@@ -1,6 +1,9 @@
 import { resolveWorkbookColor } from "../colors";
 import type {
+  XlsxAutoFilterColumn,
+  XlsxAutoFilterRange,
   XlsxCellAddress,
+  XlsxCellTextRun,
   XlsxConditionalDataBarRule,
   XlsxConditionalFormatIcon,
   XlsxConditionalFormatRule,
@@ -10,10 +13,19 @@ import type {
   XlsxCellHyperlink,
   XlsxCellComment,
   XlsxDataValidation,
+  XlsxDefinedName,
   XlsxFormControl,
+  XlsxFreezePanes,
   XlsxImage,
+  XlsxPageBreak,
+  XlsxPageMargins,
+  XlsxPageSetup,
+  XlsxPivotTable,
+  XlsxPrintOptions,
+  XlsxPrintTitles,
   XlsxResolvedCellStyle,
   XlsxShape,
+  XlsxSlicer,
   XlsxSparkline,
   XlsxTable,
   XlsxTableStyleDefinition,
@@ -44,6 +56,10 @@ import {
   relsPathForDocument,
 } from "./image-parser";
 import {
+  parseInlineRichTextCell,
+  parseSharedStringRichText,
+} from "./rich-text";
+import {
   measureColumnCharacterWidthPx,
   MIN_COL_WIDTH_PX,
   MIN_ROW_HEIGHT_PX,
@@ -63,16 +79,51 @@ import {
   parseWorkbookStyles,
   parseWorkbookTheme,
 } from "./theme-palette";
+import {
+  parseWorkbookPrintMetadata,
+  parseWorksheetPrintState,
+} from "../print/page-setup";
+import { definedNamesForWorksheet, parseWorkbookDefinedNames } from "../defined-names";
+import { parseWorksheetPivotTables, parseWorksheetSlicers } from "../pivot";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type WorkbookSheetInfo = {
+  kind: "chartsheet" | "worksheet";
   name: string;
   path: string;
 };
 
 export type WorkbookSheetState = {
+  /**
+   * `<autoFilter>` definitions of the worksheet. Table filters are appended by
+   * `composeAutoFilterRanges` once the table parts are parsed.
+   */
+  autoFilterRanges?: XlsxAutoFilterRange[];
+  /** Workbook and sheet-scoped defined names visible on this worksheet. */
+  definedNames?: XlsxDefinedName[];
+  /** Pivot tables anchored on this worksheet. */
+  pivotTables?: XlsxPivotTable[];
+  /** Slicers attached to this worksheet's pivot tables. */
+  slicers?: XlsxSlicer[];
   cachedFormulaValues: Record<string, string>;
+  /**
+   * Explicit cell style ids (`<c r="A1" s="3">`), keyed by A1 address. The
+   * table-style resolver uses the referenced `styleById` record's declared
+   * subtrees to decide which cell formatting overrides the table style.
+   */
+  cellStyleIds?: Record<string, number>;
+  /**
+   * Cells whose explicit style carries rotation or shrink-to-fit alignment,
+   * keyed by A1 address. Only these cells need the extra map; renderers fall
+   * back to row/column styles for every other cell.
+   */
+  cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
+  /**
+   * Frozen split counts read from the worksheet XML. `undefined` when the
+   * archive was not parsed, `null` when the sheet declares no frozen pane.
+   */
+  freezePanes?: XlsxFreezePanes | null;
   columnWidthCharacterWidthPx?: number;
   colWidthOverridesPx: Record<number, number>;
   colStyleIds: Record<number, number>;
@@ -93,8 +144,28 @@ export type WorkbookSheetState = {
   minContentRow: number;
   hiddenCols: number[];
   hiddenRows: number[];
+  /** Print fields parsed from `pageSetup`; `undefined` when XML was skipped. */
+  pageSetup?: XlsxPageSetup;
+  /** Print fields parsed from `printOptions`; `undefined` when XML was skipped. */
+  printOptions?: XlsxPrintOptions;
+  /** Page margins parsed from `pageMargins`; `undefined` when XML was skipped. */
+  pageMargins?: XlsxPageMargins;
+  rowBreaks?: XlsxPageBreak[];
+  colBreaks?: XlsxPageBreak[];
+  /** Areas from `_xlnm.Print_Area`; empty means the whole used range prints. */
+  printAreas?: XlsxCellRange[];
+  /** Repeated rows/columns from `_xlnm.Print_Titles`. */
+  printTitles?: XlsxPrintTitles;
   rowHeightOverridesPx: Record<number, number>;
   rowStyleIds: Record<number, number>;
+  /** Rich-text runs per A1 address for cells that store several formatted runs. */
+  richTextCells: Record<string, XlsxCellTextRun[]>;
+  /**
+   * `<sheetView rightToLeft="1">`: Excel's right-to-left sheet view. The grid
+   * mirrors column order, headers and frozen panes; the data model is
+   * unchanged.
+   */
+  rightToLeft: boolean;
   showGridLines: boolean;
   sparklines: XlsxSparkline[];
   zoomScale: number;
@@ -103,9 +174,23 @@ export type WorkbookSheetState = {
 type ParseWorkbookStructureOptions = {
   includeCachedFormulaValues?: boolean;
   themePalette?: XlsxThemePalette | null;
+  /**
+   * Resolved cell styles, so the parser only records cells whose alignment
+   * actually needs rotation or shrink-to-fit handling.
+   */
+  styleById?: Record<number, XlsxResolvedCellStyle> | null;
+  /**
+   * Runs of `xl/sharedStrings.xml`, indexed by shared-string id.
+   *
+   * `parseWorkbookStructureAssetsFromArchive` parses the table once and passes
+   * it to every worksheet; callers that re-parse a single sheet (structure
+   * edits) may omit it and let `parseSheetState` read the archive itself.
+   */
+  sharedStringRuns?: ReadonlyArray<XlsxCellTextRun[] | null>;
 };
 
 export type WorkbookTableMetadata = {
+  autoFilter?: XlsxAutoFilterRange;
   columns?: XlsxTable["columns"];
   displayName?: string;
   end?: XlsxCellAddress;
@@ -121,6 +206,13 @@ export type WorkbookTableMetadata = {
 
 export type WorkbookImageAssets = {
   archive: ArchiveEntries;
+  /**
+   * Drawing attachments for chartsheets, indexed by chartsheet index.
+   * Worksheet drawings live in `sheetOrigins`, indexed by worksheet index;
+   * workbook.xml tab order is never used for these arrays. Optional so assets
+   * built by older hosts stay valid.
+   */
+  chartsheetOrigins?: Array<WorkbookImageSheetOrigin | null>;
   formControlOriginsById: Map<string, WorkbookFormControlOrigin>;
   formControlsByWorkbookSheetIndex: XlsxFormControl[][];
   imageOriginsById: Map<string, WorkbookImageOrigin>;
@@ -151,9 +243,17 @@ export type WorkbookStructureAssets = Pick<
 export type WorkbookChartStyleAssets = Pick<
   WorkbookImageAssets,
   | "archive"
+  | "chartsheetOrigins"
   | "sheetOrigins"
   | "themePalette"
->;
+> & {
+  /**
+   * Sheet metrics used to normalise `chartUserShapes` anchors to chart-relative
+   * fractions. Optional so hand-built asset objects from older hosts stay valid;
+   * `parseWorkbookChartStyleAssets` and `parseWorkbookImageAssets` provide it.
+   */
+  sheetStatesByWorkbookSheetIndex?: WorkbookImageAssets["sheetStatesByWorkbookSheetIndex"];
+};
 
 // ── Sparklines ─────────────────────────────────────────────────────────────
 
@@ -656,7 +756,48 @@ function parseCellComments(archive: ArchiveEntries, path: string): XlsxCellComme
   });
 }
 
+// ── Freeze panes ───────────────────────────────────────────────────────────
+
+/**
+ * Read the frozen split counts declared by a worksheet part. Used by the sheet
+ * model so XML authoring and the workbook engine report the same value.
+ */
+export function parseWorksheetFreezePanesDocument(document: Document): XlsxFreezePanes | null {
+  const pane = getLocalElements(document, "pane")[0];
+  if (!pane) {
+    return null;
+  }
+  const state = pane.getAttribute("state");
+  if (state && state !== "frozen" && state !== "frozenSplit") {
+    return null;
+  }
+  const topLeft = parseA1CellReference(pane.getAttribute("topLeftCell") ?? "");
+  const rawRow = Number(pane.getAttribute("ySplit") ?? Number.NaN);
+  const rawCol = Number(pane.getAttribute("xSplit") ?? Number.NaN);
+  const row = Number.isFinite(rawRow) ? Math.max(0, Math.floor(rawRow)) : topLeft?.row ?? 0;
+  const col = Number.isFinite(rawCol) ? Math.max(0, Math.floor(rawCol)) : topLeft?.col ?? 0;
+  return row > 0 || col > 0 ? { row, col } : null;
+}
+
 // ── Sheet state parsing ────────────────────────────────────────────────────
+
+/** Text-layout flags of a resolved style, or `null` when it inherits plain layout. */
+function textLayoutOfStyle(
+  style: XlsxResolvedCellStyle | undefined,
+): { shrinkToFit?: boolean; textRotation?: number } | null {
+  const alignment = style?.alignment;
+  if (!alignment) return null;
+  const layout: { shrinkToFit?: boolean; textRotation?: number } = {};
+  const rawRotation = alignment.rotation ?? alignment.textRotation;
+  if (typeof rawRotation === "number" && Number.isFinite(rawRotation)
+    && rawRotation >= 0 && rawRotation <= 180 && rawRotation !== 0) {
+    layout.textRotation = rawRotation;
+  }
+  if (alignment.shrinkToFit === true) {
+    layout.shrinkToFit = true;
+  }
+  return layout.textRotation !== undefined || layout.shrinkToFit ? layout : null;
+}
 
 export function parseSheetState(
   archive: ArchiveEntries,
@@ -679,9 +820,11 @@ export function parseSheetState(
   }
 
   const includeCachedFormulaValues = options?.includeCachedFormulaValues ?? true;
+  const autoFilterRanges = parseWorksheetAutoFilter(document);
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
   const dataValidations = parseSheetDataValidations(document);
+  const printState = parseWorksheetPrintState(document);
   const hyperlinks = parseCellHyperlinks(archive, path, document);
   const comments = parseCellComments(archive, path);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
@@ -690,12 +833,15 @@ export function parseSheetState(
     .filter((range): range is XlsxCellRange => range !== null);
   const hasHorizontalMerges = mergedRegions.some((range) => range.end.col > range.start.col);
   const hasVerticalMerges = mergedRegions.some((range) => range.end.row > range.start.row);
+  const freezePanes = parseWorksheetFreezePanesDocument(document);
   const sheetFormatNode = getLocalElements(document, "sheetFormatPr")[0] ?? null;
   const sheetViewNode = getLocalElements(document, "sheetView")[0] ?? null;
   const rowHeightOverridesPx: Record<number, number> = {};
   const colWidthOverridesPx: Record<number, number> = {};
   const rowStyleIds: Record<number, number> = {};
   const colStyleIds: Record<number, number> = {};
+  const cellStyleIds: Record<string, number> = {};
+  const cellTextLayouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> = {};
   let minContentCol = Number.POSITIVE_INFINITY;
   let minContentRow = Number.POSITIVE_INFINITY;
   let maxContentCol = -1;
@@ -742,6 +888,34 @@ export function parseSheetState(
     const valueNode = getFirstChild(cellNode, "v");
     return Boolean(valueNode && (valueNode.textContent ?? "").length > 0);
   };
+  // Shared strings are parsed once per archive and reused by every worksheet;
+  // a single-sheet re-parse (structure edits) reads the part itself.
+  const sharedStringRuns = options?.sharedStringRuns
+    ?? parseSharedStringRichText(archive);
+  const richTextCells: Record<string, XlsxCellTextRun[]> = {};
+  const trackRichTextCell = (cellRef: string | null, cellNode: Element) => {
+    if (!cellRef) {
+      return;
+    }
+
+    const cellType = cellNode.getAttribute("t");
+    let runs: XlsxCellTextRun[] | null = null;
+    if (cellType === "s") {
+      const sharedStringIndex = Number.parseInt(
+        getFirstChild(cellNode, "v")?.textContent ?? "",
+        10
+      );
+      if (Number.isFinite(sharedStringIndex) && sharedStringIndex >= 0) {
+        runs = sharedStringRuns[sharedStringIndex] ?? null;
+      }
+    } else if (cellType === "inlineStr") {
+      runs = parseInlineRichTextCell(cellNode);
+    }
+
+    if (runs && runs.length > 1) {
+      richTextCells[cellRef] = runs;
+    }
+  };
 
   getLocalElements(document, "row").forEach((rowNode) => {
     const rowIndex = Number(rowNode.getAttribute("r") ?? 0) - 1;
@@ -758,6 +932,18 @@ export function parseSheetState(
       const cellRef = cellNode.getAttribute("r");
       if (isMeaningfulCellNode(cellNode)) {
         trackContentCell(cellRef);
+      }
+      trackRichTextCell(cellRef, cellNode);
+
+      const cellStyleId = Number(cellNode.getAttribute("s") ?? Number.NaN);
+      if (cellRef && Number.isFinite(cellStyleId)) {
+        if (cellStyleId > 0) {
+          cellStyleIds[cellRef] = cellStyleId;
+        }
+        const textLayout = textLayoutOfStyle(options?.styleById?.[cellStyleId]);
+        if (textLayout) {
+          cellTextLayouts[cellRef] = textLayout;
+        }
       }
 
       if (includeCachedFormulaValues) {
@@ -796,7 +982,12 @@ export function parseSheetState(
   });
 
   return {
+    autoFilterRanges,
     cachedFormulaValues,
+    cellStyleIds: Object.keys(cellStyleIds).length > 0 ? cellStyleIds : undefined,
+    cellTextLayouts: Object.keys(cellTextLayouts).length > 0 ? cellTextLayouts : undefined,
+    freezePanes,
+    richTextCells,
     columnWidthCharacterWidthPx,
     colWidthOverridesPx,
     colStyleIds,
@@ -821,8 +1012,14 @@ export function parseSheetState(
     minContentRow: Number.isFinite(minContentRow) ? minContentRow : -1,
     hiddenCols: [],
     hiddenRows: [],
+    pageSetup: printState.pageSetup,
+    printOptions: printState.printOptions,
+    pageMargins: printState.pageMargins,
+    rowBreaks: printState.rowBreaks,
+    colBreaks: printState.colBreaks,
     rowHeightOverridesPx,
     rowStyleIds,
+    rightToLeft: sheetViewNode ? parseBooleanAttribute(sheetViewNode, "rightToLeft", false) : false,
     showGridLines: (sheetViewNode?.getAttribute("showGridLines") ?? "1") !== "0",
     sparklines,
     zoomScale
@@ -856,7 +1053,10 @@ export function parseWorkbookSheets(archive: ArchiveEntries) {
       continue;
     }
 
+    const isChartsheet = relationship.type.endsWith("/chartsheet")
+      || relationship.target.startsWith("xl/chartsheets/");
     sheets.push({
+      kind: isChartsheet ? "chartsheet" : "worksheet",
       name: sheetNode.getAttribute("name") ?? `Sheet ${sheets.length + 1}`,
       path: relationship.target
     });
@@ -875,7 +1075,141 @@ function parseWorkbookTableFlag(value: string | null, fallback = false): boolean
   return value === "1" || value.toLowerCase() === "true";
 }
 
-function parseSheetTableMetadata(
+function formatAutoFilterCellReference(cell: XlsxCellAddress) {
+  let letters = "";
+  let col = cell.col;
+  do {
+    letters = String.fromCharCode(65 + (col % 26)) + letters;
+    col = Math.floor(col / 26) - 1;
+  } while (col >= 0);
+  return `${letters}${cell.row + 1}`;
+}
+
+function formatAutoFilterRangeReference(range: XlsxCellRange) {
+  return `${formatAutoFilterCellReference(range.start)}:${formatAutoFilterCellReference(range.end)}`;
+}
+
+/**
+ * Reads the `filterColumn` children of one `<autoFilter>` element.
+ *
+ * Value filters contribute their allowed values and the `blank` flag. Custom
+ * filters keep their literal operands so the header menu can show the stored
+ * criterion; the first version does not evaluate comparison operators.
+ */
+function parseAutoFilterColumns(node: Element): XlsxAutoFilterColumn[] {
+  return getChildElements(node, "filterColumn").flatMap((columnNode, index) => {
+    const rawColumnId = columnNode.getAttribute("colId");
+    const parsedColumnId = rawColumnId === null ? index : Number.parseInt(rawColumnId, 10);
+    const columnIndex = Number.isFinite(parsedColumnId) && parsedColumnId >= 0 ? parsedColumnId : index;
+    const filtersNode = getChildElements(columnNode, "filters")[0];
+    const customFiltersNode = getChildElements(columnNode, "customFilters")[0];
+    const values: string[] = [];
+    let includeBlank = false;
+    if (filtersNode) {
+      for (const filterNode of getChildElements(filtersNode, "filter")) {
+        const value = filterNode.getAttribute("val");
+        if (value !== null) {
+          values.push(value);
+        }
+      }
+      includeBlank = parseWorkbookTableFlag(filtersNode.getAttribute("blank"));
+    }
+    if (customFiltersNode) {
+      for (const customFilter of getChildElements(customFiltersNode, "customFilter")) {
+        const value = customFilter.getAttribute("val");
+        if (value !== null) {
+          values.push(value);
+        }
+      }
+    }
+    return [{
+      columnIndex,
+      includeBlank,
+      showButton: parseWorkbookTableFlag(
+        columnNode.getAttribute("showButton"),
+        !parseWorkbookTableFlag(columnNode.getAttribute("hiddenButton"))
+      ),
+      values: [...new Set(values)]
+    }];
+  });
+}
+
+function parseAutoFilterDefinition(
+  node: Element,
+  fallbackRange: XlsxCellRange,
+  options: {
+    dataEndRow: number;
+    headerRowCount: number;
+    source: "table" | "worksheet";
+    tableName?: string;
+  }
+): XlsxAutoFilterRange[] {
+  const declaredRanges = parseSqrefRanges(node.getAttribute("ref"));
+  const ranges = declaredRanges.length > 0 ? declaredRanges : [fallbackRange];
+  const columns = parseAutoFilterColumns(node);
+  return ranges.map((range, index) => ({
+    columns: index === 0 ? columns : [],
+    dataEndRow: Math.min(options.dataEndRow, range.end.row),
+    end: range.end,
+    headerRowCount: options.headerRowCount,
+    reference: formatAutoFilterRangeReference(range),
+    source: options.source,
+    start: range.start,
+    ...(options.tableName ? { tableName: options.tableName } : {})
+  }));
+}
+
+function parseWorksheetAutoFilter(document: Document): XlsxAutoFilterRange[] {
+  const nodes = getLocalElements(document, "autoFilter");
+  return nodes.flatMap((node) => {
+    const reference = node.getAttribute("ref") ?? "";
+    const declaredRange = parseSqrefRanges(reference)[0] ?? null;
+    if (!declaredRange) {
+      return [];
+    }
+    return parseAutoFilterDefinition(node, declaredRange, {
+      dataEndRow: declaredRange.end.row,
+      headerRowCount: 1,
+      source: "worksheet"
+    });
+  });
+}
+
+/**
+ * Appends each table's `<autoFilter>` to the ranges a sheet already declares.
+ *
+ * A worksheet and its table can describe the same filter range; the table
+ * definition wins because it carries the table name the sort and header menu
+ * need.
+ */
+export function composeAutoFilterRanges(
+  worksheetRanges: readonly XlsxAutoFilterRange[] | null | undefined,
+  tables: readonly { autoFilter?: XlsxAutoFilterRange; name?: string }[] | null | undefined
+): XlsxAutoFilterRange[] {
+  const composed: XlsxAutoFilterRange[] = [];
+  const byReference = new Set<string>();
+  for (const table of tables ?? []) {
+    if (!table.autoFilter || byReference.has(table.autoFilter.reference)) {
+      continue;
+    }
+    byReference.add(table.autoFilter.reference);
+    composed.push({
+      ...table.autoFilter,
+      source: "table",
+      ...(table.name ?? table.autoFilter.tableName ? { tableName: table.name ?? table.autoFilter.tableName } : {})
+    });
+  }
+  for (const range of worksheetRanges ?? []) {
+    if (byReference.has(range.reference)) {
+      continue;
+    }
+    byReference.add(range.reference);
+    composed.push(range);
+  }
+  return composed;
+}
+
+export function parseWorksheetTableMetadata(
   archive: ArchiveEntries,
   sheetPath: string
 ): WorkbookTableMetadata[] {
@@ -911,14 +1245,32 @@ function parseSheetTableMetadata(
     );
     const styleNode = getLocalElements(tableNode, "tableStyleInfo")[0];
     const name = tableNode.getAttribute("name") ?? `Table${tables.length + 1}`;
+    const headerRowCount = parseWorkbookTableCount(
+      tableNode.getAttribute("headerRowCount"),
+      1
+    );
+    const totalsRowCount = parseWorkbookTableCount(
+      tableNode.getAttribute("totalsRowCount"),
+      0
+    );
+    const totalsRowShown = parseWorkbookTableFlag(
+      tableNode.getAttribute("totalsRowShown")
+    );
+    const autoFilterNode = getChildElements(tableNode, "autoFilter")[0];
+    const autoFilter = autoFilterNode
+      ? parseAutoFilterDefinition(autoFilterNode, range, {
+          dataEndRow: range.end.row - (totalsRowShown ? Math.max(totalsRowCount, 1) : 0),
+          headerRowCount,
+          source: "table",
+          tableName: name
+        })[0]
+      : undefined;
     tables.push({
+      autoFilter,
       columns,
       displayName: tableNode.getAttribute("displayName") ?? name,
       end: range.end,
-      headerRowCount: parseWorkbookTableCount(
-        tableNode.getAttribute("headerRowCount"),
-        1
-      ),
+      headerRowCount,
       headerRowCellStyle: tableNode.getAttribute("headerRowCellStyle") ?? undefined,
       name,
       reference,
@@ -932,13 +1284,8 @@ function parseSheetTableMetadata(
             showRowStripes: parseWorkbookTableFlag(styleNode.getAttribute("showRowStripes")),
           }
         : undefined,
-      totalsRowCount: parseWorkbookTableCount(
-        tableNode.getAttribute("totalsRowCount"),
-        0
-      ),
-      totalsRowShown: parseWorkbookTableFlag(
-        tableNode.getAttribute("totalsRowShown")
-      ),
+      totalsRowCount,
+      totalsRowShown,
     });
   }
   return tables;
@@ -955,6 +1302,7 @@ export function normalizeWorkbookTableMetadata(
     if (!range) return [];
     const columnCount = Math.max(1, range.end.col - range.start.col + 1);
     return [{
+      autoFilter: table.autoFilter,
       columns: table.columns?.length
         ? table.columns
         : Array.from({ length: columnCount }, (_, columnIndex) => ({
@@ -985,27 +1333,73 @@ export function parseWorkbookStructureAssetsFromArchive(
   contentTypes: ContentTypesState;
   theme: ThemeState;
   workbookSheets: WorkbookSheetInfo[];
+  /** Workbook slots restricted to worksheets, in worksheet-index order. */
+  worksheetSheets: WorkbookSheetInfo[];
+  /** Workbook slots restricted to chartsheets, in chartsheet-index order. */
+  chartsheetSheets: WorkbookSheetInfo[];
 } {
   const contentTypes = parseContentTypes(archive);
   const workbookSheets = parseWorkbookSheets(archive);
+  // Chartsheets occupy workbook.xml slots but the engine, `XlsxSheetData` and
+  // every `workbookSheetIndex`-keyed asset array count worksheets only. Keep
+  // the tab-slot list for `localSheetId` metadata and index the per-worksheet
+  // state by worksheet order instead.
+  const worksheetTabIndexes = workbookSheets.flatMap((sheet, tabIndex) =>
+    sheet.kind === "worksheet" ? [tabIndex] : []
+  );
+  const worksheetSheets = worksheetTabIndexes.map((tabIndex) => workbookSheets[tabIndex]);
+  const chartsheetSheets = workbookSheets.filter((sheet) => sheet.kind === "chartsheet");
   const theme = parseWorkbookTheme(archive);
-  const themePalette = buildThemePalette(theme);
-  const { defaultFont, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
+  const { defaultFont, indexedColors, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
+  const themePalette = buildThemePalette(theme, indexedColors);
+  const printMetadata = parseWorkbookPrintMetadata(archive, workbookSheets);
+  const sharedStringRuns = parseSharedStringRichText(archive);
+  const sheetStates = worksheetSheets.map((sheet) => parseSheetState(archive, sheet.path, {
+    ...options,
+    defaultFont,
+    styleById,
+    themePalette,
+    sharedStringRuns
+  }));
+  const tableMetadataByWorkbookSheetIndex = worksheetSheets.map((sheet) =>
+    parseWorksheetTableMetadata(archive, sheet.path)
+  );
+  const definedNameMetadata = parseWorkbookDefinedNames(archive, workbookSheets);
+  const pivotTablesByWorkbookSheetIndex = worksheetSheets.map((sheet) =>
+    parseWorksheetPivotTables(archive, sheet.path)
+  );
+  const slicersByWorkbookSheetIndex = worksheetSheets.map((sheet, worksheetIndex) =>
+    parseWorksheetSlicers(archive, sheet.path, worksheetIndex)
+  );
   return {
     contentTypes,
     namedCellStyleByName,
-    sheetStatesByWorkbookSheetIndex: workbookSheets.map((sheet) => parseSheetState(archive, sheet.path, {
-      ...options,
-      defaultFont,
-      themePalette
-    })),
+    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, worksheetIndex) => {
+      if (!state) {
+        return state;
+      }
+      const workbookTabIndex = worksheetTabIndexes[worksheetIndex] ?? worksheetIndex;
+      const definedNames = definedNamesForWorksheet(definedNameMetadata, workbookTabIndex);
+      const pivotTables = pivotTablesByWorkbookSheetIndex[worksheetIndex] ?? [];
+      return {
+        ...state,
+        ...printMetadata[workbookTabIndex],
+        autoFilterRanges: composeAutoFilterRanges(
+          state.autoFilterRanges,
+          tableMetadataByWorkbookSheetIndex[worksheetIndex]
+        ),
+        definedNames,
+        pivotTables,
+        slicers: slicersByWorkbookSheetIndex[worksheetIndex] ?? []
+      };
+    }),
     styleById,
-    tableMetadataByWorkbookSheetIndex: workbookSheets.map((sheet) =>
-      parseSheetTableMetadata(archive, sheet.path)
-    ),
+    tableMetadataByWorkbookSheetIndex,
     tableStyleByName,
     theme,
     themePalette,
-    workbookSheets
+    workbookSheets,
+    worksheetSheets,
+    chartsheetSheets
   };
 }

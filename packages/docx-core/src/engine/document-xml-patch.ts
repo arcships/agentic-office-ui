@@ -88,6 +88,46 @@ export function locateBodyParagraphSpans(
   };
 }
 
+/**
+ * Content spans of the *outermost* `<w:p>` elements of a part, in document
+ * order. Paragraphs nested inside a text box (`w:txbxContent`) belong to the
+ * drawing that carries them and are never model paragraphs.
+ */
+export function locateOutermostParagraphSpans(
+  xml: string
+): ParagraphContentSpan[] {
+  const spans: ParagraphContentSpan[] = [];
+  const openStack: Array<{ contentStart: number; depth: number }> = [];
+
+  PARAGRAPH_TAG_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = PARAGRAPH_TAG_PATTERN.exec(xml)) !== null) {
+    const closing = match[1] === "/";
+    const selfClosing = match[2] === "/";
+    if (closing) {
+      const open = openStack.pop();
+      if (!open) continue;
+      if (open.depth === 0) {
+        spans.push({ contentStart: open.contentStart, contentEnd: match.index });
+      }
+      continue;
+    }
+    if (selfClosing) {
+      if (openStack.length === 0) {
+        const empty = match.index + match[0].length;
+        spans.push({ contentStart: empty, contentEnd: empty });
+      }
+      continue;
+    }
+    openStack.push({
+      contentStart: match.index + match[0].length,
+      depth: openStack.length,
+    });
+  }
+
+  return spans;
+}
+
 export interface XmlTextAtom {
   /** Index of the `<w:t>` open tag inside the paragraph content. */
   tagStart: number;

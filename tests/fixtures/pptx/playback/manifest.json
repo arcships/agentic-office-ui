@@ -130,6 +130,121 @@
       "powerpointVersion": "16.110.3 (16.110.26070318)",
       "baseline": "morph-explicit-name/expected-events.json",
       "focusSlideIndex": 3
+    },
+    {
+      "file": "text-by-word.pptx",
+      "status": "controlled",
+      "source": "scripts/fixtures/generate-pptx-v2-fixtures.mjs（基于 text-by-paragraph.pptx 的确定性派生文件；送入 PowerPoint 另存前不得升级为 ready）",
+      "license": "项目自有测试素材",
+      "sha256": "4465c167d57d33e34d5e7e8401af304175fea3a891fd89be5e4154255cfb9261",
+      "powerpointVersion": null,
+      "slides": 12,
+      "focusSlideIndex": 11,
+      "expectations": [
+        {
+          "feature": "text:by-word",
+          "disposition": "strict",
+          "count": 3
+        }
+      ],
+      "xmlMarkers": [
+        "<p:charRg st=\"0\" end=\"2\"/>",
+        "<p:bldP spid=\"3\""
+      ]
+    },
+    {
+      "file": "chart-series.pptx",
+      "status": "controlled",
+      "source": "scripts/fixtures/generate-pptx-v2-fixtures.mjs（基于 text-by-paragraph.pptx 的确定性派生文件；送入 PowerPoint 另存前不得升级为 ready）",
+      "license": "项目自有测试素材",
+      "sha256": "bb0b79f39b7f5a5c087701d74c7a12c74364aebe19997ef54e1b8e6568f762e5",
+      "powerpointVersion": null,
+      "slides": 12,
+      "focusSlideIndex": 11,
+      "expectations": [
+        {
+          "feature": "chart:element",
+          "disposition": "strict",
+          "count": 1
+        },
+        {
+          "feature": "chart:series",
+          "disposition": "static",
+          "count": 1
+        },
+        {
+          "feature": "chart-build:series",
+          "disposition": "static",
+          "count": 1
+        }
+      ],
+      "xmlMarkers": [
+        "<p:oleChartEl type=\"chart\"/>",
+        "<p:oleChartEl type=\"ser\" lvl=\"1\" idx=\"1\"/>",
+        "<c:chartSpace",
+        "rIdChart1"
+      ]
+    },
+    {
+      "file": "table-cells.pptx",
+      "status": "controlled",
+      "source": "scripts/fixtures/generate-pptx-v2-fixtures.mjs（基于 text-by-paragraph.pptx 的确定性派生文件；送入 PowerPoint 另存前不得升级为 ready）",
+      "license": "项目自有测试素材",
+      "sha256": "a08503786a7c76bf54435ea7d1071a9e19f67a4652f3329211a20269daf798dc",
+      "powerpointVersion": null,
+      "slides": 12,
+      "focusSlideIndex": 11,
+      "expectations": [
+        {
+          "feature": "table:cell",
+          "disposition": "strict",
+          "count": 2
+        },
+        {
+          "feature": "table-build:cell",
+          "disposition": "static",
+          "count": 1
+        }
+      ],
+      "xmlMarkers": [
+        "<p:pRg st=\"0\" end=\"0\"/>",
+        "<p:pRg st=\"3\" end=\"3\"/>",
+        "<p:bldGraphic spid=\"6\""
+      ]
+    },
+    {
+      "file": "transition-sound.pptx",
+      "status": "controlled",
+      "source": "scripts/fixtures/generate-pptx-v2-fixtures.mjs（基于 text-by-paragraph.pptx 的确定性派生文件；送入 PowerPoint 另存前不得升级为 ready）",
+      "license": "项目自有测试素材",
+      "sha256": "c7056416a0d37a1b121249e2f8cb203ebbbadb9167804839df653d9233a34c2a",
+      "powerpointVersion": null,
+      "slides": 12,
+      "focusSlideIndex": 0,
+      "expectations": [
+        {
+          "feature": "transition:sound",
+          "disposition": "strict",
+          "count": 1
+        }
+      ],
+      "otherSlideExpectations": [
+        {
+          "slideIndex": 1,
+          "expectations": [
+            {
+              "feature": "transition:3d:cube",
+              "disposition": "static",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "xmlMarkers": [
+        "<p:sndAc>",
+        "<p:cube",
+        "transition-sound.wav"
+      ]
     }
   ]
 }

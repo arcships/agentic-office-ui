@@ -2,8 +2,8 @@
   <div class="page" data-testid="docx-viewer-page">
     <header class="product-header">
       <div>
-        <h2>Word 文档查看器</h2>
-        <p class="desc">打开文档后，可翻页、缩放、查看缩略图和下载原文件。</p>
+        <h2>Word / OpenDocument 文档查看器</h2>
+        <p class="desc">打开 Word 或 OpenDocument 文本文档后，可翻页、缩放、查看缩略图和下载原文件；OpenDocument 以只读方式打开，不提供 DOCX 导出。</p>
       </div>
       <div class="controls control-panel product-actions">
         <label>
@@ -25,7 +25,7 @@
         </label>
         <label class="file-action">
           打开本地文件
-          <input data-testid="docx-file-input" type="file" accept=".docx,.docm,.dotx,.dotm" @change="onFileChange" />
+          <input data-testid="docx-file-input" type="file" :accept="DOCX_FILE_ACCEPT" @change="onFileChange" />
         </label>
       </div>
     </header>
@@ -79,14 +79,13 @@
         v-model:is-dark="isDark"
         v-model:show-tracked-changes="showTrackedChanges"
         v-model:show-comments="showComments"
-        :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
         style="height: 78vh;"
         @load-start="onViewerLoadStart"
         @load-success="onViewerLoadSuccess"
         @load-error="onViewerLoadError"
       />
       <div v-else class="empty">
-        <p>选择示例或打开本地 Word 文档、模板文件。</p>
+        <p>选择示例或打开本地 Word / OpenDocument 文本文档、模板文件。</p>
       </div>
     </div>
 
@@ -118,6 +117,50 @@
         </label>
         <button data-testid="apply-docx-runtime" type="button" @click="applyRuntimeConfig">应用运行配置</button>
       </fieldset>
+      <section class="source-graph" data-testid="docx-source-graph">
+        <h3>源文档图：保留 vs 近似</h3>
+        <p v-if="!sourceGraph" data-testid="docx-source-graph-empty" class="source-graph-empty">
+          尚未收到源文档图。导入成功后，这里会列出部件字节范围和保留/近似特性。
+        </p>
+        <template v-else>
+          <p data-testid="docx-source-graph-summary">
+            {{ sourceGraph.parts.length }} 个 XML 部件，{{ sourceGraph.assets.length }} 个二进制资源；
+            文档 ID <code>{{ sourceGraph.documentId.slice(0, 16) }}…</code>
+          </p>
+          <div class="source-graph-features">
+            <div data-testid="docx-preserved-only-features" data-support="preserved_only">
+              <h4>仅保留（preserved_only）</h4>
+              <ul>
+                <li v-for="feature in preservedOnlyFeatures" :key="`${feature.partName}:${feature.feature}`" :data-feature="feature.feature">
+                  <code>{{ feature.feature }}</code> × {{ feature.occurrences }} — {{ feature.partName }}
+                </li>
+              </ul>
+              <p v-if="preservedOnlyFeatures.length === 0">无</p>
+            </div>
+            <div data-testid="docx-approximate-features" data-support="approximate_rendering">
+              <h4>近似渲染（approximate_rendering）</h4>
+              <ul>
+                <li v-for="feature in approximateFeatures" :key="`${feature.partName}:${feature.feature}`" :data-feature="feature.feature">
+                  <code>{{ feature.feature }}</code> × {{ feature.occurrences }} — {{ feature.partName }}
+                </li>
+              </ul>
+              <p v-if="approximateFeatures.length === 0">无</p>
+            </div>
+          </div>
+          <details>
+            <summary>部件与字节范围</summary>
+            <ul data-testid="docx-source-parts">
+              <li v-for="part in sourceGraph.parts" :key="part.name" :data-part="part.name">
+                <code>{{ part.name }}</code> — {{ part.byteLength }} 字节
+                <span v-if="part.error" class="source-graph-error">（{{ part.error }}）</span>
+              </li>
+            </ul>
+          </details>
+          <p v-if="sourceGraph.warnings.length" data-testid="docx-source-warnings">
+            警告：{{ sourceGraph.warnings.join("；") }}
+          </p>
+        </template>
+      </section>
       <pre data-testid="docx-diagnostics">{{ JSON.stringify(diagnostics, null, 2) }}</pre>
     </details>
   </div>
@@ -128,10 +171,15 @@ import { computed, onBeforeUnmount, ref, shallowRef } from "vue"
 import {
   bundledDocxWasmUrl,
   createDocxRuntime,
+  type DocumentSourceGraph,
   type DocxImportDiagnostic,
   type DocxImportResult,
 } from "@arcships/docx-core"
-import { DocxViewer } from "@arcships/vue-docx"
+import {
+  DOCX_FILE_ACCEPT,
+  DocxViewer,
+  isSupportedDocumentFileName,
+} from "@arcships/vue-docx"
 
 const samples = [
   { file: "demo.docx", label: "Demo — master services agreement" },
@@ -140,6 +188,10 @@ const samples = [
   { file: "report-with-image.docx", label: "Report with image and rich text" },
   { file: "chinese-mixed.docx", label: "Chinese + English mixed text" },
   { file: "review-comments.docx", label: "Review — 修订、批注、脚注、尾注与搜索" },
+  { file: "review-threads.docx", label: "Review threads — 批注线程、跨段范围、表格修订" },
+  { file: "table-structures.docx", label: "Table structures — vMerge、嵌套表、重复表头" },
+  { file: "sections-columns.docx", label: "Sections — 纵横混排、分栏、文本框、水印" },
+  { file: "page-sizes.docx", label: "Page sizes — A4、A4 横向与 Letter 混排" },
   { file: "corrupted.docx", label: "Corrupted DOCX — negative test" },
 ]
 
@@ -175,6 +227,13 @@ const isDark = ref(false)
 const defaultZoom = ref(100)
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const diagnostics = ref<VisibleDiagnostic[]>([])
+const sourceGraph = shallowRef<DocumentSourceGraph | null>(null)
+const preservedOnlyFeatures = computed(
+  () => sourceGraph.value?.preservedFeatures.filter((feature) => feature.support === "preserved_only") ?? [],
+)
+const approximateFeatures = computed(
+  () => sourceGraph.value?.preservedFeatures.filter((feature) => feature.support === "approximate_rendering") ?? [],
+)
 let pageLoadSequence = 0
 let activePageLoad:
   | {
@@ -188,6 +247,10 @@ let activePageLoad:
 
 function recordDiagnostic(event: DocxImportDiagnostic): void {
   diagnostics.value = [...diagnostics.value, event].slice(-50)
+}
+
+function recordSourceGraph(graph: DocumentSourceGraph): void {
+  sourceGraph.value = graph
 }
 
 function recordPageLoadDiagnostic(
@@ -225,6 +288,7 @@ function beginPageLoad(source: PageLoadSource, fileName: string) {
   }
   activePageLoad = request
   pageState.value = "loading"
+  sourceGraph.value = null
   error.value = null
   errorCode.value = null
   recordPageLoadDiagnostic("page-load-start", request)
@@ -242,6 +306,7 @@ function createPageRuntime() {
     allowMainThreadFallback: allowMainThreadFallback.value,
     mainThreadFallbackMaxBytes: Math.max(0, mainThreadFallbackMaxBytes.value || 0),
     onDiagnostic: recordDiagnostic,
+    onSourceGraph: recordSourceGraph,
   })
 }
 
@@ -269,10 +334,10 @@ function onFileChange(event: Event): void {
   const file = input.files?.[0]
   if (!file) return
   const request = beginPageLoad("file", file.name)
-  if (!/\.(?:docx|docm|dotx|dotm)$/i.test(file.name)) {
+  if (!isSupportedDocumentFileName(file.name)) {
     if (isCurrentPageLoad(request)) {
       activePageLoad = undefined
-      setError("Please select a supported Word document", "PARSE_FAILED")
+      setError("Please select a supported Word or OpenDocument text document", "PARSE_FAILED")
       recordPageLoadDiagnostic("page-load-error", request)
     }
     return
@@ -374,6 +439,14 @@ h2 { margin-bottom: 4px; }
 .runtime-config input[type="url"] { min-width: 280px; }
 .runtime-config .checkbox-label { flex-direction: row; align-items: center; }
 .runtime-config .checkbox-label input { padding: 0; }
+.source-graph { margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; }
+.source-graph h3 { margin: 0 0 8px; font-size: 13px; }
+.source-graph h4 { margin: 0 0 4px; font-size: 12px; }
+.source-graph ul { margin: 0; padding-left: 18px; }
+.source-graph code { overflow-wrap: anywhere; }
+.source-graph-empty { margin: 0; }
+.source-graph-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 8px 0; }
+.source-graph-error { color: #ef4444; }
 .props-panel { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); }
 .props-panel legend { padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
 .props-panel .checkbox-label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--foreground); white-space: nowrap; }

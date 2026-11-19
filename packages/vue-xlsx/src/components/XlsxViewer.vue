@@ -2,10 +2,16 @@
   <div
     ref="viewerRef"
     class="xlsx-viewer"
+    :class="{ 'xlsx-viewer--print-preview': controller.isPrintPreviewOpen }"
     data-testid="xlsx-viewer"
     :data-state="controller.isLoading ? 'loading' : controller.error || controller.sourceError ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     :style="viewerStyle"
     @keydown="onKeydown"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
     tabindex="0"
   >
     <XlsxToolbar
@@ -23,6 +29,7 @@
       :controller="controller"
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
+      @authoring="openAuthoring"
       @update:read-only="onReadOnlyChange"
     />
     <XlsxFormulaBar
@@ -49,6 +56,14 @@
       :message="liveStatusMessage"
       :busy="controller.isLoading"
     />
+    <div
+      v-if="dropError"
+      class="xlsx-viewer__drop-error"
+      data-testid="xlsx-drop-error"
+      role="alert"
+    >
+      {{ dropError }}
+    </div>
     <div ref="bodyRef" class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
@@ -137,17 +152,34 @@
       <template v-else>
         <XlsxGrid
           ref="gridRef"
+          :id="gridId"
           :controller="controller"
           :get-cell-style="getCellStyle"
           :is-dark="isDark ?? false"
           :read-only="effectiveReadOnly"
           :selection-color="selectionColor"
           :selection-fill-color="selectionFillColor"
+          :render-mode="renderMode"
           @cell-double-click="onCellDoubleClick"
           @viewport-change="gridViewport = $event"
+        >
+          <template
+            v-if="$slots['table-header-menu']"
+            #table-header-menu="headerMenuProps"
+          >
+            <slot name="table-header-menu" v-bind="headerMenuProps" />
+          </template>
+        </XlsxGrid>
+        <XlsxRangeHighlightLayer
+          :controller="controller"
+          :scroll-left="gridViewport.scrollLeft"
+          :scroll-top="gridViewport.scrollTop"
+          :viewport-width="gridViewport.width"
+          :viewport-height="gridViewport.height"
         />
         <XlsxChartOverlay
           :controller="controller"
+          @chart-context-menu="onChartContextMenu"
           :is-dark="isDark ?? false"
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
@@ -161,6 +193,7 @@
           :scroll-top="gridViewport.scrollTop"
           :viewport-width="gridViewport.width"
           :viewport-height="gridViewport.height"
+          @drawing-context-menu="onDrawingContextMenu"
         />
         <XlsxDrawingLayer
           :controller="controller"
@@ -168,6 +201,7 @@
           :scroll-top="gridViewport.scrollTop"
           :viewport-width="gridViewport.width"
           :viewport-height="gridViewport.height"
+          @drawing-context-menu="onDrawingContextMenu"
         />
         <XlsxSelectionOverlay
           :controller="controller"
@@ -180,14 +214,34 @@
           :controller="controller"
           :target-element="gridElement"
           :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
+          @authoring="openAuthoring"
         />
       </template>
+      <XlsxPrintPreview
+        v-if="controller.isPrintPreviewOpen"
+        :controller="controller"
+        :is-dark="isDark ?? false"
+        @close="controller.closePrintPreview()"
+      />
     </div>
+    <XlsxAuthoringDialog
+      v-if="authoringKind"
+      :controller="controller"
+      :kind="authoringKind"
+      :is-dark="isDark ?? false"
+      @close="authoringKind = null"
+    />
     <XlsxSheetTabs
-      v-if="controller.tabs.length > 0"
+      v-if="showSheetTabs && controller.tabs.length > 0"
       :controller="controller"
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
+      :panel-id="controller.activeSheet ? gridId : undefined"
+    />
+    <XlsxStatusBar
+      v-if="showStatusBar && controller.activeSheet"
+      :controller="controller"
+      :is-dark="isDark ?? false"
     />
   </div>
 </template>
@@ -196,25 +250,34 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures";
-import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
+import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext, XlsxWorkbookTab } from "@arcships/xlsx-core";
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
 import XlsxRibbon from "./XlsxRibbon.vue";
 import XlsxFormulaBar from "./XlsxFormulaBar.vue";
 import XlsxSheetTabs from "./XlsxSheetTabs.vue";
+import XlsxStatusBar from "./XlsxStatusBar.vue";
+import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue";
 import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
+import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue";
+import XlsxPrintPreview from "./XlsxPrintPreview.vue";
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
+import { FILE_DROP_OUTLINE, useFileDrop } from "@arcships/vue-ui";
+import { XLSX_FILE_EXTENSIONS, XLSX_FILE_MIME_TYPES } from "../composables/xlsx-file-types";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { provideXlsxMessages } from "../i18n";
 import { localizeXlsxLoadError } from "../errors";
+import { nextXlsxDomId } from "./dom-ids";
+import type { XlsxGridRenderMode } from "./grid-dom";
 
 const props = withDefaults(
   defineProps<{
@@ -228,17 +291,53 @@ const props = withDefaults(
     readOnly?: boolean;
     selectionColor?: string;
     selectionFillColor?: string;
+    /**
+     * Grid body renderer. `canvas` (default) paints the visible range into the
+     * grid canvases; `dom` renders the same window as real `role="gridcell"`
+     * elements with selectable text. Use `dom` as the accessibility mode, for
+     * browser find on cell values, as a canvas fallback, or to inspect the
+     * visible window while debugging. Switching modes keeps the scroll position
+     * and the controller's selection.
+     */
+    renderMode?: XlsxGridRenderMode;
     showDefaultToolbar?: boolean;
     showRibbon?: boolean;
     showFormulaBar?: boolean;
     showImages?: boolean;
+    /**
+     * Renders the sheet tab strip. Hiding it keeps the workbook state and the
+     * rest of the chrome (grid, ribbon, formula bar); sheets can then only be
+     * switched by host UI or `controller.setActiveTabIndex()`.
+     */
+    showSheetTabs?: boolean;
+    /**
+     * Renders the selection status bar under the sheet tabs. It shows the
+     * selected cell/range, non-empty and numeric counts, sum, average, min and
+     * max, and marks filtered or budget-truncated selections.
+     */
+    showStatusBar?: boolean;
+    /**
+     * Controlled active tab, as an index into `controller.tabs` (worksheets and
+     * chartsheets interleaved). Leave `undefined` to let the controller own the
+     * active tab; a number is mirrored onto the controller and reported back
+     * through `update:activeTabIndex` when the viewer switches.
+     */
+    activeTabIndex?: number;
     showUpload?: boolean;
     /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
     enableGestureZoom?: boolean;
+    /**
+     * Locale for the built-in UI copy and, unless `documentLocale` is set, for
+     * number and date formats that name no locale of their own.
+     *
+     * Built-in UI copy ships in `"en"` and `"zh-CN"`; other BCP-47 tags such
+     * as `"de-DE"` keep the English UI copy while formatting numbers and dates
+     * for that locale.
+     */
     locale?: OfficeLocale;
     /**
-     * Locale for number and date formats that name none of their own
-     * (`[$-407]`-style sections win). Defaults to the controller's locale.
+     * Overrides the locale used by number and date formats that name none of
+     * their own (`[$-407]`-style sections always win). Defaults to `locale`.
      */
     documentLocale?: string;
     messages?: OfficeMessagesOverride;
@@ -252,10 +351,13 @@ const props = withDefaults(
     readOnly: false,
     selectionColor: undefined,
     selectionFillColor: undefined,
+    renderMode: "canvas",
     showDefaultToolbar: true,
     showRibbon: true,
     showFormulaBar: true,
     showImages: true,
+    showSheetTabs: true,
+    showStatusBar: true,
     showUpload: false,
     enableGestureZoom: true,
     locale: "en",
@@ -267,6 +369,15 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   upload: [];
+  /**
+   * A supported workbook was dropped on the viewer. The controller has already
+   * started loading it through the same pipeline as the file picker; hosts
+   * listen to refresh their own file label.
+   */
+  fileDrop: [file: File];
+  /** Committed tab switch: `tab` is the full entry, so `kind` stays readable. */
+  tabChange: [tab: XlsxWorkbookTab];
+  "update:activeTabIndex": [index: number];
   "update:readOnly": [value: boolean];
   searchStateChange: [state: XlsxSearchState];
   "load-deferred": [payload: XlsxDeferredLoadPayload];
@@ -278,6 +389,26 @@ type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 const m = provideXlsxMessages(() => props.locale, () => props.messages);
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// Dropping a workbook replaces the current source through
+// `controller.loadFile()`, so size limits, URL policy and the Worker path all
+// stay identical to a file chosen in the dialog.
+const dropError = ref("");
+const fileDrop = useFileDrop({
+  accept: { extensions: XLSX_FILE_EXTENSIONS, mimeTypes: XLSX_FILE_MIME_TYPES },
+  onFile: async (file) => {
+    dropError.value = "";
+    emit("fileDrop", file);
+    await props.controller.loadFile?.(file);
+  },
+  onReject: () => {
+    dropError.value = m.value.xlsx.viewer.unsupportedDrop;
+  },
+});
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop;
+// A host-driven load replaces whatever the last rejected drop reported.
+watch(() => props.controller.displayFileName, () => { dropError.value = ""; });
 const localizedError = computed(() => {
   const sourceError = props.controller.sourceError;
   if (sourceError) {
@@ -294,10 +425,20 @@ const calculationMessage = computed(() => {
   return m.value.xlsx.calculation.failed;
 });
 
-// Number/date formats without a `[$-…]` section follow the host locale.
+// Number/date formats without a `[$-…]` section follow the host locale. The
+// dedicated `documentLocale` prop wins; otherwise the viewer locale applies,
+// except for the default "en" so a controller created with its own locale is
+// not reset. Once a locale has been applied, switching back to the default
+// resets the controller to its en-US default.
+let hasAppliedDocumentLocale = false;
+const effectiveDocumentLocale = computed(() => props.documentLocale ?? (props.locale === "en" ? undefined : props.locale));
 watch(
-  () => props.documentLocale,
-  (locale) => { props.controller.setDocumentLocale?.(locale); },
+  effectiveDocumentLocale,
+  (locale) => {
+    if (locale === undefined && !hasAppliedDocumentLocale) return;
+    hasAppliedDocumentLocale = locale !== undefined;
+    props.controller.setDocumentLocale?.(locale);
+  },
   { immediate: true },
 );
 
@@ -346,8 +487,115 @@ const viewerRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
 const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
 const gridRef = ref<GridInstance | null>(null);
-const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null);
+const contextMenuRef = ref<{
+  openAt(clientX: number, clientY: number, target?: unknown): boolean
+  openForChart(chartId: string, clientX: number, clientY: number): boolean
+  openForDrawing(kind: "image" | "shape", id: string, clientX: number, clientY: number): boolean
+} | null>(null);
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
+const authoringKind = ref<XlsxAuthoringDialogKind | null>(null);
+// The tab strip points `aria-controls` at this id; both are unique per viewer.
+const gridId = nextXlsxDomId("xlsx-grid");
+
+// ── Sheet tab surface (controlled index + switch notification) ─────
+// `activeTabIndex` is an index into `controller.tabs`, not into `sheets`:
+// worksheets and chartsheets share one strip. `undefined` keeps the controller
+// authoritative, which is the behavior every existing host already gets.
+const controlledTabIndex = computed<number | undefined>(() => {
+  const index = props.activeTabIndex;
+  return typeof index === "number" && Number.isFinite(index) ? Math.trunc(index) : undefined;
+});
+
+// Set while the host's controlled index is being written to the controller, so
+// that a host-driven restore is not reported back as a user switch.
+let pendingControlledIndex: number | null = null;
+
+function syncControlledTabIndex(): void {
+  const index = controlledTabIndex.value;
+  if (index === undefined) return;
+  if (index === props.controller.activeTabIndex) return;
+  // An out-of-range index is ignored, exactly like `setActiveTabIndex()`.
+  if (index < 0 || index >= props.controller.tabs.length) return;
+  pendingControlledIndex = index;
+  props.controller.setActiveTabIndex(index);
+  // The controller commits synchronously; the marker only has to survive the
+  // flush that emits the events below.
+  void nextTick(() => {
+    if (pendingControlledIndex === index) pendingControlledIndex = null;
+  });
+}
+
+// A controlled value can arrive before the workbook is parsed, so the first
+// tabs of a load are the other moment it can be mirrored onto the controller.
+watch(controlledTabIndex, syncControlledTabIndex, { immediate: true });
+watch(
+  () => props.controller.tabs.length > 0,
+  (hasTabs) => {
+    if (hasTabs) syncControlledTabIndex();
+  },
+);
+
+// `tabChange` reports committed switches only. Tabs are rebuilt into new
+// objects for renames, visibility changes, reorders and removals, so the active
+// tab is compared by what identifies the sheet rather than by tab object or
+// index: a rename keeps the tab id (the workbook slot), while a reorder or a
+// slot shift keeps the name.
+const activeTabKey = computed(() => {
+  const tab = props.controller.activeTab;
+  return tab ? `${tab.index}:${tab.kind}:${tab.id}:${tab.name}` : null;
+});
+
+let reportedTab: { count: number; tab: XlsxWorkbookTab } | null = null;
+
+// A reload clears the strip and starts a new workbook; the next tab it shows is
+// an opening tab again, not a switch. Declared before the tab watcher so a
+// flush that replaces one workbook with another clears the previous tab first.
+watch(
+  () => props.controller.tabs.length,
+  (count) => {
+    if (count === 0) reportedTab = null;
+  },
+);
+
+function isSameSheet(next: XlsxWorkbookTab, count: number): boolean {
+  const previous = reportedTab;
+  if (!previous || previous.tab.kind !== next.kind) return false;
+  if (previous.tab.name === next.name) return true;
+  // A rename keeps the tab id and does not change how many tabs are shown; a
+  // removal can hand that id to a neighbouring sheet, so it also needs the
+  // count to stay put before the id counts as the same sheet.
+  return previous.tab.id === next.id && previous.count === count;
+}
+
+watch(
+  activeTabKey,
+  () => {
+    const tab = props.controller.activeTab;
+    if (!tab) return;
+    const count = props.controller.tabs.length;
+    const openingTab = reportedTab === null;
+    const sameSheet = isSameSheet(tab, count);
+    reportedTab = { count, tab };
+    // The workbook's opening tab is not a switch, and neither is a tab the host
+    // itself selected through `activeTabIndex`.
+    if (openingTab || sameSheet || pendingControlledIndex === props.controller.activeTabIndex) return;
+    emit("tabChange", tab);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.controller.activeTabIndex,
+  (index) => {
+    // A value the host already passed in needs no echo.
+    if (index === controlledTabIndex.value) return;
+    emit("update:activeTabIndex", index);
+  },
+);
+
+function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringKind.value = kind;
+}
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(
   () => props.controller,
@@ -376,7 +624,7 @@ const viewerStyle = computed<CSSProperties>(() => ({
   width: "100%",
   backgroundColor: props.isDark ? "#18181b" : "#ffffff",
   color: props.isDark ? "#e4e4e7" : "#18181b",
-  outline: "none",
+  outline: isDragOver.value ? FILE_DROP_OUTLINE : "none",
 }));
 
 let printPageStyle: HTMLStyleElement | undefined;
@@ -384,6 +632,17 @@ let printPageStyle: HTMLStyleElement | undefined;
 function syncPrintPageSize(): void {
   const browserDocument = globalThis.document;
   if (!browserDocument) return;
+  const layout = props.controller.printLayout;
+  const firstPage = props.controller.isPrintPreviewOpen ? layout?.pages[0] : undefined;
+  if (firstPage) {
+    if (!printPageStyle || printPageStyle.isConnected === false) {
+      printPageStyle = browserDocument.createElement("style");
+      if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "xlsx";
+      browserDocument.head.append(printPageStyle);
+    }
+    printPageStyle.textContent = `@page { size: ${(firstPage.widthPx / 96).toFixed(2)}in ${(firstPage.heightPx / 96).toFixed(2)}in; margin: 0; }`;
+    return;
+  }
   const sheet = props.controller.activeSheet;
   if (!sheet || sheet.maxUsedCol < sheet.minUsedCol || sheet.maxUsedRow < sheet.minUsedRow) {
     printPageStyle?.remove?.();
@@ -414,12 +673,44 @@ watch(
     props.controller.activeSheet?.maxUsedCol,
     props.controller.activeSheet?.minUsedRow,
     props.controller.activeSheet?.maxUsedRow,
+    props.controller.isPrintPreviewOpen,
+    props.controller.printLayout?.pages[0]?.widthPx,
+    props.controller.printLayout?.pages[0]?.heightPx,
   ] as const,
   syncPrintPageSize,
   { immediate: true },
 );
 
+/** True while the inline cell editor owns the keyboard. */
+function isCellEditorOpen(event: KeyboardEvent): boolean {
+  const grid = gridRef.value as (GridInstance & { isEditingCell?: boolean }) | null;
+  if (grid?.isEditingCell === true) return true;
+  const target = event.target as { closest?: (selector: string) => unknown } | null;
+  if (!target || typeof target.closest !== "function") return false;
+  try {
+    return Boolean(target.closest('[data-testid="xlsx-cell-editor"]'));
+  } catch {
+    return false;
+  }
+}
+
+/** True while a text field (formula bar, name box) owns Escape. */
+function isTextInputOpen(event: KeyboardEvent): boolean {
+  const target = event.target as { closest?: (selector: string) => unknown } | null;
+  if (!target || typeof target.closest !== "function") return false;
+  try {
+    return Boolean(target.closest("input, textarea, [contenteditable='true']"));
+  } catch {
+    return false;
+  }
+}
+
 function onKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && props.controller.isPrintPreviewOpen) {
+    event.preventDefault();
+    props.controller.closePrintPreview();
+    return;
+  }
   if (
     props.showDefaultToolbar
     && (event.ctrlKey || event.metaKey)
@@ -430,7 +721,38 @@ function onKeydown(event: KeyboardEvent) {
     return;
   }
 
-  if (!props.controller || effectiveReadOnly.value) return;
+  if (!props.controller) return;
+
+  // Escape cancels a pending cut wherever the focus sits, mirroring the grid's
+  // own handler. Drawings keep their own pending cut without a cell range, so
+  // the controller, not `cutState`, decides whether anything was cancelled.
+  // The inline editor and the formula bar own Escape while they
+  // are open, exactly like they own the other grid shortcuts.
+  if (
+    event.key === "Escape"
+    && !isCellEditorOpen(event)
+    && !isTextInputOpen(event)
+    && props.controller.cancelCut?.()
+  ) {
+    event.preventDefault();
+    return;
+  }
+
+  // Excel's sheet-switching shortcut. It is a navigation key, so read-only
+  // viewers keep it, but an open cell editor owns every key including this one.
+  if ((event.ctrlKey || event.metaKey) && (event.key === "PageUp" || event.key === "PageDown")) {
+    const tabs = props.controller.tabs ?? [];
+    if (tabs.length === 0 || isCellEditorOpen(event)) return;
+    event.preventDefault();
+    const offset = event.key === "PageDown" ? 1 : -1;
+    const current = props.controller.activeTabIndex;
+    const next = Math.min(Math.max(current + offset, 0), tabs.length - 1);
+    if (next !== current) props.controller.setActiveTabIndex(next);
+    return;
+  }
+
+  if (effectiveReadOnly.value) return;
+  if (isCellEditorOpen(event)) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key === "z") {
     event.preventDefault();
@@ -485,6 +807,19 @@ const touchGestures = createTouchGestureTracker({
     contextMenuRef.value?.openAt(pointer.clientX, pointer.clientY, pointer.target);
   },
 });
+
+function onChartContextMenu(payload: { chartId: string; clientX: number; clientY: number }): void {
+  contextMenuRef.value?.openForChart(payload.chartId, payload.clientX, payload.clientY);
+}
+
+function onDrawingContextMenu(payload: {
+  id: string;
+  kind: "image" | "shape";
+  clientX: number;
+  clientY: number;
+}): void {
+  contextMenuRef.value?.openForDrawing(payload.kind, payload.id, payload.clientX, payload.clientY);
+}
 
 function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event); }
 function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event); }
@@ -576,11 +911,13 @@ defineExpose({
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
 }
+/* The viewer root is focusable for keyboard users; keep that focus visible. */
+.xlsx-viewer:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 
 .xlsx-viewer__body {
   display: flex;
   flex: 1;
-  min-height: 0;
+  min-height: 360px;
   min-width: 0;
   position: relative;
   touch-action: pan-x pan-y;
@@ -598,6 +935,15 @@ defineExpose({
 .xlsx-viewer__calculation-status {
   background: rgba(245, 158, 11, 0.12);
   border-block-end: 1px solid rgba(245, 158, 11, 0.35);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 12px;
+}
+
+.xlsx-viewer__drop-error {
+  background: rgba(220, 38, 38, 0.12);
+  border-block-end: 1px solid rgba(220, 38, 38, 0.35);
   color: inherit;
   font-size: 12px;
   line-height: 1.4;
@@ -707,7 +1053,9 @@ defineExpose({
 }
 
 @media print {
+  .xlsx-toolbar { display: none !important; }
   .xlsx-viewer {
+    border-radius: 0 !important;
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
@@ -716,10 +1064,16 @@ defineExpose({
   .xlsx-ribbon,
   .xlsx-formula-bar,
   .xlsx-sheet-tabs,
+  .xlsx-status-bar,
   .xlsx-context-menu,
   .xlsx-grid__edit-input,
+  .xlsx-grid__edit-mirror,
   .xlsx-grid__comment-popover,
-  .xlsx-viewer__deferred { display: none !important; }
+  .xlsx-viewer__deferred,
+  .xlsx-viewer__calculation-status,
+  .xlsx-live-status { display: none !important; }
   .xlsx-viewer__body { display: block !important; overflow: visible !important; }
+  .xlsx-viewer--print-preview .xlsx-viewer__body > :not(.xlsx-print-preview) { display: none !important; }
+  .xlsx-viewer--print-preview { background: #ffffff !important; }
 }
 </style>

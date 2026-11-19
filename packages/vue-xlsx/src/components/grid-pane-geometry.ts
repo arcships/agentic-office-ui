@@ -24,6 +24,64 @@ export function paneContentOffset(
   return frozen ? localOffset : localOffset + scrollOffset;
 }
 
+// ── Right-to-left sheets ───────────────────────────────────────────────────
+
+/**
+ * Layout offset of an axis interval `[startOffset, endOffset)`.
+ *
+ * A right-to-left sheet mirrors its columns within the content width, so the
+ * interval's layout left edge is `totalSize - endOffset`. LTR keeps the
+ * interval start. Layout space still grows left-to-right, which lets the paint
+ * path translate it with a single scroll offset instead of mirroring every
+ * drawing primitive.
+ */
+export function axisLayoutOffset(
+  startOffset: number,
+  endOffset: number,
+  totalSize: number,
+  rtl: boolean,
+): number {
+  return rtl ? totalSize - endOffset : startOffset;
+}
+
+/** Layout coordinate of an axis boundary (gridline, header divider, resize edge). */
+export function axisLayoutBoundary(
+  offset: number,
+  totalSize: number,
+  rtl: boolean,
+): number {
+  return rtl ? totalSize - offset : offset;
+}
+
+/**
+ * Layout-space scroll offset of an axis.
+ *
+ * The browser scrolls a right-to-left sheet from column A at the right edge, so
+ * the layout translation starts at `totalSize - viewportSize - scrollOffset`
+ * and reaches 0 at the end of the scroll range.
+ */
+export function axisLayoutScroll(
+  scrollOffset: number,
+  viewportSize: number,
+  totalSize: number,
+  rtl: boolean,
+): number {
+  return rtl ? totalSize - viewportSize - scrollOffset : scrollOffset;
+}
+
+/**
+ * Mirrors a body-local pointer offset for an RTL sheet: x is then measured from
+ * the right edge, which is the same content coordinate the layout mapping uses
+ * for column A. Rows are never mirrored.
+ */
+export function mirrorBodyOffset(
+  localOffset: number,
+  viewportSize: number,
+  rtl: boolean,
+): number {
+  return rtl ? viewportSize - localOffset : localOffset;
+}
+
 /** Pane-local offset of one axis for a sheet-content offset: only scrolling subtracts scroll. */
 export function paneViewOffset(
   contentOffset: number,
@@ -91,17 +149,28 @@ export interface PaneViewPointInput {
   frozenRows: number;
   scrollLeft: number;
   scrollTop: number;
+  /** Anchored box width; needed to mirror its left edge on an RTL sheet. */
+  width?: number;
+  /** The sheet reads right-to-left; x is measured from the body's right edge. */
+  rtl?: boolean;
+  /** Pixel width of the grid body; required when `rtl` is true. */
+  viewportWidth?: number;
 }
 
 /**
  * Inverse mapping for viewport-positioned overlays (inline editor, comment
  * popover): a cell inside a frozen strip keeps its content position, a cell in
- * the scrolling pane subtracts the scroll offset.
+ * the scrolling pane subtracts the scroll offset. On an RTL sheet the box is
+ * mirrored so `contentX` still names the cell's content-space left edge.
  */
 export function resolvePaneViewPoint(input: PaneViewPointInput): { x: number; y: number } {
+  const frozenX = input.displayCol < input.frozenCols;
+  const frozenY = input.displayRow < input.frozenRows;
   return {
-    x: paneViewOffset(input.contentX, input.scrollLeft, input.displayCol < input.frozenCols),
-    y: paneViewOffset(input.contentY, input.scrollTop, input.displayRow < input.frozenRows),
+    x: input.rtl
+      ? (input.viewportWidth ?? 0) - paneViewOffset(input.contentX + (input.width ?? 0), input.scrollLeft, frozenX)
+      : paneViewOffset(input.contentX, input.scrollLeft, frozenX),
+    y: paneViewOffset(input.contentY, input.scrollTop, frozenY),
   };
 }
 
@@ -140,8 +209,13 @@ export function resolvePaneOverlayRect(input: PaneOverlayInput): PaneOverlayRect
   const frozenHeight = Math.max(0, Math.min(input.frozenHeight, input.viewportHeight));
   const frozenX = input.displayCol < input.frozenCols;
   const frozenY = input.displayRow < input.frozenRows;
-  const paneLeft = frozenX ? 0 : frozenWidth;
-  const paneRight = frozenX ? frozenWidth : Math.max(frozenWidth, input.viewportWidth);
+  const rtl = input.rtl === true;
+  // RTL mirrors the pane rectangles horizontally: the frozen columns are
+  // pinned to the right edge and the scrolling pane keeps the left side.
+  const paneLeft = frozenX ? (rtl ? input.viewportWidth - frozenWidth : 0) : (rtl ? 0 : frozenWidth);
+  const paneRight = frozenX
+    ? (rtl ? input.viewportWidth : frozenWidth)
+    : (rtl ? Math.max(0, input.viewportWidth - frozenWidth) : Math.max(frozenWidth, input.viewportWidth));
   const paneTop = frozenY ? 0 : frozenHeight;
   const paneBottom = frozenY ? frozenHeight : Math.max(frozenHeight, input.viewportHeight);
   const left = Math.max(paneLeft, Math.min(point.x, paneRight));

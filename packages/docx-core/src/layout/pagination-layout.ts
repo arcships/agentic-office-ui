@@ -47,6 +47,12 @@ import {
 } from "../editor/helpers/line-height-table-extra";
 import { resolvePageNoteReservePx } from "../editor/helpers/note-numbering";
 import { paragraphLineCountWithinWidth } from "../editor/helpers/line-height-wrap";
+import {
+  resolveDocumentLayoutDefaults,
+  tabGridLayoutDefaults,
+  type DocumentLayoutDefaults,
+} from "../engine/layout-defaults";
+import { resolveParagraphLineMetrics } from "../editor/helpers/paragraph-line-metrics";
 import { paragraphLastRenderedPageBreakLineIndex } from "../editor/helpers/pagination-line-index";
 import { paragraphHasVisibleText } from "../editor/helpers/paragraph-geometry";
 import { paragraphIsStructuralSectionBreakSpacer } from "../editor/helpers/paragraph-tracked";
@@ -222,6 +228,7 @@ export function resolvePaginationSectionGeometry(
   const resolvedSections = resolveDocumentSectionsFromMetadata(
     model.metadata
   );
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
 
   return resolvedSections.map((section) => {
     const startNodeIndex =
@@ -249,7 +256,19 @@ export function resolvePaginationSectionGeometry(
       docGridLinePitchPx: parsedLayout.docGridLinePitchPx
     };
     const reserveOptions = {
-      estimateDocNodeHeightPx,
+      estimateDocNodeHeightPx: (
+        node: DocModel["nodes"][number],
+        availableWidthPx?: number,
+        definitions?: NumberingDefinitionSet,
+        docGridLinePitchPx?: number
+      ) =>
+        estimateDocNodeHeightPx(
+          node,
+          availableWidthPx,
+          definitions,
+          docGridLinePitchPx,
+          layoutDefaults
+        ),
       // Pagination should reserve only the real overlap with the body, not the
       // renderer's small safety strip for a footer that fits in the margin.
       minimumVisibleFlowFooterReservePx: 0
@@ -311,6 +330,7 @@ function createSegmentationCallbacks(
   model: DocModel,
   measuredParagraphHeightsPxByNodeIndex?: Record<number, number>
 ): PageSegmentationCallbacks {
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
   const nodeIndexByParagraph = new WeakMap<ParagraphNode, number>();
   if (measuredParagraphHeightsPxByNodeIndex) {
     model.nodes.forEach((node, nodeIndex) => {
@@ -340,20 +360,66 @@ function createSegmentationCallbacks(
       paragraph,
       availableWidthPx,
       numberingDefinitions,
-      docGridLinePitchPx
+      docGridLinePitchPx,
+      undefined,
+      layoutDefaults
     );
   };
 
   return {
-    estimateDocNodeHeightPx,
+    estimateDocNodeHeightPx: (
+      node: DocModel["nodes"][number],
+      availableWidthPx?: number,
+      definitions?: NumberingDefinitionSet,
+      docGridLinePitchPx?: number
+    ) =>
+      estimateDocNodeHeightPx(
+        node,
+        availableWidthPx,
+        definitions,
+        docGridLinePitchPx,
+        layoutDefaults
+      ),
     paragraphHasVisibleText,
     estimateParagraphHeightPx: estimateParagraphHeightWithMeasurement,
     estimateParagraphLineHeightPx,
-    estimateTableRowHeightsPx,
-    paragraphLineCountWithinWidth,
+    estimateTableRowHeightsPx: (
+      table: TableNode,
+      availableWidthPx?: number,
+      definitions?: NumberingDefinitionSet,
+      docGridLinePitchPx?: number
+    ) =>
+      estimateTableRowHeightsPx(
+        table,
+        availableWidthPx,
+        definitions,
+        docGridLinePitchPx,
+        undefined,
+        layoutDefaults
+      ),
+    paragraphLineCountWithinWidth: (
+      paragraph: ParagraphNode,
+      availableWidthPx?: number,
+      definitions?: NumberingDefinitionSet
+    ) =>
+      paragraphLineCountWithinWidth(
+        paragraph,
+        availableWidthPx,
+        definitions,
+        layoutDefaults
+      ),
     paragraphWidowControlEnabled,
     paragraphCanSplitAcrossPages,
-    paragraphIsStructuralSectionBreakSpacer
+    paragraphIsStructuralSectionBreakSpacer,
+    resolveParagraphLineMetrics: (params) =>
+      resolveParagraphLineMetrics(params.paragraph, {
+        availableWidthPx: params.availableWidthPx,
+        numberingDefinitions: params.numberingDefinitions,
+        lineHeightPx: params.lineHeightPx,
+        docGridLinePitchPx: params.docGridLinePitchPx,
+        expectedLineCount: params.expectedLineCount,
+        layoutDefaults
+      })
   };
 }
 
@@ -393,9 +459,16 @@ function paragraphSegmentHeightPx(params: {
   numberingDefinitions?: NumberingDefinitionSet;
   pageConsumedHeightPx: number;
   availableWidthPx?: number;
+  layoutDefaults?: DocumentLayoutDefaults;
 }): { heightPx: number; afterSpacingPx: number } {
-  const beforeSpacingPx = paragraphBeforeSpacingPx(params.paragraph);
-  const afterSpacingPx = paragraphAfterSpacingPx(params.paragraph);
+  const beforeSpacingPx = paragraphBeforeSpacingPx(
+    params.paragraph,
+    params.layoutDefaults
+  );
+  const afterSpacingPx = paragraphAfterSpacingPx(
+    params.paragraph,
+    params.layoutDefaults
+  );
   const lineRange = params.segment.paragraphLineRange;
 
   if (lineRange) {
@@ -434,7 +507,9 @@ function paragraphSegmentHeightPx(params: {
         params.paragraph,
         params.availableWidthPx ?? params.metrics.pageContentWidthPx,
         params.numberingDefinitions,
-        params.metrics.docGridLinePitchPx
+        params.metrics.docGridLinePitchPx,
+        undefined,
+        params.layoutDefaults
       )
     )
   );
@@ -455,6 +530,7 @@ function tableSegmentHeightPx(params: {
   metrics: PaginationSectionMetrics;
   numberingDefinitions?: NumberingDefinitionSet;
   availableWidthPx?: number;
+  layoutDefaults?: DocumentLayoutDefaults;
 }): number {
   const rowHeightsPx = estimateTableRowHeightsPx(
     params.table,
@@ -517,6 +593,7 @@ function projectPageBlocks(params: {
   const blocks: PaginatedPageBlock[] = [];
   const contentBox = params.geometry.contentBoxPx;
   const numberingDefinitions = params.model.metadata.numberingDefinitions;
+  const layoutDefaults = resolveDocumentLayoutDefaults(params.model.metadata);
   const columnWidthsPx =
     params.geometry.columnWidthsPx.length > 0
       ? params.geometry.columnWidthsPx
@@ -543,8 +620,16 @@ function projectPageBlocks(params: {
         const height =
           Number.isFinite(measuredHeightPx) && (measuredHeightPx as number) > 0
             ? {
-                heightPx: Math.round(measuredHeightPx as number),
-                afterSpacingPx: paragraphAfterSpacingPx(node)
+                // The DOM-measured height includes the paragraph's margins.
+                // Apply the same page-top space-before suppression the
+                // segmenter uses for this node, otherwise the block frame is
+                // taller than the budget it was placed against.
+                heightPx: resolveParagraphConsumedHeightPx(
+                  Math.round(measuredHeightPx as number),
+                  paragraphBeforeSpacingPx(node, layoutDefaults),
+                  pageConsumedHeightPx <= 0
+                ),
+                afterSpacingPx: paragraphAfterSpacingPx(node, layoutDefaults)
               }
             : paragraphSegmentHeightPx({
                 segment,
@@ -552,7 +637,8 @@ function projectPageBlocks(params: {
                 metrics: params.metrics,
                 numberingDefinitions,
                 pageConsumedHeightPx,
-                availableWidthPx: columnWidthPx
+                availableWidthPx: columnWidthPx,
+                layoutDefaults
               });
         blocks.push({
           kind: "paragraph",
@@ -575,7 +661,8 @@ function projectPageBlocks(params: {
         segment,
         metrics: params.metrics,
         numberingDefinitions,
-        availableWidthPx: columnWidthPx
+        availableWidthPx: columnWidthPx,
+        layoutDefaults
       });
       blocks.push({
         kind: "table",
@@ -665,7 +752,19 @@ export function paginateDocumentLayout(
               options.suppressSpacingBeforeAfterPageBreak ?? false,
             preferLastRenderedParagraphStartBreaks:
               options.useLastRenderedPageBreakHints ?? true,
-            paragraphLastRenderedPageBreakLineIndex,
+            paragraphLastRenderedPageBreakLineIndex: (
+              paragraph,
+              lineCount,
+              widthPx,
+              definitions
+            ) =>
+              paragraphLastRenderedPageBreakLineIndex(
+                paragraph,
+                lineCount,
+                widthPx,
+                definitions,
+                resolveDocumentLayoutDefaults(model.metadata)
+              ),
             measuredPageContentHeightsPxByPageIndex:
               options.pageContentHeightOverridesPx
                 ? [...options.pageContentHeightOverridesPx]
@@ -829,7 +928,19 @@ export function paginateDocumentLayoutWithNoteReserve(
 
   for (let iteration = 0; iteration < MAX_NOTE_RESERVE_ITERATIONS; iteration += 1) {
     const reservePx = resolvePageNoteReservePx(model, paginated.segmentsByPage, {
-      estimateDocNodeHeightPx,
+      estimateDocNodeHeightPx: (
+        node: DocModel["nodes"][number],
+        availableWidthPx?: number,
+        definitions?: NumberingDefinitionSet,
+        docGridLinePitchPx?: number
+      ) =>
+        estimateDocNodeHeightPx(
+          node,
+          availableWidthPx,
+          definitions,
+          docGridLinePitchPx,
+          tabGridLayoutDefaults(resolveDocumentLayoutDefaults(model.metadata))
+        ),
       numberingDefinitions: model.metadata.numberingDefinitions,
       resolvePageContentWidthPx: (pageIndex) =>
         Math.max(

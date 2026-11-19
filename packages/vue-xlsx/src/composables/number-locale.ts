@@ -28,6 +28,87 @@ export type NumberSeparators = {
   groupSeparator: string;
 };
 
+export type NumberFormatCategory =
+  | "general"
+  | "text"
+  | "number"
+  | "currency"
+  | "percent"
+  | "date"
+  | "time"
+  | "scientific"
+  | "fraction";
+
+/** Currency symbols Excel treats as part of a numeric format or typed value. */
+export const CURRENCY_SYMBOLS = "$€£¥₹₽₩₪¢₫₴₦₱₸₺฿";
+
+const BRACKET_CURRENCY = new RegExp(`\\[[^\\]]*[${CURRENCY_SYMBOLS.replace("$", "")}][^\\]]*\\]`);
+const CURRENCY_SYMBOL_TEST = new RegExp(`[${CURRENCY_SYMBOLS}]`);
+
+function hasCurrencySymbol(code: string): boolean {
+  if (BRACKET_CURRENCY.test(code)) {
+    return true;
+  }
+  return CURRENCY_SYMBOL_TEST.test(code.replace(/\[[^\]]*\]/g, ""));
+}
+
+/**
+ * Remove quoted literals, escaped characters, colour/condition/locale
+ * sections and padding directives so only format codes remain. This is what
+ * keeps `#,##0.00_);[Red](#,##0.00)` from looking like a date.
+ */
+export function stripFormatLiterals(code: string): string {
+  return code
+    .replace(/"[^"]*"/g, "")
+    .replace(/\\./g, "")
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/[_*]./g, "")
+    .toLowerCase();
+}
+
+/** Classify a format code into the category display and coercion rules need. */
+export function classifyNumberFormatCode(code: string): NumberFormatCategory {
+  const trimmed = code.trim();
+  if (!trimmed || /^general$/i.test(trimmed)) {
+    return "general";
+  }
+
+  // Currency symbols stay visible inside `[$€-407]` sections, so bracket
+  // sections are checked directly. `[$-409]`-style sections only carry a
+  // locale id and must not be read as a dollar format.
+  if (hasCurrencySymbol(trimmed)) {
+    return "currency";
+  }
+
+  const stripped = stripFormatLiterals(trimmed);
+  if (stripped.includes("%")) {
+    return "percent";
+  }
+  if (stripped.includes("e+") || stripped.includes("e-")) {
+    return "scientific";
+  }
+  if (/[yd]/.test(stripped)) {
+    return "date";
+  }
+  if (/[hs]/.test(stripped)) {
+    return "time";
+  }
+  if (stripped.includes("m")) {
+    return "date";
+  }
+  if (/[0#?]\s*\/\s*[0#?]/.test(stripped)) {
+    return "fraction";
+  }
+  if (!stripped) {
+    return "general";
+  }
+  if (!/[0#?]/.test(stripped)) {
+    return stripped.includes("@") ? "text" : "general";
+  }
+
+  return "number";
+}
+
 /**
  * Excel locale ids (LCIDs) mapped to BCP-47 tags. Formats normally reference a
  * locale as `[$-409]` (US English) or `[$€-407]` (German with the euro sign).
@@ -361,6 +442,202 @@ export function resolveNumberSeparators(locale: NumberFormatLocale | null | unde
   };
 }
 
+type LocaleSeparatorSource = string | NumberFormatLocale | null | undefined;
+
+function separatorsForLocale(locale: LocaleSeparatorSource): NumberSeparators {
+  if (typeof locale === "string") {
+    return resolveNumberSeparators(resolveFormatLocale(null, locale));
+  }
+  return resolveNumberSeparators(locale);
+}
+
+const LITERAL_TOKEN_START = 0xe000;
+const LITERAL_TOKEN_END = 0xf8ff;
+const NUMERIC_RUN = /[+-]?\d(?:[\d.,\u00a0\u202f' ]*\d)?/g;
+
+/** Literal text a numeric format prints verbatim (quotes, escapes, currencies). */
+function formatLiterals(code: string): string[] {
+  const literals: string[] = [];
+  for (let index = 0; index < code.length; index += 1) {
+    const char = code[index];
+    if (char === '"') {
+      let value = "";
+      let cursor = index + 1;
+      while (cursor < code.length) {
+        if (code[cursor] === "\\" && cursor + 1 < code.length) {
+          value += code[cursor + 1];
+          cursor += 2;
+          continue;
+        }
+        if (code[cursor] === '"') {
+          if (code[cursor + 1] === '"') {
+            value += '"';
+            cursor += 2;
+            continue;
+          }
+          break;
+        }
+        value += code[cursor];
+        cursor += 1;
+      }
+      if (value) {
+        literals.push(value);
+      }
+      index = cursor;
+    } else if (char === "\\" && index + 1 < code.length) {
+      literals.push(code[index + 1] ?? "");
+      index += 1;
+    } else if (char === "[") {
+      const end = code.indexOf("]", index + 1);
+      if (end > index) {
+        const inner = code.slice(index + 1, end);
+        if (inner.startsWith("$")) {
+          const symbol = inner.slice(1).split("-")[0] ?? "";
+          if (symbol) {
+            literals.push(symbol);
+          }
+        }
+        index = end;
+      }
+    }
+  }
+  return [...new Set(literals)].sort((left, right) => right.length - left.length);
+}
+
+/** Replace edge literals with private-use tokens so they are never rewritten. */
+function maskFormatLiterals(formatted: string, literals: readonly string[]) {
+  let masked = formatted;
+  const tokens: string[] = [];
+  const tokenFor = (literal: string) => {
+    if (tokens.length > LITERAL_TOKEN_END - LITERAL_TOKEN_START) {
+      return null;
+    }
+    tokens.push(literal);
+    return String.fromCharCode(LITERAL_TOKEN_START + tokens.length - 1);
+  };
+
+  for (const literal of literals) {
+    if (!literal) continue;
+    if (masked.startsWith(literal)) {
+      const token = tokenFor(literal);
+      if (token) masked = token + masked.slice(literal.length);
+    }
+    if (masked.endsWith(literal)) {
+      const token = tokenFor(literal);
+      if (token) masked = masked.slice(0, -literal.length) + token;
+    }
+  }
+  return { masked, tokens };
+}
+
+function unmaskFormatLiterals(text: string, tokens: readonly string[]) {
+  return text.replace(/[\uE000-\uF8FF]/g, (token) => {
+    const index = token.charCodeAt(0) - LITERAL_TOKEN_START;
+    return tokens[index] ?? token;
+  });
+}
+
+/** Rewrite one en-US engine number run with the target locale's separators. */
+function localizeNumberRun(run: string, locale: NumberFormatLocale): string {
+  let sign = "";
+  let body = run;
+  if (body.startsWith("+") || body.startsWith("-")) {
+    sign = body[0] ?? "";
+    body = body.slice(1);
+  }
+  body = body.replace(/[\s\u00a0\u202f']/g, "");
+  if (!/^(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)$/.test(body)) {
+    return run;
+  }
+  const [integerPart = "", fractionPart] = body.split(".");
+  const grouped = integerPart.includes(",");
+  const digits = integerPart.replace(/,/g, "");
+  const localizedInteger = grouped
+    ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, locale.groupSeparator)
+    : digits;
+  return `${sign}${localizedInteger}${fractionPart === undefined ? "" : `${locale.decimalSeparator}${fractionPart}`}`;
+}
+
+/**
+ * Localize a formatted cell value for the viewer locale.
+ *
+ * The workbook engine formats with en-US separators, so numeric output is
+ * rewritten to the locale's decimal and group marks. Quoted/escaped format
+ * literals (including currency symbols) are masked first, and text, date and
+ * time formats are returned untouched so their own punctuation survives.
+ */
+export function localizeCellNumber(
+  formatted: string,
+  formatCode: string | null | undefined,
+  fallbackLocale?: string
+): string {
+  if (!formatted) {
+    return formatted;
+  }
+  const code = typeof formatCode === "string" ? formatCode : String(formatCode ?? "");
+  const category = classifyNumberFormatCode(code);
+  if (
+    category !== "number"
+    && category !== "currency"
+    && category !== "percent"
+    && category !== "scientific"
+  ) {
+    return formatted;
+  }
+  // A `[$-…]` section wins; otherwise the host locale applies.
+  const locale = resolveFormatLocale(code, fallbackLocale);
+  if (!locale || (locale.decimalSeparator === "." && locale.groupSeparator === ",")) {
+    return formatted;
+  }
+
+  const { masked, tokens } = maskFormatLiterals(formatted, formatLiterals(code));
+  const rewritten = masked.replace(NUMERIC_RUN, (run) => localizeNumberRun(run, locale));
+  return unmaskFormatLiterals(rewritten, tokens);
+}
+
+/**
+ * Parse a number that uses the separators of `locale`.
+ *
+ * `parseLocaleNumber("1.234,5")` is 1234.5 in every locale because both marks
+ * are present; with a single mark the tag decides (`1.234` is 1.234 in en-US
+ * and 1234 in de-DE). Currency and percent markings are not part of the
+ * number itself and stay with the caller.
+ */
+export function parseLocaleNumber(
+  text: string,
+  locale?: LocaleSeparatorSource
+): number | null {
+  let source = String(text ?? "").trim();
+  if (!source) {
+    return null;
+  }
+
+  let negative = false;
+  const parenthesised = /^\((.*)\)$/.exec(source);
+  if (parenthesised) {
+    negative = true;
+    source = (parenthesised[1] ?? "").trim();
+  }
+
+  const sign = /^([+-])\s*/.exec(source);
+  if (sign) {
+    if (sign[1] === "-") {
+      negative = !negative;
+    }
+    source = source.slice(sign[0].length).trim();
+  }
+
+  const normalized = normalizeNumberDigits(source, separatorsForLocale(locale));
+  if (!normalized) {
+    return null;
+  }
+  const value = Number(normalized.normalized);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return negative ? -value : value;
+}
+
 function groupingPattern(separator: string) {
   return new RegExp(`^\\d{1,3}(?:\\${separator}\\d{3})+$`);
 }
@@ -430,27 +707,19 @@ export function normalizeNumberDigits(
 }
 
 /** Parse a number that is already rendered as text, e.g. in a grid cell. */
-export function parseDisplayedNumber(text: string): number | null {
+export function parseDisplayedNumber(
+  text: string,
+  locale?: LocaleSeparatorSource
+): number | null {
   const source = String(text ?? "").trim();
   if (!source) {
     return null;
   }
-  const negative = /^\(.*\)$/.test(source) || /^-/.test(source);
   const cleaned = source
     .replace(/[%％]/g, "")
-    .replace(/\$€£¥₹₽₪¢₫₴₦₱₸₺฿/g, "")
-    .replace(/[()]/g, "")
-    .replace(/^[+-]/, "")
+    .replace(new RegExp(`[${CURRENCY_SYMBOLS}]`, "g"), "")
     .trim();
-  const normalized = normalizeNumberDigits(cleaned);
-  if (!normalized) {
-    return null;
-  }
-  const value = Number(normalized.normalized);
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-  return negative ? -value : value;
+  return parseLocaleNumber(cleaned, locale);
 }
 
 const NUMERIC_DATE_PARTS = /^(\d{1,4})[./-](\d{1,2})[./-](\d{1,4})$/;

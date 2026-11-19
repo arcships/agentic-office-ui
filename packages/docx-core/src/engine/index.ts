@@ -31,6 +31,43 @@ export {
 // DocModel construction (buildDocModel / buildDocModelFromBytes)
 export { buildDocModel, buildDocModelFromBytes } from "./doc-model";
 
+// Drawing objects and equations: import enrichment + export preservation.
+// The WASM model builder has no node type for shapes, charts, SmartArt,
+// embedded OLE objects, 3D models or equations; these modules attach them to
+// the model after parsing and write their stored markup back on export.
+export {
+  enrichDocModelDrawingObjects,
+  mediaPartDataUri,
+  relationshipPartName,
+  storyRelationshipTargets,
+} from "./drawing-object-model";
+export type { DrawingObjectEnrichmentContext } from "./drawing-object-model";
+export {
+  classifyDrawingXml,
+  drawingExtentPx,
+  mathIsDisplay,
+  mathTextFromXml,
+  paragraphDrawingObjects,
+  parseChartData,
+  parseDrawingAnchor,
+  parseDrawingShapeStyle,
+  parseTextBoxContent,
+  textBoxContentText,
+} from "./drawing-objects";
+export type { ParagraphDrawingObject } from "./drawing-objects";
+export { linearizeOmml } from "./omml";
+export {
+  applyObjectsToParagraphContent,
+  applyPreservedDrawingObjectsToDocumentXml,
+  applyPreservedDrawingObjectsToPackage,
+  applyPreservedDrawingObjectsToPartContent,
+  applyPreservedDrawingObjectsToStoryXml,
+  applyTextBoxTextToXml,
+  collectPreservedDrawingObjects,
+  modelNeedsDrawingObjectSerialization,
+  storyParagraphCount,
+} from "./drawing-object-serialization";
+
 // Note numbering/placement properties (w:footnotePr / w:endnotePr)
 export {
   parseNoteNumberingProperties,
@@ -41,6 +78,44 @@ export {
 // Page background colour and pattern parsing (w:background)
 export { parseDocumentBackground } from "./page-background";
 export type { ParsedDocumentBackground } from "./page-background";
+
+// Document layout inputs from word/settings.xml (compatibility mode, default
+// tab stop) and the paragraph rules that depend on them (HTML auto spacing).
+export {
+  attachDocumentDefaults,
+  parseCompatibilityMode,
+  parseDefaultTabStopTwips,
+  parseParagraphAutoSpacing,
+} from "./document-defaults";
+export type { ParsedParagraphAutoSpacing } from "./document-defaults";
+export {
+  WORD_DEFAULT_TAB_STOP_TWIPS,
+  allowsWrappedLeftTabRefit,
+  documentHonoursAutoSpacing,
+  documentLayoutCacheKey,
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  tabGridLayoutDefaults,
+  twipsToPixelsExact,
+  twipsToWholePixels,
+} from "./layout-defaults";
+export type {
+  DocumentLayoutDefaults,
+  DocumentLayoutDefaultsSource,
+} from "./layout-defaults";
+export {
+  HTML_AUTO_SPACING_PX,
+  HTML_AUTO_SPACING_TWIPS,
+  paragraphsShareListNumbering,
+  paragraphsSuppressAutoSpacing,
+  resolveParagraphAutoSpacingInStory,
+  resolveParagraphAutoSpacingPx,
+  resolveParagraphSpacingPx,
+} from "./paragraph-auto-spacing";
+export type {
+  ParagraphAutoSpacingContext,
+  ParagraphAutoSpacingPx,
+} from "./paragraph-auto-spacing";
 
 // WASM bridge: initWasm / setWasmSource / wasmParseDocx / wasmSerializeDocx / ...
 export type { WasmSource, WasmOoxmlPart, WasmOoxmlPackage, LegacyWasmOoxmlPackage } from "./wasm";
@@ -70,3 +145,49 @@ export {
 
 // Serialization: model → document.xml / OoxmlPackage / ArrayBuffer
 export { modelToDocumentXml, serializeDocModel, serializeDocx } from "./serializer";
+export {
+  DocxSerializationError,
+  prepareModelForSerialization
+} from "./prepare-model";
+export type { DocxSerializationErrorCode } from "./prepare-model";
+export {
+  hasCollapsedTableGrid,
+  projectCollapsedTableGrid
+} from "./table-grid-projection";
+export type {
+  GridCell,
+  GridProjectionOptions,
+  GridProjectionResult,
+  GridRow,
+  GridTable,
+  LogicalBoundaryRange
+} from "./table-grid-projection";
+
+// Section page setup (w:pgSz / w:pgMar / w:cols) read + rewrite helpers
+export {
+  DEFAULT_DOCX_COLUMN_SPACE_TWIPS,
+  DEFAULT_DOCX_PAGE_MARGINS,
+  DEFAULT_DOCX_PAGE_SIZE,
+  DEFAULT_SECTION_PROPERTIES_XML,
+  DOCX_PAGE_SIZE_PRESETS,
+  TWIPS_PER_INCH,
+  matchDocxPageSizePreset,
+  normalizePageSizeOrientation,
+  readSectionColumns,
+  readSectionPageMargins,
+  readSectionPageSize,
+  resolveDocxPageSizePreset,
+  writeSectionColumns,
+  writeSectionPageMargins,
+  writeSectionPageSize,
+} from "./section-properties";
+export type {
+  DocxPageMargins,
+  DocxPageMarginsUpdate,
+  DocxPageOrientation,
+  DocxPageSize,
+  DocxPageSizePreset,
+  DocxPageSizeUpdate,
+  DocxSectionColumns,
+  DocxSectionColumnsUpdate,
+} from "./section-properties";

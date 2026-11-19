@@ -480,6 +480,100 @@ test("Delete removes selected images, charts and shapes through the controller",
   }
 });
 
+test("preset shapes render as SVG paths with connector dashes and arrowheads", async () => {
+  const arrow = shape("arrow", 100, 50, {
+    fill: { color: "#fde68a" },
+    geometry: "rightArrow",
+    stroke: { color: "#b45309", widthPx: 2 },
+  });
+  const connector = shape("connector", 100, 50, {
+    fill: { none: true },
+    geometry: "bentConnector3",
+    stroke: {
+      color: "#111827",
+      dash: "dash",
+      headEndType: "triangle",
+      tailEndType: "arrow",
+      widthPx: 2,
+    },
+  });
+  const { controller } = imageController({ shapes: [arrow, connector] });
+  const mounted = await mount(XlsxDrawingLayer, { controller });
+  try {
+    const [arrowItem, connectorItem] = findItems(mounted.root, "xlsx-shape");
+
+    const arrowSvg = walk(arrowItem).find((node) => node.type === "svg");
+    assert.equal(arrowSvg.props.viewBox, "0 0 160 80", "preset paths use the shape's pixel box");
+    const arrowPath = walk(arrowSvg).find((node) => node.type === "path" && node.props.class === "xlsx-drawing-layer__geometry");
+    assert.equal(arrowPath.props.d, "M0,20 L120,20 L120,0 L160,40 L120,80 L120,60 L0,60 Z");
+    assert.equal(walk(arrowSvg).some((node) => node.type === "rect"), false, "no rectangle fallback");
+
+    const connectorSvg = walk(connectorItem).find((node) => node.type === "svg");
+    const connectorPath = walk(connectorSvg).find((node) => node.type === "path" && node.props.class === "xlsx-drawing-layer__geometry");
+    assert.equal(connectorPath.props.d, "M0,0 L80,0 L80,80 L160,80");
+    assert.equal(connectorPath.props.style.strokeDasharray, "8 6", "prstDash scales with the line width");
+    assert.equal(connectorPath.props["marker-start"], "url(#xlsx-shape-connector-head-marker)");
+    assert.equal(connectorPath.props["marker-end"], "url(#xlsx-shape-connector-tail-marker)");
+    assert.equal(connectorItem.props.style["--shape-fill"], "transparent", "connectors stay unfilled");
+
+    const markers = walk(connectorSvg).filter((node) => node.type === "marker");
+    assert.equal(markers.length, 2);
+    assert.deepEqual(markers.map((marker) => marker.props.orient), ["auto-start-reverse", "auto"]);
+    const markerPaths = markers.map((marker) => walk(marker).find((node) => node.type === "path"));
+    assert.deepEqual(
+      markerPaths.map((markerPath) => [markerPath.props.fill, markerPath.props.stroke]),
+      [["#111827", "none"], ["none", "#111827"]],
+      "triangle heads are filled and open arrow tails are stroked",
+    );
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("every acceptance preset renders as a path, never a rectangle", async () => {
+  const presets = ["rightArrow", "chevron", "star5", "callout1", "flowChartDecision"];
+  const { controller } = imageController({
+    shapes: presets.map((geometry, index) => shape(geometry, 40 + index * 200, 30, {
+      fill: { none: true },
+      geometry,
+      stroke: { color: "#111827", widthPx: 1 },
+    })),
+  });
+  const mounted = await mount(XlsxDrawingLayer, { controller });
+  try {
+    const items = findItems(mounted.root, "xlsx-shape");
+    assert.equal(items.length, presets.length);
+    items.forEach((item, index) => {
+      assert.equal(item.props["data-shape-geometry"], presets[index]);
+      const svg = walk(item).find((node) => node.type === "svg");
+      const path = walk(svg).find((node) => node.type === "path" && node.props.class === "xlsx-drawing-layer__geometry");
+      assert.ok(path?.props.d?.startsWith("M"), `${presets[index]} should draw a preset path`);
+      assert.equal(walk(svg).some((node) => node.type === "rect"), false, `${presets[index]} must not fall back to a rect`);
+    });
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("custom geometry uses its stored svg view box", async () => {
+  const custom = shape("custom", 100, 50, {
+    geometry: "custom",
+    svgPath: "M 20 20 L 180 20 L 100 80 Z",
+    svgViewBox: { height: 100, width: 200 },
+  });
+  const { controller } = imageController({ shapes: [custom] });
+  const mounted = await mount(XlsxDrawingLayer, { controller });
+  try {
+    const [item] = findItems(mounted.root, "xlsx-shape");
+    const svg = walk(item).find((node) => node.type === "svg");
+    assert.equal(svg.props.viewBox, "0 0 200 100");
+    const path = walk(svg).find((node) => node.type === "path");
+    assert.equal(path.props.d, "M 20 20 L 180 20 L 100 80 Z");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
 test("selected shapes drag, resize and nudge through the shape mutation APIs", async () => {
   const { calls, controller } = imageController({
     selectedShapeId: "shape-1",

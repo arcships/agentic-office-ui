@@ -30,6 +30,7 @@ import {
   parseThemeFontsFromXml,
   xmlAttribute
 } from "./text-typography";
+import { parseParagraphAutoSpacing } from "./document-defaults";
 
 function packagePartContent(
   pkg: OoxmlPackage,
@@ -70,9 +71,22 @@ function applyMissingRunStyle(
   };
 
   assign("fontFamily");
+  assign("sourceFontFamily");
+  assign("fontFamilyAscii");
+  assign("fontFamilyHAnsi");
   assign("fontFamilyEastAsia");
   assign("fontFamilyComplexScript");
+  assign("fontHint");
   assign("fontSizePt");
+  assign("fontSizeCsPt");
+  assign("kerningMinFontSizePt");
+  assign("ligatures");
+  assign("contextualAlternates");
+  assign("language");
+  assign("languageEastAsia");
+  assign("languageBidi");
+  assign("rightToLeft");
+  assign("complexScript");
   assign("bold");
   assign("italic");
   assign("color");
@@ -127,7 +141,7 @@ function runTextFromXml(runXml: string): string {
 }
 
 const RUN_TYPOGRAPHY_TAG_PATTERN =
-  /<w:(?:rFonts|u|dstrike|strike|caps|smallCaps|spacing|w|bdr|effect|shadow|outline|rtl)\b/i;
+  /<w:(?:rFonts|u|dstrike|strike|caps|smallCaps|spacing|w|bdr|effect|shadow|outline|rtl|kern|lang|szCs|cs)\b|<w14:(?:ligatures|cntxtAlts)\b/i;
 
 function enrichParagraphRuns(
   paragraph: ParagraphNode,
@@ -198,9 +212,57 @@ function enrichParagraph(
     if (changed) {
       paragraph.style = style;
     }
+    applyParagraphAutoSpacing(paragraph, pPrXml);
   }
 
   enrichParagraphRuns(paragraph, themeFonts);
+}
+
+/**
+ * `w:spacing/@w:beforeAutospacing` / `@w:afterAutospacing` are not surfaced by
+ * the WASM builder, but layout needs them: Word derives a whole paragraph gap
+ * from either flag. The model keeps the flag (the amount is consumer-defined)
+ * and `resolveParagraphAutoSpacingPx` turns it into pixels. Existing model
+ * values win so a re-enrichment never clobbers an edit.
+ */
+function applyParagraphAutoSpacing(
+  paragraph: ParagraphNode,
+  paragraphPropertiesXml: string
+): void {
+  const spacing = paragraph.style?.spacing;
+  if (
+    spacing?.beforeAutoSpacing !== undefined &&
+    spacing?.afterAutoSpacing !== undefined
+  ) {
+    return;
+  }
+
+  const parsed = parseParagraphAutoSpacing(paragraphPropertiesXml);
+  if (!parsed) {
+    return;
+  }
+
+  const nextSpacing = { ...(spacing ?? {}) };
+  let changed = false;
+  if (
+    nextSpacing.beforeAutoSpacing === undefined &&
+    parsed.beforeAutoSpacing !== undefined
+  ) {
+    nextSpacing.beforeAutoSpacing = parsed.beforeAutoSpacing;
+    changed = true;
+  }
+  if (
+    nextSpacing.afterAutoSpacing === undefined &&
+    parsed.afterAutoSpacing !== undefined
+  ) {
+    nextSpacing.afterAutoSpacing = parsed.afterAutoSpacing;
+    changed = true;
+  }
+  if (!changed) {
+    return;
+  }
+
+  paragraph.style = { ...(paragraph.style ?? {}), spacing: nextSpacing };
 }
 
 function walkNodes(
@@ -225,6 +287,28 @@ function walkTable(table: TableNode, themeFonts: DocxThemeFonts | undefined): vo
         } else {
           walkTable(node, themeFonts);
         }
+      }
+    }
+  }
+}
+
+/**
+ * Header/footer/note stories lay out with the same paragraph estimators as the
+ * body, so they need the automatic spacing flags too. Run typography stays
+ * body-only to keep this enrichment pass to paragraph spacing.
+ */
+function walkParagraphAutoSpacing(nodes: DocNode[]): void {
+  for (const node of nodes) {
+    if (node.type === "paragraph") {
+      const pPrXml = firstTag(node.sourceXml ?? "", "w:pPr");
+      if (pPrXml) {
+        applyParagraphAutoSpacing(node, pPrXml);
+      }
+      continue;
+    }
+    for (const row of node.rows) {
+      for (const cell of row.cells) {
+        walkParagraphAutoSpacing(cell.nodes);
       }
     }
   }
@@ -384,4 +468,25 @@ export function enrichDocModelTypography(
   );
 
   walkNodes(model.nodes, themeFonts);
+
+  for (const section of model.metadata.headerSections) {
+    walkParagraphAutoSpacing(section.nodes);
+  }
+  for (const section of model.metadata.footerSections) {
+    walkParagraphAutoSpacing(section.nodes);
+  }
+  for (const section of model.metadata.sections ?? []) {
+    for (const header of section.headerSections) {
+      walkParagraphAutoSpacing(header.nodes);
+    }
+    for (const footer of section.footerSections) {
+      walkParagraphAutoSpacing(footer.nodes);
+    }
+  }
+  for (const note of model.metadata.footnotes ?? []) {
+    if (note.nodes) walkParagraphAutoSpacing(note.nodes);
+  }
+  for (const note of model.metadata.endnotes ?? []) {
+    if (note.nodes) walkParagraphAutoSpacing(note.nodes);
+  }
 }

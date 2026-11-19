@@ -81,6 +81,13 @@ function collectIdentifiersFromNode(
   collectIdentifiersFromSourceXml(node.sourceXml, registry);
 
   if (node.type !== "table") {
+    // Drawing objects and equations keep their own markup, which carries the
+    // same `wp:docPr@id` identity as an inline drawing.
+    for (const child of node.children) {
+      if (child.type === "drawing" || child.type === "math") {
+        collectIdentifiersFromSourceXml(child.sourceXml, registry);
+      }
+    }
     return;
   }
 
@@ -232,6 +239,19 @@ function sanitizeNodeForInsertion(
     // as soon as an edit clears the copy's `sourceXml`, re-emit
     // `w:commentRangeStart w:id`/`w:commentReference w:id` a second time.
     node.commentRanges = undefined;
+    // A preserved drawing object is written back from its own markup, so its
+    // drawing ids have to be renumbered just like the paragraph's.
+    for (const child of node.children) {
+      if (child.type === "drawing" || child.type === "math") {
+        child.sourceXml = sanitizeDuplicatedSourceXml(child.sourceXml, registry);
+      }
+      if (child.type === "image" && child.textBoxSourceXml) {
+        child.textBoxSourceXml = sanitizeDuplicatedSourceXml(
+          child.textBoxSourceXml,
+          registry
+        );
+      }
+    }
   }
 
   if (node.sourceXml) {

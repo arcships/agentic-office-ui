@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import json
 import random
 import re
 import zipfile
 from pathlib import Path
 from textwrap import wrap
+from typing import Callable
 
 from docx import Document
+from docx.enum.section import WD_ORIENT, WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Mm, Pt, RGBColor
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.drawing.image import Image as XlsxImage
@@ -17,15 +20,18 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, IconSetRule
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table as XlsxTable, TableStyleInfo
 from PIL import Image, ImageDraw, ImageFont
 from reportlab import rl_config
-from reportlab.lib import colors
+from reportlab.lib import colors, pdfencrypt
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Image as PdfImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -341,6 +347,800 @@ def make_docx_review_comments(path: Path):
             target.writestr(name, entries[name])
 
 
+# ---------------------------------------------------------------------------
+# DOCX feature fixtures (issue #53)
+#
+# A DOCX fixture can only catch a rendering defect when it actually contains the
+# feature that regressed. The review fixture above deliberately keeps exactly
+# one comment and one revision, so the fixtures below carry the harder cases:
+# comment threads and replies, several comments on one paragraph, ranges that
+# cross paragraphs, comments anchored in a table cell and in a header, a
+# resolved thread, vertically merged and nested tables, repeating header rows,
+# mixed portrait/landscape sections, two-column sections, a text box and a
+# behind-text watermark.
+#
+# The assertions for these files live in `tests/unit/docx-fixture-fidelity.test.mjs`
+# (document model) and `tests/component/docx-fixture-fidelity.test.mjs`
+# (rendered pages).
+# ---------------------------------------------------------------------------
+
+WORD_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+WORD14_NS = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"'
+WORD15_NS = 'xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"'
+
+REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+CONTENT_TYPE_COMMENTS = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
+)
+CONTENT_TYPE_COMMENTS_EXTENDED = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml"
+)
+CONTENT_TYPE_FOOTNOTES = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"
+)
+CONTENT_TYPE_ENDNOTES = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml"
+)
+
+
+def read_docx_parts(path: Path) -> dict[str, bytes]:
+    with zipfile.ZipFile(path, "r") as source:
+        return {name: source.read(name) for name in source.namelist()}
+
+
+def write_docx_parts(path: Path, entries: dict[str, bytes]) -> None:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
+        for name in sorted(entries):
+            target.writestr(name, entries[name])
+
+
+def replace_docx_paragraph(document_xml: str, marker: str, replacement: str) -> str:
+    """Replace the single paragraph whose text is exactly `marker`."""
+    pattern = (
+        r"<w:p\b[^>]*>(?:(?!</w:p>).)*?<w:t[^>]*>"
+        + re.escape(marker)
+        + r"</w:t>(?:(?!</w:p>).)*?</w:p>"
+    )
+    updated, count = re.subn(pattern, replacement, document_xml, count=1)
+    if count != 1:
+        raise RuntimeError(f"Unable to replace DOCX fixture paragraph {marker!r}")
+    return updated
+
+
+def add_content_type_overrides(content_types: str, overrides: dict[str, str]) -> str:
+    for part_name, content_type in overrides.items():
+        if part_name in content_types:
+            continue
+        content_types = content_types.replace(
+            "</Types>",
+            f'<Override PartName="{part_name}" ContentType="{content_type}"/></Types>',
+        )
+    return content_types
+
+
+def add_relationships(relationships: str, entries: list[tuple[str, str, str]]) -> str:
+    for rel_id, rel_type, target in entries:
+        if f'Id="{rel_id}"' in relationships:
+            continue
+        relationships = relationships.replace(
+            "</Relationships>",
+            f'<Relationship Id="{rel_id}" Type="{rel_type}" Target="{target}"/></Relationships>',
+        )
+    return relationships
+
+
+def escape_xml(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def comment_markup(comment_id: int, text: str) -> tuple[str, str]:
+    """Return (range start/text/end fragment, reference run) for a comment id."""
+    body = (
+        f'<w:commentRangeStart w:id="{comment_id}"/>'
+        f"<w:r><w:t>{escape_xml(text)}</w:t></w:r>"
+        f'<w:commentRangeEnd w:id="{comment_id}"/>'
+    )
+    reference = (
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>'
+        f'<w:commentReference w:id="{comment_id}"/></w:r>'
+    )
+    return body, reference
+
+
+def find_table_row(document_xml: str, marker: str) -> tuple[int, str]:
+    """Return (row index, raw `<w:tr>` XML) for the row containing `marker`."""
+    cursor = 0
+    row_index = -1
+    while True:
+        start = document_xml.find("<w:tr>", cursor)
+        alternate = document_xml.find("<w:tr ", cursor)
+        if start == -1 or (alternate != -1 and alternate < start):
+            start = alternate
+        if start == -1:
+            raise RuntimeError(f"Unable to locate DOCX fixture table row {marker!r}")
+        end = document_xml.find("</w:tr>", start)
+        if end == -1:
+            raise RuntimeError(f"Unbalanced DOCX fixture table row {marker!r}")
+        row_index += 1
+        row_xml = document_xml[start : end + len("</w:tr>")]
+        if marker in row_xml:
+            return row_index, row_xml
+        cursor = end + len("</w:tr>")
+
+
+def inject_row_properties(row_xml: str, properties_xml: str) -> str:
+    """Insert `properties_xml` into the row's `<w:trPr>` (creating it first)."""
+    if "<w:trPr>" in row_xml:
+        return row_xml.replace("<w:trPr>", f"<w:trPr>{properties_xml}", 1)
+    if "<w:trPr/>" in row_xml:
+        return row_xml.replace("<w:trPr/>", f"<w:trPr>{properties_xml}</w:trPr>", 1)
+    open_tag_end = row_xml.find(">") + 1
+    return f"{row_xml[:open_tag_end]}<w:trPr>{properties_xml}</w:trPr>{row_xml[open_tag_end:]}"
+
+
+def build_comments_xml(comments: list[tuple[int, str, str, str, str]]) -> str:
+    """Serialize `word/comments.xml`; tuples are (id, author, initials, paraId, text)."""
+    body = []
+    for comment_id, author, initials, para_id, text in comments:
+        body.append(
+            f'<w:comment w:id="{comment_id}" w:author="{author}" w:initials="{initials}" '
+            'w:date="2026-07-11T00:10:00Z">'
+            f'<w:p w14:paraId="{para_id}"><w:r><w:t>{escape_xml(text)}</w:t></w:r></w:p>'
+            "</w:comment>"
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f"<w:comments {WORD_NS} {WORD14_NS}>{''.join(body)}</w:comments>"
+    )
+
+
+def build_comments_extended_xml(
+    entries: list[tuple[str, str | None, bool]]
+) -> str:
+    """Serialize `word/commentsExtended.xml`; tuples are (paraId, parent, done)."""
+    body = []
+    for para_id, parent, done in entries:
+        attributes = [f'w15:paraId="{para_id}"']
+        if parent is not None:
+            attributes.append(f'w15:paraIdParent="{parent}"')
+        if done:
+            attributes.append('w15:done="1"')
+        body.append(f"<w15:commentEx {' '.join(attributes)}/>")
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f"<w15:commentsEx {WORD15_NS}>{''.join(body)}</w15:commentsEx>"
+    )
+
+
+def build_notes_xml(tag: str, notes: list[tuple[int, str]]) -> str:
+    """Serialize `word/footnotes.xml` or `word/endnotes.xml`; ids are not labels."""
+    body = "".join(
+        f'<w:{tag[:-1]} w:id="{note_id}"><w:p><w:r><w:t>{escape_xml(text)}</w:t></w:r></w:p>'
+        f"</w:{tag[:-1]}>"
+        for note_id, text in notes
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f"<w:{tag} {WORD_NS}>{body}</w:{tag}>"
+    )
+
+
+def make_docx_review_threads(path: Path):
+    """Comment threads, reply/resolve state, cross-paragraph ranges and table revisions.
+
+    Covers the review cases the single-comment fixture cannot express:
+
+    * comment 0 with replies 1 and 2 (`commentsExtended` paraIdParent), where
+      reply 2 has no inline markup and must inherit its parent's anchor,
+    * comments 3 and 4 on two runs of the same paragraph,
+    * comment 5 whose range starts in one paragraph and ends three paragraphs
+      later,
+    * comment 6 anchored in a table cell,
+    * comment 7 anchored in the page header,
+    * comment 8 marked done with reply 9 (a resolved thread),
+    * comment 10 on an ordinary paragraph,
+    * a deleted table row and a `trPrChange` row-height revision,
+    * two footnotes and two endnotes whose markers must match the notes list.
+    """
+    doc = Document()
+    set_doc_defaults(doc)
+    add_header_footer(doc, "HEADER_COMMENT_TARGET")
+    doc.add_heading("Review Threads", 0)
+    doc.add_paragraph("THREAD_PARAGRAPH")
+    doc.add_paragraph("TWO_COMMENT_PARAGRAPH")
+    doc.add_paragraph("CROSS_START_PARAGRAPH")
+    doc.add_paragraph("CROSS_MIDDLE_PARAGRAPH")
+    doc.add_paragraph("CROSS_END_PARAGRAPH")
+    doc.add_paragraph("RESOLVED_PARAGRAPH")
+    doc.add_paragraph("SIMPLE_PARAGRAPH")
+
+    table = doc.add_table(rows=4, cols=3)
+    table.style = "Table Grid"
+    for cell, text in zip(table.rows[0].cells, ["Vendor", "Amount", "Status"]):
+        cell.text = text
+    table.cell(1, 0).text = "Northwind Industrial"
+    table.cell(1, 1).text = "CELL_COMMENT"
+    table.cell(1, 2).text = "Approved"
+    table.cell(2, 0).text = "DELETED_ROW_TARGET"
+    table.cell(2, 1).text = "880.00"
+    table.cell(2, 2).text = "Rejected"
+    table.cell(3, 0).text = "ROW_HEIGHT_TARGET"
+    table.cell(3, 1).text = "2,400.00"
+    table.cell(3, 2).text = "Approved"
+
+    doc.add_paragraph("CLOSING_PARAGRAPH")
+    doc.save(path)
+
+    entries = read_docx_parts(path)
+    document_xml = entries["word/document.xml"].decode("utf-8")
+
+    thread_body, thread_ref0 = comment_markup(0, "Threaded comment anchor")
+    thread_ref1 = (
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>'
+        '<w:commentReference w:id="1"/></w:r>'
+    )
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "THREAD_PARAGRAPH",
+        f"<w:p>{thread_body}{thread_ref0}{thread_ref1}</w:p>",
+    )
+
+    left_body, left_ref = comment_markup(3, "LEFT_SEGMENT")
+    right_body, right_ref = comment_markup(4, "RIGHT_SEGMENT")
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "TWO_COMMENT_PARAGRAPH",
+        f'<w:p>{left_body}{left_ref}<w:r><w:t xml:space="preserve"> and </w:t></w:r>'
+        f"{right_body}{right_ref}</w:p>",
+    )
+
+    start_body = '<w:commentRangeStart w:id="5"/>'
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "CROSS_START_PARAGRAPH",
+        '<w:p><w:r><w:t xml:space="preserve">Cross paragraph range begins </w:t></w:r>'
+        f"{start_body}<w:r><w:t>here</w:t></w:r></w:p>",
+    )
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "CROSS_MIDDLE_PARAGRAPH",
+        '<w:p><w:r><w:t>the range continues through this middle paragraph</w:t></w:r></w:p>',
+    )
+    end_ref = (
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>'
+        '<w:commentReference w:id="5"/></w:r>'
+    )
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "CROSS_END_PARAGRAPH",
+        '<w:p><w:r><w:t>and closes at this point</w:t></w:r>'
+        f'<w:commentRangeEnd w:id="5"/>{end_ref}</w:p>',
+    )
+
+    resolved_body, resolved_ref8 = comment_markup(8, "Resolved thread anchor paragraph")
+    resolved_ref9 = (
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>'
+        '<w:commentReference w:id="9"/></w:r>'
+    )
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "RESOLVED_PARAGRAPH",
+        f"<w:p>{resolved_body}{resolved_ref8}{resolved_ref9}</w:p>",
+    )
+
+    simple_body, simple_ref = comment_markup(10, "simple comment anchor paragraph")
+    footnote_marker = (
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr>'
+        '<w:footnoteReference w:id="1"/></w:r>'
+    )
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "SIMPLE_PARAGRAPH",
+        f"<w:p>{simple_body}{footnote_marker}{simple_ref}"
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr>'
+        '<w:endnoteReference w:id="2"/></w:r></w:p>',
+    )
+
+    cell_body, cell_ref = comment_markup(6, "1,200.00")
+    document_xml = replace_docx_paragraph(
+        document_xml, "CELL_COMMENT", f"<w:p>{cell_body}{cell_ref}</w:p>"
+    )
+
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "CLOSING_PARAGRAPH",
+        '<w:p><w:r><w:t>Closing paragraph with two note markers</w:t></w:r>'
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr>'
+        '<w:footnoteReference w:id="2"/></w:r>'
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr>'
+        '<w:endnoteReference w:id="1"/></w:r></w:p>',
+    )
+
+    # --- review-threads-tail ---
+    _, deleted_row_xml = find_table_row(document_xml, "DELETED_ROW_TARGET")
+    deleted_row_index, _ = find_table_row(document_xml, "DELETED_ROW_TARGET")
+    height_row_index, height_row_xml = find_table_row(document_xml, "ROW_HEIGHT_TARGET")
+    if deleted_row_index >= height_row_index:
+        raise RuntimeError("review fixture rows are out of order")
+    document_xml = document_xml.replace(
+        deleted_row_xml,
+        inject_row_properties(
+            deleted_row_xml,
+            '<w:del w:id="20" w:author="Alex Reviewer" w:date="2026-07-11T00:20:00Z"/>',
+        ),
+        1,
+    )
+    document_xml = document_xml.replace(
+        height_row_xml,
+        inject_row_properties(
+            height_row_xml,
+            '<w:trHeight w:val="720" w:hRule="atLeast"/>'
+            '<w:trPrChange w:id="22" w:author="Morgan Editor" w:date="2026-07-11T00:25:00Z">'
+            '<w:trPr><w:trHeight w:val="360" w:hRule="atLeast"/></w:trPr>'
+            "</w:trPrChange>",
+        ),
+        1,
+    )
+    entries["word/document.xml"] = document_xml.encode("utf-8")
+
+    entries["word/comments.xml"] = build_comments_xml(
+        [
+            (0, "Priya Reviewer", "PR", "1A2B3C01", "Root comment: confirm the service-level summary is current."),
+            (1, "Alex Reviewer", "AR", "1A2B3C02", "Reply one: the summary was refreshed this morning."),
+            (2, "Morgan Editor", "ME", "1A2B3C03", "Reply two: no reference run, so the anchor is inherited."),
+            (3, "Priya Reviewer", "PR", "1A2B3C04", "Left half of the same paragraph."),
+            (4, "Alex Reviewer", "AR", "1A2B3C05", "Right half of the same paragraph."),
+            (5, "Morgan Editor", "ME", "1A2B3C06", "Range crosses the three paragraphs above."),
+            (6, "Priya Reviewer", "PR", "1A2B3C07", "Cell comment: the amount must match the purchase order."),
+            (7, "Alex Reviewer", "AR", "1A2B3C08", "Header comment: the running head is out of date."),
+            (8, "Morgan Editor", "ME", "1A2B3C09", "Resolved root: the wording was accepted."),
+            (9, "Priya Reviewer", "PR", "1A2B3C0A", "Resolved reply: thanks, closing the thread."),
+            (10, "Alex Reviewer", "AR", "1A2B3C0B", "Ordinary paragraph comment."),
+        ]
+    ).encode("utf-8")
+    entries["word/commentsExtended.xml"] = build_comments_extended_xml(
+        [
+            ("1A2B3C01", None, False),
+            ("1A2B3C02", "1A2B3C01", False),
+            ("1A2B3C03", "1A2B3C01", False),
+            ("1A2B3C04", None, False),
+            ("1A2B3C05", None, False),
+            ("1A2B3C06", None, False),
+            ("1A2B3C07", None, False),
+            ("1A2B3C08", None, False),
+            ("1A2B3C09", None, True),
+            ("1A2B3C0A", "1A2B3C09", False),
+            ("1A2B3C0B", None, False),
+        ]
+    ).encode("utf-8")
+    entries["word/footnotes.xml"] = build_notes_xml(
+        "footnotes",
+        [
+            (1, "Footnote one: the service-level summary was reviewed."),
+            (2, "Footnote two: the invoice total includes tax."),
+        ],
+    ).encode("utf-8")
+    entries["word/endnotes.xml"] = build_notes_xml(
+        "endnotes",
+        [
+            (1, "Endnote one: response times change in the next contract."),
+            (2, "Endnote two: the retention policy is under legal review."),
+        ],
+    ).encode("utf-8")
+
+    header_xml = entries["word/header1.xml"].decode("utf-8")
+    header_body, header_ref = comment_markup(7, "Review Threads Fixture")
+    header_xml = replace_docx_paragraph(
+        header_xml, "HEADER_COMMENT_TARGET", f"<w:p>{header_body}{header_ref}</w:p>"
+    )
+    entries["word/header1.xml"] = header_xml.encode("utf-8")
+
+    content_types = entries["[Content_Types].xml"].decode("utf-8")
+    entries["[Content_Types].xml"] = add_content_type_overrides(
+        content_types,
+        {
+            "/word/comments.xml": CONTENT_TYPE_COMMENTS,
+            "/word/commentsExtended.xml": CONTENT_TYPE_COMMENTS_EXTENDED,
+            "/word/footnotes.xml": CONTENT_TYPE_FOOTNOTES,
+            "/word/endnotes.xml": CONTENT_TYPE_ENDNOTES,
+        },
+    ).encode("utf-8")
+
+    relationships = entries["word/_rels/document.xml.rels"].decode("utf-8")
+    entries["word/_rels/document.xml.rels"] = add_relationships(
+        relationships,
+        [
+            ("rIdReviewThreadComments", f"{REL_NS}/comments", "comments.xml"),
+            (
+                "rIdReviewThreadCommentsExtended",
+                "http://schemas.microsoft.com/office/2011/relationships/commentsExtended",
+                "commentsExtended.xml",
+            ),
+            ("rIdReviewThreadFootnotes", f"{REL_NS}/footnotes", "footnotes.xml"),
+            ("rIdReviewThreadEndnotes", f"{REL_NS}/endnotes", "endnotes.xml"),
+        ],
+    ).encode("utf-8")
+
+    write_docx_parts(path, entries)
+
+def make_docx_table_structures(path: Path):
+    """Vertical merges, grid spans, nested tables, multi-paragraph cells, header rows.
+
+    `invoice-table.docx` only merges cells horizontally, so a dropped `vMerge`
+    continuation cell or a lost nested table is invisible to the suite. This
+    fixture carries both, plus `w:tblHeader` rows that must repeat when the long
+    table in the same file splits across pages.
+    """
+    doc = Document()
+    set_doc_defaults(doc)
+    add_header_footer(doc, "Table Structures Fixture")
+    doc.add_heading("Table Structures", 0)
+    doc.add_paragraph("The first table merges vertically and horizontally and nests a table.")
+
+    table = doc.add_table(rows=5, cols=4)
+    table.style = "Table Grid"
+    for cell, text in zip(table.rows[0].cells, ["Region", "Q1", "Q2", "Total"]):
+        cell.text = text
+
+    # Vertical merge over the three body rows of column 0.
+    vertical = table.cell(1, 0).merge(table.cell(3, 0))
+    vertical.text = "North region"
+    vertical.add_paragraph("(all quarters)")
+    # Horizontal merge in row 1 spanning the two quarter columns.
+    horizontal = table.cell(1, 1).merge(table.cell(1, 2))
+    horizontal.text = "Q1+Q2 combined"
+    table.cell(1, 3).text = "2,650"
+    # Multi-paragraph cell in a normal body row.
+    multi = table.cell(2, 1)
+    multi.text = "1,200"
+    multi.add_paragraph("(audited)")
+    multi.add_paragraph("(signed off)")
+    table.cell(2, 2).text = "1,450"
+    table.cell(2, 3).text = "2,650"
+    # Nested table inside the last body cell.
+    nested = table.cell(3, 3)
+    nested.text = "Nested:"
+    nested_table = nested.add_table(rows=2, cols=2)
+    nested_table.style = "Table Grid"
+    for row_index, values in enumerate([["N1", "N2"], ["N3", "N4"]]):
+        for column_index, value in enumerate(values):
+            nested_table.cell(row_index, column_index).text = value
+    table.cell(4, 0).text = "Total"
+    table.cell(4, 1).text = "2,650"
+    table.cell(4, 2).text = "2,650"
+    table.cell(4, 3).text = "5,300"
+
+    doc.add_paragraph("The second table repeats its header row on every page it spans.")
+    long_table = doc.add_table(rows=46, cols=8)
+    long_table.style = "Table Grid"
+    for column_index in range(8):
+        long_table.cell(0, column_index).text = f"Column {column_index + 1}"
+    for row_index in range(1, 46):
+        for column_index in range(8):
+            long_table.cell(row_index, column_index).text = (
+                f"R{row_index:02d}C{column_index + 1}"
+            )
+    doc.save(path)
+
+    entries = read_docx_parts(path)
+    document_xml = entries["word/document.xml"].decode("utf-8")
+
+    header_row_index, header_row_xml = find_table_row(document_xml, "Column 8")
+    if header_row_index < 0 or "Column 1" not in header_row_xml:
+        raise RuntimeError("the long table's header row could not be located")
+    document_xml = document_xml.replace(
+        header_row_xml,
+        inject_row_properties(
+            header_row_xml, '<w:tblHeader/><w:cantSplit/>'
+        ),
+        1,
+    )
+    entries["word/document.xml"] = document_xml.encode("utf-8")
+
+    # A running head can contain a table (a common letterhead layout), and the
+    # viewer renders it through the same table host as the body. Without this a
+    # header table that is dropped, flattened or rendered outside the header band
+    # is invisible to the suite.
+    header_xml = entries["word/header1.xml"].decode("utf-8")
+    if "<w:tbl>" in header_xml:
+        raise RuntimeError("table-structures header already contains a table")
+    closing = header_xml.find("</w:p>")
+    if closing == -1:
+        raise RuntimeError("table-structures header paragraph is missing")
+    insert_at = closing + len("</w:p>")
+    header_xml = (
+        header_xml[:insert_at] + build_header_table_xml() + header_xml[insert_at:]
+    )
+    entries["word/header1.xml"] = header_xml.encode("utf-8")
+    write_docx_parts(path, entries)
+
+
+def build_header_table_xml() -> str:
+    """A two-row table for a page header, in the fixture's table style.
+
+    Word keeps an empty paragraph after a header table so the header can still
+    hold a caret; the fixture does the same so it looks like Word output.
+    """
+
+    def cell(text: str, *, bold: bool = False) -> str:
+        run_properties = "<w:rPr><w:b/></w:rPr>" if bold else ""
+        return (
+            '<w:tc><w:tcPr><w:tcW w:w="2880" w:type="dxa"/></w:tcPr>'
+            f"<w:p><w:r>{run_properties}<w:t>{escape_xml(text)}</w:t></w:r></w:p></w:tc>"
+        )
+
+    borders = (
+        "<w:tblBorders>"
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:left w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:right w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        "</w:tblBorders>"
+    )
+    grid = (
+        "<w:tblGrid>"
+        '<w:gridCol w:w="2880"/><w:gridCol w:w="2880"/><w:gridCol w:w="2880"/>'
+        "</w:tblGrid>"
+    )
+    header_row = (
+        "<w:tr><w:trPr><w:tblHeader/></w:trPr>"
+        + cell("Register", bold=True)
+        + cell("Period", bold=True)
+        + cell("Owner", bold=True)
+        + "</w:tr>"
+    )
+    value_row = (
+        "<w:tr>"
+        + cell("Table Register")
+        + cell("FY2026")
+        + cell("O. North")
+        + "</w:tr>"
+    )
+    return (
+        '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>'
+        + borders
+        + '<w:tblLook w:val="04A0"/></w:tblPr>'
+        + grid
+        + header_row
+        + value_row
+        + "</w:tbl><w:p/>"
+    )
+
+
+def make_docx_sections_columns(path: Path, image_path: Path):
+    """Portrait, landscape and two-column sections, a text box and a watermark.
+
+    Every section carries its own header/footer part so the fixture can prove
+    that a page renders the header of *its* section (and that the header repeats
+    on every page of that section). The first section's header also holds a
+    behind-text watermark image.
+    """
+    doc = Document()
+    set_doc_defaults(doc)
+
+    first = doc.sections[0]
+    # Capture the portrait geometry before any section break: `add_section()`
+    # moves the body-level sectPr to the new last section, so the object from
+    # `doc.sections[0]` stops describing the first page.
+    portrait_width, portrait_height = first.page_width, first.page_height
+    first.header.is_linked_to_previous = False
+    first.footer.is_linked_to_previous = False
+    first.header.paragraphs[0].text = "Section One Header"
+    first.footer.paragraphs[0].text = "Section One Footer"
+    doc.add_heading("Sections and Columns", 0)
+    for index in range(1, 25):
+        doc.add_paragraph(
+            f"Section one portrait body paragraph {index:02d}. "
+            "This paragraph exists so the section spans more than one page and "
+            "the header and watermark have to repeat on every page of it."
+        )
+
+    landscape = doc.add_section(WD_SECTION.NEW_PAGE)
+    landscape.orientation = WD_ORIENT.LANDSCAPE
+    landscape.page_width, landscape.page_height = (
+        landscape.page_height,
+        landscape.page_width,
+    )
+    landscape.header.is_linked_to_previous = False
+    landscape.footer.is_linked_to_previous = False
+    landscape.header.paragraphs[0].text = "Section Two Landscape Header"
+    landscape.footer.paragraphs[0].text = "Section Two Footer"
+    doc.add_paragraph("TEXTBOX_TARGET_PARAGRAPH")
+    doc.add_paragraph(
+        "Landscape body paragraph. Wide content such as a schedule table reads "
+        "better on a landscape page."
+    )
+
+    columns = doc.add_section(WD_SECTION.NEW_PAGE)
+    # `add_section` copies the previous section's properties, so the two-column
+    # section has to be switched back to portrait explicitly.
+    columns.orientation = WD_ORIENT.PORTRAIT
+    columns.page_width, columns.page_height = portrait_width, portrait_height
+    columns.header.is_linked_to_previous = False
+    columns.footer.is_linked_to_previous = False
+    columns.header.paragraphs[0].text = "Section Three Two Column Header"
+    columns.footer.paragraphs[0].text = "Section Three Footer"
+    for index in range(1, 13):
+        doc.add_paragraph(
+            f"Two column body paragraph {index:02d}. Text in this section flows "
+            "through two balanced columns before the next page break."
+        )
+    doc.save(path)
+
+    entries = read_docx_parts(path)
+    document_xml = entries["word/document.xml"].decode("utf-8")
+    document_xml = replace_docx_paragraph(
+        document_xml,
+        "TEXTBOX_TARGET_PARAGRAPH",
+        '<w:p><w:r><w:pict>'
+        '<v:shape id="FixtureTextBox" type="#_x0000_t202" '
+        'style="position:absolute;margin-left:180pt;margin-top:120pt;width:300pt;height:90pt;'
+        'z-index:251659264" fillcolor="#DCE6F1" strokecolor="#1C3A5E">'
+        '<v:textbox><w:txbxContent>'
+        '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>TEXT BOX: quarterly review pack</w:t></w:r></w:p>'
+        '<w:p><w:r><w:t>Second text box paragraph</w:t></w:r></w:p>'
+        "</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>",
+    )
+    # The last section's sectPr becomes two columns. Only the body-level sectPr
+    # is patched, so the single-column sections above keep their own w:cols.
+    body_sectpr_start = document_xml.rfind("<w:sectPr")
+    body_sectpr_end = document_xml.find("</w:sectPr>", body_sectpr_start)
+    body_sectpr = document_xml[body_sectpr_start:body_sectpr_end]
+    patched_sectpr = body_sectpr.replace(
+        '<w:cols w:space="720"/>', '<w:cols w:num="2" w:space="720"/>'
+    )
+    if patched_sectpr == body_sectpr:
+        raise RuntimeError("Unable to switch the fixture's last section to two columns")
+    document_xml = (
+        document_xml[:body_sectpr_start]
+        + patched_sectpr
+        + document_xml[body_sectpr_end:]
+    )
+    entries["word/document.xml"] = document_xml.encode("utf-8")
+
+    watermark_bytes = image_path.read_bytes()
+    entries["word/media/watermark.png"] = watermark_bytes
+
+    header_xml = entries["word/header1.xml"].decode("utf-8")
+    header_xml = header_xml.replace(
+        "</w:p>",
+        '<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" '
+        'simplePos="0" relativeHeight="251658240" behindDoc="1" locked="0" '
+        'layoutInCell="1" allowOverlap="1">'
+        '<wp:simplePos x="0" y="0"/>'
+        '<wp:positionH relativeFrom="page"><wp:posOffset>1800000</wp:posOffset></wp:positionH>'
+        '<wp:positionV relativeFrom="page"><wp:posOffset>2400000</wp:posOffset></wp:positionV>'
+        '<wp:extent cx="3450000" cy="1200000"/>'
+        '<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>'
+        '<wp:docPr id="9001" name="Watermark"/>'
+        '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<pic:nvPicPr><pic:cNvPr id="0" name="watermark.png"/><pic:cNvPicPr/></pic:nvPicPr>'
+        '<pic:blipFill><a:blip r:embed="rIdWatermark"/><a:stretch><a:fillRect/></a:stretch>'
+        "</pic:blipFill>"
+        '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="3450000" cy="1200000"/></a:xfrm>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'
+        "</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r></w:p>",
+        1,
+    )
+    entries["word/header1.xml"] = header_xml.encode("utf-8")
+
+    header_rels_key = "word/_rels/header1.xml.rels"
+    header_rels = (
+        entries[header_rels_key].decode("utf-8")
+        if header_rels_key in entries
+        else '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+    )
+    entries[header_rels_key] = add_relationships(
+        header_rels,
+        [("rIdWatermark", f"{REL_NS}/image", "media/watermark.png")],
+    ).encode("utf-8")
+
+    content_types = entries["[Content_Types].xml"].decode("utf-8")
+    if 'Extension="png"' not in content_types:
+        content_types = content_types.replace(
+            "<Default Extension=\"rels\"",
+            '<Default Extension="png" ContentType="image/png"/><Default Extension="rels"',
+        )
+    entries["[Content_Types].xml"] = content_types.encode("utf-8")
+    write_docx_parts(path, entries)
+
+
+def make_docx_page_sizes(path: Path):
+    """A4 portrait, A4 landscape and US Letter sections in one document.
+
+    The demo must derive paper geometry from each section's `w:pgSz` instead of
+    passing Letter dimensions from the host, so this fixture deliberately mixes
+    millimetre and inch page sizes and gives every section its own header and
+    footer. Each section spans more than one page, so the parity page has to
+    compare page geometry and repeated furniture for six or more pages, and the
+    landscape section is the only one whose paper is wider than it is tall.
+    """
+    doc = Document()
+    set_doc_defaults(doc)
+
+    def configure(
+        section,
+        width,
+        height,
+        orientation,
+        header,
+        footer,
+        heading,
+        body,
+        paragraph_count,
+    ):
+        section.page_width = width
+        section.page_height = height
+        section.orientation = orientation
+        section.header.is_linked_to_previous = False
+        section.footer.is_linked_to_previous = False
+        section.header.paragraphs[0].text = header
+        section.header.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        section.footer.paragraphs[0].text = footer
+        section.footer.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_heading(heading, 1)
+        for index in range(1, paragraph_count + 1):
+            doc.add_paragraph(
+                f"{heading} paragraph {index:02d}. {body} "
+                "This text repeats so the section has to span several pages and "
+                "its header and footer have to repeat on every page of it."
+            )
+
+    a4_width, a4_height = Mm(210), Mm(297)
+    letter_width, letter_height = Inches(8.5), Inches(11)
+
+    portrait = doc.sections[0]
+    configure(
+        portrait,
+        a4_width,
+        a4_height,
+        WD_ORIENT.PORTRAIT,
+        "A4 Portrait Header",
+        "A4 Portrait Footer",
+        "A4 Portrait Section",
+        "Portrait pages use the ISO A4 (210 x 297 mm) paper size.",
+        28,
+    )
+
+    landscape = doc.add_section(WD_SECTION.NEW_PAGE)
+    configure(
+        landscape,
+        a4_height,
+        a4_width,
+        WD_ORIENT.LANDSCAPE,
+        "A4 Landscape Header",
+        "A4 Landscape Footer",
+        "A4 Landscape Section",
+        "Landscape pages keep A4 paper but swap its width and height.",
+        14,
+    )
+
+    letter = doc.add_section(WD_SECTION.NEW_PAGE)
+    configure(
+        letter,
+        letter_width,
+        letter_height,
+        WD_ORIENT.PORTRAIT,
+        "Letter Portrait Header",
+        "Letter Portrait Footer",
+        "US Letter Section",
+        "The final section switches back to US Letter (8.5 x 11 in).",
+        18,
+    )
+
+    doc.save(path)
+
+
 def make_invoice_png(path: Path):
     img = Image.new("RGB", (1000, 1330), "white")
     d = ImageDraw.Draw(img)
@@ -429,17 +1229,23 @@ def make_pdf_sample(path: Path):
 
 
 def make_pdf_scanned(path: Path, image_path: Path):
+    """Image-only pages: the fixture must have no native text layer at all."""
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
     image = ImageReader(str(image_path))
-    for i in range(3):
+    for _ in range(3):
         c.drawImage(image, 18*mm, 20*mm, width=w-36*mm, height=h-40*mm, preserveAspectRatio=True, anchor="c")
-        c.drawString(20*mm, 10*mm, f"Scanned invoice page {i+1}")
         c.showPage()
     c.save()
 
 
 def make_pdf_rotated(path: Path):
+    """One upright page and one page whose /Rotate entry is 90 degrees.
+
+    ReportLab stores a rotated page at its displayed page size, so the second
+    page keeps an A4 portrait MediaBox with `/Rotate 90`. Viewers must apply
+    the page rotation instead of guessing the orientation from the MediaBox.
+    """
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
     c.setFont("Helvetica-Bold", 22)
@@ -449,19 +1255,72 @@ def make_pdf_rotated(path: Path):
         c.drawString(40, h - 120 - i*22, f"Portrait content row {i+1} for rotation and viewport validation.")
     c.showPage()
     c.setPageSize(landscape(A4))
-    w, h = landscape(A4)
+    c.setPageRotation(90)
     c.setFont("Helvetica-Bold", 22)
-    c.drawString(40, h - 70, "Landscape Page")
-    for i in range(12):
-        c.drawString(40, h - 110 - i*24, f"Landscape wide content row {i+1}: columns should remain visible during zoom and scroll testing.")
+    c.drawString(40, h - 80, "Rotated Page (/Rotate 90)")
+    for i in range(20):
+        c.drawString(40, h - 120 - i*22, f"Rotated content row {i+1} must be drawn through the page rotation.")
     c.showPage()
+    c.save()
+
+
+def make_pdf_encrypted(path: Path):
+    """Password-protected PDF; the documented password is ``arcships``."""
+    encryption = pdfencrypt.StandardEncryption(
+        "arcships",
+        ownerPassword="arcships-owner",
+        canPrint=1,
+        canModify=1,
+        canCopy=1,
+        canAnnotate=1,
+        strength=128,
+    )
+    c = canvas.Canvas(str(path), pagesize=A4, encrypt=encryption)
+    w, h = A4
+    for index, heading in enumerate(("Encrypted Contract", "Payment Schedule"), start=1):
+        c.setFont("Helvetica-Bold", 22)
+        c.drawString(40, h - 80, f"{heading} {index}")
+        c.setFont("Helvetica", 12)
+        for row in range(10):
+            c.drawString(40, h - 120 - row*22, f"Encrypted page {index} row {row+1}: password protected content.")
+        c.showPage()
+    c.save()
+
+
+def make_pdf_cjk_text(path: Path):
+    """Chinese text pages so PDF text extraction and search cover CJK glyphs."""
+    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    c = canvas.Canvas(str(path), pagesize=A4)
+    w, h = A4
+    pages = [
+        [
+            "中文合同摘要 / CJK-ALPHA-1",
+            "合同金额：人民币壹佰贰拾万元整",
+            "付款条款：验收合格后三十日内付款",
+            "合同双方：甲方与乙方共同签署",
+            "合同附件：技术规格与交付清单",
+        ],
+        [
+            "合同补充条款 / CJK-ALPHA-2",
+            "合同变更须经双方书面确认",
+            "付款节点：预付款、进度款与尾款",
+            "合同争议由合同签订地法院管辖",
+        ],
+    ]
+    for lines in pages:
+        c.setFont("STSong-Light", 20)
+        c.drawString(40, h - 80, lines[0])
+        c.setFont("STSong-Light", 14)
+        for row, line in enumerate(lines[1:], start=1):
+            c.drawString(40, h - 120 - row*28, line)
+        c.showPage()
     c.save()
 
 
 def make_pdf_large(path: Path):
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
-    for page in range(1, 32):
+    for page in range(1, 241):
         c.setFont("Helvetica-Bold", 18)
         c.drawString(40, h - 60, f"Large Contract Page {page}")
         c.setFont("Helvetica", 10)
@@ -474,7 +1333,12 @@ def make_pdf_large(path: Path):
 def style_header(ws):
     fill = PatternFill("solid", fgColor="1C3A5E")
     font = Font(color="FFFFFF", bold=True)
+    # Only style header cells that carry a label: fixtures such as the sales
+    # table put far-right helper columns on row 1, and a blanket row loop would
+    # paint every empty column in between.
     for cell in ws[1]:
+        if cell.value in (None, ""):
+            continue
         cell.fill = fill
         cell.font = font
         cell.alignment = Alignment(horizontal="center")
@@ -520,7 +1384,8 @@ def make_financial_model(path: Path):
     wb.save(path)
 
 
-def make_sales_table(path: Path):
+def make_sales_table_legacy(path: Path):
+    random.seed(42)
     wb = Workbook()
     ws = wb.active
     ws.title = "Sales Data"
@@ -539,6 +1404,62 @@ def make_sales_table(path: Path):
         ws.column_dimensions[get_column_letter(idx)].width = width
     for cell in ws[1]:
         cell.border = Border(bottom=Side(style="medium", color="1C3A5E"))
+    sales_table = XlsxTable(displayName="SalesRecords", ref=f"A1:H{ws.max_row}")
+    sales_table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    )
+    ws.add_table(sales_table)
+    wb.save(path)
+
+
+def make_sales_table_validated(path: Path):
+    random.seed(4242)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales Data"
+    headers = ["Region", "Rep", "Product", "Month", "Units", "Unit Price", "Revenue", "Notes"]
+    ws.append(headers)
+    regions = ["North", "South", "East", "West", "APAC", "EMEA"]
+    products = ["Doc Extract", "PDF Viewer", "XLSX Engine", "Workflow Bot"]
+    for i in range(1, 181):
+        units = random.randint(5, 180)
+        price = random.choice([49, 89, 129, 249])
+        ws.append([random.choice(regions), f"Rep {i%17+1}", random.choice(products), f"2026-{(i%12)+1:02d}", units, price, f"=E{i+1}*F{i+1}", "Long note validating overflow and cell text truncation behavior in the grid viewer."])
+    # Status is an input column outside the table: its list validation is the
+    # fixture contract for the data-validation UI, not part of SalesRecords.
+    statuses = ["Active", "On Hold", "Closed"]
+    ws["I1"] = "Status"
+    for row in range(2, ws.max_row + 1):
+        ws.cell(row, 9, statuses[row % len(statuses)])
+    validation = DataValidation(
+        type="list",
+        formula1='"Active,On Hold,Closed"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="Invalid status",
+        error="Pick Active, On Hold or Closed.",
+    )
+    ws.add_data_validation(validation)
+    validation.add(f"I2:I{ws.max_row}")
+    style_header(ws)
+    # Freeze rows *and* columns so a real fixture exercises the four-pane
+    # clipping path (A1:B2 stays pinned while both axes scroll).
+    ws.freeze_panes = "C3"
+    widths = [14, 12, 18, 12, 10, 12, 14, 58, 12]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    # Two-letter column labels with explicit widths prove the parser maps
+    # column letters beyond "Z" to workbook indices.
+    ws["AA1"] = "Region rollup"
+    ws["AB1"] = "Owner"
+    for cell in ws[1]:
+        cell.border = Border(bottom=Side(style="medium", color="1C3A5E"))
+    for name, width in {"AA": 26, "AB": 16}.items():
+        ws.column_dimensions[name].width = width
     sales_table = XlsxTable(displayName="SalesRecords", ref=f"A1:H{ws.max_row}")
     sales_table.tableStyleInfo = TableStyleInfo(
         name="TableStyleMedium2",
@@ -572,6 +1493,20 @@ def make_charts_images(path: Path, image_path: Path):
     ws["D1"].font = Font(color="FFFFFF", bold=True)
     ws["D3"], ws["D4"], ws["D5"] = 3, 2, 1
     ws.conditional_formatting.add("D3:D5", IconSetRule("3TrafficLights1", "num", [1, 2, 3], showValue=True))
+    # A list validation on the sparkline/icon column exercises the validation
+    # overlay against a real workbook instead of a synthetic part.
+    trend_validation = DataValidation(
+        type="list",
+        formula1='"1,2,3"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="Invalid trend",
+        error="Pick 1, 2 or 3.",
+    )
+    ws.add_data_validation(trend_validation)
+    trend_validation.add("D2:D5")
+    # Multi-axis freeze: both rows and columns stay pinned while scrolling.
+    ws.freeze_panes = "C3"
     ws.row_dimensions[7].height = 28
     ws.row_dimensions[8].height = 28
     chart = BarChart()
@@ -710,43 +1645,81 @@ def make_corrupted(path: Path, text: str):
     path.write_bytes((text * 20).encode("utf-8"))
 
 
-def main():
+def fixture_builders() -> dict[str, Callable[[], None]]:
+    """Every generated fixture, keyed by file name, in generation order."""
     invoice_png = SAMPLES / "invoice.png"
     contract_png = SAMPLES / "contract-page.png"
-    make_invoice_png(invoice_png)
-    make_contract_page_png(contract_png)
+    return {
+        "invoice.png": lambda: make_invoice_png(invoice_png),
+        "contract-page.png": lambda: make_contract_page_png(contract_png),
+        "legal-contract.docx": lambda: make_docx_legal_contract(SAMPLES / "legal-contract.docx"),
+        "invoice-table.docx": lambda: make_docx_invoice_table(SAMPLES / "invoice-table.docx"),
+        "report-with-image.docx": lambda: make_docx_report_with_image(SAMPLES / "report-with-image.docx", invoice_png),
+        "chinese-mixed.docx": lambda: make_docx_chinese_mixed(SAMPLES / "chinese-mixed.docx"),
+        "review-comments.docx": lambda: make_docx_review_comments(SAMPLES / "review-comments.docx"),
+        "review-threads.docx": lambda: make_docx_review_threads(SAMPLES / "review-threads.docx"),
+        "table-structures.docx": lambda: make_docx_table_structures(SAMPLES / "table-structures.docx"),
+        "sections-columns.docx": lambda: make_docx_sections_columns(SAMPLES / "sections-columns.docx", invoice_png),
+        "page-sizes.docx": lambda: make_docx_page_sizes(SAMPLES / "page-sizes.docx"),
+        "demo.docx": lambda: make_docx_legal_contract(SAMPLES / "demo.docx"),
+        "corrupted.docx": lambda: make_corrupted(SAMPLES / "corrupted.docx", "This is not a valid DOCX package. "),
+        "sample.pdf": lambda: make_pdf_sample(SAMPLES / "sample.pdf"),
+        "scanned-invoice.pdf": lambda: make_pdf_scanned(SAMPLES / "scanned-invoice.pdf", invoice_png),
+        "rotated-pages.pdf": lambda: make_pdf_rotated(SAMPLES / "rotated-pages.pdf"),
+        "encrypted.pdf": lambda: make_pdf_encrypted(SAMPLES / "encrypted.pdf"),
+        "cjk-report.pdf": lambda: make_pdf_cjk_text(SAMPLES / "cjk-report.pdf"),
+        "large-contract.pdf": lambda: make_pdf_large(SAMPLES / "large-contract.pdf"),
+        "corrupted.pdf": lambda: make_corrupted(SAMPLES / "corrupted.pdf", "%PDF corrupted fixture\n"),
+        "financial-model.xlsx": lambda: make_financial_model(SAMPLES / "financial-model.xlsx"),
+        "sales-table.xlsx": lambda: make_sales_table_legacy(SAMPLES / "sales-table.xlsx"),
+        "sales-table-validated.xlsx": lambda: make_sales_table_validated(SAMPLES / "sales-table-validated.xlsx"),
+        "charts-images.xlsx": lambda: make_charts_images(SAMPLES / "charts-images.xlsx", invoice_png),
+        "large-grid.xlsx": lambda: make_large_grid(SAMPLES / "large-grid.xlsx"),
+        "corrupted.xlsx": lambda: make_corrupted(SAMPLES / "corrupted.xlsx", "This is not a valid XLSX package. "),
+        "field-citations.json": make_json_fixtures,
+        "ocr-layout.json": make_json_fixtures,
+    }
 
-    make_docx_legal_contract(SAMPLES / "legal-contract.docx")
-    make_docx_invoice_table(SAMPLES / "invoice-table.docx")
-    make_docx_report_with_image(SAMPLES / "report-with-image.docx", invoice_png)
-    make_docx_chinese_mixed(SAMPLES / "chinese-mixed.docx")
-    make_docx_review_comments(SAMPLES / "review-comments.docx")
-    make_docx_legal_contract(SAMPLES / "demo.docx")
-    make_corrupted(SAMPLES / "corrupted.docx", "This is not a valid DOCX package. ")
 
-    make_pdf_sample(SAMPLES / "sample.pdf")
-    make_pdf_scanned(SAMPLES / "scanned-invoice.pdf", invoice_png)
-    make_pdf_rotated(SAMPLES / "rotated-pages.pdf")
-    make_pdf_large(SAMPLES / "large-contract.pdf")
-    make_corrupted(SAMPLES / "corrupted.pdf", "%PDF corrupted fixture\n")
+def main(argv: list[str] | None = None):
+    """Generate every fixture, or only the ones named with `--only`.
 
-    make_financial_model(SAMPLES / "financial-model.xlsx")
-    make_sales_table(SAMPLES / "sales-table.xlsx")
-    make_charts_images(SAMPLES / "charts-images.xlsx", invoice_png)
-    make_large_grid(SAMPLES / "large-grid.xlsx")
-    make_corrupted(SAMPLES / "corrupted.xlsx", "This is not a valid XLSX package. ")
+    `--only review-threads.docx,table-structures.docx` regenerates a subset; the
+    samples manifest is still rewritten for the whole directory so it always
+    describes what is on disk. Use it when adding a fixture without rebuilding
+    the unrelated binaries with a different toolchain version.
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--only",
+        default=None,
+        help="comma-separated fixture file names to regenerate",
+    )
+    args = parser.parse_args(argv)
+    builders = fixture_builders()
+    selected = list(builders)
+    if args.only:
+        requested = [name.strip() for name in args.only.split(",") if name.strip()]
+        unknown = [name for name in requested if name not in builders]
+        if unknown:
+            parser.error(f"unknown fixture(s): {', '.join(unknown)}")
+        selected = requested
 
-    make_json_fixtures()
+    for name in selected:
+        builders[name]()
 
-    for path in sorted([*SAMPLES.glob("*.docx"), *SAMPLES.glob("*.xlsx")]):
-        if not path.name.startswith("corrupted."):
+    for name in selected:
+        path = SAMPLES / name
+        if path.suffix in {".docx", ".xlsx"} and not name.startswith("corrupted."):
             normalize_ooxml_zip(path)
 
     manifest = []
     for path in sorted(SAMPLES.iterdir()):
         if path.is_file() and path.name != "manifest.json":
             manifest.append({"name": path.name, "bytes": path.stat().st_size})
-    (SAMPLES / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    (SAMPLES / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

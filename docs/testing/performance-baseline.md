@@ -15,9 +15,11 @@
 - 语言与时区：`zh-CN`、`Asia/Shanghai`。
 - 每轮使用新的浏览器 context，同一浏览器进程连续执行三轮。
 - 每轮大表帧采集时长：`10` 秒，先垂直再水平滚动。
-- 材料：`financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx` 和 PDF 资源样本 `sample.pdf`。字节数与 SHA-256 由 [`performance-baseline.json`](../../tests/blackbox/performance-baseline.json) 固定，并与 `test-data/manifest.json` 双向核对。
+- 材料：`financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx`，以及 PDF 材料 `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`cjk-report.pdf`、`encrypted.pdf`、`large-contract.pdf`（240 页）。字节数与 SHA-256 由 [`performance-baseline.json`](../../tests/blackbox/performance-baseline.json) 固定，并与 `test-data/manifest.json` 双向核对。
 
 当前机器为 macOS arm64、Apple M4 Max、128 GiB 内存。不同机器或浏览器版本的结果不得直接覆盖这份基线；必须建立新的可比较系列并重新批准。
+
+PDF 的首次渲染、缩略图就绪、翻页和位图像素指标单独记录在 `pdfBaseline` 中，并使用同一条 Chromium `149.0.7827.55` 在 Linux x64 上完成三轮批准采集（见 `capturedEnvironment`）。它们与资源体积基线分开门禁，避免把 PDF 渲染能力绑定到另一台机器的打包体积；重新采集时以同一环境的三轮中位数更新。
 
 ## 执行命令
 
@@ -55,10 +57,11 @@ CI_PREBUILT=1 pnpm test:performance
 - Canvas 尺寸写入次数和真实纵横滚动范围；
 - 深滚动位置选择、Tab 提交和撤销延迟；
 - 图表材料首次打开新增的 JavaScript 请求；
+- PDF `sample.pdf` 从进入路由到首张真实位图的时间，`large-contract.pdf` 的首屏渲染时间、全部缩略图就绪时间、前五次翻页耗时中位数和 95 分位数、真实位图像素数和总页数；
 - 连续切换五个工作簿前后的 Worker、对象 URL、DOM、监听器和 JS 堆；
 - 回到 Home 并等待 2 秒后的资源与内存回落。
 
-每项机器指标保存三次原始值、中位数、最差值、最小值和轮间差值百分比。帧指标只有在纵向与横向滚动范围均大于零时才代表真实滚动；否则保留数值并登记 `LARGE_GRID_HAS_NO_SCROLL_RANGE`，不能把空转帧率描述成大表性能通过。
+每项机器指标保存三次原始值、中位数、最差值、最小值和轮间差值百分比。帧指标只有在纵向与横向滚动范围均大于零时才代表真实滚动；否则保留数值并登记 `LARGE_GRID_HAS_NO_SCROLL_RANGE`，不能把空转帧率描述成大表性能通过。PDF 大材料少于 200 页时登记 `PDF_LARGE_FIXTURE_TOO_SMALL`，避免“大文档”又退回几十页。
 
 ## 预算状态和判定
 
@@ -69,6 +72,8 @@ CI_PREBUILT=1 pnpm test:performance
 - `approved`：后续运行按每项已批准中位数加 `10%` 检查。CSS 原始和 gzip 体积在 `500,000` 字节以内不因相对增长阻断；超过该绝对值后继续执行相对基线检查。非零的毫秒指标至少允许 `10ms` 的绝对调度波动；零长任务等零基线仍必须保持为零。超过预算即失败并要求人工分析。
 
 脚本在 `capture` 或 `pending_approval` 阶段成功采集时输出 `BASELINE_CAPTURED_PENDING_APPROVAL`。只有配置明确改为 `approved` 且全部预算满足时才输出 `PASS`。
+
+`pdfBaseline.status` 独立控制 PDF 指标：为 `approved` 时，`verify_budget` 用同一套 `maxRegressionPercent` 和 `maxRegressionAbsoluteMs` 检查 `pdfBaseline.metrics`，首次渲染、翻页、缩略图就绪时间和位图像素超过上限即违规；`browser.pdf.largePageCount` 是 `min` 方向，页数少于批准值同样违规。`baseline-candidate.json` 的 `pdfMetrics` 保存最近三轮 PDF 原始值，供下一次批准使用。
 
 ## 已批准结果
 

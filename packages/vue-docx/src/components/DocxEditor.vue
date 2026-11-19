@@ -6,6 +6,11 @@
     :style="minHeightStyle"
     data-testid="docx-editor"
     @keydown="onKeydown"
+    @dblclick="onEditorDoubleClick"
+    @pointerover="onEditorPointerOver"
+    @pointerout="onEditorPointerOut"
+    @pointermove="onEditorPointerMove"
+    @pointerleave="onEditorPointerLeave"
   >
     <!-- Toolbar -->
     <DocxToolbar
@@ -15,12 +20,55 @@
       :zoom="zoomPercent"
       :read-only="interactionLocked"
       :show-thumbnails="thumbnailPanelVisible"
+      :show-style-preview="showStylePreview"
       :current-page="currentPage"
       :total-pages="totalPages"
+      :find-open="findState.open"
       @update:zoom="zoomPercent = $event"
       @toggle-thumbnails="thumbnailPanelVisible = !thumbnailPanelVisible"
       @select-page="onSelectPage($event - 1)"
-    />
+      @toggle-find="find.toggleFind()"
+    >
+      <template #find>
+        <OfficeFindBar
+          v-if="findState.open"
+          ref="findBarRef"
+          :query="findState.query"
+          :status="findState.status"
+          :active-index="findState.activeIndex"
+          :result-count="findState.matches.length"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          input-test-id="docx-editor-search-input"
+          :case-sensitive="findState.caseSensitive"
+          :whole-word="findState.wholeWord"
+          :regex="findState.regex"
+          :show-replace="!interactionLocked"
+          :replacement="findState.replacement"
+          :replace-disabled="!find.canReplace.value"
+          :replace-all-disabled="!find.canReplaceAll.value"
+          :replace-status="findReplaceStatus"
+          @update:query="find.setQuery"
+          @update:replacement="find.setReplacement"
+          @update:case-sensitive="find.setOption('caseSensitive', $event)"
+          @update:whole-word="find.setOption('wholeWord', $event)"
+          @update:regex="find.setOption('regex', $event)"
+          @previous="find.searchPrevious()"
+          @next="find.searchNext()"
+          @close="find.closeFind()"
+          @replace="find.replaceActive()"
+          @replace-all="find.replaceAll()"
+        />
+      </template>
+    </DocxToolbar>
+
+    <div
+      v-if="controller.viewOnlyReason"
+      class="docx-editor-view-only"
+      data-testid="docx-editor-view-only-reason"
+      role="note"
+    >
+      {{ controller.viewOnlyReason }}
+    </div>
 
     <!-- Editor body (thumbnails + viewer root) -->
     <div class="docx-editor-body">
@@ -41,14 +89,19 @@
         ref="viewerRootRef"
         :model="renderedModel"
         :controller="controller"
-        :editable="editable"
+        :editable="editable && !controller.viewOnlyReason"
         :theme="isDarkTheme ? 'dark' : 'light'"
         :zoom-scale="zoomPercent"
         :locale="locale"
         :messages="messages"
+        :render-comment-card="renderCommentCard"
+        :render-tracked-change-card="renderTrackedChangeCard"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
         @context-menu="onDocumentContextMenu"
+        @search-state-change="find.syncSearchState"
+        @request-page-reveal="emit('requestPageReveal', $event)"
+        @bookmark-missing="emit('bookmarkMissing', $event)"
       />
       <div
         v-else
@@ -66,13 +119,16 @@
 
     <!-- Context menu -->
     <DocxContextMenu
-      v-if="!interactionLocked && contextMenu.visible.value"
+      v-if="contextMenu.visible.value"
       :context="contextMenu.context.value"
       :controller="controller"
       :x="contextMenu.x.value"
       :y="contextMenu.y.value"
       :text="contextMenu.text.value"
       :caret-offset="contextMenu.caretOffset.value"
+      :read-only="interactionLocked"
+      :render-context-menu="renderContextMenu"
+      :render-table-context-menu="renderTableContextMenu"
       @close="contextMenu.hide()"
     />
 
@@ -80,6 +136,54 @@
     <DocxDragOverlay
       v-if="!interactionLocked && dragOverlay.visible.value"
       :controller="controller"
+    />
+
+    <!-- Node reorder handle and drop indicator -->
+    <button
+      v-if="reorderHandleVisible"
+      type="button"
+      class="docx-node-reorder-handle"
+      data-testid="docx-node-reorder-handle"
+      :data-docx-node-index="reorder.hover.value?.nodeIndex"
+      :aria-label="m.docx.nodeDrag.handle"
+      :title="m.docx.nodeDrag.handleTitle"
+      :style="reorderHandleStyle"
+      @mousedown.prevent.stop="onReorderHandlePointerDown"
+      @keydown.up.prevent.stop="onReorderHandleKey(-1)"
+      @keydown.down.prevent.stop="onReorderHandleKey(1)"
+    >
+      <span aria-hidden="true">⠿</span>
+    </button>
+    <div
+      v-if="reorder.dragging.value && reorder.dropTop.value !== undefined"
+      class="docx-node-drop-indicator"
+      data-testid="docx-node-drop-indicator"
+      :style="reorderDropIndicatorStyle"
+    />
+
+    <!-- Link hover card -->
+    <DocxLinkHoverCard
+      v-if="linkCard.visible.value && linkCard.state.value"
+      :href="linkCard.state.value.href"
+      :x="linkCard.state.value.x"
+      :y="linkCard.state.value.y"
+      :editable="linkCard.state.value.editable"
+      :document-theme="controller.documentTheme"
+      @open="onLinkCardOpen"
+      @edit="onLinkCardEdit"
+      @remove="onLinkCardRemove"
+      @close="hideLinkCard()"
+      @pointerenter="cancelLinkCardHide"
+      @pointerleave="scheduleLinkCardHide"
+    />
+
+    <!-- Form field properties dialog -->
+    <DocxFormFieldDialog
+      v-if="formFieldDialogLocation && formFieldDialogField"
+      :field="formFieldDialogField"
+      :location="formFieldDialogLocation"
+      :controller="controller"
+      @close="closeFormFieldDialog"
     />
 
     <!-- Status bar -->
@@ -99,30 +203,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, provide, watch, onMounted, onUnmounted } from "vue"
+import { ref, computed, provide, watch, nextTick, onMounted, onUnmounted } from "vue"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
+  DocxFormFieldLocation,
   DocxRuntime,
+  DocxTextRangeLocation,
+  FormFieldRunNode,
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
-import { OfficeLiveStatus } from "@arcships/vue-ui"
-import { useDocxEditor } from "../composables/useDocxEditor"
 import {
+  getParagraphAtLocation,
+  imageLocationToParagraphLocation,
+  resolveDocxImageWrapState,
+} from "@arcships/docx-core"
+import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeFindBar } from "@arcships/vue-ui"
+import { useDocxEditor } from "../composables/useDocxEditor"
+import { useDocxFindReplace } from "../composables/useDocxFindReplace"
+import {
+  docxImageLocationFromNode,
   docxTableContextFromNode,
   docxTextHostFromNode,
+  docxTextLocationForNode,
+  effectiveControllerRevisionDisplay,
   readDocxTextHostText,
+  sourceTextRangeToDisplayTextRange,
   syncDomSelectionToEditor,
   textOffsetAtDomPoint,
 } from "../composables/editor-selection"
+import {
+  parseDocxFormFieldLocationKey,
+  resolveFormFieldAt,
+} from "../composables/docx-form-fields"
+import { useDocxNodeReorder } from "../composables/useDocxNodeReorder"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxToolbar from "./DocxToolbar.vue"
 import DocxContextMenu from "./DocxContextMenu.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxDragOverlay from "./DocxDragOverlay.vue"
+import DocxLinkHoverCard from "./DocxLinkHoverCard.vue"
+import DocxFormFieldDialog from "./DocxFormFieldDialog.vue"
 import { provideDocxMessages } from "../i18n"
+import type { DocxBookmarkRevealResult } from "../composables/docx-bookmarks"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -134,6 +260,11 @@ const props = withDefaults(
     editable?: boolean
     showToolbar?: boolean
     showThumbnails?: boolean
+    /**
+     * Review display mode. Omitted follows the editor controller's own state.
+     * Display only: export keeps every revision.
+     */
+    revisionDisplay?: import("@arcships/docx-core").DocxRevisionDisplay
     runtime?: DocxRuntime
     /** Optional minimum height; the editor itself does not impose one. */
     minHeight?: string | number
@@ -141,13 +272,61 @@ const props = withDefaults(
     isDark?: boolean
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
+    /** Author name stored on comments created in this editor. */
+    commentAuthor?: string
+    /** Comment initials; derived from `commentAuthor` when omitted. */
+    commentInitials?: string
+    /** Link hover card with open/edit/remove actions. Default `true`. */
+    showLinkCard?: boolean
+    /** Double-clicking a form field opens its properties dialog. Default `true`. */
+    showFormFieldDialog?: boolean
+    /** Hovering the paragraph-style picker previews each style. Default `true`. */
+    showStylePreview?: boolean
+    /** Drag handle that reorders body paragraphs/tables. Default `true`. */
+    showNodeReorder?: boolean
+    /**
+     * Host renderer that replaces comment cards in the page gutter. Omit to
+     * keep the built-in card.
+     */
+    renderCommentCard?: (
+      props: import("@arcships/docx-core").DocxCommentCardRenderProps
+    ) => unknown
+    /**
+     * Host renderer that replaces tracked-change cards in the page gutter.
+     * Omit to keep the built-in card.
+     */
+    renderTrackedChangeCard?: (
+      props: import("@arcships/docx-core").DocxTrackedChangeCardRenderProps
+    ) => unknown
+    /**
+     * Host renderer that replaces the text, image and table context menus.
+     * Omit to keep the built-in menu. Read-only editing sessions still open a
+     * Copy-only default menu.
+     */
+    renderContextMenu?: (
+      props: import("@arcships/docx-core").DocxContextMenuRenderProps
+    ) => unknown
+    /** Host renderer for table context menus; wins over `renderContextMenu`. */
+    renderTableContextMenu?: (
+      props: import("@arcships/docx-core").DocxTableContextMenuRenderProps
+    ) => unknown
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined }
+  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined, commentAuthor: undefined, commentInitials: undefined, showLinkCard: true, showFormFieldDialog: true, showStylePreview: true, showNodeReorder: true }
 )
 
 const emit = defineEmits<{
   (event: "load-error", error: Error): void
   (event: "update:isDark", isDark: boolean): void
+  /**
+   * A link card action asked to open `href`. External URLs are opened by the
+   * editor; internal `#bookmark` targets are host navigation, so the host can
+   * scroll to the anchor it resolves.
+   */
+  (event: "link-open", href: string): void
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  (event: "requestPageReveal", pageIndex: number): void
+  /** An internal link named a bookmark this document does not contain. */
+  (event: "bookmarkMissing", name: string): void
 }>()
 
 const m = provideDocxMessages(() => props.locale, () => props.messages)
@@ -158,6 +337,8 @@ const internalController = !props.editor
       starterModel: props.model,
       initialFileName: props.file ? m.value.docx.editor.importedDocument : m.value.docx.editor.newDocument,
       statusMessages: () => m.value.docx.editor.status,
+      commentAuthor: props.commentAuthor ?? m.value.docx.editor.commentAuthor,
+      commentInitials: props.commentInitials,
     })
   : null
 const controller = props.editor ?? internalController!
@@ -170,6 +351,15 @@ const minHeightStyle = computed(() => {
 watch(
   () => controller.documentTheme,
   (theme) => { emit("update:isDark", theme === "dark") },
+)
+watch(
+  () => props.revisionDisplay,
+  (display) => {
+    if (display && display !== controller.revisionDisplay) {
+      controller.setRevisionDisplay(display)
+    }
+  },
+  { immediate: true },
 )
 const renderedModel = computed(() =>
   !props.editor && !props.editable && props.model
@@ -186,7 +376,7 @@ watch(
 )
 
 const interactionLocked = computed(
-  () => !props.editable || controller.showTrackedChanges
+  () => !props.editable || controller.showTrackedChanges || Boolean(controller.viewOnlyReason)
 )
 
 // ── Import file ────────────────────────────────────────────────────
@@ -210,6 +400,28 @@ watch(
 
 // ── Viewer root ref ────────────────────────────────────────────────
 const viewerRootRef = ref<InstanceType<typeof DocxDocumentSurface> | undefined>()
+
+// ── Find & replace ─────────────────────────────────────────────────
+// The surface owns the search session; the composable owns the bar's inputs and
+// turns Replace / Replace All into the controller's one-undo-entry commands.
+const findBarRef = ref<InstanceType<typeof OfficeFindBar> | undefined>()
+const find = useDocxFindReplace({
+  controller: () => controller,
+  surface: () => viewerRootRef.value,
+})
+const findState = computed(() => find.state.value)
+const findReplaceStatus = computed(() => {
+  const feedback = findState.value.feedback
+  if (!feedback) return ""
+  if (feedback.kind === "unavailable") return m.value.common.search.noResults
+  if (feedback.count === 0) return ""
+  return formatOfficeMessage(m.value.common.search.replaced, { count: feedback.count })
+})
+
+watch(
+  () => findState.value.open,
+  (open) => { if (open) void nextTick(() => findBarRef.value?.focus()) },
+)
 
 // Root element ref keeps context-menu/selection scoping explicit.
 const editorRootRef = ref<HTMLElement | undefined>()
@@ -318,21 +530,41 @@ const contextMenu = {
 }
 
 function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
-  if (interactionLocked.value) return
-
   const root = viewerRootRef.value?.scrollContainer
-  if (root) syncDomSelectionToEditor(controller, root)
+  if (root) {
+    syncDomSelectionToEditor(controller, root, undefined, {
+      revisionDisplay: effectiveControllerRevisionDisplay(controller),
+    })
+  }
 
   const target = typeof Node !== "undefined" && payload.target instanceof Node
     ? payload.target
     : null
   const tableContext = docxTableContextFromNode(target)
+  const imageLocation = docxImageLocationFromNode(target)
   const textHost = docxTextHostFromNode(target)
   const range = controller.activeTextRange
 
-  const context: DocxContextMenuContext = tableContext
+  let context: DocxContextMenuContext = tableContext
     ? { kind: "table", tableContext }
     : { kind: "text" }
+  if (!tableContext && imageLocation) {
+    const { paragraph } = getParagraphAtLocation(
+      controller.model,
+      imageLocationToParagraphLocation(imageLocation),
+    )
+    const image = paragraph?.children[imageLocation.childIndex]
+    if (image?.type === "image") {
+      context = {
+        kind: "image",
+        image: {
+          location: imageLocation,
+          floating: image.floating,
+          wrap: resolveDocxImageWrapState(image.floating),
+        },
+      }
+    }
+  }
   if (range) context.activeTextRange = range
 
   let text: string | undefined
@@ -341,7 +573,13 @@ function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
     text = readDocxTextHostText(textHost)
     caretOffset = textOffsetAtDomPoint(textHost, payload.clientX, payload.clientY)
     if (caretOffset === undefined && range) {
-      caretOffset = range.start.offset
+      // The context menu and its text are display-space; controller ranges are
+      // source-space. Convert the fallback before comparing it to `text`.
+      caretOffset = sourceTextRangeToDisplayTextRange(
+        controller.model,
+        effectiveControllerRevisionDisplay(controller),
+        range
+      ).start.offset
     }
     if (caretOffset === undefined) caretOffset = text.length
   }
@@ -357,22 +595,300 @@ const dragOverlay = {
 }
 provide("docxDragOverlay", dragOverlay)
 
+// ── Link hover card ────────────────────────────────────────────────
+// Hovering a rendered link shows open/edit/remove without changing the
+// selection. Editing and removing select the linked characters first, so the
+// controller's `setLink()` rewrites exactly that link.
+interface LinkCardState {
+  href: string
+  x: number
+  y: number
+  editable: boolean
+  location?: DocxTextRangeLocation
+  start?: number
+  end?: number
+}
+
+const linkCard = {
+  visible: ref(false),
+  state: ref<LinkCardState | undefined>(undefined),
+}
+let linkCardHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function cancelLinkCardHide(): void {
+  if (linkCardHideTimer !== undefined) clearTimeout(linkCardHideTimer)
+  linkCardHideTimer = undefined
+}
+
+function hideLinkCard(): void {
+  cancelLinkCardHide()
+  linkCard.visible.value = false
+  linkCard.state.value = undefined
+}
+
+function scheduleLinkCardHide(): void {
+  cancelLinkCardHide()
+  linkCardHideTimer = setTimeout(() => {
+    linkCard.visible.value = false
+    linkCard.state.value = undefined
+    linkCardHideTimer = undefined
+  }, 140)
+}
+
+function linkElementFromEvent(event: Event): Element | undefined {
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  if (!target?.closest) return undefined
+  const anchor = target.closest("a[href]")
+  if (!anchor) return undefined
+  // A link inside the hover card itself is card chrome, not a document link.
+  if (anchor.closest?.("[data-docx-link-card]")) return undefined
+  return anchor
+}
+
+function onEditorPointerOver(event: PointerEvent | Event): void {
+  if (props.showLinkCard === false || !props.editable || interactionLocked.value) return
+  const anchor = linkElementFromEvent(event)
+  if (!anchor) return
+  const href = anchor.getAttribute?.("href")
+  if (!href) return
+
+  const start = Number(anchor.getAttribute?.("data-docx-link-start"))
+  const end = Number(anchor.getAttribute?.("data-docx-link-end"))
+  const hasRange = Number.isFinite(start) && Number.isFinite(end) && end > start
+  const location = docxTextLocationForNode(anchor)
+  const rect = (anchor as Element & {
+    getBoundingClientRect?: () => { left: number; bottom: number }
+  }).getBoundingClientRect?.()
+
+  cancelLinkCardHide()
+  linkCard.state.value = {
+    href,
+    x: rect ? Math.round(rect.left) : 0,
+    y: rect ? Math.round(rect.bottom + 6) : 0,
+    editable: hasRange && Boolean(location),
+    location: hasRange ? location : undefined,
+    start: hasRange ? start : undefined,
+    end: hasRange ? end : undefined,
+  }
+  linkCard.visible.value = true
+}
+
+function onEditorPointerOut(event: PointerEvent | Event): void {
+  if (!linkCard.visible.value) return
+  if (!linkElementFromEvent(event)) return
+  scheduleLinkCardHide()
+}
+
+function selectHoveredLink(): boolean {
+  const state = linkCard.state.value
+  if (!state?.editable || !state.location) return false
+  if (state.start === undefined || state.end === undefined) return false
+  controller.setActiveTextRange({
+    start: { location: state.location, offset: state.start },
+    end: { location: state.location, offset: state.end },
+  })
+  return true
+}
+
+function onLinkCardOpen(href: string): void {
+  hideLinkCard()
+  // Internal bookmarks are document navigation: reveal the target locally and
+  // still expose the action to the host for its own routing.
+  if (href.startsWith("#")) {
+    void viewerRootRef.value?.revealBookmark(href)
+    emit("link-open", href)
+    return
+  }
+  const target = globalThis as { window?: { open?: (url: string, name?: string, features?: string) => unknown } }
+  target.window?.open?.(href, "_blank", "noopener,noreferrer")
+  emit("link-open", href)
+}
+
+function onLinkCardEdit(href: string): void {
+  if (!selectHoveredLink()) {
+    hideLinkCard()
+    return
+  }
+  controller.setLink(href)
+  hideLinkCard()
+}
+
+function onLinkCardRemove(): void {
+  if (!selectHoveredLink()) {
+    hideLinkCard()
+    return
+  }
+  controller.setLink(undefined)
+  hideLinkCard()
+}
+
+// ── Form field properties dialog ───────────────────────────────────
+const formFieldDialogLocation = ref<DocxFormFieldLocation | undefined>()
+const formFieldDialogField = computed<FormFieldRunNode | undefined>(() =>
+  resolveFormFieldAt(controller.model, formFieldDialogLocation.value)
+)
+
+function onEditorDoubleClick(event: MouseEvent | Event): void {
+  if (props.showFormFieldDialog === false || !props.editable || interactionLocked.value) return
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  const fieldElement = target?.closest?.("[data-docx-form-field-location]") as Element | null | undefined
+  const location = parseDocxFormFieldLocationKey(
+    fieldElement?.getAttribute?.("data-docx-form-field-location")
+  )
+  if (!location) return
+  event.preventDefault?.()
+  controller.selectFormField(location)
+  formFieldDialogLocation.value = location
+}
+
+function closeFormFieldDialog(): void {
+  const location = formFieldDialogLocation.value
+  formFieldDialogLocation.value = undefined
+  if (location) controller.endFormFieldEdit(location)
+}
+
+// ── Drag-to-reorder body nodes ─────────────────────────────────────
+const reorder = useDocxNodeReorder(controller, {
+  enabled: () => props.editable && !interactionLocked.value && props.showNodeReorder !== false,
+})
+
+const reorderHandleVisible = computed(
+  () => reorder.enabled.value && !reorder.dragging.value && reorder.hover.value !== undefined
+)
+
+const reorderHandleStyle = computed(() => {
+  const hover = reorder.hover.value
+  if (!hover) return undefined
+  return {
+    position: "fixed" as const,
+    left: `${Math.max(0, Math.round(hover.left - 22))}px`,
+    top: `${Math.round(hover.top + 2)}px`,
+    zIndex: 40,
+  }
+})
+
+const reorderDropIndicatorStyle = computed(() => {
+  const hover = reorder.hover.value
+  return {
+    position: "fixed" as const,
+    left: `${Math.max(0, Math.round((hover?.left ?? 0) - 8))}px`,
+    width: `${Math.max(24, Math.round((hover?.width ?? 280) + 8))}px`,
+    top: `${Math.round(reorder.dropTop.value ?? 0)}px`,
+    zIndex: 45,
+  }
+})
+
+let reorderMouseMove: ((event: MouseEvent) => void) | undefined
+let reorderMouseUp: (() => void) | undefined
+let reorderKeyDown: ((event: KeyboardEvent) => void) | undefined
+
+function detachReorderListeners(): void {
+  const doc = (globalThis as { document?: Document }).document
+  if (reorderMouseMove) doc?.removeEventListener("mousemove", reorderMouseMove)
+  if (reorderMouseUp) doc?.removeEventListener("mouseup", reorderMouseUp)
+  if (reorderKeyDown) doc?.removeEventListener("keydown", reorderKeyDown)
+  reorderMouseMove = undefined
+  reorderMouseUp = undefined
+  reorderKeyDown = undefined
+}
+
+function finishReorderDrag(): void {
+  reorder.finishDrag()
+  detachReorderListeners()
+}
+
+function onReorderHandlePointerDown(event: PointerEvent | MouseEvent): void {
+  const nodeIndex = reorder.hover.value?.nodeIndex
+  if (nodeIndex === undefined || !reorder.enabled.value) return
+  reorder.startDrag(nodeIndex)
+  const doc = (globalThis as { document?: Document }).document
+  if (!doc?.addEventListener) return
+  detachReorderListeners()
+  reorderMouseMove = (moveEvent: MouseEvent) => reorder.updateDrag(moveEvent)
+  reorderMouseUp = () => finishReorderDrag()
+  reorderKeyDown = (keyEvent: KeyboardEvent) => {
+    if (keyEvent.key !== "Escape") return
+    reorder.cancelDrag()
+    detachReorderListeners()
+  }
+  doc.addEventListener("mousemove", reorderMouseMove)
+  doc.addEventListener("mouseup", reorderMouseUp)
+  doc.addEventListener("keydown", reorderKeyDown)
+  event.preventDefault?.()
+}
+
+function onReorderHandleKey(delta: -1 | 1): void {
+  const nodeIndex = reorder.hover.value?.nodeIndex
+  if (nodeIndex === undefined) return
+  if (reorder.moveBy(nodeIndex, delta)) reorder.clearHover()
+}
+
+function onEditorPointerMove(event: PointerEvent | MouseEvent): void {
+  if (reorder.dragging.value) {
+    reorder.updateDrag(event)
+    return
+  }
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  // The handle sits beside the node, outside the paragraph host: hovering it
+  // must keep the handle (and therefore the node it moves) alive.
+  if (target?.closest?.(".docx-node-reorder-handle")) return
+  reorder.onHover(event)
+}
+
+function onEditorPointerLeave(): void {
+  reorder.clearHover()
+  scheduleLinkCardHide()
+}
+
 // ── Keyboard shortcuts ─────────────────────────────────────────────
 // The listener lives on the editor root, so host-page inputs and other editor
 // instances never see these shortcuts. Commands are also suppressed while the
 // document is read-only or while tracked-changes review locks editing.
 function onKeydown(event: KeyboardEvent): void {
-  if (!props.editable || event.defaultPrevented || event.isComposing) return
+  if (event.defaultPrevented || event.isComposing) return
 
   const target = event.target as HTMLElement | null
   const tagName = target?.tagName?.toLowerCase()
-  if (tagName === "input" || tagName === "textarea" || tagName === "select") return
+  const inField = tagName === "input" || tagName === "textarea" || tagName === "select"
+
+  // Ctrl/Cmd + F opens the find bar even in a read-only editor: searching is
+  // always allowed, only the replace half is disabled.
+  const mod = event.metaKey || event.ctrlKey
+  const key = event.key.toLowerCase()
+  if (mod && key === "f" && props.showToolbar && !inField) {
+    event.preventDefault()
+    find.openFind()
+    return
+  }
+  if (event.key === "Escape" && findState.value.open) {
+    event.preventDefault()
+    find.closeFind()
+    return
+  }
+
+  if (!props.editable) return
+  if (inField) return
   if (target?.closest?.(".docx-toolbar-shell")) return
 
-  const mod = event.metaKey || event.ctrlKey
+  // A table range has no caret of its own. Escape returns to its anchor cell
+  // (the cell the drag or Shift+click started from) and Delete/Backspace clears
+  // every highlighted cell through `clearTableSelection()`.
+  if (event.key === "Escape" && controller.collapseTableCellSelection()) {
+    event.preventDefault()
+    return
+  }
+  if (
+    !mod &&
+    !interactionLocked.value &&
+    (key === "delete" || key === "backspace") &&
+    controller.clearTableSelection()
+  ) {
+    event.preventDefault()
+    return
+  }
+
   if (!mod) return
 
-  const key = event.key.toLowerCase()
   if (key === "s") {
     event.preventDefault()
     controller.exportDocx()
@@ -430,12 +946,20 @@ watch(
     if (!locked) return
     contextMenu.hide()
     dragOverlay.hide()
+    hideLinkCard()
+    cancelLinkCardHide()
+    formFieldDialogLocation.value = undefined
+    reorder.cancelDrag()
+    detachReorderListeners()
     controller.clearSelectionSession()
   },
 )
 
 onMounted(() => {
   syncBeforeUnload()
+  // The surface exists now, so a query typed before mount (or a model restored
+  // from a cache) can resolve its results.
+  void find.refresh()
 })
 
 onUnmounted(() => {
@@ -443,7 +967,17 @@ onUnmounted(() => {
     window.removeEventListener("beforeunload", onBeforeUnload)
     beforeUnloadAttached = false
   }
+  cancelLinkCardHide()
+  detachReorderListeners()
   ownedLimitRuntime.dispose()
+})
+
+defineExpose({
+  /** Reveals an internal `#bookmark` target in this document. */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return viewerRootRef.value?.revealBookmark(name) ??
+      Promise.resolve({ status: "missing", name: name.replace(/^#/, "") })
+  },
 })
 </script>
 
@@ -468,6 +1002,20 @@ onUnmounted(() => {
   --docx-editor-border: #3f3f46;
   --docx-editor-fg: #f4f4f5;
   --docx-editor-muted: #a1a1aa;
+}
+.docx-editor-view-only {
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #9a3412;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 14px;
+}
+.docx-editor-viewer--dark .docx-editor-view-only {
+  background: #431407;
+  border-bottom-color: #7c2d12;
+  color: #fdba74;
 }
 .docx-editor-body {
   display: flex;
@@ -505,7 +1053,36 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.docx-node-reorder-handle {
+  align-items: center;
+  background: var(--docx-editor-panel);
+  border: 1px solid var(--docx-editor-border);
+  border-radius: 4px;
+  color: var(--docx-editor-muted);
+  cursor: grab;
+  display: inline-flex;
+  font-size: 12px;
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 16px;
+}
+.docx-node-reorder-handle:hover,
+.docx-node-reorder-handle:focus-visible {
+  border-color: #3b82f6;
+  color: #2563eb;
+  outline: none;
+}
+.docx-node-drop-indicator {
+  background: #3b82f6;
+  border-radius: 2px;
+  height: 2px;
+  pointer-events: none;
+}
+
 @media print {
+  .docx-toolbar-shell { display: none !important; }
   .docx-editor-viewer {
     background: #fff !important;
     color: #000 !important;
@@ -519,6 +1096,7 @@ onUnmounted(() => {
   .docx-context-menu-backdrop,
   .docx-context-menu,
   .docx-drag-overlay,
+  .docx-editor-view-only,
   .docx-editor-limit-error { display: none !important; }
   .docx-editor-body { display: block !important; overflow: visible !important; }
 }

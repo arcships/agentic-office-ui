@@ -54,12 +54,26 @@ import {
   updateEstimatedLineWidthPxForText
 } from "./drop-cap";
 import {
+  inlineObjectLineMetricElement,
+  scriptBaselineShiftPx,
+  textLineMetricElement
+} from "../../viewer/line-metrics";
+import {
   measureTextWidthPx,
   paragraphBaseFontSizePx,
   paragraphContainsExplicitLineBreakText,
-  resolveMeasureFont,
+  resolveMeasureFontForText,
   resolveParagraphTabStopsPx
 } from "./line-height";
+import {
+  docxScriptSegmentStyle,
+  segmentTextByDocxScriptFont
+} from "../../viewer/script-fonts";
+import { resolveDocxFontFeatureSettings } from "../../viewer/font-features";
+import {
+  measuredFontSizePt,
+  resolveDocxFontKerning
+} from "../../viewer/font-kerning";
 import {
   firstRunStyle,
   paragraphText
@@ -291,11 +305,24 @@ export function buildParagraphPretextLayoutSource(
   options?: {
     allowExplicitLineBreakText?: boolean;
     expandTabsForLayout?: boolean;
+    /** Document `w:defaultTabStop` in CSS pixels; Word's 48px when omitted. */
+    defaultTabStopPx?: number;
   }
 ): ParagraphPretextLayoutSource | undefined {
+  const defaultTabStopPx =
+    Number.isFinite(options?.defaultTabStopPx) &&
+    (options?.defaultTabStopPx as number) > 0
+      ? Math.max(1, Math.round(options?.defaultTabStopPx as number))
+      : DEFAULT_TAB_STOP_PX;
+  // Tabs in the text depend on the document grid, so variants measured for
+  // another default tab stop must not be reused. The two flag bits stay below
+  // 4 and the grid contributes a multiple of 4, so the key stays unique.
   const cacheKey =
-    (options?.allowExplicitLineBreakText ? 1 : 0) |
-    (options?.expandTabsForLayout ? 2 : 0);
+    (options?.allowExplicitLineBreakText ? 1 : 0) +
+    (options?.expandTabsForLayout ? 2 : 0) +
+    (options?.expandTabsForLayout && defaultTabStopPx !== DEFAULT_TAB_STOP_PX
+      ? defaultTabStopPx * 4
+      : 0);
   const cachedVariants = paragraphPretextLayoutSourceCache.get(paragraph);
   const cachedSource = cachedVariants?.get(cacheKey);
   if (cachedSource !== undefined) {
@@ -334,7 +361,7 @@ export function buildParagraphPretextLayoutSource(
     paragraphLooksLikeCheckboxChoiceRow(paragraph);
   const fallbackTabWidthPx = usesCheckboxRowTabFallback
     ? checkboxChoiceRowTabWidthPx(paragraph)
-    : DEFAULT_TAB_STOP_PX;
+    : defaultTabStopPx;
   let approximateLineWidthPx = 0;
   let lastTextStyle: TextRunNode["style"] | undefined =
     firstRunStyle(paragraph);
@@ -385,16 +412,22 @@ export function buildParagraphPretextLayoutSource(
       const tabSegments = child.text.split("\t");
       tabSegments.forEach((segmentText, segmentIndex) => {
         if (segmentText.length > 0) {
-          const startOffset = combinedText.length;
-          combinedText += segmentText;
-          runs.push({
-            kind: "text",
-            key: `run-${childIndex}-${segmentIndex}`,
-            text: segmentText,
-            startOffset,
-            endOffset: combinedText.length,
-            style: child.style,
-            link: child.link,
+          const scriptSegments = segmentTextByDocxScriptFont(
+            segmentText,
+            child.style
+          );
+          scriptSegments.forEach((scriptSegment, scriptIndex) => {
+            const startOffset = combinedText.length;
+            combinedText += scriptSegment.text;
+            runs.push({
+              kind: "text",
+              key: `run-${childIndex}-${segmentIndex}-${scriptIndex}`,
+              text: scriptSegment.text,
+              startOffset,
+              endOffset: combinedText.length,
+              style: docxScriptSegmentStyle(child.style, scriptSegment),
+              link: child.link,
+            });
           });
           approximateLineWidthPx = updateEstimatedLineWidthPxForText(
             approximateLineWidthPx,
@@ -435,16 +468,19 @@ export function buildParagraphPretextLayoutSource(
       continue;
     }
 
-    const startOffset = combinedText.length;
-    combinedText += child.text;
-    runs.push({
-      kind: "text",
-      key: `run-${childIndex}`,
-      text: child.text,
-      startOffset,
-      endOffset: combinedText.length,
-      style: child.style,
-      link: child.link,
+    const scriptSegments = segmentTextByDocxScriptFont(child.text, child.style);
+    scriptSegments.forEach((scriptSegment, scriptIndex) => {
+      const startOffset = combinedText.length;
+      combinedText += scriptSegment.text;
+      runs.push({
+        kind: "text",
+        key: `run-${childIndex}-${scriptIndex}`,
+        text: scriptSegment.text,
+        startOffset,
+        endOffset: combinedText.length,
+        style: docxScriptSegmentStyle(child.style, scriptSegment),
+        link: child.link,
+      });
     });
     approximateLineWidthPx = updateEstimatedLineWidthPxForText(
       approximateLineWidthPx,
@@ -511,6 +547,20 @@ export function sanitizeRenderedPretextFragmentText(text: string): string {
 
 // --- Layout items (upstream 6988-7078) ---
 
+function measureItemTypography(
+  style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+  font: string
+): { fontKerning: "auto" | "normal" | "none"; fontFeatureSettings: string } {
+  return {
+    fontKerning:
+      resolveDocxFontKerning(
+        style,
+        measuredFontSizePt(font) ?? style?.fontSizePt
+      ) ?? "auto",
+    fontFeatureSettings: resolveDocxFontFeatureSettings(style),
+  };
+}
+
 export function buildParagraphPretextLayoutItems(
   paragraph: ParagraphNode,
   source: ParagraphPretextLayoutSource
@@ -525,14 +575,83 @@ export function buildParagraphPretextLayoutItems(
 
   const items: PretextLayoutItem[] = source.runs
     .filter((run) => run.endOffset > run.startOffset)
-    .map((run) => ({
-      text: run.text,
-      font: resolveMeasureFont(run.style, paragraphBaseFontPx),
-      startOffset: run.startOffset,
-      endOffset: run.endOffset,
-      break: run.kind === "image" || run.kind === "tab" ? "never" : "normal",
-      wordBreak,
-    }));
+    .map((run) => {
+      const font = resolveMeasureFontForText(
+        run.text,
+        run.style,
+        paragraphBaseFontPx
+      );
+      const item: PretextLayoutItem = {
+        text: run.text,
+        font,
+        startOffset: run.startOffset,
+        endOffset: run.endOffset,
+        break: run.kind === "image" || run.kind === "tab" ? "never" : "normal",
+        wordBreak,
+        ...measureItemTypography(run.style, font),
+      };
+
+      // An inline image is an atomic ascent: it sits on the shared baseline and
+      // has no descent, so a line containing one is at least as tall as the
+      // image.
+      if (run.kind === "image" && run.image) {
+        const imageHeightPx = Math.max(
+          0,
+          Math.round(
+            Number.isFinite(run.image.heightPx)
+              ? (run.image.heightPx as number)
+              : Number.isFinite(run.image.widthPx)
+              ? (run.image.widthPx as number)
+              : 0
+          )
+        );
+        return {
+          ...item,
+          ...inlineObjectLineMetricElement(imageHeightPx),
+          hasCustomVerticalMetrics: true,
+        };
+      }
+
+      if (run.kind !== "text") {
+        return item;
+      }
+
+      // Sub/superscript runs move off the shared baseline: record the shift so
+      // the fragment aligns by baseline, but keep the line box at the
+      // paragraph's line height (Word lets script ink overflow the box instead
+      // of growing the line). A run whose font size differs from the
+      // paragraph's does grow the box.
+      const baselineShiftPx = scriptBaselineShiftPx(
+        run.style?.verticalAlign,
+        paragraphBaseFontPx
+      );
+      // Compare the run's own font size (not the 65% script size) with the
+      // paragraph's dominant size.
+      const runFontSizePt = run.style?.fontSizePt;
+      const unscaledRunFontSizePx =
+        Number.isFinite(runFontSizePt) && (runFontSizePt as number) > 0
+          ? ((runFontSizePt as number) * 96) / 72
+          : paragraphBaseFontPx;
+      const fontSizeDiffers =
+        Math.abs(unscaledRunFontSizePx - paragraphBaseFontPx) > 0.5;
+      if (baselineShiftPx === 0 && !fontSizeDiffers) {
+        return item;
+      }
+
+      const element = textLineMetricElement(font);
+      return {
+        ...item,
+        ...(baselineShiftPx !== 0 ? { baselineShiftPx } : {}),
+        ...(fontSizeDiffers
+          ? {
+              ascentPx: element.ascentPx,
+              descentPx: element.descentPx,
+              unsuppressibleDescentPx: element.unsuppressibleDescentPx,
+              hasCustomVerticalMetrics: true,
+            }
+          : {}),
+      };
+    });
   paragraphPretextLayoutItemsBySource.set(source, items);
   return items;
 }
@@ -540,8 +659,9 @@ export function buildParagraphPretextLayoutItems(
 /**
  * Returns the single measurement font shared by every non-empty run of this
  * pretext source, or `undefined` if there are atomic items (images, tabs)
- * or the runs vary in font. Callers can use this to take a fast
- * `measureLineStats`-based line count path when it returns a value.
+ * or the runs vary in font. The line-count fast path uses
+ * `resolveUniformPretextSourceTypography()` so it also requires matching
+ * kerning and feature settings.
  */
 export function resolveUniformPretextSourceFont(
   paragraph: ParagraphNode,
@@ -564,7 +684,11 @@ export function resolveUniformPretextSourceFont(
       return undefined;
     }
 
-    const runFont = resolveMeasureFont(run.style, paragraphBaseFontPx);
+    const runFont = resolveMeasureFontForText(
+      run.text,
+      run.style,
+      paragraphBaseFontPx
+    );
     if (uniformFont === undefined) {
       uniformFont = runFont;
       continue;
@@ -579,6 +703,55 @@ export function resolveUniformPretextSourceFont(
   return uniformFont;
 }
 
+export interface UniformPretextSourceTypography {
+  font: string;
+  fontKerning: "auto" | "normal" | "none";
+  fontFeatureSettings: string;
+}
+
+/**
+ * Font and typography shared by every non-empty text run. The fast
+ * `measureLineStats` path may only be used when kerning and feature settings
+ * are identical too; otherwise it would measure a different face than the
+ * per-run prepared text the render layout uses.
+ */
+export function resolveUniformPretextSourceTypography(
+  paragraph: ParagraphNode,
+  source: ParagraphPretextLayoutSource
+): UniformPretextSourceTypography | undefined {
+  const paragraphBaseFontPx = paragraphBaseFontSizePx(paragraph);
+  let uniform: UniformPretextSourceTypography | undefined;
+
+  for (const run of source.runs) {
+    if (run.endOffset <= run.startOffset) {
+      continue;
+    }
+    if (run.kind !== "text") {
+      return undefined;
+    }
+
+    const font = resolveMeasureFontForText(
+      run.text,
+      run.style,
+      paragraphBaseFontPx
+    );
+    const typography = measureItemTypography(run.style, font);
+    if (!uniform) {
+      uniform = { font, ...typography };
+      continue;
+    }
+    if (
+      uniform.font !== font ||
+      uniform.fontKerning !== typography.fontKerning ||
+      uniform.fontFeatureSettings !== typography.fontFeatureSettings
+    ) {
+      return undefined;
+    }
+  }
+
+  return uniform;
+}
+
 export function buildMeasureSegmentsPretextLayoutItems(
   segments: ParagraphMeasureSegment[],
   paragraphBaseFontPx: number,
@@ -588,16 +761,32 @@ export function buildMeasureSegmentsPretextLayoutItems(
   let nextOffset = 0;
 
   return segments
+    .flatMap((segment) => {
+      const scriptSegments = segmentTextByDocxScriptFont(
+        segment.text,
+        segment.style
+      );
+      return scriptSegments.map((scriptSegment) => ({
+        text: scriptSegment.text,
+        style: docxScriptSegmentStyle(segment.style, scriptSegment),
+      }));
+    })
     .map((segment) => {
       const startOffset = nextOffset;
       nextOffset += segment.text.length;
+      const font = resolveMeasureFontForText(
+        segment.text,
+        segment.style,
+        paragraphBaseFontPx
+      );
       return {
         text: segment.text,
-        font: resolveMeasureFont(segment.style, paragraphBaseFontPx),
+        font,
         startOffset,
         endOffset: nextOffset,
         break: "normal" as const,
         wordBreak,
+        ...measureItemTypography(segment.style, font),
       };
     })
     .filter((item) => item.endOffset > item.startOffset);
@@ -610,9 +799,13 @@ export function layoutParagraphPretextSource(
   source: ParagraphPretextLayoutSource,
   containerWidthPx: number,
   lineHeightPx: number,
-  exclusions?: PretextExclusionRect[]
+  exclusions?: PretextExclusionRect[],
+  options?: {
+    docGridLinePitchPx?: number;
+  }
 ): PretextVariableWidthLayout | undefined {
-  const fallbackFont = resolveMeasureFont(
+  const fallbackFont = resolveMeasureFontForText(
+    source.text,
     firstRunStyle(paragraph),
     paragraphBaseFontSizePx(paragraph)
   );
@@ -626,7 +819,8 @@ export function layoutParagraphPretextSource(
           containerWidthPx,
           lineHeightPx,
           exclusions,
-          fallbackFont
+          fallbackFont,
+          { docGridLinePitchPx: options?.docGridLinePitchPx }
         )
       : undefined;
   if (richLayout) {

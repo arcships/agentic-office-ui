@@ -8,6 +8,7 @@
     :data-state="viewerState"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
     :data-show-comments="String(effectiveShowComments)"
+    :data-view-only="viewOnlyReason ? 'true' : undefined"
     tabindex="0"
     @keydown="onViewerKeydown"
   >
@@ -28,7 +29,7 @@
     <DocxViewerToolbar
       v-if="showToolbar"
       ref="toolbarRef"
-      :can-download="Boolean(effectiveFile)"
+      :can-download="Boolean(effectiveFile) && !viewOnlyReason"
       :current-page="currentPage"
       :disabled="isLoading || Boolean(error) || !renderableModel"
       :file-name="displayFileName"
@@ -37,12 +38,18 @@
       :show-upload="showUpload"
       :show-download="showDownload"
       :show-tracked-changes="effectiveShowTrackedChanges"
+      :revision-display="effectiveRevisionDisplay"
       :show-comments="effectiveShowComments"
       :tracked-change-count="viewerTrackedChanges.length"
       :comment-count="viewerComments.length"
       :total-pages="totalPages"
       :zoom="zoomPercent"
+      :view-mode="effectiveViewMode"
+      :fit-mode="fitMode"
       :search-query="searchQuery"
+      :search-case-sensitive="searchOptions.caseSensitive"
+      :search-whole-word="searchOptions.wholeWord"
+      :search-regex="searchOptions.regex"
       :search-result-count="searchState.matches.length"
       :search-result-index="searchState.activeIndex"
       @download="downloadFile"
@@ -50,14 +57,29 @@
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @toggle-tracked-changes="toggleTrackedChanges"
       @toggle-comments="toggleComments"
+      @update:revision-display="setRevisionDisplay"
       @update:search-query="searchQuery = $event"
+      @update:search-case-sensitive="setSearchOption('caseSensitive', $event)"
+      @update:search-whole-word="setSearchOption('wholeWord', $event)"
+      @update:search-regex="setSearchOption('regex', $event)"
       @search-next="selectSearchResult(1)"
       @search-previous="selectSearchResult(-1)"
       @search-close="closeSearch"
       @toggle-theme="toggleTheme"
-      @update:zoom="zoomPercent = $event"
+      @update:zoom="applyToolbarZoom"
+      @update:view-mode="setViewMode"
+      @update:fit-mode="setFitMode"
       @upload="uploadInputRef?.click()"
     />
+
+    <div
+      v-if="viewOnlyReason"
+      class="docx-viewer__view-only"
+      data-testid="docx-view-only-reason"
+      role="note"
+    >
+      {{ viewOnlyReason }}
+    </div>
 
     <div class="docx-viewer__body">
       <DocxThumbnailPanel
@@ -118,16 +140,23 @@
           :model="renderableModel"
           :layout-options="layoutOptions"
           :theme="darkTheme ? 'dark' : 'light'"
-          :zoom="zoomPercent / 100"
+          :zoom="fitMode === 'none' ? zoomPercent / 100 : undefined"
+          :fit-mode="fitMode === 'none' ? null : fitMode"
+          :view-mode="effectiveViewMode"
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
+          :revision-display="effectiveRevisionDisplay"
           :show-comments="effectiveShowComments"
+          :render-comment-card="renderCommentCard"
+          :render-tracked-change-card="renderTrackedChangeCard"
           :locale="locale"
           :messages="messages"
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
           @search-state-change="onSearchStateChange"
-          @update:zoom="zoomPercent = Math.round($event * 100)"
+          @request-page-reveal="emit('requestPageReveal', $event)"
+          @bookmark-missing="emit('bookmarkMissing', $event)"
+          @update:zoom="onSurfaceZoom"
         />
       </main>
     </div>
@@ -136,26 +165,35 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
-import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
+import type { DocModel, DocxImportResult, DocxRevisionDisplay, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
 import {
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
   createDocxRuntime,
   DocxImportError,
+  isOpenDocumentModel,
   primeCommentAnchors,
 } from "@arcships/docx-core"
-import type { DocxSearchState } from "../composables/useDocxSearch"
+import type { DocxSearchOptions, DocxSearchState } from "../composables/useDocxSearch"
 import {
   DOCX_FILE_ACCEPT,
   isSupportedDocxFileName,
 } from "../composables/docx-file-types"
-import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeLiveStatus, useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
+import {
+  normalizeDocxFitMode,
+  normalizeDocxViewMode,
+  type DocxFitMode,
+  type DocxViewMode,
+} from "../composables/docx-view-mode"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { provideDocxMessages } from "../i18n"
+import type { DocxBookmarkRevealResult } from "../composables/docx-bookmarks"
 
 const props = withDefaults(
   defineProps<{
@@ -176,10 +214,36 @@ const props = withDefaults(
     isDark?: boolean
     defaultShowTrackedChanges?: boolean
     defaultShowComments?: boolean
+    /**
+     * Review display when `revisionDisplay` is uncontrolled. Defaults to
+     * `balloons`, which keeps insertions inline and moves deletions to cards.
+     */
+    defaultRevisionDisplay?: DocxRevisionDisplay
+    /** `null` follows the internal state; display only, export keeps revisions. */
+    revisionDisplay?: DocxRevisionDisplay | null
     showTrackedChanges?: boolean | null
     showComments?: boolean | null
+    /**
+     * Page layout: `continuous` scrolling, `single` page at a time, or
+     * two-page `spread`s. `null` follows the internal toolbar state.
+     */
+    viewMode?: import("../composables/docx-view-mode").DocxViewMode | null
+    /** View mode used while `viewMode` is uncontrolled. Defaults to continuous. */
+    defaultViewMode?: import("../composables/docx-view-mode").DocxViewMode
+    /** Fit the paper to the viewport instead of using the zoom factor. */
+    fitMode?: import("../composables/docx-view-mode").DocxFitMode | null
+    /** Fit mode used while `fitMode` is uncontrolled. Defaults to `none` (zoom factor). */
+    defaultFitMode?: import("../composables/docx-view-mode").DocxFitMode | "none"
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
+    /** Host renderer that replaces comment cards in the page gutter. */
+    renderCommentCard?: (
+      props: import("@arcships/docx-core").DocxCommentCardRenderProps
+    ) => unknown
+    /** Host renderer that replaces tracked-change cards in the page gutter. */
+    renderTrackedChangeCard?: (
+      props: import("@arcships/docx-core").DocxTrackedChangeCardRenderProps
+    ) => unknown
   }>(),
   {
     emptyState: undefined,
@@ -193,8 +257,14 @@ const props = withDefaults(
     isDark: false,
     defaultShowTrackedChanges: true,
     defaultShowComments: true,
+    defaultRevisionDisplay: "balloons" as DocxRevisionDisplay,
+    revisionDisplay: null,
     showTrackedChanges: null,
     showComments: null,
+    viewMode: null,
+    defaultViewMode: "continuous" as import("../composables/docx-view-mode").DocxViewMode,
+    fitMode: null,
+    defaultFitMode: "none" as const,
     locale: "en",
     messages: undefined,
   },
@@ -208,8 +278,17 @@ const emit = defineEmits<{
   (event: "update:isDark", isDark: boolean): void
   (event: "update:showTrackedChanges", visible: boolean): void
   (event: "update:showComments", visible: boolean): void
+  (event: "update:revisionDisplay", display: DocxRevisionDisplay): void
   (event: "searchStateChange", state: DocxSearchState): void
+  (event: "update:viewMode", mode: DocxViewMode): void
+  (event: "update:fitMode", mode: DocxFitMode | "none"): void
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  (event: "requestPageReveal", pageIndex: number): void
+  /** An internal link named a bookmark this document does not contain. */
+  (event: "bookmarkMissing", name: string): void
 }>()
+
+const DOCX_ZOOM_OPTIONS = [50, 75, 100, 125, 150, 175, 200]
 
 const isLoading = ref(false)
 const m = provideDocxMessages(() => props.locale, () => props.messages)
@@ -235,7 +314,19 @@ const minHeightStyle = computed(() => {
 })
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
+const internalRevisionDisplay = ref<DocxRevisionDisplay>(
+  props.defaultRevisionDisplay
+)
+const internalViewMode = ref<DocxViewMode>(normalizeDocxViewMode(props.defaultViewMode))
+const internalFitMode = ref<DocxFitMode | "none">(
+  normalizeDocxFitMode(props.defaultFitMode) ?? "none"
+)
 const searchQuery = ref("")
+const searchOptions = ref<Required<DocxSearchOptions>>({
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false,
+})
 const searchState = shallowRef<DocxSearchState>({
   status: "idle",
   query: "",
@@ -248,8 +339,24 @@ const resolvedModel = computed(() => props.model ?? parsedModel.value)
 const renderableModel = computed(() => layoutLimitExceeded.value ? undefined : resolvedModel.value)
 const displayFileName = computed(() => internalFileName.value || props.fileName)
 const effectiveEmptyState = computed(() => props.emptyState ?? m.value.docx.viewer.emptyDetail)
+const viewOnlyReason = computed(() =>
+  renderableModel.value && isOpenDocumentModel(renderableModel.value)
+    ? m.value.docx.viewer.viewOnlyReason
+    : undefined
+)
 const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? internalShowTrackedChanges.value)
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
+const effectiveRevisionDisplay = computed(
+  () => props.revisionDisplay ?? internalRevisionDisplay.value
+)
+const effectiveViewMode = computed<DocxViewMode>(() =>
+  props.viewMode == null ? internalViewMode.value : normalizeDocxViewMode(props.viewMode)
+)
+const fitMode = computed<DocxFitMode | "none">(() =>
+  props.fitMode === null || props.fitMode === undefined
+    ? internalFitMode.value
+    : normalizeDocxFitMode(props.fitMode) ?? "none"
+)
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
 const viewerComments = computed(() => renderableModel.value ? collectCommentsFromModel(renderableModel.value) : [])
 const viewerState = computed(() => {
@@ -304,16 +411,32 @@ watch(() => props.defaultShowTrackedChanges, (value) => {
 watch(() => props.defaultShowComments, (value) => {
   if (props.showComments == null) internalShowComments.value = value
 })
+watch(() => props.defaultRevisionDisplay, (value) => {
+  if (props.revisionDisplay == null) internalRevisionDisplay.value = value
+})
+watch(() => props.defaultViewMode, (value) => {
+  if (props.viewMode == null) internalViewMode.value = normalizeDocxViewMode(value)
+})
+watch(() => props.defaultFitMode, (value) => {
+  if (props.fitMode == null) internalFitMode.value = normalizeDocxFitMode(value) ?? "none"
+})
+watch(effectiveViewMode, () => { void nextTick(keepCurrentPageVisible) })
 
 watch(
-  [searchQuery, renderableModel],
-  async ([query, model], _previous, onCleanup) => {
+  [
+    searchQuery,
+    () => searchOptions.value.caseSensitive,
+    () => searchOptions.value.wholeWord,
+    () => searchOptions.value.regex,
+    () => Boolean(renderableModel.value),
+  ],
+  async ([query], _previous, onCleanup) => {
     let current = true
     onCleanup(() => { current = false })
     await nextTick()
     if (!current) return
     const surface = documentSurfaceRef.value
-    if (!surface || !model) {
+    if (!surface || !renderableModel.value) {
       searchState.value = { status: "idle", query: "", matches: [], activeIndex: -1 }
       return
     }
@@ -321,10 +444,17 @@ watch(
       surface.clearSearch()
       return
     }
-    void surface.search(query).catch(ignoreReplacedSearch)
+    // Model edits are refreshed by the surface itself (which keeps the active
+    // result); this watcher only restarts the search when the query/options
+    // change or the document first becomes available.
+    void surface.search(query, searchOptions.value).catch(ignoreReplacedSearch)
   },
   { flush: "post" },
 )
+
+function setSearchOption(key: keyof DocxSearchOptions, value: boolean): void {
+  searchOptions.value = { ...searchOptions.value, [key]: value }
+}
 
 function ignoreReplacedSearch(error: unknown): void {
   if (error instanceof Error && error.name === "AbortError") return
@@ -345,9 +475,71 @@ function selectSearchResult(direction: -1 | 1): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
-  if (!props.showToolbar || !(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== "f") return
-  event.preventDefault()
-  toolbarRef.value?.focusSearch()
+  viewerKeys.onKeydown(event)
+}
+
+/**
+ * DOCX keyboard map (shared with PDF and PPTX through `useViewerKeys`):
+ * PageDown/PageUp move one page, Home/End jump to the first/last page,
+ * Ctrl/Cmd +/−/0 zoom, Ctrl/Cmd+F focuses search and Escape closes it.
+ */
+const viewerKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  search: () => props.showToolbar,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToPage(currentPage.value + 1)
+    case "page-previous":
+      return goToPage(currentPage.value - 1)
+    case "page-first":
+      return goToPage(1)
+    case "page-last":
+      return goToPage(totalPages.value)
+    case "zoom-in":
+      return stepZoom(1)
+    case "zoom-out":
+      return stepZoom(-1)
+    case "zoom-reset":
+      if (fitMode.value === "none" && zoomPercent.value === 100) return false
+      if (fitMode.value !== "none") setFitMode("none")
+      zoomPercent.value = 100
+      return true
+    case "search":
+      if (!props.showToolbar) return false
+      toolbarRef.value?.focusSearch()
+      return true
+    case "escape":
+      if (!searchQuery.value && searchState.value.status === "idle") return false
+      closeSearch()
+      return true
+    default:
+      return false
+  }
+}
+
+function goToPage(page: number): boolean {
+  if (totalPages.value < 1) return false
+  const target = Math.min(totalPages.value, Math.max(1, page))
+  if (target === currentPage.value) return false
+  selectPage(target)
+  return true
+}
+
+function stepZoom(direction: 1 | -1): boolean {
+  const next = direction > 0
+    ? DOCX_ZOOM_OPTIONS.find((option) => option > zoomPercent.value)
+    : [...DOCX_ZOOM_OPTIONS].reverse().find((option) => option < zoomPercent.value)
+  if (next === undefined) return false
+  // Zooming by keyboard leaves fit mode, exactly like the toolbar control.
+  if (fitMode.value !== "none") setFitMode("none")
+  zoomPercent.value = next
+  return true
 }
 
 function closeSearch(): void {
@@ -430,7 +622,48 @@ function onPageCountChange(count: number): void {
 
 function onVisiblePageRange(range: { startPageIndex: number; endPageIndex: number }): void {
   if (range.endPageIndex < range.startPageIndex) return
+  if (effectiveViewMode.value === "spread") {
+    // A spread always renders a page pair; keep the page the reader selected
+    // as long as it is part of the visible pair.
+    const pageIndex = currentPage.value - 1
+    if (pageIndex >= range.startPageIndex && pageIndex <= range.endPageIndex) return
+    currentPage.value = range.startPageIndex + 1
+    return
+  }
   currentPage.value = Math.floor((range.startPageIndex + range.endPageIndex) / 2) + 1
+}
+
+function keepCurrentPageVisible(): void {
+  if (totalPages.value < 1) return
+  const pageIndex = Math.min(Math.max(0, currentPage.value - 1), totalPages.value - 1)
+  documentSurfaceRef.value?.scrollToPage(pageIndex)
+}
+
+function setViewMode(mode: DocxViewMode): void {
+  const next = normalizeDocxViewMode(mode)
+  if (next === effectiveViewMode.value) return
+  if (props.viewMode == null) internalViewMode.value = next
+  emit("update:viewMode", next)
+  // The row layout changes; stay on the page the reader was looking at.
+  void nextTick(keepCurrentPageVisible)
+}
+
+function setFitMode(mode: DocxFitMode | "none"): void {
+  const next = mode === "width" || mode === "page" ? mode : "none"
+  if (next === fitMode.value) return
+  if (props.fitMode == null) internalFitMode.value = next
+  emit("update:fitMode", next)
+}
+
+/** Toolbar zoom is the new truth: leaving fit mode applies the chosen factor. */
+function applyToolbarZoom(value: number): void {
+  if (fitMode.value !== "none") setFitMode("none")
+  zoomPercent.value = value
+}
+
+function onSurfaceZoom(zoom: number): void {
+  if (fitMode.value !== "none") setFitMode("none")
+  zoomPercent.value = Math.round(zoom * 100)
 }
 
 function selectPage(page: number): void {
@@ -484,6 +717,7 @@ async function onUploadChange(event: Event): Promise<void> {
 }
 
 function downloadFile(): void {
+  if (viewOnlyReason.value) return
   const bytes = effectiveFile.value
   if (!bytes) return
   const extension = /\.([^.]+)$/.exec(displayFileName.value)?.[1]?.toLowerCase()
@@ -521,9 +755,13 @@ function toggleComments(): void {
   emit("update:showComments", visible)
 }
 
+function setRevisionDisplay(display: DocxRevisionDisplay): void {
+  if (props.revisionDisplay == null) internalRevisionDisplay.value = display
+  emit("update:revisionDisplay", display)
+}
+
 function normalizeZoom(value: number): number {
-  const options = [50, 75, 100, 125, 150, 175, 200]
-  return options.reduce((closest, option) =>
+  return DOCX_ZOOM_OPTIONS.reduce((closest, option) =>
     Math.abs(option - value) < Math.abs(closest - value) ? option : closest,
   100)
 }
@@ -547,6 +785,14 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   const detail = (value as Error & Record<typeof key, unknown>)[key]
   return typeof detail === "number" ? detail : undefined
 }
+
+defineExpose({
+  /** Reveals an internal `#bookmark` target in this document. */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return documentSurfaceRef.value?.revealBookmark(name) ??
+      Promise.resolve({ status: "missing", name: name.replace(/^#/, "") })
+  },
+})
 </script>
 
 <style scoped>
@@ -572,7 +818,27 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   --docx-toolbar-bg: #18181b;
   background: #09090b;
 }
+/* The viewer root is the keyboard focus target; make that focus visible. */
+.docx-viewer:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.docx-viewer--dark:focus-visible { outline-color: #60a5fa; }
 .docx-viewer__file-input { display: none; }
+.docx-viewer__view-only {
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #9a3412;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 14px;
+}
+.docx-viewer--dark .docx-viewer__view-only {
+  background: #431407;
+  border-bottom-color: #7c2d12;
+  color: #fdba74;
+}
 .docx-viewer__body { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .docx-viewer__content { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }
 .docx-viewer-state {
@@ -634,6 +900,7 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
     overflow: visible !important;
   }
   .docx-viewer__file-input,
+  .docx-viewer__view-only,
   .docx-viewer-toolbar,
   .docx-thumbnail-panel { display: none !important; }
   .docx-viewer__body,

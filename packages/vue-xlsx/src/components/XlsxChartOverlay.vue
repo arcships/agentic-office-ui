@@ -25,6 +25,7 @@
         }"
         :style="item.style"
         @pointerdown.stop="onChartPointerDown(item, $event)"
+        @contextmenu.prevent.stop="onChartContextMenu(item, $event)"
         @keydown="onChartKeydown(item.chart, $event)"
       >
         <MemoChartSvg
@@ -80,6 +81,10 @@ import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridP
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction";
 import type { ChartRendererPalette } from "../render/chart-types";
 import { useXlsxMessages } from "../i18n";
+
+const emit = defineEmits<{
+  chartContextMenu: [payload: { chartId: string; clientX: number; clientY: number }];
+}>();
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -173,6 +178,15 @@ function onHandlePointerDown(item: ChartItem, handle: XlsxImageResizeHandlePosit
   interaction.beginResize(item.chart.id, item.rect, handle, event);
 }
 
+function onChartContextMenu(item: ChartItem, event: MouseEvent) {
+  props.controller.selectChart(item.chart.id);
+  emit("chartContextMenu", {
+    chartId: item.chart.id,
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
+}
+
 function onChartElementPointerDown(selection: XlsxChartElementSelection, _event: PointerEvent) {
   props.controller.selectChartElement(selection);
 }
@@ -183,6 +197,30 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection, _event:
 
 function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
   if (props.controller.selectedChartId !== chart.id) {
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.copySelectionToClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "x") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.cutSelection?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.pasteFromClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.duplicateDrawing?.();
     return;
   }
   const step = event.shiftKey ? 10 : 1;
@@ -207,6 +245,7 @@ function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     event.stopPropagation();
+    if (props.controller.cancelCut?.()) return;
     props.controller.clearSelectedChart();
   }
 }

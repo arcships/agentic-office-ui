@@ -156,6 +156,12 @@ export interface PptxStageObjectClick {
   objectKey: string
 }
 
+/** A linked shape activated from the keyboard (Enter/Space). */
+export interface PptxStageLinkActivate {
+  slideIndex: number
+  objectKey: string
+}
+
 interface PptxStageContextMenuPosition {
   slideIndex: number
   clientX: number

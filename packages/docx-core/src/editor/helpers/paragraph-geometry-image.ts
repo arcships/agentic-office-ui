@@ -17,6 +17,7 @@ import type {
   NumberingDefinitionSet,
   ParagraphNode,
 } from "../../engine/types";
+import { WORD_IMAGE_Z_INDEX_STEP } from "./constants";
 import { syntheticTextBoxContainsPictureLayer } from "./synthetic-textbox";
 import { resolveListParagraphIndent } from "./xml-parsing-extra";
 import { twipsToSignedPixels } from "./ooxml-helpers";
@@ -485,6 +486,33 @@ export function wrappedFloatingImageStyle(
   };
 }
 
+/**
+ * CSS stacking index for a floating image, derived from Word's
+ * `wp:anchor/@relativeHeight` (`floating.zIndex`).
+ *
+ * Front-of-text images map into Word's 1..65535 editor range (4 when the
+ * document did not specify a height), while behind-text images are pushed
+ * negative so paragraph text and page backgrounds paint above them. Both the
+ * flow renderer and the floating interaction layer use this helper so the
+ * measured paint order always agrees with the exported XML.
+ */
+export function resolveFloatingImageStackingZIndex(
+  floating?: ImageRunNode["floating"]
+): number | undefined {
+  if (!floating) {
+    return undefined;
+  }
+  const normalizedZIndex = Number.isFinite(floating.zIndex)
+    ? Math.max(
+        1,
+        Math.min(65535, Math.round((floating.zIndex as number) / WORD_IMAGE_Z_INDEX_STEP))
+      )
+    : undefined;
+  return floating.behindDocument
+    ? -100000 + (normalizedZIndex ?? 1)
+    : normalizedZIndex ?? 4;
+}
+
 export function absoluteFloatingImageStyle(
   image: ImageRunNode,
   options?: {
@@ -526,15 +554,7 @@ export function absoluteFloatingImageStyle(
   const deltaY = Number.isFinite(options?.deltaY)
     ? Math.round(options?.deltaY as number)
     : 0;
-  const normalizedZIndex = Number.isFinite(floating.zIndex)
-    ? Math.max(
-        1,
-        Math.min(65535, Math.round((floating.zIndex as number) / 65536))
-      )
-    : undefined;
-  const resolvedZIndex = floating.behindDocument
-    ? -100000 + (normalizedZIndex ?? 1)
-    : normalizedZIndex ?? 4;
+  const resolvedZIndex = resolveFloatingImageStackingZIndex(floating) ?? 4;
 
   const resolvedLeft =
     floating.xPx !== undefined

@@ -129,7 +129,7 @@ test("XlsxGrid returns keyboard focus after committing or cancelling cell editin
   assert.match(SCRIPT_SOURCE, /function commitEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
   assert.match(SCRIPT_SOURCE, /function cancelEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
   assert.match(functionNode("onEditKeydown").getText(AST), /isComposingKeyboardEvent\(event\)/);
-  assert.match(functionNode("onEditCompositionEnd").getText(AST), /nextTick\(commitEdit\)/);
+  assert.match(functionNode("onEditCompositionEnd").getText(AST), /nextTick\(commitEditFillingSelection\)/);
 });
 
 test("XlsxGrid display indices keep hidden row and column workbook addresses", () => {
@@ -181,18 +181,146 @@ test("XlsxGrid display indices keep hidden row and column workbook addresses", (
   assert.match(functionNode("commitAndTab").getText(AST), /getAdjacentCell\(editingCell\.value, 0, 1\)/);
 });
 
-test("XlsxGrid owns a real scroll surface and coalesces scroll painting by animation frame", () => {
-  assert.match(GRID_SOURCE, /data-testid="xlsx-grid-scroll-space"/);
-  assert.match(GRID_SOURCE, /class="xlsx-grid__viewport"/);
-  assert.match(GRID_SOURCE, /position:\s*sticky/);
+test("XlsxGrid renders a real scroll surface and coalesces scroll painting by animation frame", async (t) => {
+  const frames = [];
+  let resizeCallback = null;
+  const previousWindow = globalThis.window;
+  const previousResizeObserver = globalThis.ResizeObserver;
+  const previousDocument = globalThis.Document;
+  const previousShadowRoot = globalThis.ShadowRoot;
+  globalThis.window = {
+    devicePixelRatio: 1,
+    requestAnimationFrame(callback) {
+      frames.push(callback);
+      return frames.length;
+    },
+    cancelAnimationFrame() {},
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  globalThis.ResizeObserver = class ResizeObserver {
+    constructor(callback) {
+      resizeCallback = callback;
+    }
+    observe() {}
+    disconnect() {}
+  };
+  globalThis.Document = class Document {};
+  globalThis.ShadowRoot = class ShadowRoot {};
 
-  const scheduleSource = functionNode("schedulePaint").getText(AST);
-  const scrollSource = functionNode("onScroll").getText(AST);
-  assert.match(scheduleSource, /paintFrame !== null/);
-  assert.match(scheduleSource, /requestAnimationFrame/);
-  assert.match(scheduleSource, /paintGrid\(\)/);
-  assert.match(scrollSource, /schedulePaint\(\)/);
-  assert.doesNotMatch(scrollSource, /paintGrid\(\)/);
+  const originalWidth = Object.getOwnPropertyDescriptor(Object.prototype, "clientWidth");
+  const originalHeight = Object.getOwnPropertyDescriptor(Object.prototype, "clientHeight");
+  Object.defineProperty(Object.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.__clientWidth ?? 1600; },
+    set(value) { this.__clientWidth = value; },
+  });
+  Object.defineProperty(Object.prototype, "clientHeight", {
+    configurable: true,
+    get() { return this.__clientHeight ?? 600; },
+    set(value) { this.__clientHeight = value; },
+  });
+  const controller = createWheelController();
+  let displayValueReads = 0;
+  const readDisplayValue = controller.getCellDisplayValue;
+  controller.getCellDisplayValue = (cell) => {
+    displayValueReads += 1;
+    return readDisplayValue(cell);
+  };
+  const mounted = await mount(XlsxViewer, {
+    controller,
+    showDefaultToolbar: false,
+    showRibbon: false,
+    showFormulaBar: false,
+    showImages: false,
+  });
+  t.after(() => {
+    mounted.app.unmount();
+    if (originalWidth) Object.defineProperty(Object.prototype, "clientWidth", originalWidth);
+    else delete Object.prototype.clientWidth;
+    if (originalHeight) Object.defineProperty(Object.prototype, "clientHeight", originalHeight);
+    else delete Object.prototype.clientHeight;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    if (previousResizeObserver === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = previousResizeObserver;
+    if (previousDocument === undefined) delete globalThis.Document;
+    else globalThis.Document = previousDocument;
+    if (previousShadowRoot === undefined) delete globalThis.ShadowRoot;
+    else globalThis.ShadowRoot = previousShadowRoot;
+  });
+
+  const grid = findByTestId(mounted.root, "xlsx-grid");
+  grid.getBoundingClientRect = () => ({
+    bottom: 600, height: 600, left: 0, right: 1600, top: 0, width: 1600,
+  });
+  resizeCallback?.([{ contentRect: { height: 600, width: 1600 } }]);
+  await vue.nextTick();
+  const scrollSpace = findByTestId(mounted.root, "xlsx-grid-scroll-space");
+  const viewport = nodesWithClass(mounted.root, "xlsx-grid__viewport")[0];
+  assert.ok(grid, "the grid renders its scroll container");
+  assert.ok(scrollSpace, "the grid renders a real scroll-space element");
+  assert.ok(viewport, "the grid renders the canvas viewport inside the scroll space");
+
+  // The scroll space must span every row and column, otherwise the browser
+  // has no scrollbar range to drag.
+  assert.ok(
+    Number.parseFloat(scrollSpace.props.style.width) >= 48 + 50 * 80,
+    `scroll width ${scrollSpace.props.style.width} grid=${JSON.stringify({ first: grid.props["data-first-column-width"], cols: grid.props["data-display-column-count"], rows: grid.props["data-display-row-count"], rh: grid.props["data-first-row-height"] })} resize=${Boolean(resizeCallback)}`,
+  );
+  assert.ok(
+    Number.parseFloat(scrollSpace.props.style.height) >= 24 + 200 * 24,
+    `scroll height ${scrollSpace.props.style.height}`,
+  );
+
+  // A canvas renderer needs a 2D context; the test renderer creates plain host
+  // nodes, so stub just enough of the API for one real paint pass.
+  const gradient = { addColorStop() {} };
+  const context = new Proxy(
+    {},
+    {
+      get(_target, property) {
+        if (property === "measureText") return (value) => ({ width: String(value).length * 7 });
+        if (property === "createLinearGradient" || property === "createRadialGradient") {
+          return () => gradient;
+        }
+        return () => undefined;
+      },
+      set() {
+        return true;
+      },
+    },
+  );
+  for (const node of walk(mounted.root)) {
+    if (node.type === "canvas") {
+      node.style = {};
+      node.getContext = () => context;
+    }
+  }
+  grid.clientWidth = 800;
+  grid.clientHeight = 600;
+  grid.scrollLeft = 120;
+  grid.scrollTop = 60;
+  resizeCallback?.([{ contentRect: { width: 800, height: 600 } }]);
+  await vue.nextTick();
+  // Flush the frame queued by mount; the scroll assertions below need an idle
+  // scheduler to prove that three events share exactly one new frame.
+  while (frames.length) frames.shift()();
+
+  frames.length = 0;
+  displayValueReads = 0;
+  grid.props.onScroll();
+  grid.props.onScroll();
+  grid.props.onScroll();
+  assert.equal(frames.length, 1, "three scroll events must schedule one paint frame");
+  assert.equal(displayValueReads, 0, "scroll must defer painting to the next frame");
+
+  frames.shift()();
+  assert.ok(displayValueReads > 0, "the animation frame paints the visible cells");
+  assert.equal(frames.length, 0);
+
+  grid.props.onScroll();
+  assert.equal(frames.length, 1, "a later scroll schedules a new frame");
 });
 
 test("XlsxGrid canvas dimensions are guarded against scroll-only rewrites", () => {
@@ -374,6 +502,18 @@ function nodesWithClass(root, className) {
 
 test("XlsxViewer Ctrl/Cmd+wheel zoom keeps the cell under the cursor anchored", async (t) => {
   const restoreEnvironment = installWheelEnvironment();
+  const originalWidth = Object.getOwnPropertyDescriptor(Object.prototype, "clientWidth");
+  const originalHeight = Object.getOwnPropertyDescriptor(Object.prototype, "clientHeight");
+  Object.defineProperty(Object.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.__clientWidth ?? 1600; },
+    set(value) { this.__clientWidth = value; },
+  });
+  Object.defineProperty(Object.prototype, "clientHeight", {
+    configurable: true,
+    get() { return this.__clientHeight ?? 600; },
+    set(value) { this.__clientHeight = value; },
+  });
   const controller = createWheelController();
   const mounted = await mount(XlsxViewer, {
     controller,

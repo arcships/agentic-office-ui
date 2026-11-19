@@ -173,7 +173,7 @@ test("OfficeLiveStatus is one stable shared live region for DOCX/PPTX/XLSX", () 
 
 test("DOCX viewer announces loading, error, page and empty states", () => {
   const viewer = read(DOCX_VIEWER_PATH);
-  assert.match(viewer, /import \{ OfficeLiveStatus \} from "@arcships\/vue-ui"/);
+  assert.match(viewer, /import \{[^}]*OfficeLiveStatus[^}]*\} from "@arcships\/vue-ui"/);
   assert.match(viewer, /<OfficeLiveStatus\s+test-id="docx-live-status"\s+:message="liveStatusMessage"\s+:busy="liveStatusBusy"/);
   assert.ok(
     viewer.indexOf('test-id="docx-live-status"') < viewer.indexOf("<DocxViewerToolbar"),
@@ -203,7 +203,7 @@ test("DOCX editor mirrors its status bar into the shared live region", () => {
 
 test("PPTX and XLSX viewers use the same shared live region", () => {
   const pptx = read(PPTX_VIEWER_PATH);
-  assert.match(pptx, /import \{ OfficeLiveStatus \} from "@arcships\/vue-ui"/);
+  assert.match(pptx, /import \{[^}]*OfficeLiveStatus[^}]*\} from "@arcships\/vue-ui"/);
   assert.match(pptx, /<OfficeLiveStatus\s+test-id="pptx-live-status"\s+:message="liveStatusMessage"\s+:busy="state === 'loading'"/);
   const pptxMessage = computedBody(PPTX_VIEWER_PATH, "liveStatusMessage");
   assert.match(pptxMessage, /m\.value\.pptx\.viewer\.live\.empty/);

@@ -3,7 +3,11 @@
 //
 // Migrated from upstream @extend-ai/react-docx, editor.tsx lines 29582-29668
 
-import type { DocxEditorController, LayoutSnapshot } from "@arcships/docx-core"
+import type {
+  DocxEditorController,
+  DocxSectionPageNumberTracker,
+  LayoutSnapshot
+} from "@arcships/docx-core"
 
 /** A page surface was published or unpublished by the viewer. */
 export interface DocxViewerPageSurfaceChange {
@@ -51,6 +55,13 @@ export interface DocxViewerPageSurfaceRegistry {
 
   /** Viewer-owned layout snapshot shared with thumbnail consumers. */
   layoutSnapshot?: LayoutSnapshot
+
+  /**
+   * Viewer-owned per-section page numbering. Thumbnail consumers label pages
+   * from it, so the rail cannot disagree with the numbers a page's own
+   * header/footer fields resolve.
+   */
+  pageNumberTracker?: DocxSectionPageNumberTracker
 
   /** Change listeners, notified when a page surface changes. */
   listeners: Set<DocxViewerPageSurfaceListener>

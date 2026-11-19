@@ -17,7 +17,31 @@ export interface OoxmlPackage {
   binaryAssets: Map<string, Uint8Array>;
 }
 
+/**
+ * OpenDocument text is a ZIP (or flat XML) with no Word package. The WASM
+ * parser only reads OOXML, so reject it here with the reason the viewer shows
+ * instead of reporting a generic ZIP failure.
+ */
+function isOpenDocumentPackage(input: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(input)
+  const head = new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 4096))
+  const isZip = bytes.length >= 4 &&
+    bytes[0] === 0x50 && bytes[1] === 0x4b &&
+    bytes[2] === 0x03 && bytes[3] === 0x04
+  if (isZip) {
+    return head.includes("mimetype") &&
+      /application\/vnd\.oasis\.opendocument\.text/i.test(head)
+  }
+  return /<office:document\b/i.test(head) &&
+    /application\/vnd\.oasis\.opendocument\.text/i.test(head)
+}
+
 export async function parseDocx(input: ArrayBuffer): Promise<OoxmlPackage> {
+  if (isOpenDocumentPackage(input)) {
+    throw new Error(
+      "OpenDocument text has no Word package; use the document runtime to open .odt files in view-only mode.",
+    );
+  }
   const wasmPackage = await wasmParseDocx(input);
   const { parts, binaryAssets } = wasmPackageToMaps(wasmPackage);
   return { parts, binaryAssets };

@@ -1,10 +1,14 @@
 import { compilePptxSlideSchedule, type PptxScheduledEffect, type PptxSlideSchedule, type PptxTriggerKey } from "./time-tree"
 import { isMediaPlayCommand, mediaSeekMs } from "./media-command"
+import { isPptxEffectTargetExecutable, pptxEffectTargetKey } from "./targets"
 import type {
+  PptxChartElementTarget,
+  PptxGraphicElementTarget,
   PptxMediaItem,
   PptxPlaybackEffect,
   PptxPlaybackSlide,
   PptxPropertyTrack,
+  PptxTableCellTarget,
   PptxTrackKeyframe,
   PptxTrackProperty,
   PptxTimeNode,
@@ -15,7 +19,13 @@ export type PptxObjectPropertyState = Partial<Record<PptxTrackProperty, PptxTrac
 export type PptxObjectStateMap = Readonly<Record<string, Readonly<PptxObjectPropertyState>>>
 
 export interface PptxCompiledPropertyTrack extends PptxPropertyTrack {
+  /** Exact state-map key, including paragraph, character, cell or element selectors. */
+  target?: string
   paragraphRange?: { start: number; end: number }
+  characterRange?: { start: number; end: number }
+  tableCell?: PptxTableCellTarget
+  chartElement?: PptxChartElementTarget
+  graphicElement?: PptxGraphicElementTarget
   segments: readonly PptxCompiledTrackSegment[]
 }
 
@@ -50,7 +60,12 @@ export interface PptxCompiledSlide {
 
 interface TrackFragment extends PptxCompiledTrackSegment {
   objectKey: string
+  target: string
   paragraphRange?: { start: number; end: number }
+  characterRange?: { start: number; end: number }
+  tableCell?: PptxTableCellTarget
+  chartElement?: PptxChartElementTarget
+  graphicElement?: PptxGraphicElementTarget
   property: PptxTrackProperty
   initialValue: PptxTrackValue
 }
@@ -75,24 +90,19 @@ const defaultValues: Record<PptxTrackProperty, PptxTrackValue> = {
 
 function initialValue(
   initialState: PptxObjectStateMap,
-  objectKey: string,
+  target: string,
   property: PptxTrackProperty,
-  paragraphRange?: { start: number; end: number },
 ): PptxTrackValue {
-  const target = paragraphRange
-    ? `${objectKey}#paragraph:${paragraphRange.start}-${paragraphRange.end}`
-    : objectKey
   return initialState[target]?.[property] ?? defaultValues[property]
 }
 
 function initialNumber(
   initialState: PptxObjectStateMap,
-  objectKey: string,
+  target: string,
   property: PptxTrackProperty,
   fallback: number,
-  paragraphRange?: { start: number; end: number },
 ): number {
-  const value = initialValue(initialState, objectKey, property, paragraphRange)
+  const value = initialValue(initialState, target, property)
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
 }
 
@@ -186,16 +196,17 @@ function fragmentsForEffect(
 ): TrackFragment[] {
   const effect = scheduled.effect
   const objectKey = effect.targetObjectKey
-  if (!objectKey) return []
+  const target = pptxEffectTargetKey(effect)
+  if (!objectKey || !target || !isPptxEffectTargetExecutable(effect)) return []
   const baseDuration = typeof node.durationMs === "number" ? node.durationMs : 0
   const baseEnd = scheduled.startMs + baseDuration
   // Exit effects must hide the element once every repeat pass has finished.
   const terminalEnd = scheduled.endMs === "indefinite" ? undefined : scheduled.endMs
-  const rotateBase = initialNumber(baselineState, objectKey, "rotate", 0, effect.paragraphRange)
-  const translateBaseX = initialNumber(baselineState, objectKey, "translate-x", 0, effect.paragraphRange)
-  const translateBaseY = initialNumber(baselineState, objectKey, "translate-y", 0, effect.paragraphRange)
-  const scaleBaseX = initialNumber(baselineState, objectKey, "scale-x", 1, effect.paragraphRange)
-  const scaleBaseY = initialNumber(baselineState, objectKey, "scale-y", 1, effect.paragraphRange)
+  const rotateBase = initialNumber(baselineState, target, "rotate", 0)
+  const translateBaseX = initialNumber(baselineState, target, "translate-x", 0)
+  const translateBaseY = initialNumber(baselineState, target, "translate-y", 0)
+  const scaleBaseX = initialNumber(baselineState, target, "scale-x", 1)
+  const scaleBaseY = initialNumber(baselineState, target, "scale-y", 1)
   const fragment = (
     property: PptxTrackProperty,
     from: PptxTrackValue,
@@ -204,9 +215,14 @@ function fragmentsForEffect(
     endMs = baseEnd,
   ): TrackFragment => ({
     objectKey,
+    target,
     paragraphRange: effect.paragraphRange,
+    characterRange: effect.characterRange,
+    tableCell: effect.tableCell,
+    chartElement: effect.chartElement,
+    graphicElement: effect.graphicElement,
     property,
-    initialValue: initialValue(initialState, objectKey, property, effect.paragraphRange),
+    initialValue: initialValue(initialState, target, property),
     startMs,
     endMs,
     from,
@@ -260,7 +276,7 @@ function fragmentsForEffect(
     case "emphasis": {
       const property = effect.values.emphasisProperty
       if (property === "opacity") {
-        const from = numberValue(effect, "emphasisFrom", initialValue(initialState, objectKey, "opacity", effect.paragraphRange) as number)
+        const from = numberValue(effect, "emphasisFrom", initialValue(initialState, target, "opacity") as number)
         fragments = [fragment("opacity", from, numberValue(effect, "emphasisTo", from))]
       } else fragments = []
       break
@@ -302,8 +318,7 @@ function fragmentsForEffect(
 }
 
 function trackKey(fragment: TrackFragment): string {
-  const range = fragment.paragraphRange
-  return `${fragment.objectKey}|${range ? `${range.start}:${range.end}` : "object"}|${fragment.property}`
+  return `${fragment.target}|${fragment.property}`
 }
 
 function mediaFragment(
@@ -316,6 +331,7 @@ function mediaFragment(
   if (!item.objectKey) return undefined
   return {
     objectKey: item.objectKey,
+    target: item.objectKey,
     property,
     initialValue: from,
     startMs: 0,
@@ -379,7 +395,12 @@ function compileFragments(fragments: readonly TrackFragment[]): readonly PptxCom
     const first = ordered[0]
     return Object.freeze({
       objectKey: first.objectKey,
+      target: first.target,
       paragraphRange: first.paragraphRange,
+      characterRange: first.characterRange,
+      tableCell: first.tableCell,
+      chartElement: first.chartElement,
+      graphicElement: first.graphicElement,
       property: first.property,
       initialValue: first.initialValue,
       keyframes,
@@ -435,11 +456,8 @@ export function compilePptxSlideTracks(
   )
   for (const scheduled of schedule.groups.flatMap((group) => group.effects)) {
     const effect = scheduled.effect
-    const objectKey = effect.targetObjectKey
-    if (!objectKey || effect.presetClass !== "entr" || !compilableNodeIds.has(scheduled.nodeId)) continue
-    const target = effect.paragraphRange
-      ? `${objectKey}#paragraph:${effect.paragraphRange.start}-${effect.paragraphRange.end}`
-      : objectKey
+    const target = pptxEffectTargetKey(effect)
+    if (!target || effect.presetClass !== "entr" || !compilableNodeIds.has(scheduled.nodeId)) continue
     const state = preparedState[target] ?? {}
     if (effect.kind === "appear") state.display = false
     else if (effect.kind === "fade-in") {
@@ -688,9 +706,10 @@ export function evaluatePptxTriggerGroup(
 ): PptxObjectStateMap {
   const result: Record<string, PptxObjectPropertyState> = {}
   for (const track of group.tracks) {
-    const target = track.paragraphRange
-      ? `${track.objectKey}#paragraph:${track.paragraphRange.start}-${track.paragraphRange.end}`
-      : track.objectKey
+    const target = track.target
+      ?? (track.paragraphRange
+        ? `${track.objectKey}#paragraph:${track.paragraphRange.start}-${track.paragraphRange.end}`
+        : track.objectKey)
     const state = result[target] ?? {}
     state[track.property] = evaluatePptxTrack(track, positionMs)
     result[target] = state

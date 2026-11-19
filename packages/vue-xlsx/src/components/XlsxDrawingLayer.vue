@@ -4,6 +4,7 @@
     data-testid="xlsx-drawing-layer"
     :data-shape-count="shapeItems.length"
     :data-form-control-count="controlItems.length"
+    :data-slicer-count="slicerItems.length"
     :style="layerStyle"
   >
     <div
@@ -27,12 +28,41 @@
         }"
         :style="item.style"
         @pointerdown.stop="onShapePointerDown(item, $event)"
+        @contextmenu.prevent.stop="onShapeContextMenu(item, $event)"
         @keydown="onShapeKeydown(item.shape, $event)"
       >
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <ellipse v-if="/ellipse|oval/i.test(item.shape.geometry)" cx="50" cy="50" rx="48" ry="48" />
-          <path v-else-if="item.shape.svgPath" :d="item.shape.svgPath" />
-          <rect v-else x="1" y="1" width="98" height="98" rx="4" />
+        <svg :viewBox="item.viewBox" preserveAspectRatio="none" aria-hidden="true">
+          <defs v-if="item.markers.length">
+            <marker
+              v-for="marker in item.markers"
+              :id="marker.id"
+              :key="marker.id"
+              :refX="marker.refX"
+              :refY="marker.refY"
+              markerHeight="4"
+              markerUnits="strokeWidth"
+              markerWidth="4"
+              :orient="marker.orient"
+              :viewBox="marker.viewBox"
+            >
+              <path
+                :d="marker.path"
+                :fill="marker.fill"
+                :stroke="marker.stroke"
+                :stroke-width="marker.strokeWidth"
+              />
+            </marker>
+          </defs>
+          <path
+            v-if="item.path"
+            class="xlsx-drawing-layer__geometry"
+            :d="item.path"
+            :marker-end="item.markerEnd ? `url(#${item.markerEnd.id})` : undefined"
+            :marker-start="item.markerStart ? `url(#${item.markerStart.id})` : undefined"
+            :style="item.dashStyle"
+          />
+          <ellipse v-else-if="/ellipse|oval/i.test(item.shape.geometry)" class="xlsx-drawing-layer__geometry" cx="50" cy="50" rx="48" ry="48" :style="item.dashStyle" />
+          <rect v-else class="xlsx-drawing-layer__geometry" x="1" y="1" width="98" height="98" rx="4" :style="item.dashStyle" />
         </svg>
         <div class="xlsx-drawing-layer__text" :style="shapeTextStyle(item.shape)">
           <p
@@ -85,6 +115,34 @@
         <span v-else>{{ item.control.label || item.control.name || controlLabel(item.control.kind) }}</span>
         <span v-if="item.control.kind === 'checkbox' || item.control.kind === 'radio'">{{ item.control.label || item.control.name }}</span>
       </div>
+      <div
+        v-for="item in pane.slicers"
+        :key="item.slicer.name"
+        class="xlsx-drawing-layer__slicer"
+        data-testid="xlsx-slicer"
+        :data-slicer-name="item.slicer.name"
+        :data-slicer-cache="item.slicer.cacheName || undefined"
+        :data-slicer-count="item.slicer.items.length"
+        :style="item.style"
+        role="group"
+        :aria-label="item.slicer.caption || item.slicer.name"
+        :title="formatOfficeMessage(m.xlsx.drawing.slicerHint, { name: item.slicer.caption || item.slicer.name })"
+      >
+        <div class="xlsx-drawing-layer__slicer-header">
+          {{ item.slicer.caption || item.slicer.name }}
+        </div>
+        <div class="xlsx-drawing-layer__slicer-items">
+          <span
+            v-for="slicerItem in item.slicer.items"
+            :key="slicerItem.key"
+            class="xlsx-drawing-layer__slicer-item"
+            :class="{ 'xlsx-drawing-layer__slicer-item--selected': slicerItem.selected }"
+            data-slicer-item
+            :data-slicer-key="slicerItem.key"
+            :data-selected="slicerItem.selected ? 'true' : 'false'"
+          >{{ slicerItem.caption }}</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -92,6 +150,8 @@
 <script setup lang="ts">
 import { computed, ref, type CSSProperties } from "vue"
 import {
+  buildPresetShapePath,
+  isStrokeOnlyShapeGeometry,
   parseA1CellReference,
   type XlsxFormControl,
   type XlsxImageAnchor,
@@ -104,6 +164,7 @@ import {
 } from "@arcships/xlsx-core"
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics"
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useXlsxMessages } from "../i18n"
 
 const props = defineProps<{
@@ -112,6 +173,10 @@ const props = defineProps<{
   scrollTop?: number
   viewportWidth?: number
   viewportHeight?: number
+}>()
+
+const emit = defineEmits<{
+  drawingContextMenu: [payload: { id: string; kind: "shape"; clientX: number; clientY: number }]
 }>()
 
 const layerStyle = gridBodyLayerStyle
@@ -158,12 +223,127 @@ function shapeTransform(shape: XlsxShape): string | undefined {
   return parts.length ? parts.join(" ") : undefined
 }
 
+type ShapeMarkerGeometry = {
+  fill: string
+  id: string
+  orient: "auto" | "auto-start-reverse"
+  path: string
+  refX: number
+  refY: number
+  stroke: string
+  strokeWidth: number
+  viewBox: string
+}
+
+type ShapeMarkerDefinition = {
+  filled: boolean
+  path: string
+  refX: number
+  refY: number
+  stroked: boolean
+}
+
+// DrawingML arrow ends, drawn in a 4x4 marker box so `markerUnits="strokeWidth"`
+// scales them with the connector's line width.
+const SHAPE_MARKER_DEFINITIONS: Record<string, ShapeMarkerDefinition> = {
+  arrow: { filled: false, path: "M0,0 L4,2 L0,4", refX: 4, refY: 2, stroked: true },
+  diamond: { filled: true, path: "M0,2 L2,0 L4,2 L2,4 Z", refX: 4, refY: 2, stroked: false },
+  oval: { filled: true, path: "M2,0 A2,2 0 1,1 2,4 A2,2 0 1,1 2,0 Z", refX: 2, refY: 2, stroked: false },
+  stealth: { filled: true, path: "M0,0 L4,2 L0,4 L1,2 Z", refX: 4, refY: 2, stroked: false },
+  triangle: { filled: true, path: "M0,0 L4,2 L0,4 Z", refX: 4, refY: 2, stroked: false },
+}
+
+// Dash lengths are multiples of the line width, matching DrawingML's
+// `a:prstDash` presets.
+const SHAPE_DASH_PATTERNS: Record<string, readonly number[]> = {
+  dash: [4, 3],
+  dashdot: [4, 3, 1, 3],
+  dot: [1, 1],
+  lgdash: [8, 3],
+  lgdashdot: [8, 3, 1, 3],
+  lgdashdotdot: [8, 3, 1, 3, 1, 3],
+  sysdash: [3, 1],
+  sysdashdot: [3, 1, 1, 1],
+  sysdashdotdot: [3, 1, 1, 1, 1, 1],
+  sysdot: [1, 1],
+}
+
+/** Rect/ellipse keep their own SVG primitives; every other preset is a path. */
+const NATIVE_SVG_GEOMETRIES = /^(ellipse|oval|rect)$/i
+
+function shapeStrokeColor(shape: XlsxShape): string {
+  return shape.stroke?.none ? "transparent" : shape.stroke?.color || "#2563eb"
+}
+
+function shapeDashArray(shape: XlsxShape): string | undefined {
+  if (shape.stroke?.none || !shape.stroke?.dash) {
+    return undefined
+  }
+  const pattern = SHAPE_DASH_PATTERNS[shape.stroke.dash.trim().toLowerCase()]
+  if (!pattern) {
+    return undefined
+  }
+  const width = Math.max(1, shape.stroke.widthPx ?? 1)
+  return pattern.map((part) => Math.round(part * width * 100) / 100).join(" ")
+}
+
+function shapeMarker(shape: XlsxShape, end: "head" | "tail", color: string): ShapeMarkerGeometry | undefined {
+  const type = (end === "head" ? shape.stroke?.headEndType : shape.stroke?.tailEndType)?.trim().toLowerCase()
+  if (!type || type === "none" || shape.stroke?.none) {
+    return undefined
+  }
+  const definition = SHAPE_MARKER_DEFINITIONS[type]
+  if (!definition) {
+    return undefined
+  }
+  const rawId = `${shape.id}-${end}-marker`.replace(/[^A-Za-z0-9_-]/g, "-")
+  return {
+    fill: definition.filled ? color : "none",
+    id: `xlsx-shape-${rawId}`,
+    orient: end === "head" ? "auto-start-reverse" : "auto",
+    path: definition.path,
+    refX: definition.refX,
+    refY: definition.refY,
+    stroke: definition.stroked ? color : "none",
+    strokeWidth: definition.stroked ? 1 : 0,
+    viewBox: "0 0 4 4",
+  }
+}
+
+/**
+ * Resolve the SVG path for a shape at its current on-screen size.
+ * Preset geometry is rebuilt from the live rect (Excel recomputes guides on
+ * resize); custom geometry keeps the path and view box stored in the drawing.
+ */
+function shapePathGeometry(
+  shape: XlsxShape,
+  width: number,
+  height: number,
+): { path: string; viewBox: string } | undefined {
+  const geometry = shape.geometry?.trim()
+  if (geometry && geometry.toLowerCase() !== "custom" && !NATIVE_SVG_GEOMETRIES.test(geometry)) {
+    const preset = buildPresetShapePath(geometry, shape.geometryAdjustments, { height, width })
+    if (preset) {
+      return { path: preset.path, viewBox: `0 0 ${preset.viewBox.width} ${preset.viewBox.height}` }
+    }
+  }
+  if (shape.svgPath?.trim()) {
+    const boxWidth = shape.svgViewBox?.width && shape.svgViewBox.width > 0 ? shape.svgViewBox.width : 100
+    const boxHeight = shape.svgViewBox?.height && shape.svgViewBox.height > 0 ? shape.svgViewBox.height : 100
+    return { path: shape.svgPath, viewBox: `0 0 ${boxWidth} ${boxHeight}` }
+  }
+  return undefined
+}
+
 const shapeItems = computed(() => (props.controller.shapes as XlsxShape[])
   .filter((shape) => !shape.hidden)
   .flatMap((shape) => {
+    const strokeColor = shapeStrokeColor(shape)
     const item = itemPlacement(shape.anchor, shape.zIndex, {
-      "--shape-fill": shape.fill?.none ? "transparent" : shape.fill?.color || "#dbeafe",
-      "--shape-stroke": shape.stroke?.none ? "transparent" : shape.stroke?.color || "#2563eb",
+      "--shape-fill": shape.fill?.none
+        ? "transparent"
+        : shape.fill?.color || (isStrokeOnlyShapeGeometry(shape.geometry) ? "transparent" : "#dbeafe"),
+      "--shape-stroke": strokeColor,
       "--shape-stroke-width": `${shape.stroke?.widthPx || 1}px`,
       transform: shapeTransform(shape),
     } as CSSProperties)
@@ -185,7 +365,28 @@ const shapeItems = computed(() => (props.controller.shapes as XlsxShape[])
       style.width = `${preview.width}px`
       style.height = `${preview.height}px`
     }
-    return [{ shape, pane: item.pane, rect: item.rect, style }]
+    const zoom = props.controller.zoomScale > 0 ? props.controller.zoomScale / 100 : 1
+    const geometry = shapePathGeometry(
+      shape,
+      (preview?.width ?? item.rect.width) / zoom,
+      (preview?.height ?? item.rect.height) / zoom,
+    )
+    const dashArray = shapeDashArray(shape)
+    const markerStart = shapeMarker(shape, "head", strokeColor)
+    const markerEnd = shapeMarker(shape, "tail", strokeColor)
+    const markers = [markerStart, markerEnd].filter((marker): marker is ShapeMarkerGeometry => Boolean(marker))
+    return [{
+      dashStyle: dashArray ? { strokeDasharray: dashArray } : undefined,
+      markerEnd,
+      markerStart,
+      markers,
+      pane: item.pane,
+      path: geometry?.path,
+      rect: item.rect,
+      shape,
+      style,
+      viewBox: geometry?.viewBox ?? "0 0 100 100",
+    }]
   }))
 
 const controlItems = computed(() => (props.controller.formControls as XlsxFormControl[])
@@ -198,14 +399,34 @@ const controlItems = computed(() => (props.controller.formControls as XlsxFormCo
     return [{ control, pane: item.pane, rect: item.rect, style: item.style }]
   }))
 
+const slicerItems = computed(() => (props.controller.slicers ?? []).flatMap((slicer) => {
+  if (!slicer.anchor) return []
+  const item = itemPlacement(slicer.anchor, 900000)
+  if (!paneLayout.value.isVisible(item.rect, item.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+    return []
+  }
+  return [{ pane: item.pane, rect: item.rect, slicer, style: item.style }]
+}))
+
 const panes = computed(() => paneLayout.value.panes.map((pane) => ({
   ...pane,
   shapes: shapeItems.value.filter((item) => item.pane === pane.key),
   controls: controlItems.value.filter((item) => item.pane === pane.key),
+  slicers: slicerItems.value.filter((item) => item.pane === pane.key),
 })))
 
 function onShapePointerDown(item: { shape: XlsxShape; rect: XlsxImageRect }, event: PointerEvent) {
   interaction.beginMove(item.shape.id, item.rect, event)
+}
+
+function onShapeContextMenu(item: { shape: XlsxShape; rect: XlsxImageRect }, event: MouseEvent) {
+  props.controller.selectShape(item.shape.id)
+  emit("drawingContextMenu", {
+    id: item.shape.id,
+    kind: "shape",
+    clientX: event.clientX,
+    clientY: event.clientY,
+  })
 }
 
 function onShapeHandlePointerDown(
@@ -218,6 +439,30 @@ function onShapeHandlePointerDown(
 
 function onShapeKeydown(shape: XlsxShape, event: KeyboardEvent) {
   if (props.controller.selectedShapeId !== shape.id) {
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    event.preventDefault()
+    event.stopPropagation()
+    void props.controller.copySelectionToClipboard?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "x") {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.cutSelection?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault()
+    event.stopPropagation()
+    void props.controller.pasteFromClipboard?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.duplicateDrawing?.()
     return
   }
   const step = event.shiftKey ? 10 : 1
@@ -242,6 +487,7 @@ function onShapeKeydown(shape: XlsxShape, event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     event.stopPropagation()
+    if (props.controller.cancelCut?.()) return
     props.controller.clearSelectedShape()
   }
 }
@@ -345,7 +591,10 @@ function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdow
   transform-origin: center;
 }
 .xlsx-drawing-layer__shape--gesture { cursor: move; }
-.xlsx-drawing-layer__shape svg { fill: var(--shape-fill); height: 100%; left: 0; position: absolute; stroke: var(--shape-stroke); stroke-width: var(--shape-stroke-width); top: 0; width: 100%; }
+.xlsx-drawing-layer__shape svg { fill: var(--shape-fill); height: 100%; left: 0; overflow: visible; position: absolute; stroke: var(--shape-stroke); stroke-width: var(--shape-stroke-width); top: 0; width: 100%; }
+/* Preset geometry is drawn at the shape's pixel size; strokes, arrowheads and
+   callout tails are centred on the path, so they may leave the shape box. */
+.xlsx-drawing-layer__geometry { stroke-linejoin: round; }
 .xlsx-drawing-layer__text {
   box-sizing: border-box; display: flex; flex-direction: column;
   height: 100%; overflow: visible; position: relative; white-space: pre-wrap; z-index: 1;
@@ -365,4 +614,19 @@ function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdow
   height: 8px; pointer-events: auto; position: absolute; width: 8px;
   z-index: 1000000;
 }
+.xlsx-drawing-layer__slicer {
+  background: #ffffff; border: 1px solid #bfbfbf; box-sizing: border-box;
+  color: #1f2937; display: flex; flex-direction: column; overflow: hidden;
+  pointer-events: auto; position: absolute;
+}
+.xlsx-drawing-layer__slicer-header {
+  background: #1f3864; color: #ffffff; font-size: 11px; font-weight: 600;
+  overflow: hidden; padding: 4px 6px; text-overflow: ellipsis; white-space: nowrap;
+}
+.xlsx-drawing-layer__slicer-items { display: flex; flex-direction: column; gap: 2px; overflow: hidden; padding: 4px; }
+.xlsx-drawing-layer__slicer-item {
+  border: 1px solid transparent; font-size: 11px; overflow: hidden;
+  padding: 2px 4px; text-overflow: ellipsis; white-space: nowrap;
+}
+.xlsx-drawing-layer__slicer-item--selected { background: #dbeafe; border-color: #2563eb; }
 </style>

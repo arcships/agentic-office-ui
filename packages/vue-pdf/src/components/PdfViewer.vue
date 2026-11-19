@@ -40,10 +40,22 @@ import {
   wordRangeFromCharacterTexts,
 } from "../pdf/pdf-selection-interaction"
 import { hasUnmappedPdfText } from "../pdf/pdf-selection-range"
+import {
+  normalizePdfPageLayout,
+  pdfPageIndexAtOffset,
+  pdfSpreadPagePair,
+  resolvePdfPageLayoutMetrics,
+  type PdfPageLayout,
+} from "../pdf/pdf-page-layout"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
+import { isEditableViewerTarget, useViewerKeys, useFileDrop, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
+import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
+import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
+import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -56,6 +68,8 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   onPassword: undefined,
   fileName: undefined,
   defaultZoom: 1,
+  pageLayout: null,
+  defaultPageLayout: "single" as PdfPageLayout,
   className: "",
   showToolbar: true,
   showDownload: true,
@@ -70,8 +84,12 @@ const emit = defineEmits<{
   "document-load-success": [numPages: number]
   "document-load-error": [error: PdfLoadError]
   "active-page-change": [pageNumber: number]
+  /** The toolbar page-layout control changed; hosts can drive the prop. */
+  "update:pageLayout": [layout: PdfPageLayout]
   diagnostic: [event: PdfDiagnostic]
   selectionChange: [selection: PdfSelectionState]
+  /** A supported PDF was dropped; the viewer loaded it through `load()`. */
+  fileDrop: [file: File]
 }>()
 
 const m = providePdfMessages(() => props.locale, () => props.messages)
@@ -93,6 +111,9 @@ const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
 const loadError = ref<PdfLoadError | null>(null)
+/** A file dropped on the viewer; wins over the `source`/`src` props until they change. */
+const droppedSource = ref<PdfSource | null>(null)
+const dropError = ref("")
 const loadErrorMessage = computed(() => loadError.value
   ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
   : "")
@@ -108,7 +129,10 @@ const pageRenderState = ref<"idle" | "rendering" | "rendered" | "error">("idle")
 const renderedPageNumber = ref(0)
 const renderedZoom = ref(1)
 const renderedRotation = ref<PdfRotation>(0)
-const thumbnailUrls = ref<Record<number, string>>({})
+const thumbnailPipeline = usePdfThumbnails({
+  onRevoke: () => emitDiagnostic({ type: "object-url-revoked" }),
+})
+const thumbnailUrls = thumbnailPipeline.urls
 const printPageUrls = ref<Record<number, string>>({})
 const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
@@ -144,10 +168,8 @@ let latestRequestId = 0
 let latestTaskId: string | undefined
 let renderGeneration = 0
 let searchGeneration = 0
-let thumbnailGeneration = 0
 let renderAbort: AbortController | undefined
 let searchAbort: AbortController | undefined
-let thumbnailAbort: AbortController | undefined
 let printAbort: AbortController | undefined
 let printGeneration = 0
 let printMediaQuery: MediaQueryList | undefined
@@ -168,10 +190,28 @@ const pdfTaskSequence = createOfficeTaskSequence(pdfRuntimeId)
 const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 
 const effectiveSource = computed<PdfSource | undefined>(() => {
+  if (droppedSource.value) return droppedSource.value
   if (props.source) return props.source
   if (props.src) return { kind: "url", url: props.src }
   return undefined
 })
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// A dropped PDF becomes the effective source, so it loads through the same
+// `load()` pipeline as the `source`/`src` props and the file picker.
+const fileDrop = useFileDrop({
+  accept: { extensions: PDF_FILE_EXTENSIONS, mimeTypes: PDF_FILE_MIME_TYPES },
+  onFile: (file) => {
+    dropError.value = ""
+    emit("fileDrop", file)
+    droppedSource.value = { kind: "blob", blob: file, fileName: file.name }
+  },
+  onReject: () => {
+    dropError.value = m.value.pdf.viewer.unsupportedDrop
+  },
+})
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
+
 const viewerState = computed(() => {
   if (!effectiveSource.value) return "idle"
   if (isLoading.value || pageRenderState.value === "rendering") return "loading"
@@ -179,7 +219,7 @@ const viewerState = computed(() => {
   return renderDocument.value && pageImageUrl.value ? "ready" : "idle"
 })
 const controlsDisabled = computed(() => !renderDocument.value || !!loadError.value)
-const pageLabels = computed(() => Array.from({ length: numPages.value }, (_, index) => index + 1))
+const pdfPageLabels = ref<readonly string[]>([])
 const currentSearchHit = computed(() => searchHits.value[searchHitIndex.value])
 const pageImageStyle = computed(() => {
   const document = renderDocument.value
@@ -195,10 +235,253 @@ const printPageEntries = computed(() =>
     .filter((entry) => Number.isFinite(entry.page) && Boolean(entry.url))
     .sort((left, right) => left.page - right.page)
 )
+
+// ── Page layout (single / continuous / spread) ─────────────────────
+// The active page owns the one interactive stage (bitmap, text layer, search
+// hits, selection). The other pages are sized placeholders inside the same
+// scroll content, and in a spread the facing page is rasterized next to it.
+const PDF_VIEWER_ROW_GAP_PX = 16
+const PDF_VIEWER_COLUMN_GAP_PX = 16
+/** Placeholder window painted before the viewer has measured its scroll frame. */
+const PDF_PLACEHOLDER_FALLBACK_VIEWPORT_PX = 1200
+const internalPageLayout = ref<PdfPageLayout>(normalizePdfPageLayout(props.defaultPageLayout))
+const pageLayoutMode = computed<PdfPageLayout>(() =>
+  props.pageLayout == null
+    ? internalPageLayout.value
+    : normalizePdfPageLayout(props.pageLayout)
+)
+const viewerScrollTop = ref(0)
+const viewerViewportHeight = ref(0)
+
+/** On-screen size of a page at the current zoom and user rotation. */
+function viewerPageSize(pageIndex: number): { width: number; height: number } {
+  const page = renderDocument.value?.pages[pageIndex]
+  if (!page) return { width: 1, height: 1 }
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  return {
+    width: Math.max(1, Math.round((quarterTurns % 2 ? page.height : page.width) * zoom.value)),
+    height: Math.max(1, Math.round((quarterTurns % 2 ? page.width : page.height) * zoom.value)),
+  }
+}
+
+const viewerLayoutMetrics = computed(() =>
+  resolvePdfPageLayoutMetrics({
+    pageCount: renderDocument.value?.pageCount ?? 0,
+    layout: pageLayoutMode.value,
+    pageSize: viewerPageSize,
+    rowGap: PDF_VIEWER_ROW_GAP_PX,
+    columnGap: PDF_VIEWER_COLUMN_GAP_PX,
+    paddingTop: 0,
+    print: printMode.value,
+  })
+)
+
+/** True when pages are laid out in a scrollable stack instead of one stage. */
+const isStackedLayout = computed(() =>
+  pageLayoutMode.value !== "single" && Boolean(renderDocument.value) && !printMode.value
+)
+
+/** Scroll content: every page is a row (or a facing pair) inside this box. */
+const pageStackStyle = computed<Record<string, string> | undefined>(() => {
+  if (!isStackedLayout.value) return undefined
+  const metrics = viewerLayoutMetrics.value
+  return {
+    height: `${Math.max(0, metrics.totalHeightPx)}px`,
+    minWidth: `${Math.max(0, metrics.maxRowWidthPx)}px`,
+    position: "relative",
+    width: "100%",
+  }
+})
+
+function pageLayoutLeft(pageIndex: number): number {
+  const metrics = viewerLayoutMetrics.value
+  const rowIndex = metrics.pageGridRows[pageIndex] ?? 0
+  const row = metrics.rows[rowIndex - 1]
+  const offset = metrics.pageLefts[pageIndex] ?? 0
+  if (!row) return offset
+  return (metrics.maxRowWidthPx - row.widthPx) / 2 + offset
+}
+
+/** Placement of a page box inside the scroll content. */
+function pageBoxStyle(pageNumber: number): Record<string, string> | undefined {
+  if (!isStackedLayout.value) return undefined
+  const pageIndex = pageNumber - 1
+  const metrics = viewerLayoutMetrics.value
+  return {
+    position: "absolute",
+    top: `${metrics.pageOffsets[pageIndex] ?? 0}px`,
+    left: `${pageLayoutLeft(pageIndex)}px`,
+    width: `${metrics.pageWidths[pageIndex] ?? 1}px`,
+    height: `${metrics.pageHeights[pageIndex] ?? 1}px`,
+  }
+}
+
+/** Bitmap width for a page rendered at `scale` (mirrors `pageImageStyle`). */
+function pageBitmapStyle(pageNumber: number, scale: number): Record<string, string> | undefined {
+  const page = renderDocument.value?.pages[pageNumber - 1]
+  if (!page) return undefined
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const width = (quarterTurns % 2 ? page.height : page.width) * scale
+  return { width: `${Math.max(1, Math.round(width))}px` }
+}
+
+/** A stale bitmap must never paint inside the new page's box. */
+const activeBitmapVisible = computed(() =>
+  renderedPageNumber.value === activePage.value
+)
+/** Hides (but keeps mounted) the previous bitmap while another page rasterizes. */
+const pageRenderStyle = computed<Record<string, string> | undefined>(() =>
+  activeBitmapVisible.value ? undefined : { display: "none" }
+)
+
+/** Page rendered next to the active page while a spread is shown. */
+const facingPageNumber = computed(() => {
+  if (pageLayoutMode.value !== "spread" || printMode.value) return 0
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count <= 0) return 0
+  const pair = pdfSpreadPagePair(count, activePage.value - 1)
+  const facingIndex = pair.find((index) => index + 1 !== activePage.value)
+  return facingIndex === undefined ? 0 : facingIndex + 1
+})
+const facingPageUrl = ref("")
+const facingPageState = ref<"idle" | "rendering" | "rendered" | "error">("idle")
+let facingRenderAbort: AbortController | undefined
+let facingRenderGeneration = 0
+
+function replaceFacingImage(nextUrl = ""): void {
+  const previous = facingPageUrl.value
+  facingPageUrl.value = nextUrl
+  if (previous && previous !== nextUrl) revokeObjectUrl(previous)
+}
+
+async function renderFacingPage(): Promise<void> {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  const pageNumber = facingPageNumber.value
+  const generation = ++facingRenderGeneration
+  facingRenderAbort?.abort()
+  facingRenderAbort = undefined
+  if (!document || !runtime || !pageNumber) {
+    replaceFacingImage()
+    facingPageState.value = "idle"
+    return
+  }
+  const controller = new AbortController()
+  facingRenderAbort = controller
+  facingPageState.value = "rendering"
+  let candidate = ""
+  try {
+    const blob = await runtime.renderPage(document, pageNumber - 1, {
+      scale: zoom.value,
+      rotation: rotation.value,
+      dpr: renderDpr.value,
+      signal: controller.signal,
+    })
+    if (controller.signal.aborted || generation !== facingRenderGeneration) return
+    candidate = URL.createObjectURL(blob)
+    await confirmImageDecodes(candidate)
+    if (controller.signal.aborted || generation !== facingRenderGeneration) return
+    replaceFacingImage(candidate)
+    candidate = ""
+    facingPageState.value = "rendered"
+  } catch (error) {
+    if (controller.signal.aborted || generation !== facingRenderGeneration || isAbortError(error)) return
+    facingPageState.value = "error"
+    replaceFacingImage()
+  } finally {
+    if (candidate) revokeObjectUrl(candidate)
+    if (facingRenderAbort === controller) facingRenderAbort = undefined
+  }
+}
+
+// ── Scroll-driven active page (continuous / spread) ────────────────
+let frameScrollFrame: number | undefined
+
+function onFrameScroll(): void {
+  if (!isStackedLayout.value) return
+  if (frameScrollFrame !== undefined) return
+  const flush = () => {
+    frameScrollFrame = undefined
+    const frame = frameRef.value
+    if (!frame) return
+    const top = typeof frame.scrollTop === "number" ? frame.scrollTop : 0
+    const height = typeof frame.clientHeight === "number" ? frame.clientHeight : 0
+    viewerScrollTop.value = top
+    viewerViewportHeight.value = height
+    const pageIndex = pdfPageIndexAtOffset(viewerLayoutMetrics.value.rows, top, height)
+    const page = pageIndex + 1
+    if (page >= 1 && page <= numPages.value && page !== activePage.value) {
+      setActivePage(page, { reveal: false })
+    }
+  }
+  if (typeof requestAnimationFrame === "function") {
+    frameScrollFrame = requestAnimationFrame(flush)
+    return
+  }
+  flush()
+}
+
+/**
+ * Switch layout mode and stay on the page the reader is looking at.
+ * The scroll offset has to follow: a spread row starts at its left page, so
+ * keeping the raw offset would slide the reader onto the previous spread.
+ */
+function setPageLayout(mode: PdfPageLayout): void {
+  const next = normalizePdfPageLayout(mode)
+  if (next === pageLayoutMode.value) return
+  if (props.pageLayout == null) internalPageLayout.value = next
+  emit("update:pageLayout", next)
+  void nextTick(() => scrollFrameToActivePage())
+}
+
+function onPageLayoutChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement | null)?.value
+  if (value === "continuous" || value === "single" || value === "spread") setPageLayout(value)
+}
+
+function scrollFrameToActivePage(): void {
+  const frame = frameRef.value
+  if (!frame || !isStackedLayout.value) return
+  const metrics = viewerLayoutMetrics.value
+  const rowIndex = metrics.pageGridRows[activePage.value - 1] ?? 1
+  const row = metrics.rows[rowIndex - 1]
+  if (!row) return
+  if (typeof frame.scrollTo === "function") frame.scrollTo({ top: row.topPx, behavior: "auto" })
+  else frame.scrollTop = row.topPx
+}
+
+// Switching modes keeps the active page: the scroll offset follows the row
+// that page now lives in (and returns to the top in single-page mode).
+watch(pageLayoutMode, () => { void nextTick(scrollFrameToActivePage) })
+
+/** Page boxes painted around the visible window (they are decoration only). */
+const placeholderPages = computed(() => {
+  if (!isStackedLayout.value || pageLayoutMode.value === "spread") return []
+  const metrics = viewerLayoutMetrics.value
+  // Before the frame has been measured (first paint, SSR, headless host) a
+  // bounded fallback window is painted instead of every page.
+  const viewport = viewerViewportHeight.value > 0
+    ? viewerViewportHeight.value
+    : PDF_PLACEHOLDER_FALLBACK_VIEWPORT_PX
+  const from = viewerScrollTop.value - viewport
+  const to = viewerScrollTop.value + viewport * 2
+  const rows = metrics.rows.filter((row) => row.topPx + row.heightPx >= from && row.topPx <= to)
+  const pages: number[] = []
+  for (const row of rows) {
+    for (const pageIndex of row.pageIndexes) {
+      const page = pageIndex + 1
+      if (page !== activePage.value) pages.push(page)
+    }
+  }
+  return pages
+})
 const viewerMinHeightStyle = computed(() => {
   const value = props.minHeight
-  if (value === undefined) return undefined
-  return { minHeight: typeof value === "number" ? `${value}px` : value }
+  const outline = isDragOver.value ? FILE_DROP_OUTLINE : undefined
+  if (value === undefined) return outline ? { outline } : undefined
+  const style: Record<string, string> = { minHeight: typeof value === "number" ? `${value}px` : value }
+  if (outline) style.outline = outline
+  return style
 })
 
 function cn(...classes: (string | undefined | null | false)[]): string {
@@ -239,7 +522,9 @@ async function loadPageTextLayer(pageNumber: number): Promise<void> {
   try {
     const layer = await runtime.getPageTextLayer(document, pageNumber - 1)
     if (request !== textLayerRequest || renderDocument.value !== document || runtimeForDocument !== runtime) return
-    pageTextLayer.value = layer
+    // Image-only pages have no glyphs. An empty text layer would still mount a
+    // selectable overlay, so treat "no glyphs" as "no selectable text".
+    pageTextLayer.value = layer.glyphs.length > 0 ? layer : null
   } catch {
     if (request === textLayerRequest) pageTextLayer.value = null
   }
@@ -580,8 +865,7 @@ function replacePageImage(nextUrl = ""): void {
 }
 
 function clearThumbnails(): void {
-  for (const url of Object.values(thumbnailUrls.value)) revokeObjectUrl(url)
-  thumbnailUrls.value = {}
+  thumbnailPipeline.clear()
 }
 
 function clearPrintPages(): void {
@@ -723,12 +1007,12 @@ function cancelRenderWork(): void {
   renderGeneration++
   renderAbort?.abort()
   renderAbort = undefined
+  facingRenderGeneration++
+  facingRenderAbort?.abort()
+  facingRenderAbort = undefined
   searchGeneration++
   searchAbort?.abort()
   searchAbort = undefined
-  thumbnailGeneration++
-  thumbnailAbort?.abort()
-  thumbnailAbort = undefined
 }
 
 function resetSearch(): void {
@@ -747,22 +1031,84 @@ function clearSearchAndRestoreFocus(): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && selectionState.value.kind !== "none") {
-    clearSelection()
-    return
-  }
+  // The print shortcut is PDF-specific, but it still follows the shared
+  // scope rules: never fire from a focused input/textarea/select or when a
+  // child already handled the key.
+  if (event.defaultPrevented || isEditableViewerTarget(event.target)) return
   if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "p") {
     event.preventDefault()
     void printAllPages()
     return
   }
-  if (
-    !props.showToolbar
-    || !(event.ctrlKey || event.metaKey)
-    || event.key.toLocaleLowerCase() !== "f"
-  ) return
-  event.preventDefault()
-  searchInputRef.value?.focus()
+  viewerKeys.onKeydown(event)
+}
+
+/**
+ * PDF keyboard map (shared with DOCX and PPTX through `useViewerKeys`):
+ * PageDown/PageUp move one page, Home/End jump to the first/last page,
+ * Ctrl/Cmd +/−/0 zoom, Ctrl/Cmd+F focuses search and Escape clears the
+ * search before falling back to the current selection.
+ */
+const viewerKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  search: () => props.showToolbar,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToPage(activePage.value + 1)
+    case "page-previous":
+      return goToPage(activePage.value - 1)
+    case "page-first":
+      return goToPage(1)
+    case "page-last":
+      return goToPage(numPages.value)
+    case "zoom-in":
+      return stepZoom(1)
+    case "zoom-out":
+      return stepZoom(-1)
+    case "zoom-reset":
+      if (zoom.value === 1) return false
+      applyZoom(1)
+      return true
+    case "search":
+      if (!props.showToolbar) return false
+      searchInputRef.value?.focus()
+      return true
+    case "escape":
+      if (searchDraft.value || searchHits.value.length) {
+        clearSearchAndRestoreFocus()
+        return true
+      }
+      if (selectionState.value.kind !== "none") {
+        clearSelection()
+        return true
+      }
+      return false
+    default:
+      return false
+  }
+}
+
+function goToPage(page: number): boolean {
+  if (!renderDocument.value || numPages.value < 1) return false
+  const target = Math.min(numPages.value, Math.max(1, page))
+  if (target === activePage.value) return false
+  setActivePage(target)
+  return true
+}
+
+function stepZoom(direction: 1 | -1): boolean {
+  const next = direction > 0
+    ? zoomOptions.find((value) => value > zoom.value)
+    : [...zoomOptions].reverse().find((value) => value < zoom.value)
+  if (next === undefined) return false
+  applyZoom(next)
+  return true
 }
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
@@ -775,7 +1121,10 @@ async function releaseCurrentDocument(options: { closeDocument?: boolean } = {})
   characterTextCache.clear()
   pendingAnchor = undefined
   replacePageImage()
+  replaceFacingImage()
+  facingPageState.value = "idle"
   clearThumbnails()
+  pdfPageLabels.value = []
   clearPrintPages()
   pageRenderState.value = "idle"
   pageRenderError.value = ""
@@ -927,12 +1276,17 @@ function rotateClockwise(): void {
   rotation.value = next
 }
 
-function setActivePage(page: number): void {
+function setActivePage(page: number, options: { reveal?: boolean } = {}): void {
   const next = Math.max(1, Math.min(numPages.value || 1, Math.trunc(page) || 1))
-  if (next !== activePage.value) pendingAnchor = undefined
+  const changed = next !== activePage.value
+  if (changed) pendingAnchor = undefined
   activePage.value = next
   pageInput.value = String(next)
   emit("active-page-change", next)
+  // Continuous and spread layouts scroll; a toolbar, thumbnail, keyboard or
+  // search jump has to bring the new page's row into view. Scroll tracking
+  // passes `reveal: false` so the reader's own scroll is never fought.
+  if (changed && options.reveal !== false) scrollFrameToActivePage()
 }
 
 function commitPageInput(): void {
@@ -1045,41 +1399,20 @@ async function renderCurrentPage(
   }
 }
 
-async function renderThumbnails(requestId: number): Promise<void> {
-  const document = renderDocument.value
-  const runtime = runtimeForDocument
-  if (!document || !runtime) return
-  const generation = ++thumbnailGeneration
-  thumbnailAbort?.abort()
-  const controller = new AbortController()
-  thumbnailAbort = controller
-  let nextIndex = 0
-  const worker = async () => {
-    while (nextIndex < document.pageCount) {
-      const pageIndex = nextIndex++
-      let url = ""
-      try {
-        const blob = await runtime.renderThumbnail(document, pageIndex, { signal: controller.signal })
-        if (
-          controller.signal.aborted ||
-          generation !== thumbnailGeneration ||
-          requestId !== latestRequestId ||
-          document.id !== renderDocument.value?.id
-        ) return
-        url = URL.createObjectURL(blob)
-        thumbnailUrls.value = { ...thumbnailUrls.value, [pageIndex + 1]: url }
-        url = ""
-      } catch (error) {
-        if (!controller.signal.aborted && !isAbortError(error)) {
-          // A failed thumbnail must not hide an otherwise usable page.
-        }
-      } finally {
-        if (url) revokeObjectUrl(url)
-      }
-    }
+async function loadPdfNavigation(
+  runtime: PdfRenderRuntime,
+  document: PdfRenderDocument,
+  requestId: number,
+): Promise<void> {
+  pdfPageLabels.value = []
+  if (typeof runtime.getPageLabels !== "function") return
+  try {
+    const labels = await runtime.getPageLabels(document)
+    if (requestId !== latestRequestId || document.id !== renderDocument.value?.id) return
+    pdfPageLabels.value = labels
+  } catch {
+    // Page labels are a navigation aid; a document without them still renders.
   }
-  await Promise.all([worker(), worker()])
-  if (thumbnailAbort === controller) thumbnailAbort = undefined
 }
 
 async function submitSearch(): Promise<void> {
@@ -1167,6 +1500,7 @@ async function load(): Promise<void> {
   latestTaskId = undefined
   isLoading.value = !!source
   loadError.value = null
+  dropError.value = ""
   downloadError.value = ""
   rotation.value = 0
   zoom.value = Math.min(2, Math.max(0.5, props.defaultZoom))
@@ -1226,7 +1560,8 @@ async function load(): Promise<void> {
       pageNumber: 1,
       pageCount: openedDocument.pageCount,
     })
-    void renderThumbnails(requestId)
+    void thumbnailPipeline.load(selectedRuntime, openedDocument)
+    void loadPdfNavigation(selectedRuntime, openedDocument, requestId)
     if (printMode.value) void renderPrintPages(requestId)
   } catch (error) {
     if (openedDocument && selectedRuntime) {
@@ -1254,8 +1589,14 @@ async function load(): Promise<void> {
   }
 }
 
+// A host-owned source supersedes a file dropped earlier; the load watcher below
+// then picks up the props path again.
 watch(
-  () => [props.src, props.source, props.urlPolicy, props.runtime, props.pdfiumWasmUrl, props.maxFileSize],
+  () => [props.src, props.source],
+  () => { droppedSource.value = null },
+)
+watch(
+  () => [effectiveSource.value, props.urlPolicy, props.runtime, props.pdfiumWasmUrl, props.maxFileSize],
   () => void load(),
   { immediate: true },
 )
@@ -1264,6 +1605,12 @@ watch([activePage, zoom, rotation, renderDpr], () => {
   clearSelection()
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
 })
+// A spread always shows its facing page rasterized; the page mode, zoom,
+// rotation or display scale decides which page that is.
+watch(
+  [facingPageNumber, zoom, rotation, renderDpr, renderDocument],
+  () => { void renderFacingPage() },
+)
 watch([zoom, rotation, renderDpr], () => {
   if (!printMode.value) return
   clearPrintPages()
@@ -1295,9 +1642,17 @@ onBeforeUnmount(() => {
   frame?.removeEventListener("pointerup", onTouchPointerUp)
   frame?.removeEventListener("pointercancel", onTouchPointerCancel)
   latestRequestId++
+  replaceFacingImage()
+  facingRenderAbort?.abort()
+  facingRenderAbort = undefined
+  if (frameScrollFrame !== undefined && typeof cancelAnimationFrame === "function") {
+    cancelAnimationFrame(frameScrollFrame)
+  }
+  frameScrollFrame = undefined
   latestTaskId = undefined
   pdfLoadCoordinator.dispose()
   pdfTaskSequence.dispose()
+  thumbnailPipeline.dispose()
   const runtime = ownedRuntime
   ownedRuntime = undefined
   const closeDocument = !runtime || runtimeForDocument !== runtime
@@ -1317,10 +1672,15 @@ defineExpose({
     ref="viewerRef"
     :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', printMode && 'pdf-viewer--print', props.className)"
     :style="viewerMinHeightStyle"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     data-testid="pdf-viewer"
     tabindex="0"
     @keydown="onViewerKeydown"
     @copy="onViewerCopy"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
       <button
@@ -1354,6 +1714,18 @@ defineExpose({
         <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
       </select>
       <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" :aria-label="m.common.zoom.in" @click="zoomIn">+</button>
+      <select
+        data-testid="pdf-page-layout"
+        class="page-layout-select"
+        :value="pageLayoutMode"
+        :disabled="controlsDisabled"
+        :aria-label="m.pdf.viewer.pageLayout"
+        @change="onPageLayoutChange"
+      >
+        <option value="continuous">{{ m.pdf.viewer.pageLayoutContinuous }}</option>
+        <option value="single">{{ m.pdf.viewer.pageLayoutSingle }}</option>
+        <option value="spread">{{ m.pdf.viewer.pageLayoutSpread }}</option>
+      </select>
       <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" :aria-label="m.pdf.viewer.rotateClockwise" @click="rotateClockwise">⟳</button>
       <form class="pdf-search" role="search" @submit.prevent="submitSearch">
         <input
@@ -1374,6 +1746,7 @@ defineExpose({
     </div>
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
+    <div v-if="dropError" data-testid="pdf-drop-error" class="pdf-drop-error" role="alert">{{ dropError }}</div>
     <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
     <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
     <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
@@ -1388,82 +1761,112 @@ defineExpose({
       :data-zoom="zoom"
       :data-rotation="rotation"
     >
-      <aside v-if="showThumbnails" data-testid="pdf-thumbnails" class="pdf-thumbnails" :aria-label="m.pdf.viewer.thumbnails">
-        <button
-          v-for="page in pageLabels"
-          :key="page"
-          data-testid="pdf-thumbnail"
-          type="button"
-          :data-page-number="page"
-          :aria-current="page === activePage ? 'page' : undefined"
-          :class="['thumbnail', { active: page === activePage }]"
-          @click="setActivePage(page)"
-        >
-          <img
-            v-if="thumbnailUrls[page]"
-            data-testid="pdf-thumbnail-image"
-            :src="thumbnailUrls[page]"
-            :alt="formatOfficeMessage(m.pdf.viewer.thumbnailAlt, { page })"
-          />
-          <span v-else class="thumbnail-placeholder">{{ page }}</span>
-          <span>{{ formatOfficeMessage(m.pdf.viewer.pageLabel, { page }) }}</span>
-        </button>
-      </aside>
-      <main ref="frameRef" class="pdf-frame-wrap">
+      <PdfThumbnailStrip
+        v-if="showThumbnails"
+        :pageCount="numPages"
+        :labels="pdfPageLabels"
+        :urls="thumbnailUrls"
+        :activePage="activePage"
+        :label="m.pdf.viewer.thumbnails"
+        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+        :pageLabel="m.pdf.viewer.pageLabel"
+        @select="setActivePage"
+      />
+      <main
+        ref="frameRef"
+        class="pdf-frame-wrap"
+        :data-page-layout="pageLayoutMode"
+        @scroll.passive="onFrameScroll"
+      >
         <div v-if="currentSearchHit" class="pdf-search-context" role="status">
           <span>{{ currentSearchHit.before }}</span><mark>{{ currentSearchHit.match }}</mark><span>{{ currentSearchHit.after }}</span>
         </div>
         <div
-          data-testid="pdf-page"
-          class="pdf-page-stage"
-          :data-page-number="activePage"
-          :data-render-state="pageRenderState"
+          class="pdf-page-stack"
+          :class="{ 'pdf-page-stack--stacked': isStackedLayout }"
+          :style="pageStackStyle"
         >
-          <div v-if="pageRenderState === 'rendering'" class="page-loading">{{ formatOfficeMessage(m.pdf.viewer.renderingPage, { page: activePage }) }}</div>
-          <div v-if="pageRenderError" class="pdf-error page-error">{{ pageRenderError }}</div>
-          <div v-if="pageImageUrl" data-testid="pdf-page-render" class="pdf-page-render">
-            <img
-              ref="pageImageRef"
-              data-testid="pdf-page-image"
-              class="pdf-page-image"
-              :src="pageImageUrl"
-              :style="pageImageStyle"
-              :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: renderedPageNumber })"
-            />
-            <div
-              v-if="pageTextLayer"
-              class="pdf-viewer__text-layer"
-              data-testid="pdf-text-layer"
-              :data-text-transform="textLayerTransform"
-              :style="textLayerStyle"
-            >
-              <span
-                v-for="glyph in pageTextLayer.glyphs"
-                :key="`glyph-${glyph.charIndex}`"
-                class="pdf-viewer__text-glyph"
-                :class="{ 'pdf-viewer__text-glyph--unmapped': glyph.unmapped }"
-                :data-char-index="glyph.charIndex"
-                :aria-hidden="glyph.unmapped ? 'true' : undefined"
-                :style="textGlyphStyle(glyph)"
-              >{{ glyph.text }}</span>
-            </div>
-            <div
-              class="pdf-viewer__selection-layer"
-              data-testid="pdf-selection-layer"
-              :aria-label="m.pdf.viewer.selectionLayer"
-              @pointerdown="onSelectionPointerDown"
-              @pointermove="onSelectionPointerMove"
-              @pointerup="onSelectionPointerUp"
-              @pointercancel="onSelectionPointerCancel"
-              @click="onSelectionClick"
-            >
-              <div
-                v-for="(rect, rectIndex) in selectionRects"
-                :key="rectIndex"
-                class="pdf-viewer__selection-rect"
-                :style="selectionRectStyle(rect)"
+          <div
+            v-for="page in placeholderPages"
+            :key="`placeholder-${page}`"
+            class="pdf-page-box"
+            data-testid="pdf-page-placeholder"
+            :data-page-number="page"
+            :style="pageBoxStyle(page)"
+          >{{ formatOfficeMessage(m.pdf.viewer.pageLabel, { page }) }}</div>
+          <div
+            data-testid="pdf-page"
+            class="pdf-page-stage"
+            :class="{ 'pdf-page-stage--stacked': isStackedLayout }"
+            :style="isStackedLayout ? pageBoxStyle(activePage) : undefined"
+            :data-page-number="activePage"
+            :data-page-rotation="renderedPage?.rotation ?? 0"
+            :data-render-state="pageRenderState"
+          >
+            <div v-if="pageRenderState === 'rendering'" class="page-loading">{{ formatOfficeMessage(m.pdf.viewer.renderingPage, { page: activePage }) }}</div>
+            <div v-if="pageRenderError" class="pdf-error page-error">{{ pageRenderError }}</div>
+            <div v-if="pageImageUrl" data-testid="pdf-page-render" class="pdf-page-render" :style="pageRenderStyle">
+              <img
+                ref="pageImageRef"
+                data-testid="pdf-page-image"
+                class="pdf-page-image"
+                :src="pageImageUrl"
+                :style="pageImageStyle"
+                :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: renderedPageNumber })"
               />
+              <div
+                v-if="pageTextLayer"
+                class="pdf-viewer__text-layer"
+                data-testid="pdf-text-layer"
+                :data-text-transform="textLayerTransform"
+                :style="textLayerStyle"
+              >
+                <span
+                  v-for="glyph in pageTextLayer.glyphs"
+                  :key="`glyph-${glyph.charIndex}`"
+                  class="pdf-viewer__text-glyph"
+                  :class="{ 'pdf-viewer__text-glyph--unmapped': glyph.unmapped }"
+                  :data-char-index="glyph.charIndex"
+                  :aria-hidden="glyph.unmapped ? 'true' : undefined"
+                  :style="textGlyphStyle(glyph)"
+                >{{ glyph.text }}</span>
+              </div>
+              <div
+                class="pdf-viewer__selection-layer"
+                data-testid="pdf-selection-layer"
+                :aria-label="m.pdf.viewer.selectionLayer"
+                @pointerdown="onSelectionPointerDown"
+                @pointermove="onSelectionPointerMove"
+                @pointerup="onSelectionPointerUp"
+                @pointercancel="onSelectionPointerCancel"
+                @click="onSelectionClick"
+              >
+                <div
+                  v-for="(rect, rectIndex) in selectionRects"
+                  :key="rectIndex"
+                  class="pdf-viewer__selection-rect"
+                  :style="selectionRectStyle(rect)"
+                />
+              </div>
             </div>
+          </div>
+          <div
+            v-if="facingPageNumber"
+            class="pdf-page-box pdf-page-facing"
+            data-testid="pdf-facing-page"
+            :data-page-number="facingPageNumber"
+            :data-render-state="facingPageState"
+            :style="pageBoxStyle(facingPageNumber)"
+          >
+            <img
+              v-if="facingPageUrl"
+              data-testid="pdf-facing-page-image"
+              class="pdf-page-image"
+              :src="facingPageUrl"
+              :style="pageBitmapStyle(facingPageNumber, zoom)"
+              :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: facingPageNumber })"
+            />
+            <span v-else class="pdf-page-box__label">{{ formatOfficeMessage(m.pdf.viewer.pageLabel, { page: facingPageNumber }) }}</span>
           </div>
         </div>
       </main>
@@ -1517,10 +1920,12 @@ defineExpose({
   --pdf-page-shadow: 0 3px 14px rgb(0 0 0 / 60%);
   --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
+/* Keyboard focus lands on the viewer root; keep a visible ring around it. */
+.pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
 .pdf-toolbar { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--pdf-border); flex-wrap: wrap; }
 .pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--pdf-control-border); border-radius: 6px; background: var(--pdf-control-bg); color: inherit; padding: 0 8px; }
 .pdf-toolbar button { cursor: pointer; }
-.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible, .thumbnail:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .pdf-toolbar button:disabled, .pdf-toolbar input:disabled, .pdf-toolbar select:disabled { opacity: .45; cursor: not-allowed; }
 .file-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; margin-right: auto; }
 .page-input { width: 58px; text-align: center; }
@@ -1529,17 +1934,33 @@ defineExpose({
 .pdf-search input { width: 150px; }
 .search-result { font-size: 12px; color: var(--pdf-link); white-space: nowrap; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.pdf-drop-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-bottom: 1px solid var(--pdf-border); background: rgba(220, 38, 38, 0.08); }
 .pdf-empty, .pdf-error { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--pdf-muted); }
 .pdf-error, .download-error { color: #b91c1c; }
 .download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--pdf-border); }
 .pdf-body { display: flex; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
-.pdf-thumbnails { width: 150px; flex: 0 0 150px; overflow: auto; border-right: 1px solid var(--pdf-border); padding: 10px; background: var(--pdf-panel-bg); }
-.thumbnail { display: flex; width: 100%; min-height: 118px; margin-bottom: 10px; padding: 6px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; overflow: hidden; border: 2px solid transparent; border-radius: 6px; background: transparent; color: var(--pdf-muted); font-size: 11px; cursor: pointer; }
-.thumbnail img { display: block; max-width: 106px; max-height: 86px; object-fit: contain; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); filter: var(--pdf-page-filter); }
-.thumbnail-placeholder { display: grid; place-items: center; width: 74px; height: 84px; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); color: var(--pdf-muted); }
-.thumbnail.active { border-color: #2563eb; background: color-mix(in srgb, #2563eb 12%, var(--pdf-panel-bg)); color: var(--pdf-link); font-weight: 700; }
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
+/* Single-page mode paints one stage exactly like before; the stack wrapper only
+   exists so continuous and spread modes share the same template. */
+.pdf-page-stack { display: contents; }
+.pdf-page-stack--stacked { display: block; margin: 0 auto; }
 .pdf-page-stage { display: flex; min-width: min-content; min-height: 100%; align-items: flex-start; justify-content: center; position: relative; }
+.pdf-page-stage--stacked { min-height: 0; min-width: 0; }
+/* Sized page boxes: the active stage and the spread's facing page. */
+.pdf-page-box {
+  align-items: center;
+  border: 1px solid var(--pdf-border);
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--pdf-page-shadow);
+  background: var(--pdf-canvas-bg);
+  color: var(--pdf-muted);
+  font-size: 12px;
+}
+.pdf-page-facing { position: absolute; }
+.pdf-page-box__label { padding: 4px 8px; }
 .pdf-page-render { position: relative; width: fit-content; margin: 0 auto; }
 .pdf-viewer__text-layer { left: 0; position: absolute; top: 0; transform-origin: 0 0; pointer-events: none; user-select: text; z-index: 1; }
 .pdf-viewer__text-glyph {
@@ -1563,8 +1984,6 @@ defineExpose({
 .pdf-print-pages { display: none; }
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
-  .pdf-thumbnails { width: auto; flex-basis: auto; display: flex; gap: 8px; border-right: 0; border-bottom: 1px solid var(--pdf-border); }
-  .thumbnail { width: 108px; min-height: 104px; flex: 0 0 auto; margin-bottom: 0; }
   .pdf-frame-wrap { padding: 12px; }
   .pdf-search { order: 3; width: 100%; }
   .pdf-search input { flex: 1; width: auto; }

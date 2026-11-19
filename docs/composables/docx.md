@@ -22,15 +22,22 @@ const editor = useDocxEditor({
 
 | 分类 | 方法 |
 |---|---|
-| 文件 | `importDocxFile()`、`newDocument()`、`exportDocx()` |
+| 文件 | `importDocxFile()`、`newDocument()`、`exportDocx()`、`getDocxBytes()`、`getDocxBlob()` |
 | 历史 | `undo()`、`redo()` |
 | 文字 | `toggleBold()`、`toggleItalic()`、`toggleUnderline()`、`setFontFamily()`、`setFontSize()`、`setTextColor()` |
 | 段落 | `setHeading()`、`setParagraphStyle()`、`setAlignment()`、`setLineSpacing()`、`toggleList()` |
-| 表格 | `insertTable()`、增删行列、调整列宽、删除表格 |
+| 表格 | `insertTable()`、增删行列、调整列宽、调整行高、删除表格、`setTableFloating()`（拖到落下位置变浮动表格，传 `null` 放回文字流） |
 | 图片 | `insertImageFile()`、`resizeImage()`、`moveImage()`、`setImageWrapMode()` |
 | 输入 | 提交段落或单元格文字、复制和粘贴 |
 
 控制器可以传给 `<DocxEditor :editor="editor" />`。控制器与编辑器组件应在同一业务区域内使用，避免多个编辑界面同时修改同一控制器。
+
+`getDocxBytes()` 返回与 `exportDocx()` 相同的 `ArrayBuffer`，`getDocxBlob()` 按当前文件扩展名返回带 MIME 类型的 `Blob`，两者都不会创建下载链接。它们提交正在编辑的文字草稿、应用 `registerPendingExportModelTransformer()` 的模型，并执行与导出相同的必填表单校验；文档被替换或编辑器销毁时，进行中的读取会以 `DocxExportError`（`ABORTED`）拒绝，`exportDocx()` 的待处理请求在更新的导出开始时也会取消。需要保存到服务器时直接上传字节：
+
+```ts
+const bytes = await editor.getDocxBytes()
+await fetch("/api/documents/42", { method: "PUT", body: bytes })
+```
 
 ## `useDocxModel`
 

@@ -70,7 +70,9 @@ def main() -> None:
         page = browser.new_page()
         page.on(
             "console",
-            lambda message: console_errors.append(message.text)
+            lambda message: console_errors.append(
+                f"{message.text} @ {(message.location or {}).get('url', '')}"
+            )
             if message.type == "error"
             and not (message.location or {}).get("url", "").endswith("/favicon.ico")
             else None,

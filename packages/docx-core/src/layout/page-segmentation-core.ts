@@ -34,6 +34,12 @@ import {
   type PageSegmentationTableCallbacks,
   type OverflowBreakCollectionOptions
 } from "./page-segmentation-table";
+import {
+  constrainParagraphLineSplit,
+  sumLineHeightsPx,
+  type LineVerticalMetrics
+} from "../viewer/line-metrics";
+import { resolveDocumentLayoutDefaults } from "../engine/layout-defaults";
 
 export const DEFAULT_PAGE_OVERFLOW_TOLERANCE_PX = 2;
 export const DEFAULT_MIN_PARAGRAPH_LINE_HEIGHT_PX = 14;
@@ -98,6 +104,19 @@ export interface PageSegmentationCallbacks extends PageSegmentationTableCallback
     lineCount: number,
     options?: ParagraphSplitControlOptions
   ) => boolean;
+  /**
+   * Per-line vertical metrics of a paragraph, or `undefined` when the paragraph
+   * has no custom vertical metrics and the uniform line height applies.
+   * Supplied by the editor helper layer to keep this module cycle-free.
+   */
+  resolveParagraphLineMetrics?: (params: {
+    paragraph: ParagraphNode;
+    availableWidthPx?: number;
+    numberingDefinitions?: NumberingDefinitionSet;
+    lineHeightPx: number;
+    docGridLinePitchPx?: number;
+    expectedLineCount: number;
+  }) => LineVerticalMetrics[] | undefined;
 }
 
 export interface DocumentPageSegmentationOptions extends OverflowBreakCollectionOptions {
@@ -451,6 +470,7 @@ export function buildDocumentPageNodeSegments(
     }
   }
   const estimatedRowHeightsByTableNodeIndex = new Map<number, number[]>();
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
   const allowParagraphLineSplitting = options?.allowParagraphLineSplitting ?? true;
   const suppressSpacingBeforeAfterPageBreak =
     options?.suppressSpacingBeforeAfterPageBreak ?? false;
@@ -607,11 +627,11 @@ export function buildDocumentPageNodeSegments(
         pageConsumedHeightPx,
         suppressSpacingBeforeAfterPageBreak
       );
-      const afterSpacingPx = paragraphAfterSpacingPx(node);
+      const afterSpacingPx = paragraphAfterSpacingPx(node, layoutDefaults);
       const atPageTop = pageConsumedHeightPx <= 0;
       const consumedNodeHeightPx = resolveParagraphConsumedHeightPx(
         rawNodeHeightPx,
-        paragraphBeforeSpacingPx(node),
+        paragraphBeforeSpacingPx(node, layoutDefaults),
         atPageTop
       );
       const paragraphLineHeightPx = Math.max(
@@ -663,6 +683,47 @@ export function buildDocumentPageNodeSegments(
         mustSplitForForcedBreak ||
         (canSplitParagraphAcrossPages && allowParagraphLineSplitting)
       ) {
+        // Inline images and runs in another font size give the paragraph
+        // per-line heights that differ from the uniform estimate; the split
+        // below then uses those heights and lets the last line on a page give
+        // back its suppressible bottom space.
+        const paragraphLineMetrics = callbacks.resolveParagraphLineMetrics?.({
+          paragraph: node,
+          availableWidthPx: nodeMetrics.pageContentWidthPx,
+          numberingDefinitions,
+          lineHeightPx: paragraphLineHeightPx,
+          docGridLinePitchPx: nodeMetrics.docGridLinePitchPx,
+          expectedLineCount: paragraphLineCount
+        });
+        const segmentLinesHeightPx = (
+          startLineIndex: number,
+          endLineIndex: number
+        ): number =>
+          paragraphLineMetrics
+            ? sumLineHeightsPx(paragraphLineMetrics, startLineIndex, endLineIndex)
+            : Math.max(0, endLineIndex - startLineIndex) *
+              paragraphLineHeightPx;
+        // A page break may give back the suppressible bottom space of the last
+        // line it keeps, so this is the height the page really consumes.
+        const segmentConsumedHeightPx = (
+          startLineIndex: number,
+          endLineIndex: number
+        ): number => {
+          const fullHeightPx = segmentLinesHeightPx(
+            startLineIndex,
+            endLineIndex
+          );
+          if (!paragraphLineMetrics || endLineIndex <= startLineIndex) {
+            return fullHeightPx;
+          }
+          const lastLineMetrics = paragraphLineMetrics[endLineIndex - 1];
+          const suppressibleBottomSpacePx = Math.max(
+            0,
+            lastLineMetrics?.suppressibleBottomSpacePx ?? 0
+          );
+          return Math.max(0, fullHeightPx - suppressibleBottomSpacePx);
+        };
+
         let lineCursor = 0;
         let isFirstSegment = true;
         while (lineCursor < paragraphLineCount) {
@@ -691,7 +752,9 @@ export function buildDocumentPageNodeSegments(
             lineHeightPx: paragraphLineHeightPx
           });
           const allRemainingHeightPx =
-            topSpacingPx + linesRemaining * paragraphLineHeightPx + bottomSpacingPx;
+            topSpacingPx +
+            segmentLinesHeightPx(lineCursor, paragraphLineCount) +
+            bottomSpacingPx;
 
           if (
             nextForcedBreakLineIndex === undefined &&
@@ -728,7 +791,17 @@ export function buildDocumentPageNodeSegments(
             0,
             remainingHeightPx - topSpacingPx - continuingSegmentReservePx
           );
-          let linesThatFit = Math.floor(availableForLinesPx / paragraphLineHeightPx);
+          let linesThatFit = paragraphLineMetrics
+            ? Math.max(
+                0,
+                constrainParagraphLineSplit(
+                  paragraphLineMetrics,
+                  lineCursor,
+                  Math.min(paragraphLineCount, lineCursor + maxLinesThisPage),
+                  availableForLinesPx
+                ) - lineCursor
+              )
+            : Math.floor(availableForLinesPx / paragraphLineHeightPx);
           linesThatFit = Math.min(linesThatFit, maxLinesThisPage);
 
           if (linesThatFit < minLinesPerSegment) {
@@ -750,7 +823,16 @@ export function buildDocumentPageNodeSegments(
             } else {
               const fallbackLines = Math.max(
                 1,
-                Math.floor(Math.max(1, availableForLinesPx) / paragraphLineHeightPx)
+                paragraphLineMetrics
+                  ? constrainParagraphLineSplit(
+                      paragraphLineMetrics,
+                      lineCursor,
+                      Math.min(paragraphLineCount, lineCursor + linesRemaining),
+                      Math.max(1, availableForLinesPx)
+                    ) - lineCursor
+                  : Math.floor(
+                      Math.max(1, availableForLinesPx) / paragraphLineHeightPx
+                    )
               );
               linesThatFit = Math.max(
                 1,
@@ -790,7 +872,7 @@ export function buildDocumentPageNodeSegments(
             });
             if (
               topSpacingPx +
-                (segmentEndLineIndex - lineCursor) * paragraphLineHeightPx +
+                segmentConsumedHeightPx(lineCursor, segmentEndLineIndex) +
                 segmentReservePx <=
               remainingHeightPx
             ) {
@@ -814,7 +896,8 @@ export function buildDocumentPageNodeSegments(
           });
 
           pageConsumedHeightPx +=
-            topSpacingPx + (segmentEndLineIndex - lineCursor) * paragraphLineHeightPx;
+            topSpacingPx +
+            segmentConsumedHeightPx(lineCursor, segmentEndLineIndex);
           lineCursor = segmentEndLineIndex;
           isFirstSegment = false;
 
@@ -917,7 +1000,7 @@ export function buildDocumentPageNodeSegments(
       currentPageSegments.push({ nodeIndex });
       pageConsumedHeightPx += resolveParagraphConsumedHeightPx(
         rawNodeHeightPx,
-        paragraphBeforeSpacingPx(node),
+        paragraphBeforeSpacingPx(node, layoutDefaults),
         pageConsumedHeightPx <= 0
       );
       continue;

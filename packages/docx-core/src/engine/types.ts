@@ -67,6 +67,25 @@ export interface DocxThemeFonts {
   minor?: DocxThemeFontSet;
 }
 
+/** OOXML `w14:ligatures` / Word's "Use ligatures" list. */
+export type TextLigatures =
+  | "none"
+  | "standard"
+  | "contextual"
+  | "historical"
+  | "discretional"
+  | "standardContextual"
+  | "standardHistorical"
+  | "contextualHistorical"
+  | "standardDiscretional"
+  | "contextualDiscretional"
+  | "historicalDiscretional"
+  | "standardContextualHistorical"
+  | "standardContextualDiscretional"
+  | "standardHistoricalDiscretional"
+  | "contextualHistoricalDiscretional"
+  | "all";
+
 export interface TextStyle {
   bold?: boolean;
   italic?: boolean;
@@ -84,10 +103,39 @@ export interface TextStyle {
   fontSizePt?: number;
   /** Primary (ASCII / high-ANSI) font family. */
   fontFamily?: string;
+  /**
+   * Font family as imported before any user edit. Script-font resolution uses
+   * it to tell a structured `w:rFonts` style from a legacy single-family one.
+   */
+  sourceFontFamily?: string;
+  /** OOXML `w:rFonts/@w:ascii` slot. */
+  fontFamilyAscii?: string;
+  /** OOXML `w:rFonts/@w:hAnsi` slot. */
+  fontFamilyHAnsi?: string;
   /** East-Asian font family (`w:rFonts/@w:eastAsia`). */
   fontFamilyEastAsia?: string;
   /** Complex-script font family (`w:rFonts/@w:cs`). */
   fontFamilyComplexScript?: string;
+  /** Complex-script font size (`w:szCs`), in points. */
+  fontSizeCsPt?: number;
+  /** Minimum size (`w:kern/@w:val`, points) at which kerning is enabled. */
+  kerningMinFontSizePt?: number;
+  /** OOXML `w14:ligatures`; `none` unless the document asks otherwise. */
+  ligatures?: TextLigatures;
+  /** OOXML `w14:cntxtAlts`; enables contextual alternates when true. */
+  contextualAlternates?: boolean;
+  /** OOXML `w:rFonts/@w:hint` (`eastAsia`, `cs`, `default`). */
+  fontHint?: string;
+  /** OOXML `w:lang/@w:val`, used to classify neutral characters. */
+  language?: string;
+  /** OOXML `w:lang/@w:eastAsia`. */
+  languageEastAsia?: string;
+  /** OOXML `w:lang/@w:bidi`. */
+  languageBidi?: string;
+  /** OOXML `w:rtl`; keeps `direction` as the rendering compatibility flag. */
+  rightToLeft?: boolean;
+  /** OOXML `w:cs`; forces complex-script shaping for the run. */
+  complexScript?: boolean;
   characterSpacingTwips?: number;
   /** OOXML `w:w` character scale, 1-600 (100 = normal). */
   characterScalePercent?: number;
@@ -114,6 +162,65 @@ export interface TextRunNode {
   noteReference?: NoteReference;
 }
 
+/**
+ * Anchor, wrap and paint-order of a drawing object (`wp:anchor`), shared by
+ * floating images and the drawing objects this model carries (shapes, charts,
+ * embedded objects).
+ */
+export interface DrawingAnchor {
+  xPx?: number;
+  yPx?: number;
+  horizontalAlign?: "left" | "center" | "right" | "inside" | "outside";
+  verticalAlign?: "top" | "center" | "bottom" | "inside" | "outside";
+  horizontalRelativeTo?: string;
+  verticalRelativeTo?: string;
+  distLPx?: number;
+  distRPx?: number;
+  distTPx?: number;
+  distBPx?: number;
+  wrapType?: "none" | "square" | "tight" | "through" | "topAndBottom";
+  wrapText?: "bothSides" | "left" | "right" | "largest";
+  behindDocument?: boolean;
+  zIndex?: number;
+  /** Whether the anchor is laid out inside its table cell (wp:anchor/@layoutInCell). */
+  layoutInCell?: boolean;
+  /** Whether the anchored object may overlap other floating objects (wp:anchor/@allowOverlap). */
+  allowOverlap?: boolean;
+  /** Whether the editor must not move or resize the anchor (wp:anchor/@locked). */
+  lockedAnchor?: boolean;
+  /** Whether x/y are page-relative simple positions (wp:anchor/@simplePos). */
+  simplePos?: boolean;
+  /** Visual overflow beyond the extent, in CSS pixels (wp:effectExtent). */
+  effectExtent?: {
+    leftPx?: number;
+    topPx?: number;
+    rightPx?: number;
+    bottomPx?: number;
+  };
+}
+
+/** One styled text segment of a text box paragraph. */
+export interface TextBoxRunSegment {
+  text: string;
+  style?: TextStyle;
+}
+
+/**
+ * One paragraph of a text box (`w:txbxContent`). The text box content is part of
+ * the model so it stays editable and renderable after an edit clears the run's
+ * `sourceXml`.
+ */
+export interface TextBoxParagraph {
+  align?: ParagraphAlignment;
+  lineHeightPx: number;
+  segments: TextBoxRunSegment[];
+}
+
+/** Text content of a shape/text box drawing (`w:txbxContent`). */
+export interface TextBoxContent {
+  paragraphs: TextBoxParagraph[];
+}
+
 export interface ImageRunNode {
   type: "image";
   src?: string;
@@ -132,39 +239,24 @@ export interface ImageRunNode {
   };
   cssFilter?: string;
   cssOpacity?: number;
-  floating?: {
-    xPx?: number;
-    yPx?: number;
-    horizontalAlign?: "left" | "center" | "right" | "inside" | "outside";
-    verticalAlign?: "top" | "center" | "bottom" | "inside" | "outside";
-    horizontalRelativeTo?: string;
-    verticalRelativeTo?: string;
-    distLPx?: number;
-    distRPx?: number;
-    distTPx?: number;
-    distBPx?: number;
-    wrapType?: "none" | "square" | "tight" | "through" | "topAndBottom";
-    wrapText?: "bothSides" | "left" | "right" | "largest";
-    behindDocument?: boolean;
-    zIndex?: number;
-    /** Whether the anchor is laid out inside its table cell (wp:anchor/@layoutInCell). */
-    layoutInCell?: boolean;
-    /** Whether the anchored object may overlap other floating objects (wp:anchor/@allowOverlap). */
-    allowOverlap?: boolean;
-    /** Whether the editor must not move or resize the anchor (wp:anchor/@locked). */
-    lockedAnchor?: boolean;
-    /** Whether x/y are page-relative simple positions (wp:anchor/@simplePos). */
-    simplePos?: boolean;
-    /** Visual overflow beyond the extent, in CSS pixels (wp:effectExtent). */
-    effectExtent?: {
-      leftPx?: number;
-      topPx?: number;
-      rightPx?: number;
-      bottomPx?: number;
-    };
-  };
+  floating?: DrawingAnchor;
+  /**
+   * True when the image is a synthetic render of a Word text box / shape.
+   */
   syntheticTextBox?: boolean;
   textBoxText?: string;
+  /**
+   * The text box content parsed at import. The renderer prefers it over
+   * re-parsing `sourceXml`, which an edit clears.
+   */
+  textBox?: TextBoxContent;
+  /**
+   * The original `w:drawing`/`w:pict` markup of a synthetic text box. Editing a
+   * text box clears `sourceXml` (the engine must rebuild the run) but the
+   * drawing itself still has to reach the export; this copy is what the
+   * serializer writes back.
+   */
+  textBoxSourceXml?: string;
 }
 
 export type FormFieldType = "checkbox" | "text" | "date" | "dropdown";
@@ -230,7 +322,97 @@ export interface FormFieldRunNode {
   sourceXml?: string;
 }
 
-export type ParagraphChildNode = TextRunNode | ImageRunNode | FormFieldRunNode;
+/**
+ * The drawing objects a Word document can carry that are not pictures: text
+ * boxes, autoshapes, WordArt, shape groups, SmartArt, charts, embedded OLE
+ * objects and 3D models. Everything is preserved verbatim in `sourceXml` so an
+ * export writes the object back exactly as it was imported.
+ */
+export type DrawingObjectKind =
+  | "textBox"
+  | "shape"
+  | "wordArt"
+  | "group"
+  | "smartArt"
+  | "chart"
+  | "oleObject"
+  | "model3d";
+
+/** One cached chart series (`c:ser`): name, categories and plotted values. */
+export interface ChartSeriesData {
+  name?: string;
+  categories?: string[];
+  values?: Array<number | null>;
+}
+
+/** Chart part data (`word/charts/chartN.xml`) carried by a `chart` drawing. */
+export interface ChartData {
+  /** OOXML plot element, e.g. "barChart", "lineChart" or "pieChart". */
+  chartType?: string;
+  title?: string;
+  categories?: string[];
+  series?: ChartSeriesData[];
+}
+
+/** Fill/stroke a shape placeholder paints with. */
+export interface DrawingObjectShapeStyle {
+  preset?: string;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidthPx?: number;
+}
+
+/**
+ * A non-picture drawing object inside a paragraph. Layout uses `widthPx` /
+ * `heightPx` and the optional `floating` anchor; rendering falls back to a
+ * placeholder built from the available content (`textBox`, `chart`, `shape`,
+ * `ole`) because the document model cannot render the object itself.
+ */
+export interface DrawingRunNode {
+  type: "drawing";
+  kind: DrawingObjectKind;
+  name?: string;
+  alt?: string;
+  widthPx?: number;
+  heightPx?: number;
+  /** Anchor and z-order (`wp:anchor`); absent for inline (`wp:inline`) objects. */
+  floating?: DrawingAnchor;
+  /** Paint order derived from Word's `relativeHeight`, when floating. */
+  zIndex?: number;
+  /** Local preview (data URI) when the importer could produce one. */
+  src?: string;
+  textBox?: TextBoxContent;
+  chart?: ChartData;
+  shape?: DrawingObjectShapeStyle;
+  ole?: {
+    progId?: string;
+    drawAspect?: string;
+  };
+  /** Original `w:drawing` / `w:object` / `w:pict` markup, written back on export. */
+  sourceXml: string;
+}
+
+/**
+ * An equation (`m:oMath` / `m:oMathPara`). The linearized `text` keeps the
+ * equation visible when the browser cannot render OMML; `sourceXml` is written
+ * back unchanged on export.
+ */
+export interface MathRunNode {
+  type: "math";
+  /** Linearized equation text, e.g. `x^2 + a/b`. */
+  text: string;
+  /** True for a display equation (`m:oMathPara`). */
+  display?: boolean;
+  style?: TextStyle;
+  sourceXml: string;
+}
+
+export type ParagraphChildNode =
+  | TextRunNode
+  | ImageRunNode
+  | FormFieldRunNode
+  | DrawingRunNode
+  | MathRunNode;
 
 export interface ParagraphNumbering {
   numId: number;
@@ -242,6 +424,14 @@ export interface ParagraphSpacing {
   afterTwips?: number;
   lineTwips?: number;
   lineRule?: "auto" | "exact" | "atLeast";
+  /**
+   * OOXML `w:spacing/@w:beforeAutospacing`. The amount is consumer-defined, so
+   * the model keeps the flag and layout resolves it (see
+   * `resolveParagraphAutoSpacingPx`).
+   */
+  beforeAutoSpacing?: boolean;
+  /** OOXML `w:spacing/@w:afterAutospacing`; resolved like `beforeAutoSpacing`. */
+  afterAutoSpacing?: boolean;
 }
 
 export interface ParagraphIndent {
@@ -416,7 +606,27 @@ export interface TableStyle {
   layout?: "fixed" | "autofit";
   cellSpacingTwips?: number;
   cellMarginTwips?: TableBoxSpacing;
+  /**
+   * Logical grid widths. When a merge collapsed zero-width columns the array
+   * keeps the zeroes and `collapsedGridColumns` names them; serialization
+   * projects the table onto the physical grid before the width list is written.
+   */
   columnWidthsTwips?: number[];
+  /**
+   * OOXML `w:tblStyle/@w:val` of the table, when it carries an explicit style
+   * reference.
+   */
+  styleId?: string;
+  /**
+   * The explicit style id the table was imported with. A collapsed grid is only
+   * safe while the two agree: a different style can supply its own grid widths.
+   */
+  sourceStyleId?: string;
+  /**
+   * @internal Zero-width logical columns a merge collapsed. The export
+   * preparation projects them away before the physical grid is written.
+   */
+  collapsedGridColumns?: number[];
   borders?: TableBorderSet;
   floating?: {
     xTwips?: number;
@@ -575,6 +785,12 @@ export interface DocumentCompatibilitySettings {
   doNotBreakWrappedTables?: boolean;
   doNotBreakConstrainedForcedTable?: boolean;
   evenAndOddHeaders?: boolean;
+  /**
+   * OOXML `w:compat/w:compatSetting[@w:name='compatibilityMode']/@w:val`:
+   * 11 = Word 2003, 12 = Word 2007, 13 = Word 2010, 14 = Word 2010 (current
+   * default), 15 = Word 2013+. Word honours HTML auto spacing only in 12/15.
+   */
+  compatibilityMode?: number;
 }
 
 export type NoteNumberRestart = "continuous" | "eachSect" | "eachPage";
@@ -611,6 +827,12 @@ export interface DocModel {
   nodes: DocNode[];
   metadata: {
     sourceParts: number;
+    /**
+     * Source part names when the model did not come from a Word package.
+     * OpenDocument text records `{ document: "content.xml" }` here; the
+     * presence of that value is what makes such a model view-only.
+     */
+    sourcePartNames?: Record<string, string>;
     warnings: string[];
     documentPageCount?: number;
     documentOpenTag?: string;
@@ -622,6 +844,11 @@ export interface DocModel {
     footerSections: FooterSection[];
     paragraphStyles: ParagraphStyleDefinition[];
     defaultParagraphStyleId?: string;
+    /**
+     * OOXML `w:defaultTabStop/@w:val` from word/settings.xml, in twips. The
+     * default is 720 twips (0.5"), which resolves to 48 CSS pixels.
+     */
+    defaultTabStopTwips?: number;
     themeFonts?: DocxThemeFonts;
     numberingDefinitions?: NumberingDefinitionSet;
     compatibility?: DocumentCompatibilitySettings;

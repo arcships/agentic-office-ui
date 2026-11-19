@@ -155,6 +155,42 @@ test("renderParagraphRuns places margin-anchored floats from the page margin", (
   assert.equal(unanchored.props.style.left, 10, "without an origin the anchor collapses to the page edge");
 });
 
+// --- Inline baseline -----------------------------------------------------
+
+test("an inline image sits on the text baseline instead of a centred box", () => {
+  const paragraph = paragraphWith([
+    { type: "text", text: "caption " },
+    imageRun({ widthPx: 37, heightPx: 37 }),
+  ]);
+
+  const inline = imageNode(renderRuns(paragraph));
+  assert.equal(
+    inline.props.style.verticalAlign,
+    "baseline",
+    "Word drops an inline picture's bottom onto the shared baseline",
+  );
+
+  const floating = imageNode(
+    renderRuns(
+      paragraphWith([
+        imageRun({
+          floating: {
+            xPx: 10,
+            yPx: 20,
+            horizontalRelativeTo: "margin",
+            verticalRelativeTo: "margin",
+          },
+        }),
+      ]),
+    ),
+  );
+  assert.notEqual(
+    floating.props.style.verticalAlign,
+    "baseline",
+    "a floating anchor has no baseline to sit on",
+  );
+});
+
 // --- Z-order in view mode ------------------------------------------------
 
 test("a behindDoc image is painted under the paragraph text in view mode", () => {

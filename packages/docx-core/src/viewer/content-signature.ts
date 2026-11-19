@@ -175,6 +175,7 @@ export function docNodeContentSignature(node: unknown): string {
 interface ThumbnailRelevantMetadata {
   sections?: unknown;
   numberingDefinitions?: unknown;
+  defaultTabStopTwips?: unknown;
   footnotes?: unknown;
   endnotes?: unknown;
   documentBackgroundColor?: unknown;
@@ -211,6 +212,9 @@ export function docModelThumbnailMetadataSignature(metadata: object): string {
   hash = fnv1aAppendValue(hash, relevant.documentBackgroundColor);
   hash = fnv1aAppendValue(hash, relevant.documentBackgroundPattern);
   hash = fnv1aAppendValue(hash, relevant.compatibility);
+  // A custom `w:defaultTabStop` moves every tabbed run, so page thumbnails
+  // measured against another tab grid must be invalidated.
+  hash = fnv1aAppendValue(hash, relevant.defaultTabStopTwips);
   // Style tables decide every page's typography, so editing "Normal" or the
   // default style id must invalidate page thumbnails too.
   hash = fnv1aAppendValue(hash, relevant.paragraphStyles);

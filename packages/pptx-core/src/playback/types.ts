@@ -20,6 +20,21 @@ export interface PptxObjectIdentity {
   nodeType: string
   geometry?: PptxObjectGeometry
   text?: string
+  /**
+   * Hyperlinks carried by this object, in document order. Hover links are
+   * reported but never executed automatically; hosts use them for tooltips.
+   */
+  hyperlinks?: readonly PptxObjectHyperlink[]
+}
+
+/** One `a:hlinkClick` / `a:hlinkHover` entry, resolved against the slide relationships. */
+export interface PptxObjectHyperlink {
+  trigger: "click" | "hover"
+  kind: "go-to-slide" | "open-url" | "mailto" | "unsupported"
+  targetSlideIndex?: number
+  url?: string
+  /** Raw `tooltip` attribute; PowerPoint falls back to the URL for external links. */
+  tooltip?: string
 }
 
 export type PptxMorphMatchMethod =
@@ -85,11 +100,63 @@ export type PptxEffectKind =
   | "media-command"
   | "unknown"
 
+/**
+ * Inclusive character range in a text body. Paragraph marks count as one
+ * character, matching ECMA-376 `p:charRg` inside `p:txEl`.
+ */
+export interface PptxCharacterRange {
+  start: number
+  end: number
+}
+
+/** One rendered table cell, addressed with zero-based row and column. */
+export interface PptxTableCellTarget {
+  row: number
+  column: number
+}
+
+export type PptxChartElementType =
+  | "chart"
+  | "series"
+  | "category"
+  | "point-in-series"
+  | "point-in-category"
+
+/** `p:oleChartEl` target inside a chart object. */
+export interface PptxChartElementTarget {
+  type: PptxChartElementType
+  index?: number
+  level?: number
+}
+
+/** `p:graphicEl` / `p:subSp` target inside an object such as SmartArt. */
+export interface PptxGraphicElementTarget {
+  /** Raw target token, for example `dgm` or `subSp`. */
+  type: string
+  /** Resolved child object key when the renderer exposes that identity. */
+  objectKey?: string
+  sourceId?: string
+  index?: number
+  level?: number
+}
+
 export interface PptxPlaybackEffect {
   id: string
   kind: PptxEffectKind
   targetObjectKey?: string
+  /** `cNvPr/@id` of the effect target, kept for element-level target resolution. */
+  targetShapeId?: string
+  /** Parsed object type of the target (`shape`, `table`, `chart`, `smartart`, ...). */
+  targetNodeType?: string
   paragraphRange?: { start: number; end: number }
+  characterRange?: PptxCharacterRange
+  /** Report label inferred from the range; execution uses `characterRange`. */
+  characterGranularity?: "word" | "character"
+  /** `p:charRg` exists but the target has no readable text body. */
+  characterRangeUnavailable?: boolean
+  tableCell?: PptxTableCellTarget
+  chartElement?: PptxChartElementTarget
+  graphicElement?: PptxGraphicElementTarget
   presetClass?: string
   presetId?: string
   transition?: "in" | "out"
@@ -154,14 +221,27 @@ export interface PptxPropertyTrack {
   repeatIndefinite?: boolean
 }
 
+export interface PptxSlideTransitionSound {
+  relationId: string
+  sourcePath?: string
+  contentType?: string
+  embedded: boolean
+  loop: boolean
+  volume: number
+}
+
 export interface PptxSlideTransition {
   kind: string
+  /** `<p:* dir>`: the edge the new slide enters from, or `in`/`out` for `split`. */
   direction?: string
+  /** `<p:* orient>`: the split line of `split`, `horz` or `vert`. */
+  orientation?: string
   option?: string
   durationMs: number
   advanceOnClick: boolean
   advanceAfterMs?: number
   soundRelationId?: string
+  sound?: PptxSlideTransitionSound
 }
 
 export interface PptxMediaBookmark {
@@ -192,6 +272,8 @@ export interface PptxSlideAction {
   kind: "go-to-slide" | "open-url" | "mailto" | "unsupported"
   targetSlideIndex?: number
   url?: string
+  /** Raw `tooltip` attribute from the same `a:hlinkClick` / `a:hlinkHover`. */
+  tooltip?: string
   rawAction?: string
 }
 

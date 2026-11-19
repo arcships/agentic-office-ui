@@ -1,13 +1,23 @@
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
+  XlsxBorderPresetInput,
   XlsxCellAddress,
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
-  XlsxCellStyleInput
+  XlsxCellStyleInput,
+  XlsxSheetNameIssue
 } from "@arcships/xlsx-core";
-import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
+import {
+  applyWorkbookSheetRename,
+  loadWorkbookChartAssets,
+  resolveWorksheetMergedRegions,
+  validateWorksheetName
+} from "@arcships/xlsx-core";
 import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
+import { buildSelectionBorderPlan, resolveBorderEdge } from "./border-presets";
+import { commitWorkbookRebuild, rebuildWorkbookFromBytes } from "./workbook-rebuild";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -18,6 +28,7 @@ import {
   type HistoryEntry
 } from "./internal";
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
+import { loadWorkbookImageAssets } from "./image-assets";
 import { canonicalizeFormula, resolveCellInput, resolveFormulaNumberFormat } from "./cell-input";
 import { resolveEffectiveCellNumberFormat } from "./formatting";
 import type { XlsxControllerContext } from "./internal";
@@ -57,6 +68,28 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.selectedChartId.value = null;
     ctx.selectedChartElement.value = null;
     ctx.selectedImageId.value = null;
+  }
+
+  let editRequestToken = 0;
+
+  /**
+   * Asks the grid to open its inline editor on a cell.
+   *
+   * The request is data, not a callback, so the grid can be mounted later (or
+   * replaced) and still pick the edit up. The token makes a second request for
+   * the same cell observable.
+   */
+  function editCell(cell?: XlsxCellAddress | null) {
+    const target = cell ?? ctx.activeCell.value;
+    if (!target || ctx.isEditingLocked.value) {
+      return false;
+    }
+    if (cell) {
+      selectCell(target);
+    }
+    editRequestToken += 1;
+    ctx.editRequestRef.value = { cell: target, token: editRequestToken };
+    return true;
   }
 
   function clearSelectedCells() {
@@ -99,22 +132,25 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.recordRangeEditHistory(mutations, normalized, ctx.activeCell.value ?? normalized.start);
   }
 
-  function setCellValue(cell: XlsxCellAddress, value: string) {
+  /**
+   * Resolves and writes one user entry, validation included.
+   *
+   * The write is history-free and does not recalculate, so callers can record
+   * one entry per cell (`setCellValue`) or one entry for a whole range
+   * (`commitSelectionInput`) and recalculate once at the end.
+   *
+   * @returns `true` when the entry was accepted and written.
+   */
+  function writeCellValue(cell: XlsxCellAddress, value: string) {
     const worksheet = ctx.getActiveWorksheet();
     if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
-      return;
+      return false;
     }
 
     const validationCheck = ctx.checkCellValue(cell, value);
-    if (!validationCheck.accepted) {
-      ctx.setValidationFeedback(validationCheck.feedback);
-      return;
-    }
     ctx.setValidationFeedback(validationCheck.feedback);
-
-    const before = ctx.captureCellMutationState(cell);
-    if (!before) {
-      return;
+    if (!validationCheck.accepted) {
+      return false;
     }
 
     const input = resolveCellInput(value, {
@@ -136,6 +172,23 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (input.numberFormat) {
       worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat: input.numberFormat });
     }
+    return true;
+  }
+
+  function setCellValue(cell: XlsxCellAddress, value: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
+      return;
+    }
+
+    const before = ctx.captureCellMutationState(cell);
+    if (!before) {
+      return;
+    }
+
+    if (!writeCellValue(cell, value)) {
+      return;
+    }
 
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
@@ -145,6 +198,63 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       ctx.refreshWorkbookState(ctx.workbook.value);
     }
     ctx.recordCellEditHistory(cell, before, after);
+  }
+
+  /**
+   * Writes one entry into every cell of the selection as a single undo step.
+   *
+   * This is Excel's fill: with a multi-cell selection active, a confirmed
+   * entry lands in the whole range instead of only the active cell. Input
+   * follows `commitCellInput`'s rules and formulas are copied verbatim, so a
+   * filled `=A1` keeps pointing at A1 instead of shifting per cell.
+   *
+   * @returns How many cells were written.
+   */
+  function commitSelectionInput(input: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    const range = ctx.selection.value;
+    const active = ctx.activeCell.value;
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !range || !active) {
+      return 0;
+    }
+
+    const text = input ?? "";
+    const normalized = normalizeRange(range);
+    const mutations: import("./internal").RangeCellMutation[] = [];
+    for (let row = normalized.start.row; row <= normalized.end.row; row += 1) {
+      for (let col = normalized.start.col; col <= normalized.end.col; col += 1) {
+        if (worksheet.isMergedSecondary(row, col)) {
+          continue;
+        }
+
+        const cell = { row, col };
+        const before = ctx.captureCellMutationState(cell);
+        if (!before) {
+          continue;
+        }
+        if (!writeCellValue(cell, text)) {
+          continue;
+        }
+        const after = ctx.captureCellMutationState(cell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell
+        });
+      }
+    }
+
+    if (mutations.length === 0) {
+      return 0;
+    }
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
+    ctx.recordRangeEditHistory(mutations, normalized, active);
+    return mutations.length;
   }
 
   function setCellFormula(cell: XlsxCellAddress, formula: string) {
@@ -302,10 +412,16 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setCellStyle(ctx.activeCell.value, style);
   }
 
-  function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
+  /**
+   * Applies one style patch to every cell of a range as a single undo step.
+   *
+   * @returns How many cells changed; 0 when the sheet is locked or the range
+   *   holds no readable cell state.
+   */
+  function applyRangeStylePatch(range: XlsxCellRange, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
     if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
-      return;
+      return 0;
     }
 
     const normalized = normalizeRange(range);
@@ -325,7 +441,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     if (beforeStates.length === 0) {
-      return;
+      return 0;
     }
 
     worksheet.setRangeStyle(rangeToA1(normalized), style);
@@ -344,6 +460,97 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.refreshWorkbookState(ctx.workbook.value);
     ctx.recordRangeEditHistory(mutations, ctx.selection.value, ctx.activeCell.value);
+    return mutations.length;
+  }
+
+  function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
+    applyRangeStylePatch(range, style);
+  }
+
+  /**
+   * Copies the engine's merge list into the parsed sheet state, which is what
+   * the overlays and the structure commands read. The engine owns the actual
+   * geometry; the state only mirrors it.
+   */
+  function syncMergedRegions(worksheet: ReturnType<Workbook["getSheet"]>) {
+    const workbookSheetIndex = ctx.activeSheet.value?.workbookSheetIndex ?? -1;
+    const assets = ctx.imageAssetsRef.value;
+    if (workbookSheetIndex < 0 || !assets) {
+      return;
+    }
+    const state = assets.sheetStatesByWorkbookSheetIndex[workbookSheetIndex];
+    if (!state) {
+      return;
+    }
+    assets.sheetStatesByWorkbookSheetIndex[workbookSheetIndex] = {
+      ...state,
+      mergedRegions: resolveWorksheetMergedRegions(worksheet)
+    };
+  }
+
+  /**
+   * Applies one number format to the selection as a single undo step.
+   *
+   * @returns `true` when at least one cell changed.
+   */
+  function setSelectionNumberFormat(format: XlsxCellNumberFormatInput) {
+    const targetRange = ctx.selection.value
+      ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
+    if (!targetRange) {
+      return false;
+    }
+    return applyRangeStylePatch(normalizeRange(targetRange), { numberFormat: format }) > 0;
+  }
+
+  /**
+   * Draws a border preset on the selection as one undo step.
+   *
+   * Uniform presets go through the engine's range call; `outside` needs one
+   * patch per perimeter cell so the inside of the range keeps its borders.
+   */
+  function setSelectionBorders(input?: XlsxBorderPresetInput) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
+      return false;
+    }
+
+    const targetRange = ctx.selection.value
+      ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
+    if (!targetRange) {
+      return false;
+    }
+
+    const normalized = normalizeRange(targetRange);
+    const plan = buildSelectionBorderPlan(input?.preset ?? "all", normalized, resolveBorderEdge(input));
+    if (plan.kind === "range") {
+      return applyRangeStylePatch(normalized, plan.style) > 0;
+    }
+
+    const mutations: import("./internal").RangeCellMutation[] = [];
+    for (const patch of plan.patches) {
+      const before = ctx.captureCellMutationState(patch.cell);
+      if (!before) {
+        continue;
+      }
+      worksheet.setCellStyleAt(patch.cell.row, patch.cell.col, patch.style);
+      const after = ctx.captureCellMutationState(patch.cell);
+      if (!after) {
+        continue;
+      }
+      mutations.push({
+        after,
+        before,
+        cell: patch.cell
+      });
+    }
+
+    if (mutations.length === 0) {
+      return false;
+    }
+
+    ctx.refreshWorkbookState(ctx.workbook.value);
+    ctx.recordRangeEditHistory(mutations, ctx.selection.value ?? normalized, ctx.activeCell.value);
+    return true;
   }
 
   function fillSelection(targetRange: XlsxCellRange) {
@@ -435,6 +642,32 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.recordHistoryBeforeMutation();
     worksheet.mergeCells(rangeToA1(ctx.selection.value));
+    syncMergedRegions(worksheet);
+    ctx.refreshWorkbookState(ctx.workbook.value);
+  }
+
+  /**
+   * Merges the selection and centres its text both ways.
+   *
+   * The merge and the alignment share one snapshot entry, so a single undo
+   * restores the sheet. A one-cell selection is only centred, because Excel
+   * never writes a one-cell merge region.
+   */
+  function mergeAndCenterSelection() {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+      return;
+    }
+
+    const normalized = normalizeRange(ctx.selection.value);
+    ctx.recordHistoryBeforeMutation();
+    if (normalized.start.row !== normalized.end.row || normalized.start.col !== normalized.end.col) {
+      worksheet.mergeCells(rangeToA1(normalized));
+    }
+    worksheet.setRangeStyle(rangeToA1(normalized), {
+      alignment: { horizontal: "center", vertical: "center" }
+    });
+    syncMergedRegions(worksheet);
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -446,6 +679,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.recordHistoryBeforeMutation();
     worksheet.unmergeCells(rangeToA1(ctx.selection.value));
+    syncMergedRegions(worksheet);
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -468,25 +702,28 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     ctx.workbook.value.addSheet(candidate);
-    ctx.sheetOriginsRef.value = [...ctx.sheetOriginsRef.value, null];
-    ctx.imagesByWorkbookSheetIndex.value = [...ctx.imagesByWorkbookSheetIndex.value, []];
-    ctx.shapesByWorkbookSheetIndex.value = [...ctx.shapesByWorkbookSheetIndex.value, []];
+    // Re-materialize the package so the new worksheet part, its relationships
+    // and its empty drawing slot exist in the authoring archive. Without this
+    // a drawing copied onto the new sheet has no sheet part to attach to.
+    const savedBytes = ctx.createSavedWorkbookBytes(ctx.workbook.value);
+    const nextImageAssets = loadWorkbookImageAssets(savedBytes, ctx.workbook.value);
+    ctx.setImageAssets(nextImageAssets);
     const nextSheets = buildSheetList(
       ctx.workbook.value,
-      ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex,
-      ctx.imageAssetsRef.value?.themePalette,
-      ctx.imageAssetsRef.value?.styleById,
-      ctx.imageAssetsRef.value?.namedCellStyleByName,
-      ctx.imageAssetsRef.value?.tableStyleByName,
+      nextImageAssets.sheetStatesByWorkbookSheetIndex,
+      nextImageAssets.themePalette,
+      nextImageAssets.styleById,
+      nextImageAssets.namedCellStyleByName,
+      nextImageAssets.tableStyleByName,
       ctx.showHiddenSheets
     );
     ctx.sheets.value = nextSheets;
-    const nextChartAssets = ctx.imageAssetsRef.value
-      ? loadWorkbookChartAssets(ctx.workbook.value, ctx.imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), ctx.showHiddenSheets)
-      : null;
-    if (ctx.imageAssetsRef.value) {
-      ctx.setChartAssets(nextChartAssets);
-    }
+    ctx.setChartAssets(loadWorkbookChartAssets(
+      ctx.workbook.value,
+      nextImageAssets,
+      buildVisibleSheetIndexMap(nextSheets),
+      ctx.showHiddenSheets
+    ));
     const nextIndex = nextSheets.findIndex((sheet) => sheet.name === candidate);
     ctx.switchToSheet(nextIndex >= 0 ? nextIndex : 0);
     ctx.revision.value = ctx.revision.value + 1;
@@ -536,6 +773,89 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.revision.value = ctx.revision.value + 1;
   }
 
+  function takenSheetNames(workbook: Workbook, ignoredWorkbookSheetIndex: number) {
+    const names = workbook.sheetNames.filter((_, index) => index !== ignoredWorkbookSheetIndex);
+    for (const chartsheet of ctx.chartsheets.value) {
+      if (chartsheet.name) names.push(chartsheet.name);
+    }
+    return names;
+  }
+
+  /**
+   * Explains why a worksheet name would be rejected before anything changes.
+   *
+   * The sheet at `index` is left out of the uniqueness check so Excel's
+   * case-only rename (`Sheet1` → `SHEET1`) stays possible.
+   */
+  function getSheetNameError(name: string, index?: number): XlsxSheetNameIssue | null {
+    const workbook = ctx.workbook.value;
+    if (!workbook || typeof name !== "string") {
+      return null;
+    }
+    const ignoredWorkbookSheetIndex = index === undefined
+      ? -1
+      : ctx.sheets.value[index]?.workbookSheetIndex ?? -1;
+    return validateWorksheetName(name, takenSheetNames(workbook, ignoredWorkbookSheetIndex));
+  }
+
+  /**
+   * Renames a worksheet and keeps the workbook model, the tab strip and the
+   * exported bytes in agreement.
+   *
+   * The engine exposes no rename setter, so the rename is written into the
+   * saved workbook (name plus every formula, defined name and link that points
+   * at the sheet) and parsed back into a fresh workbook instance. The previous
+   * workbook is already a history snapshot, so undo restores it unchanged.
+   */
+  function renameSheet(index: number, name: string): boolean {
+    const workbook = ctx.workbook.value;
+    const targetSheet = ctx.sheets.value[index];
+    if (
+      !workbook
+      || !targetSheet
+      || ctx.readOnly.value
+      || ctx.isApplyingHistoryRef.value
+      || typeof name !== "string"
+    ) {
+      return false;
+    }
+
+    const nextName = name.trim();
+    if (getSheetNameError(nextName, index)) {
+      return false;
+    }
+
+    const workbookSheetIndex = targetSheet.workbookSheetIndex;
+    if (workbook.sheetNames[workbookSheetIndex] === nextName) {
+      return true;
+    }
+
+    const originalBytes = ctx.createSavedWorkbookBytes(workbook);
+    const renamedBytes = applyWorkbookSheetRename(originalBytes, workbookSheetIndex, nextName);
+    if (!renamedBytes) {
+      return false;
+    }
+
+    const rebuild = rebuildWorkbookFromBytes(ctx, renamedBytes);
+    if (!rebuild) {
+      return false;
+    }
+
+    // The pre-rename bytes are the history entry, so the undo snapshot and the
+    // rename share one save instead of re-serializing the workbook twice.
+    commitWorkbookRebuild(ctx, rebuild, originalBytes);
+    return true;
+  }
+
+  /** Renames the worksheet behind the active tab; chartsheet tabs never rename. */
+  function renameActiveSheet(name: string): boolean {
+    const activeTab = ctx.tabs.value[ctx.activeTabIndex.value];
+    if (!activeTab || activeTab.kind !== "sheet" || typeof activeTab.sheetIndex !== "number") {
+      return false;
+    }
+    return renameSheet(activeTab.sheetIndex, name);
+  }
+
   function defineNamedRange(name: string, range?: XlsxCellRange | null) {
     if (ctx.readOnly.value || !ctx.workbook.value) {
       return;
@@ -560,21 +880,29 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     selectCell,
     selectRange,
     clearSelection,
+    editCell,
     clearSelectedCells,
     setCellValue,
     setCellFormula,
     setCellStyle,
     commitCellInput,
+    commitSelectionInput,
     setSelectedCellValue,
     setSelectedCellFormula,
     setSelectedFormula,
     setSelectedCellStyle,
     setRangeStyle,
+    setSelectionNumberFormat,
+    setSelectionBorders,
     fillSelection,
     mergeSelection,
+    mergeAndCenterSelection,
     unmergeSelection,
     addSheet,
     removeActiveSheet,
+    renameSheet,
+    renameActiveSheet,
+    getSheetNameError,
     defineNamedRange
   };
 }

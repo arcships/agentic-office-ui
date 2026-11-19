@@ -114,6 +114,37 @@ function collectText(value, result = []) {
   return result;
 }
 
+/** Text, tables and image geometry of a model, independent of run boundaries. */
+function modelProjection(model) {
+  const projection = { paragraphs: [], tables: [], images: [] };
+  const visit = (nodes) => {
+    for (const node of nodes) {
+      if (node.type === "paragraph") {
+        projection.paragraphs.push(collectText(node).join(""));
+        for (const child of node.children) {
+          if (child.type === "image") {
+            projection.images.push({
+              widthPx: child.widthPx ?? null,
+              heightPx: child.heightPx ?? null,
+              wrapType: child.floating?.wrapType ?? null,
+              alt: child.alt ?? null,
+            });
+          }
+        }
+      } else if (node.type === "table") {
+        projection.tables.push(
+          node.rows.map((row) =>
+            row.cells.map((cell) => collectText(cell).join("")),
+          ),
+        );
+        visit(node.rows.flatMap((row) => row.cells.flatMap((cell) => cell.nodes)));
+      }
+    }
+  };
+  visit(model.nodes);
+  return projection;
+}
+
 function workerResult(request, marker) {
   return {
     data: {
@@ -135,7 +166,7 @@ function workerResult(request, marker) {
   };
 }
 
-test("DOCX surface search returns exact UTF-16 ranges for body and direct table paragraphs", () => {
+test("DOCX surface search returns exact UTF-16 ranges for body, direct and nested table paragraphs", () => {
   const paragraph = (text) => ({
     type: "paragraph",
     children: [{ type: "text", text }],
@@ -180,13 +211,22 @@ test("DOCX surface search returns exact UTF-16 ranges for body and direct table 
   assert.deepEqual(bodyMatches[0].range.start.location, { kind: "paragraph", nodeIndex: 0 });
 
   const tableMatches = vueDocx.findDocxSearchMatches(model, "a.b");
-  assert.equal(tableMatches.length, 2);
+  assert.equal(tableMatches.length, 3);
   assert.deepEqual(tableMatches[0].range.start.location, {
     kind: "table-cell",
     tableIndex: 1,
     rowIndex: 0,
     cellIndex: 0,
     paragraphIndex: 0,
+  });
+  assert.deepEqual(tableMatches[2].range.start.location, {
+    kind: "nested-table-cell",
+    tableIndex: 1,
+    path: [{ rowIndex: 0, cellIndex: 0, contentIndex: 1 }],
+    rowIndex: 0,
+    cellIndex: 0,
+    paragraphIndex: 0,
+    nestingPath: "0-0-1",
   });
   assert.equal(tableMatches.every((match) => match.nodeIndex === 1), true);
 });
@@ -252,10 +292,40 @@ test("DOCX parses a normal fixture and preserves content through roundtrip", asy
   assert.ok(exported.byteLength > 0);
   assert.deepEqual([...new Uint8Array(exported).slice(0, 2)], [0x50, 0x4b]);
 
+  // A ZIP signature proves nothing about the body. Open the exported package
+  // and compare the text, tables and images before and after re-import.
+  const archive = unzipSync(new Uint8Array(exported));
+  assert.ok(archive["word/document.xml"], "exported package must contain word/document.xml");
+  assert.match(strFromU8(archive["word/document.xml"]), /<w:tbl>/);
+  assert.ok(
+    archive["[Content_Types].xml"],
+    "exported package must contain [Content_Types].xml",
+  );
+
   const second = await core.wasmBuildDocModelFromBytes(exported);
   const secondText = collectText(second.model).join(" ");
   assert.match(secondText, /INVOICE INV-2026-0705/);
   assert.equal(second.model.nodes.length, first.model.nodes.length);
+  assert.deepEqual(modelProjection(second.model), modelProjection(first.model));
+});
+
+test("DOCX export round trip keeps images and their geometry", async () => {
+  const first = await core.wasmBuildDocModelFromBytes(
+    arrayBufferFromFile("report-with-image.docx"),
+  );
+  const exported = await core.wasmSerializeDocx(first.model, first.package);
+  const archive = unzipSync(new Uint8Array(exported));
+  assert.ok(
+    Object.keys(archive).some((name) => name.startsWith("word/media/")),
+    "exported package must keep the image part",
+  );
+  const second = await core.wasmBuildDocModelFromBytes(exported);
+  assert.deepEqual(modelProjection(second.model), modelProjection(first.model));
+  assert.equal(
+    modelProjection(second.model).images.length,
+    1,
+    "the round trip must not lose or duplicate the image",
+  );
 });
 
 test("DOCX importer accepts macro-enabled documents and Word templates as read-only inputs", async () => {

@@ -1,6 +1,6 @@
 # Surface 搜索与 PDF 文字选择设计
 
-> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重，并恢复可定位 DOM 文本层（2026-11-17）
+> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重，并恢复可定位 DOM 文本层（2026-11-17）；Issue #49 接入大小写/整词/正则选项、嵌套表格和页眉页脚/脚注尾注搜索，并在编辑后重跑当前查询（2026-11-18）
 > 适用范围：`packages/vue-docx`、`packages/vue-xlsx`、`packages/vue-pptx`、`packages/vue-pdf`、`packages/vue-ui`
 > 取代：`pdf-text-layer-issue.md` 中的透明 `<span>` 文字层方案
 > 目标：让四种 Surface 都能搜索并定位结果，让 PDF 在原生文字可用时可靠选择和复制文字
@@ -46,13 +46,13 @@
 - PDF 跨页选择、双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮。
 
 > 2026-11-17（Issue #84）把“PDF 跨页选择”从非目标移入范围：多页选区按页拆分 `PageTextSlice`，一起读取文字并在复制时用 `\n` 连接。跨页选择不生成 PDF 引用（引用仍然是单页文本范围）；双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮仍不在范围内。
-- 查找替换、正则、大小写开关和整词搜索。
+- 查找替换（replace）、批注/公式等搜索字段切换；正则、大小写和整词搜索已由 Issue #49 实现。
 - XLSX 搜索范围切换，以及公式、批注等搜索字段选择。
 - 隐藏 Sheet、隐藏行列、隐藏幻灯片和播放模式的特殊搜索规则；首版沿用现有文档模型的可搜索内容，不在本设计新增产品语义。
 - 可配置结果上限、截断结果展示和固定缓存/并发/批处理参数；如性能测试证明需要，另行设计。
 - 修复 PDF 文件本身错误的阅读顺序、逻辑结构或 Unicode 映射。
 
-DOCX 首版搜索当前模型可以稳定表达位置的正文和表格段落。页眉页脚、脚注/尾注、文本框和不可表达的嵌套结构，待模型锚点具备后再接入。
+DOCX 搜索已覆盖模型可稳定表达位置的正文、表格、嵌套表格段落，以及页眉页脚和脚注/尾注正文；文本框仍不纳入。嵌套表格使用搜索专用的 `nested-table-cell` 位置（嵌套路径 + `DocxTableHost` 的 runtime key）投影到 DOM，不修改 `DocxTextRange` 的编辑语义。
 
 XLSX 不在只读网格内部伪造字符级 DOM 高亮；单元格选中是主定位反馈，关键字精确高亮显示在 Find Bar 结果摘要或已有详情区域。
 
@@ -105,8 +105,15 @@ export interface SurfaceSearchState<M> {
   error?: { code: string; message: string }
 }
 
+export interface SurfaceSearchOptions {
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+}
+
 export interface SurfaceSearchApi<M> {
-  search(query: string): Promise<SurfaceSearchState<M>>
+  search(query: string, options?: SurfaceSearchOptions): Promise<SurfaceSearchState<M>>
+  refreshSearch(): Promise<SurfaceSearchState<M>>
   activateSearchMatch(index: number): Promise<void>
   searchNext(): Promise<void>
   searchPrevious(): Promise<void>
@@ -183,12 +190,12 @@ export interface PdfSearchMatch {
 
 ### 5.3 匹配语义
 
-- 首版默认模糊搜索，定义为大小写不敏感的连续子串包含匹配，Find Bar 不提供搜索模式开关。
-- `useXlsxSearch` 接受可选的 `caseSensitive: true`，用于宿主需要精确大小写匹配的场景；默认保持大小写不敏感。
-- 搜索结果缓存的是匹配时刻的单元格文本，工作簿 `revision` 变化（编辑、撤销、排序、重新加载）后必须清空会话，不能继续复用陈旧的 `text/start/end`。
+- 默认仍是大小写不敏感的连续子串包含匹配；`SurfaceSearchOptions` 提供大小写、整词和正则三种可选模式，DOCX 与 XLSX 共用同一套表达式构造。
+- 整词边界使用 Unicode 字母/数字/下划线，而不是 `\b`（后者会误判中文和组合字符）。
+- 搜索结果缓存的是匹配时刻的文本，工作簿 `revision` 变化（编辑、撤销、排序、重新加载）后 XLSX 清空会话；DOCX 在模型替换后重跑当前查询并尽量保留 `activeIndex`。
 - “模糊”不包含错别字纠正、编辑距离、拼音、同义词或语义召回；这些能力没有需求依据，也不能保证四种格式结果一致。
 - `start/end` 和 DOCX/PPTX offset 使用 UTF-16 code unit，start inclusive/end exclusive，与 DOM Range 和 `String#indexOf` 一致。
-- DOCX 搜索可表达位置的正文和表格段落；PPTX、PDF 搜索当前文档；XLSX 沿用现有 workbook 搜索的文字来源。本设计不新增范围或字段切换。
+- DOCX 搜索正文、表格、嵌套表格、页眉页脚和脚注/尾注；PPTX、PDF 搜索当前文档；XLSX 沿用现有 workbook 搜索的文字来源，不额外切换范围或字段。
 - 结果排序稳定：文档、页或幻灯片顺序；XLSX 按 Sheet、行、列顺序。
 
 ## 6. Find Bar 与定位交互
@@ -204,10 +211,16 @@ interface OfficeFindBarProps {
   activeIndex: number
   resultCount: number
   placeholder?: string
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
 }
 
 interface OfficeFindBarEmits {
   "update:query": [query: string]
+  "update:caseSensitive": [value: boolean]
+  "update:wholeWord": [value: boolean]
+  "update:regex": [value: boolean]
   next: []
   previous: []
   close: []
@@ -219,7 +232,7 @@ interface OfficeFindBarEmits {
 - 当焦点位于 Viewer/Surface 内时，`Ctrl+F` / `Cmd+F` 打开并聚焦 Find Bar；不永久劫持全局浏览器查找。
 - IME 组合输入期间不搜索，`compositionend` 后提交最终查询；普通输入采用可调整的短延迟合并请求，不把具体毫秒数写成架构合同。
 - Enter 到下一条，Shift+Enter 到上一条，Esc 关闭、清除搜索高亮并把焦点还给原 Surface。
-- 显示搜索中、当前序号/总数和空结果状态。
+- 显示搜索中、当前序号/总数和空结果状态；大小写、整词和正则按钮以 `aria-pressed` 暴露开关状态。
 - 当前命中与其他可见命中使用可区分的样式；按钮有可读标签和可见焦点状态。
 - 当前结果已经完全可见时不滚动；不可见时滚入视口。定位不能改变用户 zoom。
 
@@ -244,7 +257,8 @@ interface OfficeFindBarEmits {
 
 ```ts
 interface DocxSearchSegment {
-  location: DocxTextRangeLocation
+  location: DocxTextRangeLocation | ParagraphLocationInNestedTableCell | ParagraphLocationInNoteText
+  region: "body" | "header" | "footer" | "footnote" | "endnote"
   text: string
   pageIndex?: number
 }
@@ -252,7 +266,9 @@ interface DocxSearchSegment {
 
 - 正文段落位置为 `{ kind: "paragraph", nodeIndex }`。
 - 表格段落位置为 `{ kind: "table-cell", tableIndex, rowIndex, cellIndex, paragraphIndex }`。
-- 命中生成同一 location 下的 `DocxTextRange` start/end；文字 run 不构成搜索边界，因此允许跨 run 命中。
+- 嵌套表格段落位置为 `{ kind: "nested-table-cell", tableIndex, path, rowIndex, cellIndex, paragraphIndex, nestingPath }`；`path` 记录每一层嵌套的 row/cell/contentIndex，`nestingPath` 是渲染层 `data-docx-table-nesting-path` 的斜杠路径。
+- 页眉、页脚、脚注和尾注命中带 `region` 及 `partName`/`noteId`；只有正文和直接单元格段落会生成传统 `DocxTextRange`，其余使用搜索专用位置类型，不改变编辑器的 range 语义。
+- 命中生成同一 location 下的 start/end；文字 run 不构成搜索边界，因此允许跨 run 命中。
 - 搜索文本来自与当前视图一致的可见文字投影，避免模型 offset 无法映射到 DOM。
 - 首版不跨段落匹配短语。
 - range offset 与 DOM 映射统一使用 UTF-16 code unit。
@@ -451,6 +467,8 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 
 - 同段多命中和跨 run 命中可以逐条精确高亮。
 - 中文、emoji/代理对和表格单元格的 offset 映射正确。
+- 嵌套表格（含多层）文字可命中并投影到正确的 runtime key；页眉、页脚、脚注和尾注命中带区域标签，导航会滚动到显示该页眉/页脚/注释的页面。
+- 大小写、整词和正则选项在 DOCX 与 XLSX 上行为一致；编辑段落替换模型后结果列表保留、offset 更新、`activeIndex` 尽量保留。
 - 分页、zoom 和字体加载后，Range 仍对应原关键字。
 - CSS Highlight 与 rect fallback 都有真实浏览器测试；离屏结果先挂载再高亮。
 

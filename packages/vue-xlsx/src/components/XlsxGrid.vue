@@ -8,13 +8,29 @@
     :data-first-column-width="effectiveColWidths[0] ?? DEFAULT_COL_WIDTH"
     :data-first-row-height="effectiveRowHeights[0] ?? DEFAULT_ROW_HEIGHT"
     :data-merged-region-count="activeSheet?.mergedRegions?.length ?? 0"
+    :data-freeze-row="activeSheet?.freezePanes?.row ?? 0"
+    :data-freeze-column="activeSheet?.freezePanes?.col ?? 0"
+    :data-data-validation-count="activeSheet?.dataValidations?.length ?? 0"
+    :data-auto-filter-range-count="controller.autoFilterRanges?.length ?? 0"
+    :data-auto-filter-trigger-count="autoFilterTriggers.length"
+    :data-hidden-auto-filter-row-count="controller.hiddenAutoFilterRows?.length ?? 0"
+    :data-pivot-count="controller.pivotTables?.length ?? 0"
+    :data-pivot-names="pivotBadgeViews.length ? pivotBadgeViews.map((badge) => badge.name).join(' ') : undefined"
+    :data-slicer-count="controller.slicers?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
+    :data-right-to-left="isRightToLeft ? 'true' : undefined"
+    :data-cut-range="cutRangeAddress || undefined"
+    :data-formula-reference-count="formulaReferenceRanges.length || undefined"
+    :data-formula-reference-ranges="formulaReferenceRangeList || undefined"
+    :data-formula-reference-active="activeFormulaReferenceAddress || undefined"
+    :data-fill-target="fillDragTargetAddress || undefined"
     role="grid"
     :aria-label="gridAriaLabel"
     :aria-rowcount="gridRowCount"
     :aria-colcount="gridColCount"
     :aria-readonly="gridAriaReadOnly"
     :aria-activedescendant="activeCellDescendantId"
+    :data-render-mode="gridRenderMode"
     tabindex="0"
     :style="containerStyle"
     @keydown="onGridKeydown"
@@ -27,7 +43,7 @@
     @dblclick="onDblClick"
   >
     <div
-      v-if="activeCellAria"
+      v-if="activeCellAria && showHiddenA11yCell"
       class="xlsx-grid__a11y"
       role="row"
       :aria-rowindex="activeCellAria.rowIndex"
@@ -47,43 +63,167 @@
       :style="scrollSpaceStyle"
     >
       <div class="xlsx-grid__viewport" :style="viewportStyle">
-        <!-- Column header canvas -->
-        <canvas
-          ref="colHeaderCanvasRef"
-          class="xlsx-grid__col-header"
-          :style="colHeaderCanvasStyle"
+        <template v-if="gridRenderMode === 'canvas'">
+          <!-- Column header canvas -->
+          <canvas
+            ref="colHeaderCanvasRef"
+            class="xlsx-grid__col-header"
+            :style="colHeaderCanvasStyle"
+          />
+          <!-- Row header canvas -->
+          <canvas
+            ref="rowHeaderCanvasRef"
+            class="xlsx-grid__row-header"
+            :style="rowHeaderCanvasStyle"
+          />
+          <!-- Corner canvas -->
+          <canvas
+            ref="cornerCanvasRef"
+            class="xlsx-grid__corner"
+            :style="cornerCanvasStyle"
+          />
+          <!-- Main body canvas -->
+          <canvas
+            ref="bodyCanvasRef"
+            class="xlsx-grid__body"
+            :style="bodyCanvasStyle"
+          />
+        </template>
+        <!-- DOM fallback: real, selectable text for the same visible window. -->
+        <XlsxGridDomLayer
+          v-else-if="domGridModel"
+          :model="domGridModel"
+          :scroll-left="scrollLeft"
+          :scroll-top="scrollTop"
         />
-        <!-- Row header canvas -->
-        <canvas
-          ref="rowHeaderCanvasRef"
-          class="xlsx-grid__row-header"
-          :style="rowHeaderCanvasStyle"
+        <button
+          v-if="columnMenuTriggerStyle && !editingLocked"
+          class="xlsx-grid__axis-menu-trigger"
+          data-testid="xlsx-column-menu"
+          type="button"
+          tabindex="-1"
+          :style="columnMenuTriggerStyle"
+          :aria-label="m.xlsx.contextMenu.selectColumn"
+          @pointerdown.stop.prevent="openHeaderMenu('column', $event)"
+          @dblclick.stop.prevent
+        >▾</button>
+        <button
+          v-if="rowMenuTriggerStyle && !editingLocked"
+          class="xlsx-grid__axis-menu-trigger"
+          data-testid="xlsx-row-menu"
+          type="button"
+          tabindex="-1"
+          :style="rowMenuTriggerStyle"
+          :aria-label="m.xlsx.contextMenu.selectRow"
+          @pointerdown.stop.prevent="openHeaderMenu('row', $event)"
+          @dblclick.stop.prevent
+        >▾</button>
+        <XlsxHeaderMenu
+          v-if="headerMenu"
+          :controller="controller"
+          :kind="headerMenu.kind"
+          :index="headerMenu.index"
+          :x="headerMenu.x"
+          :y="headerMenu.y"
+          @close="headerMenu = null"
         />
-        <!-- Corner canvas -->
-        <canvas
-          ref="cornerCanvasRef"
-          class="xlsx-grid__corner"
-          :style="cornerCanvasStyle"
+        <template
+          v-for="trigger in autoFilterTriggers"
+          :key="`autofilter-${trigger.range.reference}-${trigger.columnIndex}`"
+        >
+          <slot
+            v-if="$slots['table-header-menu']"
+            name="table-header-menu"
+            v-bind="trigger.slotProps"
+          />
+          <button
+            v-else
+            class="xlsx-grid__autofilter-trigger"
+            :class="{ 'xlsx-grid__autofilter-trigger--active': trigger.hasFilter }"
+            data-testid="xlsx-autofilter-trigger"
+            type="button"
+            tabindex="-1"
+            :style="trigger.style"
+            :data-autofilter-reference="trigger.range.reference"
+            :data-autofilter-column="trigger.columnIndex"
+            :aria-label="trigger.label"
+            aria-haspopup="dialog"
+            @pointerdown.stop.prevent
+            @click.stop.prevent="openAutoFilterMenu(trigger, $event)"
+            @dblclick.stop.prevent
+          >▾</button>
+        </template>
+        <XlsxAutoFilterMenu
+          v-if="autoFilterMenu"
+          :controller="controller"
+          :range="autoFilterMenu.range"
+          :column-index="autoFilterMenu.columnIndex"
+          :column-name="autoFilterMenu.columnName"
+          :x="autoFilterMenu.x"
+          :y="autoFilterMenu.y"
+          @close="autoFilterMenu = null"
         />
-        <!-- Main body canvas -->
-        <canvas
-          ref="bodyCanvasRef"
-          class="xlsx-grid__body"
-          :style="bodyCanvasStyle"
-        />
-        <!-- Editing input (hidden unless editing) -->
-        <input
-          v-if="editingCell"
-          ref="editInputRef"
-          v-model="editingValue"
-          class="xlsx-grid__edit-input"
-          data-testid="xlsx-cell-editor"
-          :style="editInputStyle"
-          @keydown="onEditKeydown"
-          @compositionstart="onEditCompositionStart"
-          @compositionend="onEditCompositionEnd"
-          @blur="commitEdit"
-        />
+        <div
+          v-if="pageBreakOverlay"
+          class="xlsx-grid__page-breaks"
+          data-testid="xlsx-page-break-preview"
+          aria-hidden="true"
+        >
+          <i
+            v-for="(line, index) in pageBreakOverlay.lines"
+            :key="`line-${index}`"
+            class="xlsx-grid__page-break-line"
+            :class="`xlsx-grid__page-break-line--${line.kind}`"
+            :style="line.style"
+          />
+          <b
+            v-for="(label, index) in pageBreakOverlay.labels"
+            :key="`label-${index}`"
+            class="xlsx-grid__page-break-label"
+            :style="label.style"
+          >{{ label.text }}</b>
+        </div>
+        <!-- Editing input (hidden unless editing). The textarea makes a draft
+             multi-line; the hidden mirror under it measures how many wrapped
+             lines the draft needs so the editor grows instead of scrolling. -->
+        <template v-if="editingCell">
+          <div
+            ref="editMirrorRef"
+            class="xlsx-grid__edit-mirror"
+            :class="{ 'xlsx-grid__edit-mirror--formula': showEditorReferenceHighlight }"
+            data-testid="xlsx-cell-editor-mirror"
+            :data-formula-reference-count="showEditorReferenceHighlight ? formulaReferences.references.length : undefined"
+            aria-hidden="true"
+            :style="editMirrorStyle"
+          ><template v-if="showEditorReferenceHighlight"><span
+              v-for="(segment, index) in editorReferenceSegments"
+              :key="index"
+              :data-formula-reference="segment.reference?.rangeAddress"
+              :data-formula-reference-active="segment.active ? 'true' : undefined"
+              :style="segment.color ? { color: segment.color } : undefined"
+            >{{ segment.text }}</span></template><template v-else>{{ editingValue }}</template></div>
+          <textarea
+            ref="editInputRef"
+            v-model="editingValue"
+            class="xlsx-grid__edit-input"
+            data-testid="xlsx-cell-editor"
+            :data-editor-lines="editorLineCount"
+            :data-formula-references="showEditorReferenceHighlight ? 'true' : undefined"
+            rows="1"
+            wrap="soft"
+            spellcheck="false"
+            :style="editInputStyle"
+            @keydown="onEditKeydown"
+            @input="syncEditorCaret"
+            @keyup="syncEditorCaret"
+            @click="syncEditorCaret"
+            @select="syncEditorCaret"
+            @paste="onEditPaste"
+            @compositionstart="onEditCompositionStart"
+            @compositionend="onEditCompositionEnd"
+            @blur="commitEdit"
+          />
+        </template>
         <div
           v-if="hoveredComment"
           class="xlsx-grid__comment-popover"
@@ -102,6 +242,17 @@
           <strong v-if="validationHint.title">{{ validationHint.title }}</strong>
           <span>{{ validationHint.message }}</span>
         </div>
+        <button
+          v-if="fillHandleStyle"
+          class="xlsx-grid__fill-handle"
+          data-testid="xlsx-fill-handle"
+          type="button"
+          tabindex="-1"
+          :style="fillHandleStyle"
+          :aria-label="m.xlsx.grid.fillHandle"
+          @pointerdown.stop.prevent="startFillDrag"
+          @dblclick.stop.prevent
+        />
         <button
           v-if="validationDropdownTriggerStyle"
           class="xlsx-grid__validation-trigger"
@@ -159,30 +310,53 @@
         </div>
       </div>
     </div>
+    <div
+      v-for="badge in pivotBadgeViews"
+      :key="badge.name"
+      class="xlsx-grid__pivot-badge"
+      data-testid="xlsx-pivot-badge"
+      :data-pivot-name="badge.name"
+      :style="badge.style"
+      :title="badge.label"
+    >{{ badge.label }}</div>
     <XlsxClipboardNotice :message="clipboardNotice" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from "vue";
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from "vue";
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  withTableCellStyle,
+  type XlsxAutoFilterRange,
+  type XlsxTableHeaderMenuRenderProps,
   type XlsxViewerController,
   type XlsxCellAddress,
   type XlsxCellRange,
   type XlsxCellStyleContext,
   type XlsxCellHyperlink,
   type XlsxCellComment,
+  type XlsxCellTextRun,
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
   type XlsxDataValidationFeedback,
   type XlsxSparkline,
+  type XlsxPrintLayout,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
+  type XlsxThemePalette,
 } from "@arcships/xlsx-core";
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from "./grid-metrics";
+import {
+  isSameRange,
+  resolveHorizontalJumpDirection,
+  resolveJumpTarget,
+  resolveLastUsedDisplayIndex,
+  resolvePageRowStep,
+  type GridAxisDirection,
+} from "./grid-keyboard";
 import { nextGridA11yId } from "./grid-a11y";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
@@ -202,21 +376,80 @@ import {
   normalizeConditionalFormatRanges,
   type NormalizedRange,
 } from "./conditional-format-stats";
-import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
+import { axisLayoutBoundary, axisLayoutOffset, axisLayoutScroll, mirrorBodyOffset, paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
 import {
+  AUTOFIT_CELL_PADDING_PX,
+  AUTOFIT_SCAN_LIMIT,
   MAX_CANVAS_DIMENSION_PX,
   cellKey,
+  estimateAutofitTextWidth,
   intersectsViewport,
   readDevicePixelRatio,
+  resolveAutofitColumnWidth,
+  resolveAutofitRowHeight,
   resolveAxisResizeSize,
   resolveCanvasPixelRatio,
+  resolveCellTextLayout,
   resolveOverflowTextWidth,
+  resolvePaintedReferenceRange,
+  resolveRotatedTextBounds,
+  resolveRotatedTextCenter,
+  resolveRotatedTextFitWidth,
+  resolveShrinkToFitFontSize,
   sheetCellKey,
+  type AutofitCellText,
 } from "./grid-paint";
+import {
+  FILL_HANDLE_SIZE_PX,
+  fillRangesEqual,
+  normalizeFillRange,
+  resolveFillHandleBox,
+  resolveFillTargetRange,
+} from "./grid-fill-handle";
+import {
+  measureRichTextSegments,
+  richTextBaselineOffset,
+  richTextFontScale,
+  wrapRichTextRuns,
+} from "./rich-text-layout";
 import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
+import {
+  collectFormulaReferences,
+  formulaReferenceSegments,
+  type FormulaReferenceCollection,
+} from "../composables/formula-reference-highlight";
+import {
+  createNamedRangeResolver,
+  FORMULA_REFERENCE_OWNER_GRID,
+  isReferenceOnActiveSheet,
+  useFormulaReferenceEditing,
+} from "../composables/useFormulaReferenceEditing";
+import { cellAddressToA1, rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
+import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
+import XlsxAutoFilterMenu from "./XlsxAutoFilterMenu.vue";
+import XlsxGridDomLayer from "./XlsxGridDomLayer.vue";
+import {
+  canvasBorderEdgeCss,
+  canvasCellStyleToCss,
+  canvasCellTextStyle,
+  gridDomSelectionStyle,
+  resolveGridDomAxisWindow,
+  resolveGridDomOutlineStyle,
+  resolveGridRenderMode,
+  richTextRunCss,
+  type CanvasCellStyle,
+  type GridDomCellModel,
+  type GridDomHeaderItemModel,
+  type GridDomHeaderLayerModel,
+  type GridDomLayerModel,
+  type GridDomPaneModel,
+  type GridDomRowModel,
+  type GridDomSparklineModel,
+  type XlsxGridRenderMode,
+} from "./grid-dom";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -225,6 +458,14 @@ const props = defineProps<{
   readOnly?: boolean;
   selectionColor?: string;
   selectionFillColor?: string;
+  /**
+   * Grid body renderer. `canvas` (default) paints the visible range into the
+   * four canvases; `dom` renders the same window as real `role="gridcell"`
+   * elements with selectable text, for accessibility mode, browser find and
+   * debugging, or as a canvas fallback. Both reuse the same cell style
+   * resolution and pane geometry.
+   */
+  renderMode?: XlsxGridRenderMode;
 }>();
 
 const m = useXlsxMessages();
@@ -232,6 +473,12 @@ const m = useXlsxMessages();
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   viewportChange: [viewport: { scrollLeft: number; scrollTop: number; width: number; height: number }];
+}>();
+
+// Hosts can replace the built-in AutoFilter trigger; the menu itself stays
+// internal so sorting, filtering and clearing keep one code path.
+defineSlots<{
+  "table-header-menu"?: (props: XlsxTableHeaderMenuRenderProps) => unknown;
 }>();
 
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
@@ -248,6 +495,23 @@ const WORKER_ROW_BATCH_SIZE = 64;
 const MIN_DISPLAY_ROWS = 200;
 const MIN_DISPLAY_COLS = 50;
 const AXIS_RESIZE_DRAG_THRESHOLD = 3;
+// Inline editor chrome, in CSS pixels. A `<textarea>` sizes its content box
+// between padding and border, so the auto-grown box height is
+// `lines × lineHeight + vertical padding + border`.
+const EDITOR_BORDER_PX = 2;
+const EDITOR_PADDING_X_PX = 4;
+const EDITOR_PADDING_Y_PX = 2;
+const EDITOR_BOX_CHROME_PX = EDITOR_BORDER_PX * 2 + EDITOR_PADDING_Y_PX * 2;
+const EDITOR_LINE_HEIGHT_RATIO = 1.25;
+const EDITOR_MIN_LINE_HEIGHT_PX = 12;
+// Excel's marching ants: a 4/4 dash whose phase advances a few times a second,
+// slow enough to read and cheap enough to repaint while a cut is pending.
+const CUT_ANTS_DASH = [4, 4];
+const CUT_ANTS_DASH_PERIOD = CUT_ANTS_DASH[0] + CUT_ANTS_DASH[1];
+const CUT_ANTS_STEP_MS = 120;
+// The fill-handle preview: a short dash that reads as "this is a preview",
+// visually distinct from the solid selection and the cutting marquee.
+const FILL_DRAG_PREVIEW_DASH = [4, 3];
 
 // ── Refs ───────────────────────────────────────────────────────────────
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -255,18 +519,51 @@ const bodyCanvasRef = ref<HTMLCanvasElement | null>(null);
 const colHeaderCanvasRef = ref<HTMLCanvasElement | null>(null);
 const rowHeaderCanvasRef = ref<HTMLCanvasElement | null>(null);
 const cornerCanvasRef = ref<HTMLCanvasElement | null>(null);
-const editInputRef = ref<HTMLInputElement | null>(null);
+const editInputRef = ref<HTMLTextAreaElement | null>(null);
+const editMirrorRef = ref<HTMLDivElement | null>(null);
+// Box height the mirror measured for the current draft. Kept separate from the
+// style so growing the editor never feeds back into its own measurement.
+const editorMeasuredHeight = ref(0);
 
 const scrollTop = ref(0);
 const scrollLeft = ref(0);
 const containerWidth = ref(0);
 const containerHeight = ref(0);
+// DOM renderer model. Rebuilt only when the visible window or its inputs move;
+// scrolling itself is a transform on the layer, exactly like the canvas.
+const domGridModel = shallowRef<GridDomLayerModel | null>(null);
+let domGridSignature = "";
+const gridRenderMode = computed(() => resolveGridRenderMode(props.renderMode));
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
+// Caret inside the inline draft; the formula-reference parser uses it to decide
+// which occurrence is being edited.
+const editorCaret = ref(0);
+// Exposed so the viewer can keep sheet-level shortcuts (undo, Ctrl+PageUp/Down)
+// out of an open inline editor.
+const isEditingCell = computed(() => editingCell.value !== null);
 const isEditComposing = ref(false);
 let commitEditOnCompositionEnd = false;
 const hoveredCell = ref<XlsxCellAddress | null>(null);
+const hoveredAxis = ref<{
+  actualIndex: number;
+  displayIndex: number;
+  kind: "column" | "row";
+} | null>(null);
+const headerMenu = ref<{
+  index: number;
+  kind: "column" | "row";
+  x: number;
+  y: number;
+} | null>(null);
+const autoFilterMenu = ref<{
+  columnIndex: number;
+  columnName: string;
+  range: XlsxAutoFilterRange;
+  x: number;
+  y: number;
+} | null>(null);
 const validationDropdownOpen = ref(false);
 const resizePreview = ref<{
   actualIndex: number;
@@ -281,6 +578,16 @@ const resizePreview = ref<{
 
 const isSelecting = ref(false);
 const selectionAnchor = ref<XlsxCellAddress | null>(null);
+// The handle drag keeps the selection as the fill pattern and only previews
+// the range it would cover, so release can hand one range to `fillSelection`.
+const fillDrag = ref<{
+  pointerId: number;
+  source: XlsxCellRange;
+  target: XlsxCellRange;
+} | null>(null);
+const cutAntsStep = ref(0);
+let cutAntsFrame: number | null = null;
+let cutAntsLastStepAt = 0;
 const workerRowsRevision = ref(0);
 const devicePixelRatioRevision = ref(0);
 interface GridCellSnapshot {
@@ -316,6 +623,55 @@ const conditionalRuleEnvironments = createScopedCache<ConditionalEnvironment>();
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
 
+// ── Formula reference highlighting ────────────────────────────────────
+// Excel colours every reference in an edited formula and outlines the cells it
+// touches. The edit session is shared with `XlsxFormulaBar` through the
+// controller, so a reference outlined here can also be typed in the bar.
+const formulaReferenceEditing = useFormulaReferenceEditing(props.controller);
+const resolveFormulaReferenceName = createNamedRangeResolver(props.controller);
+const EMPTY_FORMULA_REFERENCES: FormulaReferenceCollection = {
+  activeIndex: -1,
+  activeReference: null,
+  references: [],
+};
+const formulaReferences = computed<FormulaReferenceCollection>(() => {
+  const session = formulaReferenceEditing.session;
+  if (!session.active.value) return EMPTY_FORMULA_REFERENCES;
+  return collectFormulaReferences(session.text.value, session.caret.value, {
+    activeSheetName: activeSheet.value?.name ?? null,
+    resolveName: resolveFormulaReferenceName,
+  });
+});
+const activeSheetName = computed(() => activeSheet.value?.name ?? null);
+const formulaReferenceRanges = computed(() =>
+  formulaReferences.value.references.filter(
+    (reference) => isReferenceOnActiveSheet(reference, activeSheetName.value),
+  ),
+);
+const formulaReferenceRangeList = computed(() =>
+  formulaReferenceRanges.value.map((reference) => reference.rangeAddress).join(" "),
+);
+const activeFormulaReference = computed(() => {
+  const active = formulaReferences.value.activeReference;
+  return active && formulaReferenceRanges.value.includes(active) ? active : null;
+});
+const activeFormulaReferenceAddress = computed(
+  () => activeFormulaReference.value?.rangeAddress ?? "",
+);
+const editorReferenceSegments = computed(() =>
+  formulaReferenceSegments(
+    formulaReferenceEditing.session.text.value,
+    formulaReferences.value.references,
+    formulaReferences.value.activeIndex,
+  ),
+);
+const showEditorReferenceHighlight = computed(() =>
+  editingCell.value !== null
+  && !isEditComposing.value
+  && formulaReferenceEditing.session.owner.value === FORMULA_REFERENCE_OWNER_GRID
+  && formulaReferences.value.references.length > 0,
+);
+
 // ── Grid accessibility ────────────────────────────────────────────────
 // The grid paints cells onto canvases, so assistive technology would otherwise
 // see one anonymous focusable div. The container is now a real `grid` whose
@@ -332,6 +688,8 @@ const gridAriaReadOnly = computed(() => (props.readOnly ? "true" : "false"));
 // Prefer the worksheet's real size; the display counts include row/column
 // filler so the canvas can always paint a full viewport.
 const gridRowCount = computed(() => {
+  const filtered = displayVisibleRows.value;
+  if (filtered) return filtered.length;
   const declared = activeSheet.value?.rowCount ?? 0;
   return declared > 0 ? declared : effectiveRowHeights.value.length;
 });
@@ -354,6 +712,13 @@ const activeCellAria = computed(() => {
 });
 const activeCellDescendantId = computed(() =>
   activeCellAria.value ? `${gridA11yId}-active-cell` : undefined,
+);
+// In DOM mode the active cell is a real gridcell inside the rendered window and
+// carries the `aria-activedescendant` id itself; the visually hidden mirror is
+// only kept for an active cell that scrolled out of that window, so assistive
+// tech never sees it twice.
+const showHiddenA11yCell = computed(
+  () => gridRenderMode.value === "canvas" || !domGridModel.value?.activeCellId,
 );
 // Per-cell metadata is keyed by `cellKey` (one number) rather than a
 // `${row}:${col}` string, because the paint loop looks these up for every
@@ -386,6 +751,15 @@ const zoomScale = computed(() => props.controller.zoomScale);
 const activeCell = computed(() => props.controller.activeCell);
 const selection = computed(() => props.controller.selection);
 const revision = computed(() => props.controller.revision);
+// The pending cut only gets a marquee on the sheet it was made on; switching
+// sheets keeps the move alive but hides its source outline.
+const cutRange = computed<XlsxCellRange | null>(() => {
+  const cut = props.controller.cutState;
+  const sheet = props.controller.activeSheet;
+  if (!cut || !sheet || cut.sheetIndex !== sheet.workbookSheetIndex) return null;
+  return cut.range;
+});
+const cutRangeAddress = computed(() => (cutRange.value ? rangeToA1(cutRange.value) : ""));
 const editingLocked = computed(() => props.readOnly === true || props.controller.isEditingLocked === true);
 const activeValidation = computed<XlsxDataValidation | null>(() => {
   if (editingLocked.value) return null;
@@ -456,6 +830,31 @@ const validationDropdownStyle = computed<CSSProperties>(() => {
     top: `${HEADER_HEIGHT + (anchor?.top ?? 0)}px`,
   };
 });
+const pivotBadgeViews = computed(() => {
+  void revision.value;
+  const sheet = activeSheet.value;
+  if (!sheet) return [];
+  return (props.controller.pivotTables ?? []).flatMap((pivot) => {
+    const display = getDisplayCell(pivot.range.start);
+    if (!display) return [];
+    const anchor = paneOverlayRect(pivot.range.start, {
+      contentX: getColOffsetSum(display.col),
+      contentY: getRowOffsetSum(display.row),
+      width: 0,
+      height: 0,
+    });
+    if (!anchor) return [];
+    return [{
+      label: formatOfficeMessage(m.value.xlsx.pivot.staticPreview, { name: pivot.name }),
+      name: pivot.name,
+      style: {
+        left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+        top: `${HEADER_HEIGHT + anchor.top}px`,
+      } as CSSProperties,
+    }];
+  });
+});
+
 const validationFeedbackView = computed(() => {
   const feedback = props.controller.dataValidationFeedback as XlsxDataValidationFeedback | null | undefined;
   if (!feedback) return null;
@@ -530,17 +929,42 @@ const effectiveColWidths = computed(() => {
   });
 });
 
+const autoFilterHiddenRowSet = computed(() => new Set(props.controller.hiddenAutoFilterRows ?? []));
+
+/**
+ * Rows the grid displays after AutoFilter menus hid some of them.
+ *
+ * `null` means the sheet has no explicit row list (worker filler rows), so the
+ * original index-based path stays in charge.
+ */
+const displayVisibleRows = computed<number[] | null>(() => {
+  const rows = activeSheet.value?.visibleRows;
+  if (!rows?.length) return null;
+  const hidden = autoFilterHiddenRowSet.value;
+  return hidden.size === 0 ? rows : rows.filter((row) => !hidden.has(row));
+});
+
+// Actual sheet row → index in the unfiltered `rowHeights` array.
+const baseRowIndexByActual = computed(() => {
+  const rows = activeSheet.value?.visibleRows ?? [];
+  return new Map(rows.map((row, index) => [row, index]));
+});
+
 const effectiveRowHeights = computed(() => {
   const sheet = activeSheet.value;
   if (!sheet) return [];
   const z = gridZoomFactor(zoomScale.value);
-  const count = Math.max(sheet.rowHeights?.length ?? 0, MIN_DISPLAY_ROWS);
+  const rows = displayVisibleRows.value;
+  const count = Math.max(rows?.length ?? sheet.rowHeights?.length ?? 0, MIN_DISPLAY_ROWS);
+  const baseIndexByActual = baseRowIndexByActual.value;
   return Array.from({ length: count }, (_, index) => {
-    const actualIndex = sheet.visibleRows?.[index] ?? index;
+    const actualIndex = rows?.[index] ?? sheet.visibleRows?.[index] ?? index;
+    const baseIndex = rows ? baseIndexByActual.get(actualIndex) : index;
+    const storedHeight = baseIndex === undefined ? undefined : sheet.rowHeights?.[baseIndex];
     const preview = resizePreview.value;
     const size = preview?.kind === "row" && preview.actualIndex === actualIndex
       ? preview.size
-      : sheet.rowHeights?.[index] || sheet.rowHeightOverridesPx?.[actualIndex] || sheet.defaultRowHeightPx || DEFAULT_ROW_HEIGHT;
+      : storedHeight || sheet.rowHeightOverridesPx?.[actualIndex] || sheet.defaultRowHeightPx || DEFAULT_ROW_HEIGHT;
     return size * z;
   });
 });
@@ -615,9 +1039,20 @@ function resolveAdjacentSheetCell(
 const colOffsets = computed(() => createOffsetIndex(effectiveColWidths.value));
 const rowOffsets = computed(() => createOffsetIndex(effectiveRowHeights.value));
 const displayCols = computed(() => resolveDisplayIndices(activeSheet.value?.visibleCols, effectiveColWidths.value.length));
-const displayRows = computed(() => resolveDisplayIndices(activeSheet.value?.visibleRows, effectiveRowHeights.value.length));
+const displayRows = computed(() => resolveDisplayIndices(displayVisibleRows.value ?? activeSheet.value?.visibleRows, effectiveRowHeights.value.length));
 const sheetColToDisplayIndex = computed(() => createSheetToDisplayIndex(displayCols.value));
 const sheetRowToDisplayIndex = computed(() => createSheetToDisplayIndex(displayRows.value));
+
+/**
+ * `sheetView/@rightToLeft`: Excel mirrors the whole column axis — column A sits
+ * at the right edge, frozen columns pin to the right and scrolling starts
+ * there. Rows are never mirrored.
+ */
+const isRightToLeft = computed(() => activeSheet.value?.rightToLeft === true);
+/** Total width of every display column, in layout space. */
+const columnLayoutWidth = computed(
+  () => colOffsets.value[effectiveColWidths.value.length] ?? 0,
+);
 
 const visibleRowRange = computed(() => {
   const bodyHeight = Math.max(0, containerHeight.value - HEADER_HEIGHT);
@@ -630,9 +1065,11 @@ const visibleRowRange = computed(() => {
 
 const visibleColRange = computed(() => {
   const bodyWidth = Math.max(0, containerWidth.value - ROW_HEADER_WIDTH);
+  // Column indices follow content offsets; the mirrored layout is applied when
+  // painting, so the visible content interval is always [scrollLeft, +body].
   return resolveVisibleRange(
     colOffsets.value,
-    scrollLeft.value - OVERSCAN,
+    Math.max(0, scrollLeft.value - OVERSCAN),
     scrollLeft.value + bodyWidth + OVERSCAN,
   );
 });
@@ -644,6 +1081,69 @@ function getColOffsetSum(col: number): number {
 
 function getRowOffsetSum(row: number): number {
   return rowOffsets.value[Math.max(0, Math.min(row, effectiveRowHeights.value.length))] ?? 0;
+}
+
+/**
+ * Left edge of a display column in layout space. Columns are mirrored for an
+ * RTL sheet, so the left edge is `total - rightOffset`; LTR keeps the content
+ * offset. Painting and hit testing use the same mapping.
+ */
+function getColLayoutX(displayCol: number): number {
+  return axisLayoutOffset(
+    getColOffsetSum(displayCol),
+    getColOffsetSum(displayCol + 1),
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/** Layout x of a vertical column boundary (gridline or header divider). */
+function getColLayoutBoundary(boundary: number): number {
+  return axisLayoutBoundary(
+    getColOffsetSum(boundary),
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/** Layout-space scroll translation of the column axis for a body width. */
+function getColLayoutScroll(bodyWidth: number): number {
+  return axisLayoutScroll(
+    scrollLeft.value,
+    bodyWidth,
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/**
+ * Viewport x of a cell edge (or any content-space x) inside its pane. The
+ * frozen strip is pinned; the scrolling pane follows scrollLeft. RTL mirrors
+ * the result so the cell's content-left edge is drawn on the correct side.
+ */
+function paneCellViewX(contentX: number, width: number, frozen: boolean): number {
+  if (!isRightToLeft.value) {
+    return paneViewOffset(contentX, scrollLeft.value, frozen);
+  }
+  const bodyWidth = bodyViewportSize().width;
+  return bodyWidth - paneViewOffset(contentX + width, scrollLeft.value, frozen);
+}
+
+/** Whether a cell box is fully inside its pane (frozen strip pinned at right for RTL). */
+function paneCellFullyVisible(
+  viewX: number,
+  width: number,
+  frozen: boolean,
+  viewportWidth: number,
+): boolean {
+  if (frozen) {
+    return isRightToLeft.value
+      ? viewX >= viewportWidth - frozenPaneMetrics().width && viewX + width <= viewportWidth
+      : viewX >= 0 && viewX + width <= frozenPaneMetrics().width;
+  }
+  return isRightToLeft.value
+    ? viewX >= 0 && viewX + width <= viewportWidth - frozenPaneMetrics().width
+    : viewX >= frozenPaneMetrics().width && viewX + width <= viewportWidth;
 }
 
 function getSheetCell(displayRow: number, displayCol: number): XlsxCellAddress | null {
@@ -707,13 +1207,19 @@ function frozenPaneMetrics(): FrozenPaneMetrics {
  * Grid-body-local point (headers excluded) mapped into sheet content space.
  * Frozen strips keep content coordinates; the scrolling pane adds the live
  * scroll offset, so a click on a pinned cell resolves to that cell instead
- * of whatever scrolled underneath it.
+ * of whatever scrolled underneath it. RTL mirrors the horizontal offset, so
+ * the same pane helper answers for the pinned right-hand strip.
  */
 function resolvePanePoint(clientX: number, clientY: number) {
   const container = containerRef.value;
   if (!container) return null;
   const rect = container.getBoundingClientRect();
-  const localX = clientX - rect.left - ROW_HEADER_WIDTH;
+  const bodyWidth = Math.max(0, rect.width - ROW_HEADER_WIDTH);
+  const localX = mirrorBodyOffset(
+    clientX - rect.left - ROW_HEADER_WIDTH,
+    bodyWidth,
+    isRightToLeft.value,
+  );
   const localY = clientY - rect.top - HEADER_HEIGHT;
   if (localX < 0 || localY < 0) return null;
   const frozen = frozenPaneMetrics();
@@ -730,10 +1236,106 @@ function resolvePanePoint(clientX: number, clientY: number) {
 /** Body viewport size the canvases and overlays share (headers excluded). */
 function bodyViewportSize(): { width: number; height: number } {
   return {
-    width: Math.max(0, containerWidth.value - ROW_HEADER_WIDTH),
-    height: Math.max(0, containerHeight.value - HEADER_HEIGHT),
+    width: Math.max(0, (Number.isFinite(containerWidth.value) ? containerWidth.value : 0) - ROW_HEADER_WIDTH),
+    height: Math.max(0, (Number.isFinite(containerHeight.value) ? containerHeight.value : 0) - HEADER_HEIGHT),
   };
 }
+
+interface PageBreakOverlayLine {
+  kind: "column" | "row";
+  style: CSSProperties;
+}
+
+interface PageBreakOverlayLabel {
+  style: CSSProperties;
+  text: string;
+}
+
+const pageBreakOverlay = computed<{
+  labels: PageBreakOverlayLabel[];
+  lines: PageBreakOverlayLine[];
+} | null>(() => {
+  const controller = props.controller as XlsxViewerController & {
+    isPageBreakPreview?: boolean;
+    printLayout?: XlsxPrintLayout | null;
+  };
+  if (!controller.isPageBreakPreview) return null;
+  const layout = controller.printLayout;
+  const sheet = activeSheet.value;
+  if (!layout || !sheet || layout.pages.length === 0) return null;
+  const frozen = frozenPaneMetrics();
+  const viewport = bodyViewportSize();
+  const lines = new Map<string, PageBreakOverlayLine>();
+  const labels: PageBreakOverlayLabel[] = [];
+
+  for (const page of layout.pages) {
+    if (page.colPage > 0) {
+      const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
+      if (displayCol !== undefined) {
+        // A page starts at the column's leading edge: its left edge in LTR and
+        // its right edge on a mirrored RTL sheet.
+        const contentX = isRightToLeft.value
+          ? getColOffsetSum(displayCol + 1)
+          : getColOffsetSum(displayCol);
+        const frozenCol = displayCol < frozen.cols;
+        const x = paneCellViewX(contentX, 0, frozenCol);
+        if (!frozenCol && (isRightToLeft.value ? x > viewport.width - frozen.width : x < frozen.width)) continue;
+        const key = `column:${Math.round(x)}`;
+        if (!lines.has(key)) {
+          lines.set(key, {
+            kind: "column",
+            style: {
+              height: `${viewport.height}px`,
+              left: `${ROW_HEADER_WIDTH + x}px`,
+              top: `${HEADER_HEIGHT}px`,
+            },
+          });
+        }
+      }
+    }
+    if (page.rowPage > 0) {
+      const displayRow = sheetRowToDisplayIndex.value.get(page.range.start.row);
+      if (displayRow !== undefined) {
+        const contentY = getRowOffsetSum(displayRow);
+        const y = paneViewOffset(contentY, scrollTop.value, displayRow < frozen.rows);
+        if (displayRow >= frozen.rows && y < frozen.height) continue;
+        const key = `row:${Math.round(y)}`;
+        if (!lines.has(key)) {
+          lines.set(key, {
+            kind: "row",
+            style: {
+              left: `${ROW_HEADER_WIDTH}px`,
+              top: `${HEADER_HEIGHT + y}px`,
+              width: `${viewport.width}px`,
+            },
+          });
+        }
+      }
+    }
+
+    const displayRow = sheetRowToDisplayIndex.value.get(page.range.start.row);
+    const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
+    if (displayRow === undefined || displayCol === undefined) continue;
+    const contentX = isRightToLeft.value
+      ? getColOffsetSum(displayCol + 1)
+      : getColOffsetSum(displayCol);
+    const frozenCol = displayCol < frozen.cols;
+    const x = paneCellViewX(contentX, 0, frozenCol);
+    const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, displayRow < frozen.rows);
+    if (!frozenCol && (isRightToLeft.value ? x > viewport.width - frozen.width : x < frozen.width)) continue;
+    if (displayRow >= frozen.rows && y < frozen.height) continue;
+    if (x > viewport.width || y > viewport.height || x < -120 || y < -60) continue;
+    labels.push({
+      style: {
+        left: `${ROW_HEADER_WIDTH + Math.min(Math.max(0, x) + 6, Math.max(0, viewport.width - 24))}px`,
+        top: `${HEADER_HEIGHT + Math.max(0, y) + 4}px`,
+      },
+      text: String(page.pageNumber),
+    });
+  }
+
+  return { labels, lines: [...lines.values()] };
+});
 
 /**
  * Viewport box for a cell-anchored overlay (editor, comment popover,
@@ -764,7 +1366,310 @@ function paneOverlayRect(
     viewportHeight: viewport.height,
     scrollLeft: scrollLeft.value,
     scrollTop: scrollTop.value,
+    rtl: isRightToLeft.value,
   });
+}
+
+const columnMenuTriggerStyle = computed<CSSProperties | null>(() => {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== "column") return null;
+  const anchor = paneOverlayRect(
+    { col: axis.actualIndex, row: 0 },
+    {
+      // LTR pins the trigger to the column's right edge, RTL to its right edge
+      // in visual order (the leading edge in the mirrored layout).
+      contentX: getColOffsetSum(
+        isRightToLeft.value ? axis.displayIndex : axis.displayIndex + 1,
+      ),
+      contentY: 0,
+      height: 0,
+      width: 0,
+    },
+  );
+  if (!anchor) return null;
+  return {
+    left: `${ROW_HEADER_WIDTH + anchor.left - 16}px`,
+    top: "3px",
+  };
+});
+
+const rowMenuTriggerStyle = computed<CSSProperties | null>(() => {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== "row") return null;
+  const rowHeight = effectiveRowHeights.value[axis.displayIndex] || DEFAULT_ROW_HEIGHT;
+  const anchor = paneOverlayRect(
+    { col: 0, row: axis.actualIndex },
+    { contentX: 0, contentY: getRowOffsetSum(axis.displayIndex) + rowHeight / 2, height: 0, width: 0 },
+  );
+  if (!anchor) return null;
+  return {
+    left: "3px",
+    top: `${HEADER_HEIGHT + anchor.top - 7}px`,
+  };
+});
+
+const fillDragTarget = computed<XlsxCellRange | null>(() => {
+  const drag = fillDrag.value;
+  if (!drag || fillRangesEqual(drag.source, drag.target)) return null;
+  return drag.target;
+});
+const fillDragTargetAddress = computed(() =>
+  fillDragTarget.value ? rangeToA1(fillDragTarget.value) : "",
+);
+
+/**
+ * Viewport box of the selection's fill handle.
+ *
+ * Excel centres a small square on the selection's bottom-right corner and
+ * hides it once that corner scrolls out of its pane, because the handle
+ * belongs to a cell the user can no longer see.
+ */
+const fillHandleStyle = computed<CSSProperties | null>(() => {
+  // The handle belongs to the settled selection: a locked sheet has nothing to
+  // fill, and an open inline editor owns the cell under the corner.
+  if (editingLocked.value || editingCell.value) return null;
+  const drag = fillDrag.value;
+  const selectionValue = selection.value;
+  if (!drag && !selectionValue) return null;
+  const range = drag ? drag.source : normalizeFillRange(selectionValue as XlsxCellRange);
+  const display = getDisplayCell(range.end);
+  if (!display) return null;
+  const viewport = bodyViewportSize();
+  if (!(viewport.width > 0) || !(viewport.height > 0)) return null;
+
+  const frozen = frozenPaneMetrics();
+  const frozenX = display.col < frozen.cols;
+  const frozenY = display.row < frozen.rows;
+  // The handle sits on the selection's bottom corner in reading order: the
+  // right edge in LTR, the mirrored left edge in RTL.
+  const cornerX = paneCellViewX(getColOffsetSum(display.col + 1), 0, frozenX);
+  const cornerY = paneViewOffset(getRowOffsetSum(display.row + 1), scrollTop.value, frozenY);
+  if (frozenX
+    ? isRightToLeft.value
+      ? cornerX < viewport.width - frozen.width || cornerX > viewport.width
+      : cornerX < 0 || cornerX > frozen.width
+    : isRightToLeft.value
+      ? cornerX < 0 || cornerX > viewport.width - frozen.width
+      : cornerX < frozen.width || cornerX > viewport.width) return null;
+  if (frozenY
+    ? cornerY < 0 || cornerY > frozen.height
+    : cornerY < frozen.height || cornerY > viewport.height) return null;
+
+  const box = resolveFillHandleBox(cornerX, cornerY);
+  const anchor = paneOverlayRect(range.end, {
+    contentX: isRightToLeft.value
+      ? viewport.width - box.left - FILL_HANDLE_SIZE_PX + (frozenX ? 0 : scrollLeft.value)
+      : box.left,
+    contentY: box.top,
+    height: FILL_HANDLE_SIZE_PX,
+    width: FILL_HANDLE_SIZE_PX,
+  });
+  if (!anchor) return null;
+  return {
+    background: props.selectionColor || "#2563eb",
+    height: `${FILL_HANDLE_SIZE_PX}px`,
+    left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+    top: `${HEADER_HEIGHT + anchor.top}px`,
+    width: `${FILL_HANDLE_SIZE_PX}px`,
+  };
+});
+
+function openHeaderMenu(kind: "column" | "row", event: PointerEvent) {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== kind) return;
+  const target = event.currentTarget as HTMLElement | null;
+  const rect = typeof target?.getBoundingClientRect === "function"
+    ? target.getBoundingClientRect()
+    : { bottom: 0, left: 0 };
+  headerMenu.value = {
+    index: axis.actualIndex,
+    kind,
+    x: rect.left,
+    y: rect.bottom + 2,
+  };
+}
+
+type AutoFilterTrigger = {
+  columnIndex: number;
+  columnName: string;
+  hasFilter: boolean;
+  label: string;
+  range: XlsxAutoFilterRange;
+  slotProps: XlsxTableHeaderMenuRenderProps;
+  style: CSSProperties;
+};
+
+function autoFilterColumnLetter(col: number) {
+  let index = col + 1;
+  let label = "";
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    index = Math.floor((index - 1) / 26);
+  }
+  return label;
+}
+
+/**
+ * One persistent ▾ per visible AutoFilter header cell.
+ *
+ * Excel shows the button inside the range's header row rather than in the
+ * column-header strip, so the position comes from the cell rectangle. Cells
+ * scrolled under a frozen strip or outside the body are skipped instead of
+ * being clamped to the edge.
+ */
+const autoFilterTriggers = computed<AutoFilterTrigger[]>(() => {
+  const sheet = activeSheet.value;
+  const ranges = props.controller.autoFilterRanges ?? [];
+  if (!sheet || ranges.length === 0) return [];
+  void revision.value;
+  const frozen = frozenPaneMetrics();
+  const viewport = bodyViewportSize();
+  const triggers: AutoFilterTrigger[] = [];
+  const claimedHeaderCells = new Set<string>();
+  const tableByName = new Map((props.controller.tables ?? []).map((table) => [table.name, table]));
+
+  for (const range of ranges) {
+    const headerRow = range.start.row;
+    const displayRow = sheetRowToDisplayIndex.value.get(headerRow);
+    if (displayRow === undefined) continue;
+    const rowContentY = getRowOffsetSum(displayRow);
+    const rowHeight = effectiveRowHeights.value[displayRow] || DEFAULT_ROW_HEIGHT;
+    const rowFrozen = displayRow < frozen.rows;
+    const rowY = paneViewOffset(rowContentY, scrollTop.value, rowFrozen);
+    const rowVisible = rowFrozen
+      ? rowY >= 0 && (viewport.height === 0 || rowY + rowHeight <= frozen.height)
+      : rowY >= frozen.height && (viewport.height === 0 || rowY + rowHeight <= viewport.height);
+    if (!rowVisible) continue;
+
+    const activeState = (props.controller.autoFilterStates ?? []).find(
+      (state) => state.reference === range.reference
+    );
+    for (let col = range.start.col; col <= range.end.col; col += 1) {
+      const displayCol = sheetColToDisplayIndex.value.get(col);
+      if (displayCol === undefined) continue;
+      const colContentX = getColOffsetSum(displayCol);
+      const colWidth = effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+      const colFrozen = displayCol < frozen.cols;
+      const colX = paneCellViewX(colContentX, colWidth, colFrozen);
+      const colVisible = viewport.width === 0
+        ? colX >= 0
+        : paneCellFullyVisible(colX, colWidth, colFrozen, viewport.width);
+      if (!colVisible) continue;
+
+      const columnIndex = col - range.start.col;
+      const headerCellKey = `${headerRow}:${col}`;
+      if (claimedHeaderCells.has(headerCellKey)) continue;
+      claimedHeaderCells.add(headerCellKey);
+      const headerValue = props.controller.getCellDisplayValue({ row: headerRow, col });
+      const columnName = headerValue.trim().length > 0
+        ? headerValue
+        : autoFilterColumnLetter(col);
+      const direction = props.controller.sortState
+        && (props.controller.sortState.rangeReference === range.reference
+          || props.controller.sortState.tableName === range.tableName)
+        && props.controller.sortState.columnIndex === columnIndex
+        ? props.controller.sortState.direction
+        : null;
+      const activeColumn = activeState?.columns.find((column) => column.columnIndex === columnIndex);
+      const hasFilter = Boolean(activeState && activeState.columns.length > 0);
+      const hasValueFilter = Boolean(activeColumn);
+      const table = range.tableName ? tableByName.get(range.tableName) ?? null : null;
+      const triggerStyle: CSSProperties = {
+        left: isRightToLeft.value
+          ? `${ROW_HEADER_WIDTH + Math.max(0, colX) + 2}px`
+          : `${ROW_HEADER_WIDTH + Math.max(0, colX) + Math.max(0, colWidth) - 16}px`,
+        top: `${HEADER_HEIGHT + Math.max(0, rowY) + 2}px`,
+      };
+      const sortAscending = () => {
+        props.controller.sortAutoFilter(range.reference, columnIndex, "ascending");
+      };
+      const sortDescending = () => {
+        props.controller.sortAutoFilter(range.reference, columnIndex, "descending");
+      };
+      const applyFilter = (values: string[], options?: { includeBlank?: boolean }) => {
+        props.controller.applyAutoFilterValues(range.reference, columnIndex, values, options);
+      };
+      const clearFilter = () => {
+        props.controller.clearAutoFilter(range.reference);
+      };
+      const triggerProps: Record<string, unknown> = {
+        "aria-haspopup": "dialog",
+        "aria-label": formatOfficeMessage(m.value.xlsx.autoFilter.openMenu, { column: columnName }),
+        "data-autofilter-column": columnIndex,
+        "data-autofilter-reference": range.reference,
+        "data-testid": "xlsx-autofilter-trigger",
+        onClick: (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openAutoFilterMenuAt(range, columnIndex, columnName, event.currentTarget as HTMLElement | null);
+        },
+        onPointerDown: (event: PointerEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        style: triggerStyle,
+        type: "button",
+      };
+      triggers.push({
+        columnIndex,
+        columnName,
+        hasFilter,
+        label: triggerProps["aria-label"] as string,
+        range,
+        slotProps: {
+          applyFilter,
+          autoFilter: range,
+          cell: { row: headerRow, col },
+          clearFilter,
+          column: table?.columns[columnIndex] ?? {
+            id: columnIndex + 1,
+            index: columnIndex,
+            name: columnName,
+          },
+          direction,
+          filterValues: activeColumn?.values,
+          getValueOptions: () => props.controller.getAutoFilterColumnValues(range, columnIndex),
+          hasFilter,
+          hasValueFilter,
+          sortAscending,
+          sortDescending,
+          table,
+          triggerIcon: "▾",
+          triggerProps,
+        },
+        style: triggerStyle,
+      });
+    }
+  }
+  return triggers;
+});
+
+function openAutoFilterMenuAt(
+  range: XlsxAutoFilterRange,
+  columnIndex: number,
+  columnName: string,
+  target: HTMLElement | null,
+) {
+  const rect = typeof target?.getBoundingClientRect === "function"
+    ? target.getBoundingClientRect()
+    : { bottom: 0, left: 0 };
+  autoFilterMenu.value = {
+    columnIndex,
+    columnName,
+    range,
+    x: rect.left,
+    y: rect.bottom + 2,
+  };
+}
+
+function openAutoFilterMenu(trigger: AutoFilterTrigger, event: MouseEvent) {
+  openAutoFilterMenuAt(
+    trigger.range,
+    trigger.columnIndex,
+    trigger.columnName,
+    event.currentTarget as HTMLElement | null,
+  );
 }
 
 function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
@@ -773,7 +1678,12 @@ function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | n
   const rect = container.getBoundingClientRect();
   const localX = clientX - rect.left;
   const localY = clientY - rect.top;
-  const bodyX = localX - ROW_HEADER_WIDTH;
+  const bodyWidth = Math.max(0, rect.width - ROW_HEADER_WIDTH);
+  const bodyX = mirrorBodyOffset(
+    localX - ROW_HEADER_WIDTH,
+    bodyWidth,
+    isRightToLeft.value,
+  );
   const bodyY = localY - HEADER_HEIGHT;
   const frozen = frozenPaneMetrics();
   const scrollX = localX > ROW_HEADER_WIDTH && bodyX >= frozen.width;
@@ -818,7 +1728,12 @@ function restoreZoomAnchor(anchor: XlsxZoomAnchor): void {
     if (displayCol !== undefined) {
       const contentX = getColOffsetSum(displayCol)
         + (effectiveColWidths.value[displayCol] || 0) * anchor.colRatio;
-      container.scrollLeft = contentX - (anchor.clientX - rect.left - ROW_HEADER_WIDTH);
+      const bodyX = mirrorBodyOffset(
+        anchor.clientX - rect.left - ROW_HEADER_WIDTH,
+        Math.max(0, rect.width - ROW_HEADER_WIDTH),
+        isRightToLeft.value,
+      );
+      container.scrollLeft = contentX - bodyX;
     }
   }
   if (anchor.scrollY && anchor.row !== undefined) {
@@ -860,6 +1775,13 @@ function getGridCellDisplayValue(cell: XlsxCellAddress) {
     }
   }
   return props.controller.getCellDisplayValue(cell);
+}
+
+/** Inline runs of a rich-text cell; `undefined` renders the display value as-is. */
+function getGridCellRuns(cell: XlsxCellAddress): XlsxCellTextRun[] | undefined {
+  const readRuns = props.controller.getCellRuns;
+  if (typeof readRuns !== "function") return undefined;
+  return readRuns.call(props.controller, cell);
 }
 
 function getWorkerCellStyle(cell: XlsxCellAddress): XlsxResolvedCellStyle | undefined {
@@ -968,23 +1890,66 @@ function rangesIntersect(left: XlsxCellRange, right: XlsxCellRange): boolean {
   return leftStartRow <= rightEndRow && leftEndRow >= rightStartRow && leftStartCol <= rightEndCol && leftEndCol >= rightStartCol;
 }
 
-function drawSelectionBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+function drawRangeBorder(
+  ctx: CanvasRenderingContext2D,
+  range: XlsxCellRange,
+  style: {
+    color: string;
+    lineWidth?: number;
+    /** Dash pattern; omitted for a solid outline. */
+    dash?: readonly number[];
+    /** Phase of the dash pattern in pixels (marching ants). */
+    dashOffset?: number;
+    /** Inset from the range edge in CSS pixels. */
+    inset?: number;
+    /** The range is already in display coordinates (clamped formula references). */
+    displayed?: boolean;
+  },
+): void {
   const normalized = {
     start: { row: Math.min(range.start.row, range.end.row), col: Math.min(range.start.col, range.end.col) },
     end: { row: Math.max(range.start.row, range.end.row), col: Math.max(range.start.col, range.end.col) },
   };
-  const start = getDisplayCell(normalized.start);
-  const end = getDisplayCell(normalized.end);
+  const start = style.displayed ? normalized.start : getDisplayCell(normalized.start);
+  const end = style.displayed ? normalized.end : getDisplayCell(normalized.end);
   if (!start || !end) return;
-  const x = getColOffsetSum(start.col);
+  const x = isRightToLeft.value ? getColLayoutX(end.col) : getColOffsetSum(start.col);
   const y = getRowOffsetSum(start.row);
-  const width = getColOffsetSum(end.col + 1) - x;
+  const width = getColOffsetSum(end.col + 1) - getColOffsetSum(start.col);
   const height = getRowOffsetSum(end.row + 1) - y;
+  const inset = style.inset ?? 1;
   ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = style.lineWidth ?? 2;
+  if (style.dash) {
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([...style.dash]);
+    ctx.lineDashOffset = style.dashOffset ?? 0;
+  }
+  ctx.strokeRect(x + inset, y + inset, Math.max(0, width - inset * 2), Math.max(0, height - inset * 2));
   ctx.restore();
+}
+
+function drawSelectionBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+  drawRangeBorder(ctx, range, { color });
+}
+
+/**
+ * Excel's marquee around a cut source: a white halo plus a dashed outline whose
+ * dash offset advances every animation tick.
+ */
+function drawCutAntsBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+  drawRangeBorder(ctx, range, {
+    color: props.isDark ? "#18181b" : "#ffffff",
+    inset: 0.5,
+    lineWidth: 3,
+  });
+  drawRangeBorder(ctx, range, {
+    color,
+    dash: CUT_ANTS_DASH,
+    dashOffset: -cutAntsStep.value,
+    inset: 0.5,
+    lineWidth: 1.5,
+  });
 }
 
 function normalizeMergeRegion(value: unknown): GridMergeRegion | null {
@@ -1053,10 +2018,13 @@ function hitTestSheetPoint(clientX: number, clientY: number): { row: number; col
   const top = getRowOffsetSum(displayRow);
   const width = Math.max(1, effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH);
   const height = Math.max(1, effectiveRowHeights.value[displayRow] || DEFAULT_ROW_HEIGHT);
+  // `contentX` runs from the cell's right edge on an RTL sheet, so flip the
+  // fraction to keep `xOffset` a visual left-to-right position.
+  const fractionX = Math.max(0, Math.min(1, (point.contentX - left) / width));
   return {
     row: cell.row,
     col: cell.col,
-    xOffset: Math.max(0, Math.min(1, (point.contentX - left) / width)),
+    xOffset: isRightToLeft.value ? 1 - fractionX : fractionX,
     yOffset: Math.max(0, Math.min(1, (point.contentY - top) / height)),
   };
 }
@@ -1080,21 +2048,6 @@ function resizeCanvas(canvas: HTMLCanvasElement | null, width: number, height: n
   if (canvas.style.height !== cssHeight) canvas.style.height = cssHeight;
   const ctx = canvas.getContext("2d");
   if (ctx) ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-}
-
-interface CanvasCellStyle {
-  alignment: "left" | "center" | "right";
-  backgroundColor: string;
-  border?: Record<string, Record<string, unknown>>;
-  color: string;
-  fontFamily: string;
-  fontSizePx: number;
-  fontStyle: string;
-  fontWeight: string;
-  strike: boolean;
-  underline: boolean;
-  vertical: "top" | "middle" | "bottom";
-  wrap: boolean;
 }
 
 function asStyleRecord(value: unknown): Record<string, unknown> | undefined {
@@ -1174,11 +2127,11 @@ function readConditionalCellValue(cell: XlsxCellAddress): number | null | undefi
       return undefined;
     }
     if (!cached.value.trim()) return null;
-    return parseDisplayedNumber(localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale));
+    return parseDisplayedNumber(localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale), props.controller.locale);
   }
   const text = props.controller.getCellDisplayValue(cell);
   if (!text.trim()) return null;
-  return parseDisplayedNumber(text);
+  return parseDisplayedNumber(text, props.controller.locale);
 }
 
 function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): ConditionalEnvironment {
@@ -1198,7 +2151,7 @@ function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
   if (!rule) return null;
   // Excel leaves blank cells unformatted: no bar, no icon, no scale colour.
   if (!valueText.trim()) return null;
-  const value = parseDisplayedNumber(valueText);
+  const value = parseDisplayedNumber(valueText, props.controller.locale);
   if (value === null) return null;
   const environment = conditionalEnvironmentFor(rule);
   if (rule.kind === "dataBar") {
@@ -1257,7 +2210,7 @@ function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, 
   const values: number[] = [];
   for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row++) {
     for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col++) {
-      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }));
+      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }), props.controller.locale);
       if (value !== null) values.push(value);
     }
   }
@@ -1302,9 +2255,14 @@ function resolveCanvasCellStyleInto(
   const alignment = asStyleRecord(workbookStyle?.alignment);
   const fillStyle = resolveWorkbookFillStyle(fill, sheet?.themePalette);
   const fontColor = resolveWorkbookColor(asStyleRecord(font?.color), sheet?.themePalette);
-  target.alignment = alignment?.horizontal === "center" || alignment?.horizontal === "right"
+  const horizontalAlignment = alignment?.horizontal === "center" || alignment?.horizontal === "right"
     ? alignment.horizontal
     : "left";
+  // RTL mirrors horizontal alignment the way Excel does: general/left text
+  // starts at the cell's right edge and right-aligned text at its left edge.
+  target.alignment = isRightToLeft.value && horizontalAlignment !== "center"
+    ? horizontalAlignment === "left" ? "right" : "left"
+    : horizontalAlignment;
   target.backgroundColor = fillStyle.backgroundColor || (props.isDark ? "#18181b" : "#ffffff");
   target.border = asStyleRecord(workbookStyle?.border) as Record<string, Record<string, unknown>> | undefined;
   target.color = fontColor || (props.isDark ? "#e4e4e7" : "#18181b");
@@ -1318,6 +2276,9 @@ function resolveCanvasCellStyleInto(
     ? alignment.vertical === "center" ? "middle" : "top"
     : "bottom";
   target.wrap = Boolean(alignment?.wrapText);
+  const textLayout = resolveCellTextLayout(alignment);
+  target.rotation = textLayout.rotation;
+  target.shrinkToFit = textLayout.shrinkToFit;
   const getCellStyle = props.getCellStyle;
   if (!getCellStyle) return target;
   // Host styles need the full cell context, so this branch keeps allocating.
@@ -1373,6 +2334,8 @@ function createCanvasCellStyleScratch(): CanvasCellStyle {
     fontSizePx: 12,
     fontStyle: "normal",
     fontWeight: "400",
+    rotation: null,
+    shrinkToFit: false,
     strike: false,
     underline: false,
     vertical: "bottom",
@@ -1432,21 +2395,284 @@ function drawCellBorders(
 }
 
 function wrapCellText(ctx: CanvasRenderingContext2D, value: string, width: number, maxLines: number): string[] {
-  if (maxLines <= 1) return [truncateText(ctx, value, width)];
+  // Alt+Enter stores a literal line break in the cell. Excel only shows the
+  // first line while wrap text is off, and breaks at every hard newline once
+  // it is on; soft wrapping then applies inside each hard line.
+  const hardLines = value.replace(/\r\n?/g, "\n").split("\n");
+  if (maxLines <= 1) return [truncateText(ctx, hardLines[0] ?? "", width)];
   const lines: string[] = [];
-  let line = "";
-  for (const character of value) {
-    const next = line + character;
-    if (line && ctx.measureText(next).width > width) {
-      lines.push(line);
-      line = character;
-      if (lines.length >= maxLines - 1) break;
-    } else {
-      line = next;
+  for (const hardLine of hardLines) {
+    if (lines.length >= maxLines) break;
+    let line = "";
+    for (const character of hardLine) {
+      const next = line + character;
+      if (line && ctx.measureText(next).width > width) {
+        lines.push(line);
+        line = character;
+        if (lines.length >= maxLines - 1) break;
+      } else {
+        line = next;
+      }
+    }
+    if (lines.length >= maxLines) break;
+    if (line || hardLines.length > 1) lines.push(line);
+  }
+  return lines;
+}
+
+/**
+ * Canvas font string of a cell's base style, optionally at a fitted size.
+ *
+ * Fractional fitted sizes keep one decimal so a 0.4× floor such as 6.4px is
+ * never rounded down to 6px (which would shrink below Excel's minimum).
+ */
+function baseCellFont(style: CanvasCellStyle, fontSizePx = style.fontSizePx): string {
+  const size = Math.max(1, Math.round(fontSizePx * 10) / 10);
+  return `${style.fontStyle} ${style.fontWeight} ${size}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+}
+
+/**
+ * Canvas font string of one inline run: the run's own weight/slant/family/size
+ * on top of the cell style, with superscript and subscript runs shrunk.
+ */
+function richTextRunFont(
+  style: CanvasCellStyle,
+  font: XlsxCellTextRun["font"],
+  cellFontSizePx = style.fontSizePx,
+): string {
+  const fontSizePx = Math.max(1, cellFontSizePx * richTextFontScale(font));
+  const fontWeight = font?.bold ? "700" : style.fontWeight;
+  const fontStyle = font?.italic ? "italic" : style.fontStyle;
+  const family = font?.name?.trim() ? JSON.stringify(font.name) : JSON.stringify(style.fontFamily);
+  return `${fontStyle} ${fontWeight} ${Math.round(fontSizePx)}px ${family}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+}
+
+interface RichTextDrawLayout {
+  height: number;
+  hyperlink: boolean;
+  hyperlinkColor: string;
+  maxLines: number;
+  textAreaWidth: number;
+  textColor: string;
+  themePalette?: XlsxThemePalette;
+  x: number;
+  y: number;
+}
+
+/**
+ * Draws a rich-text cell run by run.
+ *
+ * Each run is measured with its own font, so the line breaks and the run
+ * offsets follow the widths the canvas actually paints; the concatenated string
+ * would break at the wrong place whenever a run is bold, larger or a
+ * superscript marker. Wrapping, truncation and the ellipsis come from
+ * `wrapRichTextRuns`, the same helpers the thumbnail and DOM paths use.
+ */
+function drawRichTextRuns(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  style: CanvasCellStyle,
+  layout: RichTextDrawLayout,
+): void {
+  const padding = 5;
+  const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+  const maxWidth = Math.max(0, layout.textAreaWidth - padding * 2);
+  const textX = style.alignment === "right"
+    ? layout.x + layout.textAreaWidth - padding
+    : style.alignment === "center" ? layout.x + layout.textAreaWidth / 2 : layout.x + padding;
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, maxWidth, layout.maxLines);
+  const blockHeight = lines.length * lineHeight;
+  const firstBaseline = style.vertical === "top"
+    ? layout.y + 2 + lineHeight * 0.8
+    : style.vertical === "middle"
+      ? layout.y + (layout.height - blockHeight) / 2 + lineHeight * 0.8
+      : layout.y + layout.height - blockHeight + lineHeight * 0.8 - 2;
+
+  ctx.textAlign = "left";
+  lines.forEach((segments, index) => {
+    const lineWidth = Math.min(measureRichTextSegments(segments, measure), maxWidth);
+    const startX = style.alignment === "right"
+      ? textX - lineWidth
+      : style.alignment === "center" ? textX - lineWidth / 2 : textX;
+    const lineBaseline = firstBaseline + index * lineHeight;
+    let cursor = startX;
+    for (const segment of segments) {
+      if (!segment.text) continue;
+      const segmentWidth = measure(segment.text, segment.font);
+      const baseline = lineBaseline + richTextBaselineOffset(segment.font, style.fontSizePx);
+      const runColor = segment.font?.color
+        ? resolveWorkbookColor(segment.font.color as Record<string, unknown>, layout.themePalette)
+        : null;
+      const color = runColor ?? (layout.hyperlink ? layout.hyperlinkColor : style.color || layout.textColor);
+      ctx.font = richTextRunFont(style, segment.font);
+      ctx.fillStyle = color;
+      ctx.fillText(segment.text, cursor, baseline);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      if (segment.font?.underline || style.underline || layout.hyperlink) {
+        ctx.beginPath();
+        ctx.moveTo(cursor, baseline + 2);
+        ctx.lineTo(cursor + segmentWidth, baseline + 2);
+        ctx.stroke();
+      }
+      if (segment.font?.strikethrough || style.strike) {
+        const strikeY = baseline - style.fontSizePx * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(cursor, strikeY);
+        ctx.lineTo(cursor + segmentWidth, strikeY);
+        ctx.stroke();
+      }
+      cursor += segmentWidth;
+    }
+  });
+}
+
+/** Width the cell's runs occupy when measured with their own fonts. */
+function richTextNaturalWidth(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  style: CanvasCellStyle,
+  cellFontSizePx = style.fontSizePx,
+): number {
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font, cellFontSizePx);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, Number.POSITIVE_INFINITY, 1);
+  return measureRichTextSegments(lines[0] ?? [], measure);
+}
+
+interface RotatedTextRect {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Draws one line of rotated text.
+ *
+ * The text is measured in its own (unrotated) coordinate space and then
+ * translated to the cell centre that matches the requested horizontal and
+ * vertical alignment. `resolveRotatedTextCenter` uses the rotated bounds, so
+ * at 90° the text's occupied width/height are swapped and the block is
+ * anchored by its height along the cell width. The caller's clip keeps every
+ * glyph inside the cell rectangle.
+ */
+function drawRotatedPlainCellText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  degrees: number,
+  rect: RotatedTextRect,
+  style: CanvasCellStyle,
+  fontSizePx: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.font = baseCellFont(style, fontSizePx);
+  const textWidth = ctx.measureText(text).width;
+  const lineHeight = Math.max(12, fontSizePx * 1.25);
+  const bounds = resolveRotatedTextBounds(textWidth, lineHeight, degrees);
+  const center = resolveRotatedTextCenter(
+    { height: rect.height, left: rect.x, top: rect.y, width: rect.width },
+    bounds,
+    style.alignment,
+    style.vertical,
+  );
+  ctx.translate(center.x, center.y);
+  ctx.rotate(degrees * Math.PI / 180);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = color;
+  ctx.fillText(text, -textWidth / 2, 0);
+  if (style.underline || style.strike) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    const startX = -textWidth / 2;
+    if (style.underline) {
+      ctx.beginPath();
+      ctx.moveTo(startX, lineHeight * 0.25);
+      ctx.lineTo(startX + textWidth, lineHeight * 0.25);
+      ctx.stroke();
+    }
+    if (style.strike) {
+      const strikeY = -fontSizePx * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(startX, strikeY);
+      ctx.lineTo(startX + textWidth, strikeY);
+      ctx.stroke();
     }
   }
-  if (line && lines.length < maxLines) lines.push(line);
-  return lines;
+  ctx.restore();
+}
+
+/** Rich-text counterpart of `drawRotatedPlainCellText`. */
+function drawRotatedRichTextRuns(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  degrees: number,
+  rect: RotatedTextRect,
+  style: CanvasCellStyle,
+  fontSizePx: number,
+  layout: Omit<RichTextDrawLayout, "maxLines" | "textAreaWidth" | "x" | "y">,
+): void {
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font, fontSizePx);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, Number.POSITIVE_INFINITY, 1);
+  const segments = lines[0] ?? [];
+  const textWidth = measureRichTextSegments(segments, measure);
+  const lineHeight = Math.max(12, fontSizePx * 1.25);
+  const bounds = resolveRotatedTextBounds(textWidth, lineHeight, degrees);
+  const center = resolveRotatedTextCenter(
+    { height: rect.height, left: rect.x, top: rect.y, width: rect.width },
+    bounds,
+    style.alignment,
+    style.vertical,
+  );
+
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(degrees * Math.PI / 180);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  let cursor = -textWidth / 2;
+  for (const segment of segments) {
+    if (!segment.text) continue;
+    const segmentWidth = measure(segment.text, segment.font);
+    const baseline = richTextBaselineOffset(segment.font, fontSizePx);
+    const runColor = segment.font?.color
+      ? resolveWorkbookColor(segment.font.color as Record<string, unknown>, layout.themePalette)
+      : null;
+    const color = runColor ?? (layout.hyperlink ? layout.hyperlinkColor : style.color || layout.textColor);
+    ctx.font = richTextRunFont(style, segment.font, fontSizePx);
+    ctx.fillStyle = color;
+    ctx.fillText(segment.text, cursor, baseline);
+    if (segment.font?.underline || style.underline || layout.hyperlink) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cursor, baseline + lineHeight * 0.25);
+      ctx.lineTo(cursor + segmentWidth, baseline + lineHeight * 0.25);
+      ctx.stroke();
+    }
+    if (segment.font?.strikethrough || style.strike) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      const strikeY = baseline - fontSizePx * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(cursor, strikeY);
+      ctx.lineTo(cursor + segmentWidth, strikeY);
+      ctx.stroke();
+    }
+    cursor += segmentWidth;
+  }
+  ctx.restore();
 }
 
 interface CellPaintState {
@@ -1456,6 +2682,10 @@ interface CellPaintState {
   hyperlink?: XlsxCellHyperlink;
   sparkline?: XlsxSparkline;
   value: string;
+  /** Inline runs of a rich-text cell; `undefined` renders `value` as one run. */
+  runs?: XlsxCellTextRun[];
+  /** Sheet palette used to resolve run colours; set once per painted frame. */
+  themePalette?: XlsxThemePalette;
   /**
    * Stroke the cell's box with the grid colour. The scrolling pass outlines
    * merged cells only (its gridlines cover the rest); the frozen strips have
@@ -1500,37 +2730,123 @@ function drawCellText(
     ctx.beginPath();
     ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));
     ctx.clip();
-    ctx.fillStyle = hyperlink ? hyperlinkColor : style.color || state.textColor;
-    ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-    ctx.textAlign = style.alignment;
+    const textColor = hyperlink ? hyperlinkColor : style.color || state.textColor;
+    ctx.fillStyle = textColor;
     const padding = 5;
-    const textX = style.alignment === "right"
-      ? x + textAreaWidth - padding
-      : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
-    const lineHeight = Math.max(12, style.fontSizePx * 1.25);
-    const maxLines = style.wrap ? Math.max(1, Math.floor((height - 4) / lineHeight)) : 1;
-    const lines = wrapCellText(ctx, value, Math.max(0, textAreaWidth - padding * 2), maxLines);
-    const blockHeight = lines.length * lineHeight;
-    const firstBaseline = style.vertical === "top"
-      ? y + 2 + lineHeight * 0.8
-      : style.vertical === "middle"
-        ? y + (height - blockHeight) / 2 + lineHeight * 0.8
-        : y + height - blockHeight + lineHeight * 0.8 - 2;
-    lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-    if (style.underline || style.strike || hyperlink) {
-      const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
-      const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
-      ctx.strokeStyle = style.color;
-      ctx.lineWidth = 1;
-      for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
-        if (offset === null) continue;
-        ctx.beginPath();
-        ctx.moveTo(startX, firstBaseline + offset);
-        ctx.lineTo(startX + measured, firstBaseline + offset);
-        ctx.stroke();
+    const availableWidth = Math.max(0, textAreaWidth - padding * 2);
+    const availableHeight = Math.max(0, height - 4);
+    const rotation = style.rotation ?? null;
+    const rotated = rotation !== null;
+    const wraps = !rotated && style.wrap;
+    const rich = Boolean(state.runs && state.runs.length > 1);
+    let fontSizePx = style.fontSizePx;
+
+    if (rotated) {
+      // Rotation swaps the occupied width/height, so the line has to fit the
+      // cell's vertical extent (and both axes at an angle) rather than the
+      // column width alone.
+      if (style.shrinkToFit) {
+        const baseLineHeight = Math.max(12, fontSizePx * 1.25);
+        const fitWidth = Math.max(0, resolveRotatedTextFitWidth(
+          availableWidth,
+          availableHeight,
+          rotation!,
+          baseLineHeight,
+        ));
+        if (rich) {
+          const naturalWidth = richTextNaturalWidth(ctx, state.runs!, style);
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            fitWidth,
+            (candidate) => naturalWidth * (candidate / style.fontSizePx),
+          );
+        } else {
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            fitWidth,
+            (candidate) => {
+              ctx.font = baseCellFont(style, candidate);
+              return ctx.measureText(value).width;
+            },
+          );
+        }
       }
+      if (rich) {
+        drawRotatedRichTextRuns(ctx, state.runs!, rotation!, { height, width, x, y }, style, fontSizePx, {
+          height,
+          hyperlink: Boolean(hyperlink),
+          hyperlinkColor,
+          textColor: state.textColor,
+          themePalette: state.themePalette,
+        });
+      } else {
+        drawRotatedPlainCellText(ctx, value, rotation!, { height, width, x, y }, style, fontSizePx, textColor);
+      }
+      ctx.restore();
+    } else {
+      if (style.shrinkToFit && !wraps) {
+        if (rich) {
+          const naturalWidth = richTextNaturalWidth(ctx, state.runs!, style);
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            availableWidth,
+            (candidate) => naturalWidth * (candidate / style.fontSizePx),
+          );
+        } else {
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            availableWidth,
+            (candidate) => {
+              ctx.font = baseCellFont(style, candidate);
+              return ctx.measureText(value).width;
+            },
+          );
+        }
+      }
+      ctx.font = baseCellFont(style, fontSizePx);
+      ctx.textAlign = style.alignment;
+      const textX = style.alignment === "right"
+        ? x + textAreaWidth - padding
+        : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
+      const lineHeight = Math.max(12, fontSizePx * 1.25);
+      const maxLines = wraps ? Math.max(1, Math.floor(availableHeight / lineHeight)) : 1;
+      if (rich) {
+        drawRichTextRuns(ctx, state.runs!, { ...style, fontSizePx }, {
+          height,
+          hyperlink: Boolean(hyperlink),
+          hyperlinkColor,
+          maxLines,
+          textAreaWidth,
+          textColor: state.textColor,
+          themePalette: state.themePalette,
+          x,
+          y,
+        });
+      } else {
+        const lines = wrapCellText(ctx, value, availableWidth, maxLines);
+        const blockHeight = lines.length * lineHeight;
+        const firstBaseline = style.vertical === "top"
+          ? y + 2 + lineHeight * 0.8
+          : style.vertical === "middle"
+            ? y + (height - blockHeight) / 2 + lineHeight * 0.8
+            : y + height - blockHeight + lineHeight * 0.8 - 2;
+        lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
+        if (style.underline || style.strike || hyperlink) {
+          const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
+          const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
+          ctx.strokeStyle = style.color;
+          ctx.lineWidth = 1;
+          for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -fontSizePx * 0.3 : null]) {
+            if (offset === null) continue;
+            ctx.beginPath();
+            ctx.moveTo(startX, firstBaseline + offset);
+            ctx.lineTo(startX + measured, firstBaseline + offset);
+            ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
   if (conditionalIcon) {
     ctx.fillStyle = conditionalIcon.color;
@@ -1612,14 +2928,278 @@ function resolveCellWorkbookStyle(
       ? sheet.styleById[rowStyleId]
       : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
   }
+  // Excel's table styles sit above the cell's inherited style but below the
+  // cell's own explicit formatting. `withTableCellStyle` performs that merge
+  // and returns the base style unchanged on table-free sheets.
+  const tables = props.controller.tables;
+  if (tables && tables.length > 0) {
+    const explicitStyleId = sheet.cellStyleIds?.[cellAddressToA1(cell)]
+      ?? sheet.rowStyleIds[cell.row]
+      ?? sheet.colStyleIds[cell.col];
+    workbookStyle = withTableCellStyle(workbookStyle, tables, cell, {
+      declaredTableStyleOverrides: explicitStyleId === undefined
+        ? null
+        : sheet.styleById[explicitStyleId]?.tableStyleOverrides,
+      namedCellStyleByName: sheet.namedCellStyleByName,
+      tableStyleByName: sheet.tableStyleByName,
+    });
+  }
+  // Worker row batches and row/column fallbacks do not always carry the
+  // alignment of an explicitly styled cell. `cellTextLayouts` is parsed from
+  // the worksheet XML, so layering it on keeps rotated headers aligned in both
+  // viewer modes without resolving every style again.
+  const textLayout = sheet.cellTextLayouts?.[cellAddressToA1(cell)];
+  if (textLayout) {
+    const alignment = { ...(workbookStyle?.alignment) };
+    const rotation = alignment.rotation ?? alignment.textRotation;
+    if (textLayout.textRotation !== undefined && rotation === undefined) {
+      alignment.textRotation = textLayout.textRotation;
+    }
+    if (textLayout.shrinkToFit && alignment.shrinkToFit === undefined) {
+      alignment.shrinkToFit = true;
+    }
+    workbookStyle = { ...(workbookStyle ?? {}), alignment };
+  }
   return workbookStyle;
 }
 
 /**
- * Selection and active-cell outlines, drawn once per pane: each pane clips to
- * its own box and translates content by the scroll offset only on its
- * scrolling axes, so an outline inside the frozen strips lands on the pinned
- * cells instead of their scrolled positions.
+ * Offscreen context the auto-fit measures text with.
+ *
+ * The paint canvases already hold the current frame, so measuring reuses one
+ * detached canvas whose font is set per cell. Hosts without a DOM (SSR, the
+ * test renderer) fall back to an estimated advance width.
+ */
+let autofitMeasureCanvasResolved = false;
+let autofitMeasureCanvas: CanvasRenderingContext2D | null = null;
+const autofitStyleScratch = createCanvasCellStyleScratch();
+
+function autofitMeasureContext(): CanvasRenderingContext2D | null {
+  if (autofitMeasureCanvasResolved) return autofitMeasureCanvas;
+  autofitMeasureCanvasResolved = true;
+  try {
+    const canvas = typeof document !== "undefined" && typeof document.createElement === "function"
+      ? document.createElement("canvas")
+      : null;
+    autofitMeasureCanvas = canvas?.getContext?.("2d") ?? null;
+  } catch {
+    autofitMeasureCanvas = null;
+  }
+  return autofitMeasureCanvas;
+}
+
+/** Measures text with the exact font string the cell paints with. */
+function measureAutofitText(text: string, font: string): number {
+  const measuring = autofitMeasureContext();
+  if (!measuring) return estimateAutofitTextWidth(text, font);
+  measuring.font = font;
+  return measuring.measureText(text).width;
+}
+
+/**
+ * Everything about one cell's painted text the auto-fit needs.
+ *
+ * The style resolution, font string, rich-run fonts and line height are the
+ * same ones `drawCellText` uses, so a fitted column matches what is on screen
+ * instead of an approximation of the workbook's font.
+ */
+function autofitCellText(
+  cell: XlsxCellAddress,
+  value: string,
+  availableWidth: number,
+  worksheet: ActiveWorksheet | null,
+  tableHeaderCells: ReadonlySet<number>,
+): AutofitCellText {
+  const sheet = activeSheet.value;
+  if (!sheet) return { availableWidth, font: baseCellFont(autofitStyleScratch), lineHeight: 15, rotation: null, value, wrap: false };
+  const style = resolveCanvasCellStyleInto(
+    autofitStyleScratch,
+    cell,
+    value,
+    resolveCellWorkbookStyle(cell, worksheet, sheet),
+    tableHeaderCells,
+  );
+  const runs = getGridCellRuns(cell);
+  const font = baseCellFont(style);
+  const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+  return {
+    availableWidth,
+    font,
+    lineHeight,
+    rotation: style.rotation,
+    runs: runs?.length
+      ? runs.map((run) => ({ font: richTextRunFont(style, run.font), text: run.text }))
+      : undefined,
+    value,
+    wrap: style.wrap,
+  };
+}
+
+/**
+ * Used rows/columns an axis auto-fit scans: the sheet's visible extent up to
+ * its used range, capped so a formatted far-away cell cannot stall the viewer.
+ */
+function autofitScanIndices(indices: number[] | undefined, maxUsed: number): number[] {
+  const used = Math.max(0, Number.isFinite(maxUsed) ? maxUsed : 0);
+  const source = indices?.length ? indices : null;
+  const total = source ? source.length : used + 1;
+  const scan: number[] = [];
+  for (let index = 0; index < total && scan.length < AUTOFIT_SCAN_LIMIT; index += 1) {
+    const actual = source ? source[index] : index;
+    if (actual > used) break;
+    scan.push(actual);
+  }
+  return scan;
+}
+
+interface AutofitInterval {
+  start: number;
+  end: number;
+}
+
+/**
+ * Cells inside a merged region are skipped: the merged value spans several
+ * columns or rows, so fitting one axis to it would resize the wrong thing.
+ * Only the regions crossing `index` are returned, as normalized intervals.
+ */
+function autofitMergedIntervals(index: number, axis: "column" | "row"): AutofitInterval[] {
+  const regions = activeSheet.value?.mergedRegions ?? [];
+  const intervals: AutofitInterval[] = [];
+  for (const region of regions) {
+    const startCol = Math.min(region.start.col, region.end.col);
+    const endCol = Math.max(region.start.col, region.end.col);
+    const startRow = Math.min(region.start.row, region.end.row);
+    const endRow = Math.max(region.start.row, region.end.row);
+    if (axis === "column") {
+      if (index < startCol || index > endCol) continue;
+      intervals.push({ end: endRow, start: startRow });
+    } else {
+      if (index < startRow || index > endRow) continue;
+      intervals.push({ end: endCol, start: startCol });
+    }
+  }
+  return intervals;
+}
+
+function autofitSkipsIndex(index: number, intervals: readonly AutofitInterval[]): boolean {
+  return intervals.some((interval) => index >= interval.start && index <= interval.end);
+}
+
+/** Fitted width of one column in unzoomed CSS pixels, or `null` when it is empty. */
+function resolveColumnAutofitWidth(actualCol: number): number | null {
+  const sheet = activeSheet.value;
+  if (!sheet) return null;
+  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
+  try {
+    const zoom = gridZoomFactor(zoomScale.value);
+    const displayCol = sheetColToDisplayIndex.value.get(actualCol);
+    const columnWidth = displayCol === undefined
+      ? DEFAULT_COL_WIDTH
+      : effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+    const availableWidth = Math.max(1, columnWidth - AUTOFIT_CELL_PADDING_PX * 2);
+    const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+    const merged = autofitMergedIntervals(actualCol, "column");
+    const cells: AutofitCellText[] = [];
+    for (const row of autofitScanIndices(sheet.visibleRows, sheet.maxUsedRow)) {
+      if (autofitSkipsIndex(row, merged)) continue;
+      const cell = { col: actualCol, row };
+      const value = getGridCellDisplayValue(cell);
+      if (!value) continue;
+      cells.push(autofitCellText(cell, value, availableWidth, worksheet, tableHeaderCells));
+    }
+    if (!cells.length) return null;
+    return resolveAutofitColumnWidth(cells, measureAutofitText, { zoom });
+  } finally {
+    worksheet?.free();
+  }
+}
+
+/** Fitted height of one row in unzoomed CSS pixels, or `null` when it is empty. */
+function resolveRowAutofitHeight(actualRow: number): number | null {
+  const sheet = activeSheet.value;
+  if (!sheet) return null;
+  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
+  try {
+    const zoom = gridZoomFactor(zoomScale.value);
+    const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+    const merged = autofitMergedIntervals(actualRow, "row");
+    const cells: AutofitCellText[] = [];
+    for (const col of autofitScanIndices(sheet.visibleCols, sheet.maxUsedCol)) {
+      if (autofitSkipsIndex(col, merged)) continue;
+      const cell = { col, row: actualRow };
+      const value = getGridCellDisplayValue(cell);
+      if (!value) continue;
+      const displayCol = sheetColToDisplayIndex.value.get(col);
+      const columnWidth = displayCol === undefined
+        ? DEFAULT_COL_WIDTH
+        : effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+      cells.push(autofitCellText(
+        cell,
+        value,
+        Math.max(1, columnWidth - AUTOFIT_CELL_PADDING_PX * 2),
+        worksheet,
+        tableHeaderCells,
+      ));
+    }
+    if (!cells.length) return null;
+    return resolveAutofitRowHeight(cells, measureAutofitText, { zoom });
+  } finally {
+    worksheet?.free();
+  }
+}
+
+/**
+ * Auto-fits a header boundary to its content.
+ *
+ * The controller owns the resize (one undo entry, read-only and protection
+ * rules), so this only measures and asks; an empty axis is left alone.
+ */
+function autofitAxis(kind: "column" | "row", actualIndex: number): boolean {
+  if (kind === "column") {
+    const width = resolveColumnAutofitWidth(actualIndex);
+    if (width === null) return false;
+    props.controller.resizeColumn(actualIndex, width);
+    return true;
+  }
+  const height = resolveRowAutofitHeight(actualIndex);
+  if (height === null) return false;
+  props.controller.resizeRow(actualIndex, height);
+  return true;
+}
+
+/**
+ * Coloured outlines around the cells an edited formula references. Excel uses
+ * one palette colour per distinct reference and thickens the occurrence the
+ * caret is inside; cross-sheet references are left to the formula bar because
+ * their target is not on this grid.
+ */
+function paintFormulaReferenceBorders(ctx: CanvasRenderingContext2D): void {
+  const references = formulaReferenceRanges.value;
+  if (references.length === 0) return;
+  const active = activeFormulaReference.value;
+  for (const reference of references) {
+    const displayRange = resolvePaintedReferenceRange(
+      reference.range,
+      sheetRowToDisplayIndex.value,
+      sheetColToDisplayIndex.value,
+      displayRows.value.length,
+      displayCols.value.length,
+    );
+    if (!displayRange) continue;
+    drawRangeBorder(ctx, displayRange, {
+      color: reference.color,
+      displayed: true,
+      inset: active === reference ? 1.5 : 2.5,
+      lineWidth: active === reference ? 3 : 1.5,
+    });
+  }
+}
+
+/**
+ * Selection, active-cell and pending-cut outlines, drawn once per pane: each
+ * pane clips to its own box and translates content by the scroll offset only on
+ * its scrolling axes, so an outline inside the frozen strips lands on the
+ * pinned cells instead of their scrolled positions.
  */
 function paintSelectionBorders(
   ctx: CanvasRenderingContext2D,
@@ -1629,19 +3209,21 @@ function paintSelectionBorders(
 ): void {
   const sel = selection.value;
   const active = activeCell.value;
+  const cut = cutRange.value;
   const ranges: XlsxCellRange[] = [];
   if (sel) ranges.push(sel);
   if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
     ranges.push({ start: active, end: active });
   }
-  if (!ranges.length) return;
+  if (!ranges.length && !cut && !fillDragTarget.value && formulaReferenceRanges.value.length === 0) return;
 
   const frozen = frozenPaneMetrics();
+  const frozenStripX = isRightToLeft.value ? bodyWidth - frozen.width : 0;
   const panes = [
-    { x: 0, y: 0, width: frozen.width, height: frozen.height, scrollX: false, scrollY: false },
-    { x: 0, y: frozen.height, width: frozen.width, height: Math.max(0, bodyHeight - frozen.height), scrollX: false, scrollY: true },
-    { x: frozen.width, y: 0, width: Math.max(0, bodyWidth - frozen.width), height: frozen.height, scrollX: true, scrollY: false },
-    { x: frozen.width, y: frozen.height, width: Math.max(0, bodyWidth - frozen.width), height: Math.max(0, bodyHeight - frozen.height), scrollX: true, scrollY: true },
+    { x: frozenStripX, y: 0, width: frozen.width, height: frozen.height, scrollX: false, scrollY: false },
+    { x: frozenStripX, y: frozen.height, width: frozen.width, height: Math.max(0, bodyHeight - frozen.height), scrollX: false, scrollY: true },
+    { x: isRightToLeft.value ? 0 : frozen.width, y: 0, width: Math.max(0, bodyWidth - frozen.width), height: frozen.height, scrollX: true, scrollY: false },
+    { x: isRightToLeft.value ? 0 : frozen.width, y: frozen.height, width: Math.max(0, bodyWidth - frozen.width), height: Math.max(0, bodyHeight - frozen.height), scrollX: true, scrollY: true },
   ];
   for (const pane of panes) {
     if (pane.width <= 0 || pane.height <= 0) continue;
@@ -1649,8 +3231,24 @@ function paintSelectionBorders(
     ctx.beginPath();
     ctx.rect(pane.x, pane.y, pane.width, pane.height);
     ctx.clip();
-    ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
+    const translateX = pane.scrollX
+      ? -getColLayoutScroll(bodyWidth)
+      : isRightToLeft.value ? -(columnLayoutWidth.value - bodyWidth) : 0;
+    ctx.translate(translateX, pane.scrollY ? -scrollTop.value : 0);
     for (const range of ranges) drawSelectionBorder(ctx, range, color);
+    const dragTarget = fillDragTarget.value;
+    if (dragTarget) {
+      // Excel previews the fill area with a dashed gray outline while the
+      // handle is held; the marquee only appears after release.
+      drawRangeBorder(ctx, dragTarget, {
+        color: props.isDark ? "#a1a1aa" : "#71717a",
+        dash: FILL_DRAG_PREVIEW_DASH,
+        inset: 0.5,
+        lineWidth: 1.5,
+      });
+    }
+    if (cut) drawCutAntsBorder(ctx, cut, color);
+    paintFormulaReferenceBorders(ctx);
     ctx.restore();
   }
 }
@@ -1660,8 +3258,15 @@ function paintSelectionBorders(
 // WASM handle on every call (unlike the controller's internal cached one), so
 // allocating it per section would churn handles at frame rate.
 function paintGrid() {
+  // Leaving DOM mode drops the element tree; the canvases take over again.
+  if (gridRenderMode.value !== "dom" && domGridModel.value) domGridModel.value = null;
   const worksheet: ActiveWorksheet | null = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
   try {
+    if (gridRenderMode.value === "dom") {
+      paintDomGrid(worksheet);
+      return;
+    }
+    domGridSignature = "";
     paintBody(worksheet);
     paintColHeaders();
     paintRowHeaders();
@@ -1669,6 +3274,718 @@ function paintGrid() {
   } finally {
     worksheet?.free();
   }
+}
+
+// ── DOM renderer ──────────────────────────────────────────────────────
+// The DOM path mirrors the canvas model instead of driving its own layout: the
+// same visible windows, frozen strips, merge anchors, `resolveCanvasCellStyleInto`
+// styles and conditional formatting feed real elements. The layer is only
+// rebuilt when the window or its inputs change; scrolling is a transform.
+
+interface GridDomPaneLayout {
+  key: "main" | "frozen-rows" | "frozen-cols" | "frozen-corner";
+  /** Viewport position of the pane inside the grid body (headers excluded). */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  scrollX: boolean;
+  scrollY: boolean;
+  /** Display rows/columns the pane renders. */
+  rows: number[];
+  cols: number[];
+}
+
+interface GridDomBuildContext {
+  worksheet: ActiveWorksheet | null;
+  sheet: XlsxSheetData;
+  tableHeaderCells: ReadonlySet<number>;
+  styleScratch: CanvasCellStyle;
+  gridColor: string;
+  gridLines: boolean;
+  selectionFill: string;
+}
+
+/** CSS borders of a resolved cell style, with workbook colours applied. */
+function domBorderCss(style: CanvasCellStyle, sheet: XlsxSheetData) {
+  const border = style.border;
+  const edge = (name: "top" | "right" | "bottom" | "left") => {
+    const raw = asStyleRecord(border?.[name]);
+    return canvasBorderEdgeCss(raw, resolveWorkbookColor(asStyleRecord(raw?.color), sheet.themePalette));
+  };
+  return { bottom: edge("bottom"), left: edge("left"), right: edge("right"), top: edge("top") };
+}
+
+/**
+ * Sparkline geometry for the inline SVG, in cell-local coordinates.
+ *
+ * The sampling, padding and per-glyph widths match `drawSparkline`, so the DOM
+ * fallback shows the same bars / line / markers the canvas would.
+ */
+function buildDomSparkline(
+  sparkline: XlsxSparkline,
+  width: number,
+  height: number,
+): GridDomSparklineModel | null {
+  const values: number[] = [];
+  for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row += 1) {
+    for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col += 1) {
+      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }), props.controller.locale);
+      if (value !== null) values.push(value);
+    }
+  }
+  if (!values.length) return null;
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const span = Math.max(1e-9, max - min);
+  const step = Math.max(1, (width - 8) / Math.max(1, values.length - 1));
+  const color = sparkline.color || "#2563eb";
+  const px = (index: number) => 4 + index * step;
+  const py = (value: number) => height - 4 - ((value - min) / span) * Math.max(1, height - 8);
+  const model: GridDomSparklineModel = {
+    color,
+    viewBox: `0 0 ${Math.max(1, width)} ${Math.max(1, height)}`,
+  };
+  if (sparkline.type === "column" || sparkline.type === "winLoss") {
+    const barWidth = Math.max(2, (width - 8) / values.length - 2);
+    model.bars = values.map((value, index) => ({
+      key: `bar-${index}`,
+      height: Math.max(1, Math.abs(py(value) - py(0))),
+      width: barWidth,
+      x: px(index) - barWidth / 2,
+      y: Math.min(py(value), py(0)),
+    }));
+  } else {
+    model.line = values.map((value, index) => `${px(index)},${py(value)}`).join(" ");
+    if (sparkline.markers) {
+      model.markers = values.map((value, index) => ({
+        cx: px(index),
+        cy: py(value),
+        key: `marker-${index}`,
+      }));
+    }
+  }
+  return model;
+}
+
+/** One DOM cell: resolved style, display text (or runs/sparkline) and geometry. */
+function buildDomCellModel(
+  cell: XlsxCellAddress,
+  paneKey: string,
+  box: { left: number; top: number; width: number; height: number },
+  rowTop: number,
+  merge: GridMergeRegion | undefined,
+  context: GridDomBuildContext,
+): GridDomCellModel {
+  const value = getGridCellDisplayValue(cell);
+  const style = resolveCanvasCellStyleInto(
+    context.styleScratch,
+    cell,
+    value,
+    resolveCellWorkbookStyle(cell, context.worksheet, context.sheet),
+    context.tableHeaderCells,
+  );
+  const conditional = conditionalVisual(cell, value);
+  const cellKeyValue = cellKey(cell.row, cell.col);
+  const sparkline = sparklinesByCell.value.get(cellKeyValue);
+  const hyperlink = hyperlinksByCell.value.get(cellKeyValue);
+  const comment = commentsByCell.value.get(cellKeyValue);
+  const selectionValue = selection.value;
+  const selected = isCellInRange(cell, selectionValue)
+    || Boolean(merge && selectionValue && rangesIntersect(merge, selectionValue));
+  const conditionalBackground = conditional?.kind === "colorScale"
+    ? resolveColorScaleFill(conditional.environment, conditional.value)
+    : undefined;
+  const conditionalHidesValue = (conditional?.kind === "dataBar" || conditional?.kind === "iconSet")
+    && conditional.showValue === false;
+  const icon = conditional?.kind === "iconSet"
+    ? resolveIconGeometry(conditional.environment, conditional.value, box.width, box.height)
+    : null;
+  // Excel's shrink-to-fit sizes the font down to 0.4× from the measured text;
+  // reuse the paint path's measurement so both renderers pick the same size.
+  let fontSizePx: number | undefined;
+  if (style.shrinkToFit && !style.wrap && value) {
+    const availableWidth = Math.max(0, box.width - 10);
+    const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+    const fitWidth = style.rotation === null
+      ? availableWidth
+      : resolveRotatedTextFitWidth(availableWidth, Math.max(0, box.height - 4), style.rotation, lineHeight);
+    fontSizePx = resolveShrinkToFitFontSize(
+      style.fontSizePx,
+      fitWidth,
+      (candidate) => measureAutofitText(value, baseCellFont(style, candidate)),
+    );
+  }
+  const cellStyle: CSSProperties = {
+    ...canvasCellStyleToCss(style, {
+      backgroundColor: conditionalBackground,
+      borders: domBorderCss(style, context.sheet),
+      fontSizePx,
+      gridColor: context.gridColor,
+      gridLines: context.gridLines,
+      hyperlink: Boolean(hyperlink),
+      merged: Boolean(merge),
+    }),
+    height: `${box.height}px`,
+    left: `${box.left}px`,
+    position: "absolute",
+    top: `${box.top - rowTop}px`,
+    width: `${box.width}px`,
+  };
+  const model: GridDomCellModel = {
+    active: false,
+    address: `${columnLabel(cell.col)}${cell.row + 1}`,
+    ariaColIndex: cell.col + 1,
+    ariaRowIndex: cell.row + 1,
+    key: `${paneKey}:${cell.row}:${cell.col}`,
+    selected,
+    style: cellStyle,
+  };
+  if (selected) model.selectionStyle = gridDomSelectionStyle(context.selectionFill);
+  if (icon) {
+    model.icon = icon.glyph;
+    model.iconStyle = {
+      color: icon.color,
+      fontSize: `${icon.size}px`,
+      height: `${icon.size}px`,
+      left: `${icon.iconX}px`,
+      top: `${Math.max(0, (box.height - icon.size) / 2)}px`,
+      width: `${icon.size}px`,
+    };
+  }
+  if (comment) model.comment = true;
+  // Sparklines replace the value in Excel; the value stays available to
+  // assistive tech through the cell label.
+  if (sparkline) {
+    const sparklineModel = buildDomSparkline(sparkline, box.width, box.height);
+    if (sparklineModel) {
+      model.sparkline = sparklineModel;
+      if (value) model.ariaLabel = value;
+    }
+  }
+  const textVisible = !conditionalHidesValue && !model.sparkline;
+  if (textVisible) {
+    const runs = getGridCellRuns(cell);
+    if (value && runs && runs.length > 1) {
+      model.runs = runs.map((run, index) => ({
+        key: `run-${index}`,
+        style: richTextRunCss(style, run.font, {
+          color: run.font?.color ? resolveWorkbookColor(asStyleRecord(run.font.color), context.sheet.themePalette) : null,
+          fontSizePx,
+        }),
+        text: run.text,
+      }));
+    } else {
+      model.text = value;
+    }
+    model.textStyle = canvasCellTextStyle(style, {
+      fontSizePx,
+      maxWidthPx: icon ? icon.textWidth : undefined,
+    });
+  } else if (!model.ariaLabel && value) {
+    model.ariaLabel = value;
+  }
+  if (conditional?.kind === "dataBar" && conditional.environment.dataBar) {
+    const barStyle = conditional.environment.dataBar;
+    const barArea = Math.max(0, box.width - 6);
+    const geometry = resolveDataBarGeometry(conditional.environment, conditional.value, barArea);
+    const barHeight = Math.max(2, box.height - 8);
+    if (geometry.barWidth > 0) {
+      const fillColor = geometry.negative ? barStyle.negativeFillColor : barStyle.color;
+      model.dataBarStyle = {
+        background: barStyle.gradient
+          ? `linear-gradient(to right, ${withAlpha(fillColor, "66")}, ${withAlpha(fillColor, "dd")})`
+          : withAlpha(fillColor, "99"),
+        border: barStyle.border
+          ? `1px solid ${geometry.negative ? barStyle.negativeBorderColor : barStyle.borderColor}`
+          : undefined,
+        boxSizing: "border-box",
+        height: `${barHeight}px`,
+        left: `${3 + geometry.barX}px`,
+        position: "absolute",
+        top: "4px",
+        width: `${geometry.barWidth}px`,
+        zIndex: 0,
+      };
+    }
+    if (geometry.showAxis) {
+      model.dataBarAxisStyle = {
+        background: barStyle.axisColor,
+        height: `${barHeight}px`,
+        left: `${3 + geometry.axisX - 0.5}px`,
+        position: "absolute",
+        top: "4px",
+        width: "1px",
+        zIndex: 0,
+      };
+    }
+  }
+  return model;
+}
+
+/** Header strip item: one column label or row number, in the pane it belongs to. */
+function buildDomHeaderItem(
+  key: string,
+  label: string,
+  box: CSSProperties,
+  selected: boolean,
+  colors: { background: string; border: string; selectedBackground: string; selectedText: string; text: string },
+): GridDomHeaderItemModel {
+  return {
+    key,
+    label,
+    style: {
+      ...box,
+      background: selected ? colors.selectedBackground : undefined,
+      borderBottom: `1px solid ${colors.border}`,
+      borderRight: `1px solid ${colors.border}`,
+      boxSizing: "border-box",
+      color: selected ? colors.selectedText : colors.text,
+    },
+  };
+}
+
+function paintDomGrid(worksheet: ActiveWorksheet | null): void {
+  const sheet = activeSheet.value;
+  if (!sheet) {
+    domGridModel.value = null;
+    domGridSignature = "";
+    return;
+  }
+  updatePaintedMergeRegions(props.controller.isWorkerBacked ? sheet.mergedRegions : worksheet?.mergedRegions);
+  const widths = effectiveColWidths.value;
+  const heights = effectiveRowHeights.value;
+  const rowRange = visibleRowRange.value;
+  const colRange = visibleColRange.value;
+  const frozen = frozenPaneMetrics();
+  const bodyWidth = Math.max(0, containerWidth.value - ROW_HEADER_WIDTH);
+  const bodyHeight = Math.max(0, containerHeight.value - HEADER_HEIGHT);
+  const selectionValue = selection.value;
+  const fillTarget = fillDragTarget.value;
+  const cut = cutRange.value;
+  const referenceRanges = formulaReferenceRanges.value;
+  const activeFormula = activeFormulaReference.value;
+  const signature = [
+    sheet.workbookSheetIndex,
+    sheet.name,
+    revision.value,
+    workerRowsRevision.value,
+    zoomScale.value,
+    props.isDark ? "dark" : "light",
+    props.selectionColor ?? "",
+    props.selectionFillColor ?? "",
+    containerWidth.value,
+    containerHeight.value,
+    rowRange.start,
+    rowRange.end,
+    colRange.start,
+    colRange.end,
+    frozen.rows,
+    frozen.cols,
+    activeCell.value?.row ?? -1,
+    activeCell.value?.col ?? -1,
+    selectionValue?.start.row ?? -1,
+    selectionValue?.start.col ?? -1,
+    selectionValue?.end.row ?? -1,
+    selectionValue?.end.col ?? -1,
+    cut?.start.row ?? -1,
+    cut?.start.col ?? -1,
+    cut?.end.row ?? -1,
+    cut?.end.col ?? -1,
+    fillTarget?.start.row ?? -1,
+    fillTarget?.start.col ?? -1,
+    fillTarget?.end.row ?? -1,
+    fillTarget?.end.col ?? -1,
+    activeFormula?.rangeAddress ?? "",
+    referenceRanges.map((reference) => reference.rangeAddress).join(","),
+    sheet.showGridLines !== false ? "grid" : "plain",
+  ].join("|");
+  if (signature === domGridSignature) return;
+  domGridSignature = signature;
+  if (bodyWidth <= 0 || bodyHeight <= 0 || widths.length === 0 || heights.length === 0) {
+    domGridModel.value = null;
+    return;
+  }
+
+  const gridColor = props.isDark ? "#3f3f46" : "#d9d9d9";
+  const selectionFill = props.selectionFillColor || (props.isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)");
+  const selectionColor = props.selectionColor || "#2563eb";
+  const gridLines = sheet.showGridLines !== false;
+  const context: GridDomBuildContext = {
+    gridColor,
+    gridLines,
+    selectionFill,
+    sheet,
+    styleScratch: createCanvasCellStyleScratch(),
+    tableHeaderCells: props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS,
+    worksheet,
+  };
+  const rowWindow = resolveGridDomAxisWindow(rowRange, frozen.rows, heights.length);
+  const colWindow = resolveGridDomAxisWindow(colRange, frozen.cols, widths.length);
+  const panes: GridDomPaneLayout[] = [
+    {
+      cols: colWindow.scrolling,
+      height: bodyHeight - frozen.height,
+      key: "main",
+      left: frozen.width,
+      rows: rowWindow.scrolling,
+      scrollX: true,
+      scrollY: true,
+      top: frozen.height,
+      width: bodyWidth - frozen.width,
+    },
+    {
+      cols: colWindow.scrolling,
+      height: frozen.height,
+      key: "frozen-rows",
+      left: frozen.width,
+      rows: rowWindow.frozen,
+      scrollX: true,
+      scrollY: false,
+      top: 0,
+      width: bodyWidth - frozen.width,
+    },
+    {
+      cols: colWindow.frozen,
+      height: bodyHeight - frozen.height,
+      key: "frozen-cols",
+      left: 0,
+      rows: rowWindow.scrolling,
+      scrollX: false,
+      scrollY: true,
+      top: frozen.height,
+      width: frozen.width,
+    },
+    {
+      cols: colWindow.frozen,
+      height: frozen.height,
+      key: "frozen-corner",
+      left: 0,
+      rows: rowWindow.frozen,
+      scrollX: false,
+      scrollY: false,
+      top: 0,
+      width: frozen.width,
+    },
+  ].filter((pane) => pane.width > 0 && pane.height > 0 && pane.rows.length > 0 && pane.cols.length > 0) as GridDomPaneLayout[];
+
+  const paneModels: GridDomPaneModel[] = [];
+  let activeCellId: string | undefined;
+  for (const pane of panes) {
+    const contentLeft = pane.scrollX ? frozen.width : 0;
+    const contentTop = pane.scrollY ? frozen.height : 0;
+    const rows: GridDomRowModel[] = [];
+    const renderedCells = new Set<number>();
+    for (const displayRow of pane.rows) {
+      const rowTop = getRowOffsetSum(displayRow) - contentTop;
+      const rowHeight = heights[displayRow] || 0;
+      const cells: GridDomCellModel[] = [];
+      for (const displayCol of pane.cols) {
+        const cell = getSheetCell(displayRow, displayCol);
+        if (!cell) continue;
+        const key = cellKey(cell.row, cell.col);
+        if (paintedMergeAnchors.has(key) || renderedCells.has(key)) continue;
+        renderedCells.add(key);
+        const merge = mergeRegionAtAnchor(cell);
+        const mergeEnd = merge ? getDisplayCell(merge.end) : null;
+        const width = mergeEnd
+          ? getColOffsetSum(mergeEnd.col + 1) - getColOffsetSum(displayCol)
+          : widths[displayCol] || 0;
+        const height = mergeEnd
+          ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
+          : rowHeight;
+        const model = buildDomCellModel(
+          cell,
+          pane.key,
+          { height, left: getColOffsetSum(displayCol) - contentLeft, top: getRowOffsetSum(displayRow) - contentTop, width },
+          rowTop,
+          merge,
+          context,
+        );
+        if (activeCell.value && activeCell.value.row === cell.row && activeCell.value.col === cell.col) {
+          model.active = true;
+          model.ariaLabel = activeCellAria.value?.label;
+          // A merge that crosses the freeze line is rendered in two panes; only
+          // the first copy may own the id so the accessibility tree stays valid.
+          if (!activeCellId) {
+            model.id = activeCellDescendantId.value;
+            activeCellId = model.id;
+          }
+        }
+        cells.push(model);
+      }
+      rows.push({
+        ariaRowIndex: (displayRows.value[displayRow] ?? displayRow) + 1,
+        cells,
+        displayRow,
+        key: `${pane.key}:row:${displayRow}`,
+        style: {
+          height: `${rowHeight}px`,
+          position: "absolute",
+          top: `${rowTop}px`,
+          width: "100%",
+        },
+      });
+    }
+
+    // A merged region paints from its anchor rect even when the anchor scrolled
+    // out of the window (the visible part still keeps fill, border and
+    // selection). Attach it to the row that owns it, or the pane's first row.
+    for (const region of paintedMergeRegions) {
+      const anchorKey = cellKey(region.start.row, region.start.col);
+      if (renderedCells.has(anchorKey)) continue;
+      const start = getDisplayCell(region.start);
+      const end = getDisplayCell(region.end);
+      if (!start || !end) continue;
+      const contentWindowLeft = contentLeft + (pane.scrollX ? scrollLeft.value : 0);
+      const contentWindowTop = contentTop + (pane.scrollY ? scrollTop.value : 0);
+      const left = getColOffsetSum(start.col);
+      const top = getRowOffsetSum(start.row);
+      const width = getColOffsetSum(end.col + 1) - left;
+      const height = getRowOffsetSum(end.row + 1) - top;
+      if (
+        left > contentWindowLeft + pane.width
+        || left + width < contentWindowLeft
+        || top > contentWindowTop + pane.height
+        || top + height < contentWindowTop
+      ) continue;
+      const row = rows.find((entry) => entry.displayRow === start.row) ?? rows[0];
+      if (!row) continue;
+      const model = buildDomCellModel(
+        region.start,
+        pane.key,
+        { height, left: left - contentLeft, top: top - contentTop, width },
+        getRowOffsetSum(row.displayRow) - contentTop,
+        region,
+        context,
+      );
+      if (activeCell.value && activeCell.value.row === region.start.row && activeCell.value.col === region.start.col) {
+        model.active = true;
+        model.ariaLabel = activeCellAria.value?.label;
+        if (!activeCellId) {
+          model.id = activeCellDescendantId.value;
+          activeCellId = model.id;
+        }
+      }
+      row.cells.push(model);
+      renderedCells.add(anchorKey);
+    }
+
+    if (!rows.length) continue;
+    const outlines: GridDomPaneModel["outlines"] = [];
+    const addOutline = (
+      key: string,
+      range: XlsxCellRange,
+      options: { color: string; dashed?: boolean; displayed?: boolean; inset?: number; lineWidth?: number },
+    ) => {
+      const normalized = {
+        end: { col: Math.max(range.start.col, range.end.col), row: Math.max(range.start.row, range.end.row) },
+        start: { col: Math.min(range.start.col, range.end.col), row: Math.min(range.start.row, range.end.row) },
+      };
+      const start = options.displayed ? normalized.start : getDisplayCell(normalized.start);
+      const end = options.displayed ? normalized.end : getDisplayCell(normalized.end);
+      if (!start || !end) return;
+      const style = resolveGridDomOutlineStyle(
+        {
+          bottom: getRowOffsetSum(end.row + 1) - contentTop,
+          left: getColOffsetSum(start.col) - contentLeft,
+          right: getColOffsetSum(end.col + 1) - contentLeft,
+          top: getRowOffsetSum(start.row) - contentTop,
+        },
+        {
+          bottom: (pane.scrollY ? scrollTop.value : 0) + pane.height,
+          left: pane.scrollX ? scrollLeft.value : 0,
+          right: (pane.scrollX ? scrollLeft.value : 0) + pane.width,
+          top: pane.scrollY ? scrollTop.value : 0,
+        },
+        {
+          color: options.color,
+          dashed: options.dashed,
+          inset: options.inset,
+          lineWidth: options.lineWidth,
+        },
+      );
+      if (style) outlines.push({ key: `${pane.key}:${key}`, style });
+    };
+    if (selectionValue) addOutline("selection", selectionValue, { color: selectionColor, inset: 1, lineWidth: 2 });
+    if (activeCell.value && (!selectionValue || (selectionValue.start.row === selectionValue.end.row && selectionValue.start.col === selectionValue.end.col))) {
+      addOutline("active", { end: activeCell.value, start: activeCell.value }, { color: selectionColor });
+    }
+    if (cut) addOutline("cut", cut, { color: selectionColor, dashed: true, inset: 0.5, lineWidth: 1.5 });
+    if (fillTarget) addOutline("fill", fillTarget, {
+      color: props.isDark ? "#a1a1aa" : "#71717a",
+      dashed: true,
+      inset: 0.5,
+      lineWidth: 1.5,
+    });
+    for (const reference of referenceRanges) {
+      const displayedRange = resolvePaintedReferenceRange(
+        reference.range,
+        sheetRowToDisplayIndex.value,
+        sheetColToDisplayIndex.value,
+        displayRows.value.length,
+        displayCols.value.length,
+      );
+      if (!displayedRange) continue;
+      addOutline(`reference:${reference.rangeAddress}`, displayedRange, {
+        color: reference.color,
+        displayed: true,
+        inset: activeFormula === reference ? 1.5 : 2.5,
+        lineWidth: activeFormula === reference ? 3 : 1.5,
+      });
+    }
+    paneModels.push({
+      key: pane.key,
+      outlines,
+      rows,
+      scrollX: pane.scrollX,
+      scrollY: pane.scrollY,
+      style: {
+        height: `${pane.height}px`,
+        left: `${pane.left}px`,
+        overflow: "hidden",
+        position: "absolute",
+        top: `${pane.top}px`,
+        width: `${pane.width}px`,
+      },
+    });
+  }
+
+  const colors = {
+    background: props.isDark ? "#27272a" : "#f4f4f5",
+    border: props.isDark ? "#3f3f46" : "#d4d4d8",
+    selectedBackground: props.isDark ? "#1e3a5f" : "#dbeafe",
+    selectedText: props.isDark ? "#bfdbfe" : "#1d4ed8",
+    text: props.isDark ? "#a1a1aa" : "#71717a",
+  };
+  const dividerColor = props.isDark ? "#71717a" : "#a1a1aa";
+  const columnSelected = (sheetCol: number) => activeCell.value?.col === sheetCol || Boolean(selectionValue
+    && sheetCol >= Math.min(selectionValue.start.col, selectionValue.end.col)
+    && sheetCol <= Math.max(selectionValue.start.col, selectionValue.end.col));
+  const rowSelected = (sheetRow: number) => activeCell.value?.row === sheetRow || Boolean(selectionValue
+    && sheetRow >= Math.min(selectionValue.start.row, selectionValue.end.row)
+    && sheetRow <= Math.max(selectionValue.start.row, selectionValue.end.row));
+  const columnHeaders: GridDomHeaderLayerModel = {
+    frozen: colWindow.frozen.map((displayIndex) => buildDomHeaderItem(
+      `column:${displayIndex}`,
+      columnLabel(displayCols.value[displayIndex] ?? displayIndex),
+      {
+        height: `${HEADER_HEIGHT}px`,
+        left: `${getColOffsetSum(displayIndex)}px`,
+        top: "0px",
+        width: `${widths[displayIndex] || 0}px`,
+      },
+      columnSelected(displayCols.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+    scrolling: colWindow.scrolling.map((displayIndex) => buildDomHeaderItem(
+      `column:${displayIndex}`,
+      columnLabel(displayCols.value[displayIndex] ?? displayIndex),
+      {
+        height: `${HEADER_HEIGHT}px`,
+        left: `${getColOffsetSum(displayIndex) - frozen.width}px`,
+        top: "0px",
+        width: `${widths[displayIndex] || 0}px`,
+      },
+      columnSelected(displayCols.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+  };
+  if (frozen.width > 0) {
+    columnHeaders.divider = {
+      key: "column-freeze-divider",
+      style: {
+        background: dividerColor,
+        height: `${HEADER_HEIGHT}px`,
+        left: `${frozen.width - 1}px`,
+        top: "0px",
+        width: "2px",
+        zIndex: 2,
+      },
+    };
+  }
+  const rowHeaders: GridDomHeaderLayerModel = {
+    frozen: rowWindow.frozen.map((displayIndex) => buildDomHeaderItem(
+      `row:${displayIndex}`,
+      String((displayRows.value[displayIndex] ?? displayIndex) + 1),
+      {
+        height: `${heights[displayIndex] || 0}px`,
+        left: "0px",
+        top: `${getRowOffsetSum(displayIndex)}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+      },
+      rowSelected(displayRows.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+    scrolling: rowWindow.scrolling.map((displayIndex) => buildDomHeaderItem(
+      `row:${displayIndex}`,
+      String((displayRows.value[displayIndex] ?? displayIndex) + 1),
+      {
+        height: `${heights[displayIndex] || 0}px`,
+        left: "0px",
+        top: `${getRowOffsetSum(displayIndex) - frozen.height}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+      },
+      rowSelected(displayRows.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+  };
+  if (frozen.height > 0) {
+    rowHeaders.divider = {
+      key: "row-freeze-divider",
+      style: {
+        background: dividerColor,
+        height: "2px",
+        left: "0px",
+        top: `${frozen.height - 1}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+        zIndex: 2,
+      },
+    };
+  }
+  const dividers = [];
+  if (frozen.width > 0) {
+    dividers.push({
+      key: "freeze-column",
+      style: {
+        background: dividerColor,
+        height: `${bodyHeight}px`,
+        left: `${frozen.width - 1}px`,
+        top: "0px",
+        width: "2px",
+      },
+    });
+  }
+  if (frozen.height > 0) {
+    dividers.push({
+      key: "freeze-row",
+      style: {
+        background: dividerColor,
+        height: "2px",
+        left: "0px",
+        top: `${frozen.height - 1}px`,
+        width: `${bodyWidth}px`,
+      },
+    });
+  }
+  domGridModel.value = {
+    activeCellId,
+    columnHeaders,
+    cornerStyle: {
+      background: colors.background,
+      borderBottom: `1px solid ${colors.border}`,
+      borderRight: `1px solid ${colors.border}`,
+      boxSizing: "border-box",
+      height: `${HEADER_HEIGHT}px`,
+      left: "0px",
+      position: "absolute",
+      top: "0px",
+      width: `${ROW_HEADER_WIDTH}px`,
+    },
+    dividers,
+    panes: paneModels,
+    rowHeaders,
+  };
 }
 
 interface OverflowTextTask {
@@ -1688,6 +4005,8 @@ function createCellPaintStateScratch(): CellPaintState {
     hyperlink: undefined,
     sparkline: undefined,
     value: "",
+    runs: undefined,
+    themePalette: undefined,
     gridLines: false,
     selected: false,
     selectionFill: "",
@@ -1747,10 +4066,15 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     // otherwise double up wherever the two passes overlap.
     ctx.beginPath();
     ctx.rect(0, frozen.height, bw, Math.max(0, bh - frozen.height));
-    ctx.rect(frozen.width, 0, Math.max(0, bw - frozen.width), frozen.height);
+    ctx.rect(
+      isRightToLeft.value ? 0 : frozen.width,
+      0,
+      Math.max(0, bw - frozen.width),
+      frozen.height,
+    );
     ctx.clip();
   }
-  ctx.translate(-scrollLeft.value, -scrollTop.value);
+  ctx.translate(-getColLayoutScroll(bw), -scrollTop.value);
 
   // Gridlines
   if (hasVisibleRange && sheet.showGridLines !== false) {
@@ -1758,10 +4082,10 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     ctx.lineWidth = 1;
     const gridTop = getRowOffsetSum(rowRange.start);
     const gridBottom = getRowOffsetSum(rowRange.end + 1);
-    const gridLeft = getColOffsetSum(colRange.start);
-    const gridRight = getColOffsetSum(colRange.end + 1);
+    const gridLeft = getColLayoutBoundary(colRange.start);
+    const gridRight = getColLayoutBoundary(colRange.end + 1);
     for (let c = colRange.start; c <= colRange.end + 1 && c <= widths.length; c += 1) {
-      const x = getColOffsetSum(c);
+      const x = getColLayoutBoundary(c);
       ctx.beginPath(); ctx.moveTo(x, gridTop); ctx.lineTo(x, gridBottom); ctx.stroke();
     }
     for (let r = rowRange.start; r <= rowRange.end + 1 && r <= heights.length; r += 1) {
@@ -1777,6 +4101,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
   // of the allocation churn while scrolling; deferred overflow tasks snapshot
   // the two objects they keep a reference to.
   const paintState = createCellPaintStateScratch();
+  paintState.themePalette = sheet.themePalette;
   const styleScratch = createCanvasCellStyleScratch();
   const overflowNeighbourWidths: number[] = [];
 
@@ -1792,7 +4117,11 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     sparkline: XlsxSparkline | undefined,
   ): number => {
     const cellWidth = widths[displayCol] || 0;
-    if (merge || style.wrap || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
+    // Rotated text and shrink-to-fit stay inside their cell: spilling them
+    // would paint over the neighbour that hit-testing still attributes to it.
+    // Text spills in the direction it is aligned to: left in LTR, right in RTL.
+    const trailingAlignment = isRightToLeft.value ? "right" : "left";
+    if (merge || style.wrap || style.rotation != null || style.shrinkToFit || style.alignment !== trailingAlignment || conditional?.kind === "iconSet") return cellWidth;
     if (!value || sparkline || (conditional?.kind === "dataBar" && !conditional.showValue)) return cellWidth;
     overflowNeighbourWidths.length = 0;
     for (let nextCol = displayCol + 1; nextCol < widths.length; nextCol += 1) {
@@ -1822,7 +4151,9 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     const rowHResolved = mergeEnd
       ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
       : heights[displayRow] || 0;
-    const colX = getColOffsetSum(displayCol);
+    const colX = mergeEnd && isRightToLeft.value
+      ? getColLayoutX(mergeEnd.col)
+      : getColLayoutX(displayCol);
     const rowY = getRowOffsetSum(displayRow);
     const value = getGridCellDisplayValue(cell);
     const style = resolveCanvasCellStyleInto(
@@ -1842,6 +4173,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
     state.sparkline = sparkline;
     state.value = value;
+    state.runs = getGridCellRuns(cell);
     state.gridLines = Boolean(merge) && sheet.showGridLines !== false;
     state.selected = isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel));
     state.selectionFill = selFill;
@@ -1857,12 +4189,14 @@ function paintBody(worksheet: ActiveWorksheet | null) {
       state.skipText = true;
       drawCellContent(ctx, colX, rowY, colW, rowHResolved, state);
       // The task outlives this cell, so it owns a snapshot of the two objects
-      // the shared state points at.
+      // the shared state points at. RTL text grows towards the left, so the
+      // deferred box starts before the cell and keeps its visual bounds.
+      const overflowExtra = overflowWidth - colW;
       overflowTextTasks.push({
         height: rowHResolved,
         state: { ...state, conditional: snapshotConditionalVisual(conditional), style: { ...style } },
-        width: colW,
-        x: colX,
+        width: overflowWidth,
+        x: isRightToLeft.value ? colX - overflowExtra : colX,
         y: rowY,
       });
     } else {
@@ -1888,7 +4222,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
       if (!start || !end) continue;
       const regionX = getColOffsetSum(start.col);
       const regionY = getRowOffsetSum(start.row);
-      const regionWidth = getColOffsetSum(end.col + 1) - regionX;
+      const regionWidth = getColOffsetSum(end.col + 1) - getColOffsetSum(start.col);
       const regionHeight = getRowOffsetSum(end.row + 1) - regionY;
       if (!intersectsViewport(
         { height: regionHeight, left: regionX, top: regionY, width: regionWidth },
@@ -1939,9 +4273,10 @@ function paintFrozenPanes(
 
   const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
   const paintState = createCellPaintStateScratch();
+  paintState.themePalette = sheet.themePalette;
   const styleScratch = createCanvasCellStyleScratch();
 
-  const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
+  const paintCell = (displayRow: number, displayCol: number, frozenY: boolean) => {
     const cell = getSheetCell(displayRow, displayCol);
     if (!cell || paintedMergeAnchors.has(cellKey(cell.row, cell.col))) return;
     const merge = mergeRegionAtAnchor(cell);
@@ -1952,7 +4287,9 @@ function paintFrozenPanes(
     const height = mergeEnd
       ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
       : effectiveRowHeights.value[displayRow] || 0;
-    const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, frozenX);
+    const x = mergeEnd && isRightToLeft.value
+      ? getColLayoutX(mergeEnd.col)
+      : getColLayoutX(displayCol);
     const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, frozenY);
     const value = getGridCellDisplayValue(cell);
     const cellKeyValue = cellKey(cell.row, cell.col);
@@ -1970,6 +4307,7 @@ function paintFrozenPanes(
     state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
     state.sparkline = sparklinesByCell.value.get(cellKeyValue);
     state.value = value;
+    state.runs = getGridCellRuns(cell);
     state.gridLines = sheet.showGridLines !== false;
     state.selected = isCellInRange(cell, selection.value)
       || Boolean(merge && selection.value && rangesIntersect(merge, selection.value));
@@ -1984,31 +4322,54 @@ function paintFrozenPanes(
   if (frozenRows.length && visibleCols.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(frozenWidth, 0, Math.max(0, bodyWidth - frozenWidth), frozenHeight);
+    ctx.rect(
+      isRightToLeft.value ? 0 : frozenWidth,
+      0,
+      Math.max(0, bodyWidth - frozenWidth),
+      frozenHeight,
+    );
     ctx.clip();
-    for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true, false);
+    // The pinned rows keep their y; their columns still scroll horizontally.
+    ctx.translate(-getColLayoutScroll(bodyWidth), 0);
+    for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true);
     ctx.restore();
   }
   if (frozenCols.length && visibleRows.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, frozenHeight, frozenWidth, Math.max(0, bodyHeight - frozenHeight));
+    ctx.rect(
+      isRightToLeft.value ? bodyWidth - frozenWidth : 0,
+      frozenHeight,
+      frozenWidth,
+      Math.max(0, bodyHeight - frozenHeight),
+    );
     ctx.clip();
-    for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false, true);
+    // The pinned columns keep their x; their rows still scroll vertically.
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - bodyWidth), 0);
+    for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false);
     ctx.restore();
   }
   if (frozenRows.length && frozenCols.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, frozenWidth, frozenHeight);
+    ctx.rect(
+      isRightToLeft.value ? bodyWidth - frozenWidth : 0,
+      0,
+      frozenWidth,
+      frozenHeight,
+    );
     ctx.clip();
-    for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true, true);
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - bodyWidth), 0);
+    for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true);
     ctx.restore();
   }
   ctx.save();
   ctx.strokeStyle = props.isDark ? "#71717a" : "#a1a1aa";
   ctx.lineWidth = 2;
-  if (frozenWidth > 0) { ctx.beginPath(); ctx.moveTo(frozenWidth, 0); ctx.lineTo(frozenWidth, bodyHeight); ctx.stroke(); }
+  if (frozenWidth > 0) {
+    const dividerX = isRightToLeft.value ? bodyWidth - frozenWidth : frozenWidth;
+    ctx.beginPath(); ctx.moveTo(dividerX, 0); ctx.lineTo(dividerX, bodyHeight); ctx.stroke();
+  }
   if (frozenHeight > 0) { ctx.beginPath(); ctx.moveTo(0, frozenHeight); ctx.lineTo(bodyWidth, frozenHeight); ctx.stroke(); }
   ctx.restore();
 }
@@ -2042,9 +4403,9 @@ function paintColHeaders() {
 
   const paintColumn = (displayIndex: number) => {
     const colW = widths[displayIndex] || 0;
-    // The frozen strip pins its labels above the pinned cells; only the
-    // scrolling strip follows scrollLeft.
-    const x = paneViewOffset(getColOffsetSum(displayIndex), scrollLeft.value, displayIndex < frozen.cols);
+    // Labels use the same mirrored layout as the cells, so column A sits above
+    // its pinned right-hand column on an RTL sheet.
+    const x = getColLayoutX(displayIndex);
     const sheetCol = displayCols.value[displayIndex] ?? displayIndex;
     const selectedCol = activeCell.value?.col === sheetCol || Boolean(selected &&
       sheetCol >= Math.min(selected.start.col, selected.end.col) &&
@@ -2062,8 +4423,14 @@ function paintColHeaders() {
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(frozen.width, 0, Math.max(0, cw - frozen.width), HEADER_HEIGHT);
+  ctx.rect(
+    isRightToLeft.value ? 0 : frozen.width,
+    0,
+    Math.max(0, cw - frozen.width),
+    HEADER_HEIGHT,
+  );
   ctx.clip();
+  ctx.translate(-getColLayoutScroll(cw), 0);
   for (let c = Math.max(colRange.start, frozen.cols); c <= colRange.end && c < widths.length; c++) {
     paintColumn(c);
   }
@@ -2072,15 +4439,22 @@ function paintColHeaders() {
   if (frozen.width > 0) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, frozen.width, HEADER_HEIGHT);
+    ctx.rect(
+      isRightToLeft.value ? cw - frozen.width : 0,
+      0,
+      frozen.width,
+      HEADER_HEIGHT,
+    );
     ctx.clip();
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - cw), 0);
     for (let c = 0; c < frozen.cols && c < widths.length; c++) paintColumn(c);
     ctx.restore();
+    const dividerX = isRightToLeft.value ? cw - frozen.width : frozen.width;
     ctx.strokeStyle = dividerColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(frozen.width - 0.5, 0);
-    ctx.lineTo(frozen.width - 0.5, HEADER_HEIGHT);
+    ctx.moveTo(dividerX - 0.5, 0);
+    ctx.lineTo(dividerX - 0.5, HEADER_HEIGHT);
     ctx.stroke();
   }
 }
@@ -2200,6 +4574,38 @@ function onScroll() {
   schedulePaint();
 }
 
+/**
+ * Advances the pending-cut marquee a few times per second.
+ *
+ * A cut stays "armed" until it is pasted or cancelled, so the dashes have to
+ * move while the user looks for the paste target. Each step only advances the
+ * dash phase and reuses `schedulePaint()`, which coalesces the repaint with any
+ * scroll that happens in the same frame.
+ */
+function scheduleCutAnts() {
+  if (cutAntsFrame !== null) return;
+  if (!cutRange.value) return;
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") return;
+  cutAntsFrame = window.requestAnimationFrame((timestamp: number) => {
+    cutAntsFrame = null;
+    if (!cutRange.value) return;
+    if (timestamp - cutAntsLastStepAt >= CUT_ANTS_STEP_MS) {
+      cutAntsLastStepAt = timestamp;
+      cutAntsStep.value = (cutAntsStep.value + 1) % CUT_ANTS_DASH_PERIOD;
+      schedulePaint();
+    }
+    scheduleCutAnts();
+  });
+}
+
+function stopCutAnts() {
+  if (cutAntsFrame === null) return;
+  if (typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(cutAntsFrame);
+  }
+  cutAntsFrame = null;
+}
+
 type AxisHit = {
   actualIndex: number;
   displayIndex: number;
@@ -2219,7 +4625,17 @@ function hitTestAxis(clientX: number, clientY: number): AxisHit | null {
   }
   if (localY <= HEADER_HEIGHT && localX > ROW_HEADER_WIDTH) {
     const frozen = frozenPaneMetrics();
-    const contentX = paneAxisContentOffset(localX - ROW_HEADER_WIDTH, container.scrollLeft, frozen.width);
+    // Column headers mirror with the body, so the pointer's content position is
+    // measured from the header strip's right edge on an RTL sheet.
+    const contentX = paneAxisContentOffset(
+      mirrorBodyOffset(
+        localX - ROW_HEADER_WIDTH,
+        Math.max(0, rect.width - ROW_HEADER_WIDTH),
+        isRightToLeft.value,
+      ),
+      container.scrollLeft,
+      frozen.width,
+    );
     const hitDisplayIndex = findDisplayIndexAtOffset(colOffsets.value, contentX);
     if (hitDisplayIndex < 0) return null;
     const startBoundary = getColOffsetSum(hitDisplayIndex);
@@ -2314,6 +4730,10 @@ function onPointerDown(event: PointerEvent) {
   const cell = hitTestCell(event.clientX, event.clientY);
   if (!cell) return;
   containerRef.value?.focus();
+  // DOM mode paints real text, so a drag that starts with Alt is a native text
+  // selection: the browser keeps the default action and the grid does not move
+  // the cell selection or capture the pointer.
+  if (gridRenderMode.value === "dom" && event.altKey) return;
 
   if (event.shiftKey && activeCell.value) {
     props.controller.selectRange({ start: activeCell.value, end: cell });
@@ -2325,11 +4745,66 @@ function onPointerDown(event: PointerEvent) {
   containerRef.value?.setPointerCapture(event.pointerId);
 }
 
+/**
+ * Begins a fill drag from the handle.
+ *
+ * The selection is left untouched: it is the fill pattern that
+ * `fillSelection` tiles on release, so the controller keeps a stable source
+ * while the pointer previews the target range.
+ */
+function startFillDrag(event: PointerEvent) {
+  const selectionValue = selection.value;
+  if (!selectionValue || editingLocked.value || event.button !== 0) return;
+  const source = normalizeFillRange(selectionValue);
+  fillDrag.value = { pointerId: event.pointerId, source, target: source };
+  containerRef.value?.setPointerCapture?.(event.pointerId);
+  if (containerRef.value) containerRef.value.style.cursor = "crosshair";
+  schedulePaint();
+}
+
+/** Extends the previewed fill target; `true` while the handle owns the pointer. */
+function updateFillDrag(event: PointerEvent): boolean {
+  const drag = fillDrag.value;
+  if (!drag) return false;
+  if (event.pointerId !== undefined && event.pointerId !== drag.pointerId) return false;
+  const cell = hitTestCell(event.clientX, event.clientY);
+  if (cell) {
+    const target = resolveFillTargetRange(drag.source, cell);
+    if (!fillRangesEqual(target, drag.target)) {
+      drag.target = target;
+      fillDrag.value = { ...drag };
+      schedulePaint();
+    }
+  }
+  return true;
+}
+
+/** Ends the fill drag; release applies the fill as one undo entry. */
+function finishFillDrag(event: PointerEvent | undefined, cancelled: boolean): boolean {
+  const drag = fillDrag.value;
+  if (!drag) return false;
+  if (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId) return false;
+  fillDrag.value = null;
+  if (event && containerRef.value?.hasPointerCapture?.(event.pointerId)) {
+    containerRef.value.releasePointerCapture?.(event.pointerId);
+  }
+  if (!cancelled && !fillRangesEqual(drag.source, drag.target)) {
+    props.controller.fillSelection(drag.target);
+  }
+  if (containerRef.value) containerRef.value.style.cursor = "cell";
+  schedulePaint();
+  return true;
+}
+
 function onPointerMove(event: PointerEvent) {
+  if (updateFillDrag(event)) return;
   const resizing = resizePreview.value;
   if (resizing) {
     const position = resizing.kind === "column" ? event.clientX : event.clientY;
-    const delta = position - resizing.startPosition;
+    // A mirrored column grows towards the left, so the pointer delta is
+    // negated before it reaches the width.
+    const delta = (position - resizing.startPosition)
+      * (resizing.kind === "column" && isRightToLeft.value ? -1 : 1);
     if (!resizing.moved && Math.abs(delta) < AXIS_RESIZE_DRAG_THRESHOLD) return;
     const minimum = resizing.kind === "column" ? 32 : 18;
     resizing.moved = true;
@@ -2340,6 +4815,13 @@ function onPointerMove(event: PointerEvent) {
   }
   const axisHit = hitTestAxis(event.clientX, event.clientY);
   hoveredCell.value = axisHit ? null : hitTestCell(event.clientX, event.clientY);
+  hoveredAxis.value = axisHit && !axisHit.resize && axisHit.kind !== "corner"
+    ? {
+        actualIndex: axisHit.actualIndex,
+        displayIndex: axisHit.displayIndex,
+        kind: axisHit.kind,
+      }
+    : null;
   if (containerRef.value) {
     containerRef.value.style.cursor = axisHit?.resize
       ? axisHit.kind === "column" ? "col-resize" : "row-resize"
@@ -2360,6 +4842,12 @@ function resolveAxisResizeRelease(
 }
 
 function onPointerUp(event?: PointerEvent) {
+  if (finishFillDrag(event, event?.type === "pointercancel")) {
+    isSelecting.value = false;
+    selectionAnchor.value = null;
+    schedulePaint();
+    return;
+  }
   const clickedCell = event ? hitTestCell(event.clientX, event.clientY) : null;
   const pressCell = selectionAnchor.value;
   const resizing = resizePreview.value;
@@ -2386,6 +4874,7 @@ function onPointerUp(event?: PointerEvent) {
 
 function onPointerLeave(): void {
   hoveredCell.value = null;
+  hoveredAxis.value = null;
   if (!resizePreview.value && !isSelecting.value && containerRef.value) {
     containerRef.value.style.cursor = "cell";
   }
@@ -2442,6 +4931,15 @@ function chooseValidationOption(option: string) {
 }
 
 function onDblClick(event: MouseEvent) {
+  // A double-click on a column/row boundary auto-fits that axis. It is the
+  // only double-click the header strip understands, so it never reaches the
+  // cell editor below the header.
+  const axisHit = hitTestAxis(event.clientX, event.clientY);
+  if (axisHit?.resize && axisHit.kind !== "corner") {
+    event.preventDefault();
+    autofitAxis(axisHit.kind, axisHit.actualIndex);
+    return;
+  }
   const cell = hitTestCell(event.clientX, event.clientY);
   if (!cell || props.readOnly || props.controller?.isEditingLocked === true) return;
   const validation = props.controller?.getCellDataValidation?.(cell) ?? null;
@@ -2453,6 +4951,7 @@ function onDblClick(event: MouseEvent) {
   }
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  editorCaret.value = editingValue.value.length;
   // Bring the cell fully into its pane first: an editor opened over a cell
   // still half-hidden under a frozen strip would sit on the freeze line.
   scrollToCell(cell);
@@ -2460,9 +4959,40 @@ function onDblClick(event: MouseEvent) {
   nextTick(() => { editInputRef.value?.focus(); editInputRef.value?.select(); });
 }
 
+/**
+ * Writes the inline draft where Excel puts it.
+ *
+ * A single cell takes the entry as usual. Only `Enter` asks for
+ * `fillSelection`: over a multi-cell selection it fills that whole selection in
+ * one undo step (`commitSelectionInput`), which is what Excel does instead of
+ * keeping the entry in the active cell only. Tab, blur and the commit-and-move
+ * keys still write the active cell, so leaving the editor never overwrites a
+ * range the user only selected.
+ */
+function commitEditingDraft(cell: XlsxCellAddress, fillSelection = false) {
+  const fillRange = props.controller.commitSelectionInput;
+  if (fillSelection && hasRangeSelection() && !editingLocked.value && typeof fillRange === "function") {
+    return fillRange.call(props.controller, editingValue.value);
+  }
+  return props.controller.commitCellInput(cell, editingValue.value);
+}
+
 function commitEdit() {
   if (!editingCell.value) return;
-  props.controller.commitCellInput(editingCell.value, editingValue.value);
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+  commitEditingDraft(editingCell.value);
+  editingCell.value = null;
+  editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
+  void nextTick(() => containerRef.value?.focus());
+}
+
+/** `Enter` confirms the draft, filling a multi-cell selection with it. */
+function commitEditFillingSelection() {
+  if (!editingCell.value) return;
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+  commitEditingDraft(editingCell.value, true);
   editingCell.value = null;
   editingValue.value = "";
   isEditComposing.value = false;
@@ -2471,6 +5001,7 @@ function commitEdit() {
 }
 
 function cancelEdit() {
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   editingCell.value = null;
   editingValue.value = "";
   isEditComposing.value = false;
@@ -2483,18 +5014,135 @@ function isComposingKeyboardEvent(event: KeyboardEvent) {
   return event.isComposing || event.keyCode === 229;
 }
 
+/** Hard line breaks in the draft; soft wraps are measured by the mirror. */
+function countEditorLines(value: string): number {
+  return value.replace(/\r\n?/g, "\n").split("\n").length;
+}
+
+const editorLineCount = computed(() => countEditorLines(editingValue.value));
+
+function editorLineHeightPx(): number {
+  return Math.max(EDITOR_MIN_LINE_HEIGHT_PX, 12 * gridZoomFactor(zoomScale.value) * EDITOR_LINE_HEIGHT_RATIO);
+}
+
+function readEditorSelection(): { start: number; end: number } {
+  const value = editingValue.value;
+  const textarea = editInputRef.value;
+  const rawStart = textarea?.selectionStart;
+  const rawEnd = textarea?.selectionEnd;
+  const start = typeof rawStart === "number" && Number.isFinite(rawStart) ? rawStart : value.length;
+  const end = typeof rawEnd === "number" && Number.isFinite(rawEnd) ? rawEnd : start;
+  return {
+    start: Math.max(0, Math.min(start, value.length)),
+    end: Math.max(0, Math.min(end, value.length)),
+  };
+}
+
+/**
+ * Tracks the caret in the inline draft after clicks, arrows and typing. The
+ * textarea has already applied the event when `input`, `keyup`, `click` and
+ * `select` fire, so this reads the post-event selection.
+ */
+function syncEditorCaret() {
+  if (!editingCell.value) return;
+  const value = editInputRef.value?.value ?? editingValue.value;
+  const { start } = readEditorSelection();
+  editorCaret.value = start;
+  formulaReferenceEditing.update(
+    FORMULA_REFERENCE_OWNER_GRID,
+    value,
+    start,
+  );
+}
+
+/** Inserts text at the textarea caret, keeping the draft in one commit. */
+function insertEditText(text: string) {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const value = editingValue.value;
+  const { start, end } = readEditorSelection();
+  const insertionStart = Math.min(start, end);
+  const insertionEnd = Math.max(start, end);
+  editingValue.value = value.slice(0, insertionStart) + normalized + value.slice(insertionEnd);
+  const caret = insertionStart + normalized.length;
+  void nextTick(() => {
+    const textarea = editInputRef.value;
+    textarea?.focus();
+    if (textarea && typeof textarea.setSelectionRange === "function") {
+      textarea.setSelectionRange(caret, caret);
+    }
+    editorCaret.value = caret;
+    syncEditorCaret();
+    syncEditorSize();
+  });
+}
+
+/**
+ * Multi-line clipboard text keeps its line breaks. Single-line pastes stay on
+ * the native path so the browser keeps its caret and undo stack.
+ */
+function onEditPaste(event: ClipboardEvent) {
+  if (isEditComposing.value) return;
+  const clipboard = event.clipboardData;
+  if (!clipboard) return;
+  const text = clipboard.getData("text/plain") || clipboard.getData("text") || "";
+  if (!/[\r\n]/.test(text)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  insertEditText(text);
+}
+
+/**
+ * Measures the hidden mirror, which carries the draft with the textarea's
+ * typography and width. Its height is how many wrapped lines the editor has to
+ * show; hard breaks are a deterministic fallback before the mirror has layout.
+ */
+function measureEditorMirrorHeight(): number {
+  const mirror = editMirrorRef.value;
+  if (!mirror) return 0;
+  const offset = Number(mirror.offsetHeight);
+  if (Number.isFinite(offset) && offset > 0) return offset;
+  const scroll = Number(mirror.scrollHeight);
+  if (!Number.isFinite(scroll) || scroll <= 0) return 0;
+  // scrollHeight includes padding but not the border; the editor is border-box.
+  return scroll + EDITOR_BORDER_PX * 2;
+}
+
+function syncEditorSize() {
+  if (!editingCell.value) {
+    editorMeasuredHeight.value = 0;
+    return;
+  }
+  const rect = paneOverlayRect(editingCell.value);
+  const cellHeight = rect?.height || DEFAULT_ROW_HEIGHT;
+  const hardBreakHeight = editorLineCount.value > 1
+    ? Math.ceil(editorLineCount.value * editorLineHeightPx() + EDITOR_BOX_CHROME_PX)
+    : 0;
+  editorMeasuredHeight.value = Math.max(cellHeight, hardBreakHeight, measureEditorMirrorHeight());
+}
+
 function onEditKeydown(event: KeyboardEvent) {
   if (isEditComposing.value || isComposingKeyboardEvent(event)) {
-    // Let the IME consume the key. Enter confirms the composition; remember it
-    // so the cell is committed once the final composition text is in place.
-    if (event.key === "Enter") commitEditOnCompositionEnd = true;
+    // Let the IME consume the key. A plain Enter confirms the composition;
+    // remember it so the cell is committed once the final composition text is
+    // in place. Alt+Enter stays a composition key, not a commit.
+    if (event.key === "Enter" && !event.altKey) commitEditOnCompositionEnd = true;
     return;
   }
 
-  if (event.key === "Enter") {
+  if (event.key === "Enter" && event.altKey) {
+    // Alt+Enter inserts a hard line break without closing the editor, so the
+    // cell can be authored with multiple lines (Excel's shortcut).
     event.stopPropagation();
     event.preventDefault();
-    commitEdit();
+    insertEditText("\n");
+  } else if (event.key === "Enter") {
+    event.stopPropagation();
+    event.preventDefault();
+    // Excel confirms an entry and steps down with Enter; Shift+Enter steps
+    // back up, committing the same draft first. Plain Enter fills a multi-cell
+    // selection, the other exits leave the rest of the range untouched.
+    if (event.shiftKey) commitAndMoveCell(-1, 0);
+    else commitEditFillingSelection();
   } else if (event.key === "Escape") {
     event.stopPropagation();
     event.preventDefault();
@@ -2503,6 +5151,17 @@ function onEditKeydown(event: KeyboardEvent) {
     event.stopPropagation();
     event.preventDefault();
     commitAndTab();
+  } else if (
+    (event.key === "ArrowUp" || event.key === "ArrowDown")
+    && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && editorLineCount.value === 1
+  ) {
+    // A single-line draft has no text for ↑/↓ to move through, so Excel
+    // commits it and moves the selection out of the cell. A multi-line draft
+    // keeps the arrows for caret movement between its lines.
+    event.stopPropagation();
+    event.preventDefault();
+    commitAndMoveCell(event.key === "ArrowUp" ? -1 : 1, 0);
   }
 }
 
@@ -2516,19 +5175,39 @@ function onEditCompositionEnd() {
   if (!commitEditOnCompositionEnd) return;
   commitEditOnCompositionEnd = false;
   // v-model writes the final composition text during compositionend listeners,
-  // so wait one tick before reading editingValue.
-  void nextTick(commitEdit);
+  // so wait one tick before reading editingValue. The Enter that ended the
+  // composition confirms the draft like any other Enter.
+  void nextTick(commitEditFillingSelection);
 }
 
 function commitAndTab() {
   if (!editingCell.value) return;
-  props.controller.commitCellInput(editingCell.value, editingValue.value);
+  commitEditingDraft(editingCell.value);
   const nextCell = getAdjacentCell(editingCell.value, 0, 1);
   if (!nextCell) return;
   props.controller.selectCell(nextCell);
   editingCell.value = nextCell;
   editingValue.value = getCellInputValue(nextCell);
+  editorCaret.value = editingValue.value.length;
   scrollToCell(nextCell);
+}
+
+/** Commits the draft and leaves the editor, moving the selection by one cell. */
+function commitAndMoveCell(rowDelta: number, colDelta: number) {
+  const cell = editingCell.value;
+  if (!cell) return;
+  commitEditingDraft(cell);
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+  editingCell.value = null;
+  editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
+  const nextCell = getAdjacentCell(cell, rowDelta, colDelta);
+  if (nextCell) {
+    props.controller.selectCell(nextCell);
+    scrollToCell(nextCell);
+  }
+  void nextTick(() => containerRef.value?.focus());
 }
 
 function getAdjacentCell(cell: XlsxCellAddress, rowDelta: number, colDelta: number): XlsxCellAddress | null {
@@ -2556,12 +5235,182 @@ function moveCell(rowDelta: number, colDelta: number, extend: boolean) {
   scrollToCell(cell);
 }
 
+/** Whether the current selection covers more than the active cell. */
+function hasRangeSelection(): boolean {
+  const range = selection.value;
+  if (!range) return false;
+  return range.start.row !== range.end.row || range.start.col !== range.end.col;
+}
+
+/** Whether an arrow key moves the focus by one cell on either axis. */
+function isArrowKey(key: string): boolean {
+  return key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+}
+
+/**
+ * Excel's Escape: a range selection collapses back to its active cell.
+ *
+ * @returns `true` when a range was collapsed, so the key was consumed.
+ */
+function collapseSelectionToActiveCell(): boolean {
+  const cell = activeCell.value;
+  if (!cell || !hasRangeSelection()) return false;
+  props.controller.selectCell(cell);
+  return true;
+}
+
+/**
+ * Whether a cell holds data for the edge jumps.
+ *
+ * `Ctrl+Arrow` and the `End` key treat a cell with any rendered text as the
+ * end of a run, the same way Excel stops on a cell with a value, a formula
+ * result or a formatted constant.
+ */
+function isCellOccupied(cell: XlsxCellAddress): boolean {
+  return String(getGridCellDisplayValue(cell) ?? "").trim().length > 0;
+}
+
+/** Last display row or column covered by the sheet's used range. */
+function usedDisplayEdge(axis: "row" | "column"): number {
+  const indices = axis === "row" ? displayRows.value : displayCols.value;
+  const fallback = Math.max(0, indices.length - 1);
+  const sheet = activeSheet.value;
+  if (!sheet) return fallback;
+  return resolveLastUsedDisplayIndex(
+    indices,
+    axis === "row" ? sheet.maxUsedRow : sheet.maxUsedCol,
+    fallback,
+  );
+}
+
+/** The used range's last cell, or `null` for an empty sheet. */
+function usedRangeEndCell(): XlsxCellAddress | null {
+  const sheet = activeSheet.value;
+  if (!sheet || sheet.maxUsedRow < 0 || sheet.maxUsedCol < 0) return null;
+  return getSheetCell(usedDisplayEdge("row"), usedDisplayEdge("column"));
+}
+
+/**
+ * `Ctrl/Cmd+A`: select the used range.
+ *
+ * The first press selects the used extent; a second press escalates to the
+ * whole display grid, exactly what the corner click (`selectAxisRange`) does.
+ * An empty sheet therefore selects everything straight away.
+ */
+function selectUsedRange(): void {
+  const first = getSheetCell(0, 0);
+  const end = usedRangeEndCell();
+  if (first && end && !isSameRange(selection.value, { start: first, end })) {
+    props.controller.selectRange({ start: first, end });
+    scrollToCell(end);
+    return;
+  }
+  selectAxisRange({ actualIndex: 0, kind: "corner" });
+}
+
+/** `PageUp`/`PageDown`: one viewport of rows, keeping the column. */
+function moveCellByPage(direction: GridAxisDirection, extend: boolean): void {
+  const step = resolvePageRowStep(effectiveRowHeights.value, bodyViewportSize().height);
+  moveCell(direction * step, 0, extend);
+}
+
+/**
+ * `Home`/`End`: the start or the data end of the active row.
+ *
+ * `Home` lands on the row's first column. `End` lands on the row's last
+ * non-empty cell and falls back to the last display column when the row is
+ * empty, which is where Excel's `End` mode would stop next.
+ */
+function moveToRowEdge(edge: "start" | "end", extend: boolean): void {
+  const current = activeCell.value;
+  if (!current) return;
+  const cols = displayCols.value;
+  if (cols.length === 0) return;
+  let target: XlsxCellAddress = { row: current.row, col: cols[0] };
+  if (edge === "end") {
+    target = { row: current.row, col: cols[cols.length - 1] };
+    for (let index = cols.length - 1; index >= 0; index -= 1) {
+      const candidate = { row: current.row, col: cols[index] };
+      if (isCellOccupied(candidate)) {
+        target = candidate;
+        break;
+      }
+    }
+  }
+  moveSelectionTo(target, extend ? current : null);
+}
+
+/** `Ctrl/Cmd+Home` / `Ctrl/Cmd+End`: the sheet's first and last used cell. */
+function moveToSheetEdge(edge: "start" | "end", extend: boolean): void {
+  const rows = displayRows.value;
+  const cols = displayCols.value;
+  if (rows.length === 0 || cols.length === 0) return;
+  const first = getSheetCell(0, 0);
+  // Excel always counts A1 as part of the used range, so `Ctrl+End` on an
+  // empty sheet lands there instead of on the last displayed cell.
+  const target = edge === "start" ? first : usedRangeEndCell() ?? first;
+  if (!target) return;
+  moveSelectionTo(target, extend ? activeCell.value : null);
+}
+
+/**
+ * `Ctrl/Cmd` + arrow: jump to the edge of the data region under the cursor.
+ *
+ * The column axis is mirrored on an RTL sheet, so `←` walks towards the higher
+ * display index there, matching the plain arrow keys.
+ */
+function jumpToEdge(key: string, extend: boolean): void {
+  const current = activeCell.value;
+  if (!current) return;
+  const displayRow = sheetRowToDisplayIndex.value.get(current.row);
+  const displayCol = sheetColToDisplayIndex.value.get(current.col);
+  if (displayRow === undefined || displayCol === undefined) return;
+
+  let target: XlsxCellAddress | null;
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    const rows = displayRows.value;
+    const direction: GridAxisDirection = key === "ArrowUp" ? -1 : 1;
+    const index = resolveJumpTarget(displayRow, direction, rows.length, (display) =>
+      isCellOccupied({ row: rows[display], col: current.col }),
+    );
+    target = getSheetCell(index, displayCol);
+  } else {
+    const cols = displayCols.value;
+    const direction = resolveHorizontalJumpDirection(key, isRightToLeft.value);
+    const index = resolveJumpTarget(displayCol, direction, cols.length, (display) =>
+      isCellOccupied({ row: current.row, col: cols[display] }),
+    );
+    target = getSheetCell(displayRow, index);
+  }
+  if (!target) return;
+  moveSelectionTo(target, extend ? current : null);
+}
+
+/** Moves the selection to `target`, extending from `anchor` when one is given. */
+function moveSelectionTo(target: XlsxCellAddress, anchor: XlsxCellAddress | null): void {
+  if (anchor) props.controller.selectRange({ start: anchor, end: target });
+  else props.controller.selectCell(target);
+  scrollToCell(target);
+}
+
 function startEdit(cell: XlsxCellAddress) {
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  editorCaret.value = editingValue.value.length;
   scrollToCell(cell);
   nextTick(() => editInputRef.value?.focus());
 }
+
+// The context menu, ribbon and hosts can request an inline edit without
+// reaching into the grid; the request arrives as data and is consumed here.
+watch(
+  () => props.controller.editRequest,
+  (request) => {
+    if (!request || editingLocked.value) return;
+    props.controller.selectCell(request.cell);
+    startEdit(request.cell);
+  },
+);
 
 function scrollToCell(cell: XlsxCellAddress) {
   const container = containerRef.value;
@@ -2580,15 +5429,52 @@ function scrollToCell(cell: XlsxCellAddress) {
   // the sheet for no reason. In the scrolling pane the freeze line hides the
   // first frozenWidth pixels, so a cell is only fully visible once its left
   // edge clears the strip and its right edge clears the body's right edge.
+  // RTL mirrors the axis: the pinned strip is on the right and the scrolling
+  // pane ends at `bodyWidth - frozen.width`.
   if (displayCell.col >= frozen.cols) {
-    if (colX - container.scrollLeft < frozen.width) container.scrollLeft = Math.max(0, colX - frozen.width);
-    else if (colX + colW - container.scrollLeft > bodyWidth) container.scrollLeft = colX + colW - bodyWidth;
+    if (isRightToLeft.value) {
+      const maxScroll = Math.max(0, columnLayoutWidth.value - bodyWidth);
+      // The scrolling pane ends at the freeze line on the right, so a cell's
+      // right edge must stay left of `bodyWidth - frozen.width`.
+      const minVisibleScroll = colX + colW - bodyWidth;
+      const maxVisibleScroll = colX - frozen.width;
+      if (container.scrollLeft < minVisibleScroll) {
+        container.scrollLeft = Math.min(maxScroll, minVisibleScroll);
+      } else if (container.scrollLeft > maxVisibleScroll) {
+        container.scrollLeft = Math.max(0, Math.min(maxScroll, maxVisibleScroll));
+      }
+    } else if (colX - container.scrollLeft < frozen.width) {
+      container.scrollLeft = Math.max(0, colX - frozen.width);
+    } else if (colX + colW - container.scrollLeft > bodyWidth) {
+      container.scrollLeft = colX + colW - bodyWidth;
+    }
   }
   if (displayCell.row >= frozen.rows) {
     if (rowY - container.scrollTop < frozen.height) container.scrollTop = Math.max(0, rowY - frozen.height);
     else if (rowY + rowH - container.scrollTop > bodyHeight) container.scrollTop = rowY + rowH - bodyHeight;
   }
   schedulePaint();
+}
+
+/**
+ * Whether the browser currently has a non-empty text selection inside the grid.
+ *
+ * DOM mode paints real text, so Ctrl/Cmd+C over a native selection must reach
+ * the browser's copy command instead of replacing it with the cell range.
+ */
+function hasDomTextSelection(): boolean {
+  if (gridRenderMode.value !== "dom") return false;
+  if (typeof globalThis.getSelection !== "function") return false;
+  const browserSelection = globalThis.getSelection();
+  if (!browserSelection || browserSelection.isCollapsed || browserSelection.rangeCount === 0) return false;
+  const container = containerRef.value;
+  const anchor = browserSelection.anchorNode;
+  return Boolean(
+    container
+    && anchor
+    && typeof container.contains === "function"
+    && container.contains(anchor),
+  );
 }
 
 function onGridKeydown(event: KeyboardEvent) {
@@ -2598,19 +5484,70 @@ function onGridKeydown(event: KeyboardEvent) {
   // An IME composition owns the keyboard; never treat its keys as grid commands.
   if (isComposingKeyboardEvent(event)) return
 
+  // A pending cut is a grid mode, not a selection: Escape leaves the selection
+  // alone and only drops the marquee (Excel's cancel-cut). The check is on the
+  // controller, not on this sheet's marquee, so a cut made on another sheet is
+  // still cancellable from here; drawings carry their own pending cut with no
+  // cell range, so the return value decides whether Escape was consumed.
+  if (event.key === "Escape") {
+    if (props.controller.cancelCut?.()) {
+      event.preventDefault();
+      return;
+    }
+    // With nothing to cancel, Escape collapses a range selection back to its
+    // active cell, exactly like Excel; a single cell is left to the browser.
+    if (collapseSelectionToActiveCell()) {
+      event.preventDefault();
+      return;
+    }
+  }
+
   const active = activeCell.value;
   if (!active) return;
 
-  if ((event.ctrlKey || event.metaKey) && event.key === "c") { event.preventDefault(); void copySelection(); return; }
-  if ((event.ctrlKey || event.metaKey) && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
+  const modified = event.ctrlKey || event.metaKey;
+  if (modified && event.key === "c") {
+    if (hasDomTextSelection()) return;
+    event.preventDefault(); void copySelection(); return;
+  }
+  if (modified && event.key === "x") { event.preventDefault(); if (!editingLocked.value) props.controller.cutSelection?.(); return; }
+  if (modified && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
+  if (modified && event.key.toLocaleLowerCase() === "a") { event.preventDefault(); selectUsedRange(); return; }
+  // Ctrl/Cmd+Arrow jumps to the edge of the current data region.
+  if (modified && !event.altKey && isArrowKey(event.key)) {
+    event.preventDefault(); jumpToEdge(event.key, event.shiftKey); return;
+  }
+
+  // Page keys move by a viewport of rows, Home/End by row or sheet extents;
+  // each keeps Shift for extending the selection. `Ctrl/Cmd+PageUp/PageDown`
+  // belongs to the sheet tabs (#11), so it is left to the viewer.
+  if (!modified && (event.key === "PageDown" || event.key === "PageUp")) {
+    event.preventDefault();
+    moveCellByPage(event.key === "PageUp" ? -1 : 1, event.shiftKey);
+    return;
+  }
+  if (event.key === "Home" || event.key === "End") {
+    event.preventDefault();
+    const edge = event.key === "Home" ? "start" : "end";
+    if (modified) moveToSheetEdge(edge, event.shiftKey);
+    else moveToRowEdge(edge, event.shiftKey);
+    return;
+  }
 
   const handlers: Record<string, () => void> = {
     ArrowUp: () => moveCell(-1, 0, event.shiftKey),
     ArrowDown: () => moveCell(1, 0, event.shiftKey),
-    ArrowLeft: () => moveCell(0, -1, event.shiftKey),
-    ArrowRight: () => moveCell(0, 1, event.shiftKey),
+    ArrowLeft: () => moveCell(0, isRightToLeft.value ? 1 : -1, event.shiftKey),
+    ArrowRight: () => moveCell(0, isRightToLeft.value ? -1 : 1, event.shiftKey),
+    // Tab follows reading order, which is leftwards on an RTL sheet: the next
+    // display column is still `+1`.
     Tab: () => { event.preventDefault(); moveCell(0, 1, false); },
-    Enter: () => { if (!editingLocked.value) startEdit(active); },
+    // Shift+Enter steps up one row; plain Enter opens the editor, and an entry
+    // confirmed over a multi-cell selection fills that selection.
+    Enter: () => {
+      if (event.shiftKey) { moveCell(-1, 0, false); return; }
+      if (!editingLocked.value) startEdit(active);
+    },
     Delete: () => { if (!editingLocked.value) props.controller.clearSelectedCells(); },
     Backspace: () => { if (!editingLocked.value) props.controller.setCellValue(active, ""); },
     F2: () => { if (!editingLocked.value) startEdit(active); },
@@ -2622,6 +5559,7 @@ function onGridKeydown(event: KeyboardEvent) {
   if (!editingLocked.value && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
     editingCell.value = active;
     editingValue.value = event.key;
+    editorCaret.value = event.key.length;
     nextTick(() => editInputRef.value?.focus());
   }
 }
@@ -2651,7 +5589,13 @@ const cornerCanvasStyle: CSSProperties = { left: "0px", position: "absolute", to
 const editInputStyle = computed<CSSProperties>(() => {
   if (!editingCell.value) return { display: "none" };
   const z = gridZoomFactor(zoomScale.value);
-  const rect = paneOverlayRect(editingCell.value);
+  const base = paneOverlayRect(editingCell.value);
+  if (!base) return { display: "none" };
+  // Grow over the rows below for wrapped or hard-broken lines. The pane clip
+  // still wins, so a cell at the bottom edge never paints over the headers.
+  const rect = paneOverlayRect(editingCell.value, {
+    height: Math.max(base.height, editorMeasuredHeight.value),
+  });
   if (!rect) return { display: "none" };
   return {
     left: `${ROW_HEADER_WIDTH + rect.left}px`,
@@ -2659,11 +5603,41 @@ const editInputStyle = computed<CSSProperties>(() => {
     width: `${rect.width}px`,
     height: `${rect.height}px`,
     position: "absolute", zIndex: "10",
-    border: "2px solid #2563eb", padding: "2px 4px",
-    fontSize: `${12 * z}px`, fontFamily: "inherit", outline: "none",
-    background: props.isDark ? "#18181b" : "#ffffff",
-    color: props.isDark ? "#e4e4e7" : "#18181b",
+    border: `${EDITOR_BORDER_PX}px solid #2563eb`,
+    padding: `${EDITOR_PADDING_Y_PX}px ${EDITOR_PADDING_X_PX}px`,
+    fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
+    outline: "none", resize: "none", overflow: "hidden",
+    whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
+    background: showEditorReferenceHighlight.value ? "transparent" : (props.isDark ? "#18181b" : "#ffffff"),
+    color: showEditorReferenceHighlight.value ? "transparent" : (props.isDark ? "#e4e4e7" : "#18181b"),
+    caretColor: props.isDark ? "#e4e4e7" : "#18181b",
     boxSizing: "border-box",
+  };
+});
+
+/**
+ * Hidden measurement twin of the editor. It carries the same text, width,
+ * typography, padding and border, so its natural height is exactly the editor
+ * box height the draft needs.
+ */
+const editMirrorStyle = computed<CSSProperties>(() => {
+  if (!editingCell.value) return { display: "none" };
+  const z = gridZoomFactor(zoomScale.value);
+  const rect = paneOverlayRect(editingCell.value);
+  if (!rect) return { display: "none" };
+  return {
+    left: `${ROW_HEADER_WIDTH + rect.left}px`,
+    top: `${HEADER_HEIGHT + rect.top}px`,
+    width: `${rect.width}px`,
+    position: "absolute", zIndex: "9",
+    border: `${EDITOR_BORDER_PX}px solid transparent`,
+    padding: `${EDITOR_PADDING_Y_PX}px ${EDITOR_PADDING_X_PX}px`,
+    fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
+    whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
+    visibility: showEditorReferenceHighlight.value ? "visible" : "hidden",
+    pointerEvents: "none", boxSizing: "border-box",
+    background: showEditorReferenceHighlight.value ? (props.isDark ? "#18181b" : "#ffffff") : undefined,
+    color: showEditorReferenceHighlight.value ? (props.isDark ? "#e4e4e7" : "#18181b") : undefined,
   };
 });
 
@@ -2674,6 +5648,7 @@ defineExpose({
   hitTestCell,
   hitTestAxis,
   hitTestSheetPoint,
+  isEditingCell,
   get scrollContainer() {
     return containerRef.value;
   },
@@ -2695,17 +5670,63 @@ watch(
     selection.value?.start.col,
     selection.value?.end.row,
     selection.value?.end.col,
+    cutRange.value?.start.row,
+    cutRange.value?.start.col,
+    cutRange.value?.end.row,
+    cutRange.value?.end.col,
     props.isDark,
     props.selectionColor,
     props.selectionFillColor,
+    props.renderMode,
+    formulaReferences.value,
+    fillDrag.value,
   ],
   schedulePaint,
   { flush: "post" },
 );
 
 watch(
+  cutRange,
+  (range) => {
+    cutAntsStep.value = 0;
+    cutAntsLastStepAt = 0;
+    if (range) scheduleCutAnts();
+    else stopCutAnts();
+  },
+  { flush: "post" },
+);
+
+watch(
   () => [activeSheet.value?.name, activeCell.value?.row, activeCell.value?.col],
   () => { validationDropdownOpen.value = false; },
+  { flush: "post" },
+);
+
+// The mirror is the editor's sizing source: measure it after every draft or
+// zoom change and let the textarea grow instead of scrolling its first line.
+watch(
+  [editingCell, editingValue, zoomScale, containerWidth, containerHeight],
+  syncEditorSize,
+  { flush: "post" },
+);
+
+// Keep the shared formula-editing session in step with the inline editor. The
+// session starts on the first cell with content (including the zero-length seed
+// of a blank cell) and ends as soon as the editor closes via any path: Enter,
+// Escape, Tab, arrow commit, blur or a sheet switch.
+watch(
+  [editingCell, editingValue],
+  ([cell, value]) => {
+    if (!cell) {
+      formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+      return;
+    }
+    if (formulaReferenceEditing.session.owner.value === FORMULA_REFERENCE_OWNER_GRID) {
+      formulaReferenceEditing.update(FORMULA_REFERENCE_OWNER_GRID, value, editorCaret.value);
+    } else {
+      formulaReferenceEditing.begin(FORMULA_REFERENCE_OWNER_GRID, value, editorCaret.value);
+    }
+  },
   { flush: "post" },
 );
 
@@ -2757,12 +5778,15 @@ onMounted(() => {
   });
   resizeObs.observe(container);
   schedulePaint();
+  if (cutRange.value) scheduleCutAnts();
 });
 
 onUnmounted(() => {
   resizeObs?.disconnect();
   unbindDevicePixelRatioWatch();
+  stopCutAnts();
   resetWorkerRows(null);
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   if (paintFrame !== null) window.cancelAnimationFrame(paintFrame);
   paintFrame = null;
 });
@@ -2780,6 +5804,11 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .xlsx-grid__scroll-space { position: relative; }
+.xlsx-grid__page-breaks { inset: 0; pointer-events: none; position: absolute; z-index: 6; }
+.xlsx-grid__page-break-line { border: 0; display: block; margin: 0; padding: 0; position: absolute; }
+.xlsx-grid__page-break-line--column { border-left: 1px dashed #2563eb; width: 0; }
+.xlsx-grid__page-break-line--row { border-top: 1px dashed #2563eb; height: 0; }
+.xlsx-grid__page-break-label { background: rgba(37, 99, 235, .92); border-radius: 3px; color: #ffffff; font-family: inherit; font-size: 10px; font-style: normal; font-weight: 600; line-height: 1; padding: 2px 4px; position: absolute; }
 .xlsx-grid__viewport {
   left: 0;
   overflow: hidden;
@@ -2792,17 +5821,65 @@ onUnmounted(() => {
 .xlsx-grid__corner,
 .xlsx-grid__body { pointer-events: none; }
 .xlsx-grid__edit-input { box-sizing: border-box; pointer-events: auto; }
+.xlsx-grid__edit-mirror { pointer-events: none; position: absolute; visibility: hidden; }
+.xlsx-grid__edit-mirror::after { content: "\200b"; }
 .xlsx-grid__comment-popover { background: #fffbe6; border: 1px solid #eab308; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #422006; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 150px; padding: 8px 10px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 30; }
 .xlsx-grid__comment-popover strong { font-size: 11px; }
 .xlsx-grid__comment-popover span { font-size: 12px; line-height: 1.4; }
 .xlsx-grid__validation-hint { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); color: #1e3a8a; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 140px; padding: 6px 9px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 28; }
 .xlsx-grid__validation-hint strong { font-size: 11px; }
 .xlsx-grid__validation-hint span { font-size: 12px; line-height: 1.4; }
+.xlsx-grid__fill-handle {
+  border: 1px solid #ffffff;
+  box-sizing: border-box;
+  cursor: crosshair;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 24;
+}
 .xlsx-grid__validation-trigger { align-items: center; background: #ffffff; border: 1px solid #94a3b8; border-radius: 3px; color: #334155; cursor: pointer; display: flex; font-size: 10px; height: 18px; justify-content: center; padding: 0; pointer-events: auto; position: absolute; width: 16px; z-index: 29; }
 .xlsx-grid__validation-trigger:hover { background: #e2e8f0; }
 .xlsx-grid__validation-dropdown { background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; padding: 3px; pointer-events: auto; position: absolute; z-index: 32; }
 .xlsx-grid__validation-option { background: transparent; border: 0; border-radius: 3px; color: #18181b; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 8px; text-align: left; }
 .xlsx-grid__validation-option:hover { background: #dbeafe; }
+.xlsx-grid__axis-menu-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #71717a;
+  cursor: pointer;
+  display: flex;
+  font-size: 10px;
+  height: 16px;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  width: 14px;
+  z-index: 20;
+}
+.xlsx-grid__axis-menu-trigger:hover { background: rgba(113, 113, 122, .2); border-radius: 3px; color: #18181b; }
+.xlsx-grid__autofilter-trigger {
+  align-items: center;
+  background: rgba(255, 255, 255, .85);
+  border: 1px solid rgba(113, 113, 122, .35);
+  border-radius: 3px;
+  color: #52525b;
+  cursor: pointer;
+  display: flex;
+  font-size: 9px;
+  height: 14px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  width: 14px;
+  z-index: 21;
+}
+.xlsx-grid__autofilter-trigger:hover { background: #e4e4e7; color: #18181b; }
+.xlsx-grid__autofilter-trigger--active { border-color: #2563eb; color: #1d4ed8; }
 .xlsx-grid__validation-alert { align-items: flex-start; border: 1px solid #f87171; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #7f1d1d; display: flex; flex-direction: column; gap: 3px; max-width: 300px; min-width: 170px; padding: 7px 24px 7px 10px; pointer-events: auto; position: absolute; white-space: pre-wrap; z-index: 34; }
 .xlsx-grid__validation-alert strong { font-size: 11px; }
 .xlsx-grid__validation-alert span { font-size: 12px; line-height: 1.45; }
@@ -2810,4 +5887,20 @@ onUnmounted(() => {
 .xlsx-grid__validation-alert--warning { background: #fffbeb; border-color: #fbbf24; color: #78350f; }
 .xlsx-grid__validation-alert--information { background: #eff6ff; border-color: #60a5fa; color: #1e3a8a; }
 .xlsx-grid__validation-dismiss { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; position: absolute; right: 4px; top: 3px; }
+.xlsx-grid__pivot-badge {
+  background: rgba(219, 234, 254, .92);
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  color: #1e3a8a;
+  font-size: 10px;
+  line-height: 1.3;
+  max-width: 240px;
+  overflow: hidden;
+  padding: 2px 6px;
+  pointer-events: none;
+  position: absolute;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 30;
+}
 </style>

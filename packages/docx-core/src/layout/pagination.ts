@@ -13,6 +13,9 @@ import {
   type ResolvedModelSection
 } from "./sections";
 import { paragraphSectionPropertiesXml } from "../engine/section-break";
+import type { DocumentLayoutDefaults } from "../engine/layout-defaults";
+import { resolveDocumentLayoutDefaults } from "../engine/layout-defaults";
+import { resolveParagraphSpacingPx } from "../engine/paragraph-auto-spacing";
 
 export {
   resolveDocumentSectionsFromMetadata,
@@ -25,7 +28,6 @@ export type {
   SectionStartPageParity
 } from "./sections";
 
-const TWIPS_PER_PIXEL = 15;
 const PAGE_BREAK_XML_PATTERN = /<w:br\b[^>]*w:type="page"[^>]*\/?>/i;
 const LAST_RENDERED_PAGE_BREAK_XML_PATTERN = /<w:lastRenderedPageBreak\b[^>]*\/?>/i;
 const PAGE_BREAK_BEFORE_XML_PATTERN = /<w:pageBreakBefore\b[^>]*\/?>/i;
@@ -79,14 +81,6 @@ export interface TableExplicitPageBreakInfo {
 export interface DocumentPageRange {
   startNodeIndex: number;
   endNodeIndex: number;
-}
-
-function twipsToPixels(twips?: number): number | undefined {
-  if (!Number.isFinite(twips)) {
-    return undefined;
-  }
-
-  return Math.max(0, Math.round((twips as number) / TWIPS_PER_PIXEL));
 }
 
 function isOnOffTagEnabled(tagXml: string | undefined): boolean {
@@ -444,12 +438,18 @@ export function resolveParagraphConsumedHeightPx(
     : safeRawHeightPx;
 }
 
-export function paragraphBeforeSpacingPx(paragraph: ParagraphNode): number {
-  return twipsToPixels(paragraph.style?.spacing?.beforeTwips) ?? 0;
+export function paragraphBeforeSpacingPx(
+  paragraph: ParagraphNode,
+  layoutDefaults?: DocumentLayoutDefaults
+): number {
+  return resolveParagraphSpacingPx(paragraph, layoutDefaults).beforePx;
 }
 
-export function paragraphAfterSpacingPx(paragraph: ParagraphNode): number {
-  return twipsToPixels(paragraph.style?.spacing?.afterTwips) ?? 0;
+export function paragraphAfterSpacingPx(
+  paragraph: ParagraphNode,
+  layoutDefaults?: DocumentLayoutDefaults
+): number {
+  return resolveParagraphSpacingPx(paragraph, layoutDefaults).afterPx;
 }
 
 export function resolveParagraphBeforeSpacingPx(
@@ -459,7 +459,8 @@ export function resolveParagraphBeforeSpacingPx(
   pageConsumedHeightPx: number,
   suppressSpacingBeforeAfterPageBreak: boolean
 ): number {
-  const beforeSpacingPx = paragraphBeforeSpacingPx(paragraph);
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
+  const beforeSpacingPx = paragraphBeforeSpacingPx(paragraph, layoutDefaults);
   if (!suppressSpacingBeforeAfterPageBreak) {
     return beforeSpacingPx;
   }
@@ -487,6 +488,38 @@ export function sectionTitlePageEnabled(sectionPropertiesXml?: string): boolean 
 
   const titlePageTag = sectionPropertiesXml.match(/<w:titlePg\b[^>]*\/?>/i)?.[0];
   return isOnOffTagEnabled(titlePageTag);
+}
+
+/**
+ * Header/footer variant a page uses, as the OOXML `w:type` a reference must
+ * carry (`default`, `first` for a title page, `even` for even pages). This is
+ * the inverse of `selectSectionVariantForPage` and lets an authoring command
+ * create the variant the current page actually looks for.
+ */
+export function resolveSectionVariantReferenceTypeForPage(params: {
+  sectionPropertiesXml?: string;
+  /** Zero-based page index inside the section. */
+  sectionPageIndex: number;
+  /** Zero-based physical page index used for even/odd selection. */
+  documentPageIndex: number;
+  evenAndOddHeaders?: boolean;
+}): string {
+  const safeSectionPageIndex = Number.isFinite(params.sectionPageIndex)
+    ? Math.max(0, Math.round(params.sectionPageIndex))
+    : 0;
+  const physicalPageIndex = Number.isFinite(params.documentPageIndex)
+    ? Math.max(0, Math.round(params.documentPageIndex))
+    : 0;
+
+  if (safeSectionPageIndex === 0 && sectionTitlePageEnabled(params.sectionPropertiesXml)) {
+    return "first";
+  }
+  // `selectSectionVariantForPage` treats an even physical page index as an odd
+  // page number, so the same parity decides the "even" variant here.
+  if ((params.evenAndOddHeaders ?? true) && physicalPageIndex % 2 !== 0) {
+    return "even";
+  }
+  return "default";
 }
 
 export function selectSectionVariantForPage<T extends HeaderSection | FooterSection>(

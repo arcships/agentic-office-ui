@@ -24,6 +24,10 @@ import {
   type PaginationSectionGeometry
 } from "./pagination-layout";
 import type { ParagraphLineRange, TableRowRange } from "./page-segmentation-core";
+import {
+  resolvePaginationPageCountTarget,
+  type PaginationPageCountTarget
+} from "./pagination-target";
 export type {
   LayoutOptions,
   LayoutPage,
@@ -46,8 +50,11 @@ export type {
 } from "./pagination-layout";
 export * from "./pagination";
 export * from "./pagination-iteration";
+export * from "./pagination-stability";
+export * from "./pagination-target";
 export * from "./page-segmentation-core";
 export * from "./page-segmentation-table";
+export * from "./section-page-numbers";
 // `pagination-layout` is intentionally not re-exported: it is the adapter that
 // wires `buildDocumentPageNodeSegments` into `buildLayoutSnapshot`, not new
 // public API surface.
@@ -70,6 +77,11 @@ export interface LayoutSnapshotOptions extends LayoutOptions {
   reserveNoteHeight?: boolean;
   /** Measured-height feedback from the previous render pass (#99). */
   measurementFeedback?: PaginationMeasurementFeedback;
+  /**
+   * Advisory page-count target. Defaults to `model.metadata.documentPageCount`.
+   * It is reported on the snapshot but never forces page count (#99).
+   */
+  pageCountTarget?: number;
 }
 
 export interface LayoutSnapshotRect {
@@ -206,11 +218,19 @@ export interface LayoutSnapshot {
   version: 1;
   source: "layout-engine-adapter";
   resolvedDocument: ResolvedDocument;
+  /**
+   * Advisory page-count target from `documentPageCount` (#99). It is never
+   * enforced: neither page heights nor page boundaries are scaled/merged to
+   * reach it. A mismatch means the cached count is stale or the measurement
+   * differs, and the rendered count wins.
+   */
+  pageCountTarget?: PaginationPageCountTarget;
   pages: LayoutSnapshotPage[];
 }
 
 function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<LayoutOptions> & {
   measurementFeedback?: PaginationMeasurementFeedback;
+  pageCountTarget?: number;
 } {
   return {
     ...DEFAULT_LAYOUT_OPTIONS,
@@ -528,6 +548,11 @@ export function buildLayoutSnapshot(
     version: 1,
     source: "layout-engine-adapter",
     resolvedDocument,
+    pageCountTarget: resolvePaginationPageCountTarget(
+      options.pageCountTarget !== undefined
+        ? options.pageCountTarget
+        : model.metadata.documentPageCount
+    ),
     pages: paginated.pages.map((page) => ({
       index: page.index,
       number: page.index + 1,

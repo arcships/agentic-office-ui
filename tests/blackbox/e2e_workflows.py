@@ -17,6 +17,12 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
 
 from browser_evidence import BrowserEvidence
+from docx import Document
+from openpyxl import __version__ as openpyxl_version
+from openpyxl import load_workbook
+
+
+EXPECTED_OPENPYXL = "3.1.5"
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,8 +94,87 @@ def save_download(download, directory: Path) -> dict[str, object]:
     data = path.read_bytes()
     return {
         "fileName": download.suggested_filename,
+        "path": str(path),
         "bytes": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+def read_editor_model(page: Page) -> dict[str, object]:
+    raw = page.locator('[data-testid="editor-model-snapshot"]').text_content() or "{}"
+    return json.loads(raw)
+
+
+def wait_for_editor_model(page: Page, predicate, message: str, timeout_ms: int = 30_000):
+    deadline = time.monotonic() + timeout_ms / 1000
+    last: dict[str, object] | None = None
+    while time.monotonic() < deadline:
+        last = read_editor_model(page)
+        if predicate(last):
+            return last
+        page.wait_for_timeout(50)
+    raise AssertionError(f"timed out waiting for {message}; last model={last}")
+
+
+def docx_model_projection(snapshot: dict[str, object]) -> dict[str, object]:
+    """Compare text, tables and images without depending on run boundaries.
+
+    The editor snapshot summarizes paragraphs, tables and image runs. A DOCX
+    round trip may re-segment adjacent runs, so the bold/italic/underline text
+    is compared as a string instead of comparing run arrays.
+    """
+    nodes: list[dict[str, object]] = []
+    for node in snapshot.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        if node.get("type") == "paragraph":
+            def styled(style_key: str) -> str:
+                return "".join(
+                    str(run.get("text", ""))
+                    for run in node.get("runs", [])
+                    if isinstance(run, dict)
+                    and run.get("type") == "text"
+                    and isinstance(run.get("style"), dict)
+                    and run["style"].get(style_key) is True
+                )
+
+            images = [
+                {
+                    "widthPx": run.get("widthPx"),
+                    "heightPx": run.get("heightPx"),
+                    "floating": run.get("floating"),
+                }
+                for run in node.get("runs", [])
+                if isinstance(run, dict) and run.get("type") == "image"
+            ]
+            nodes.append(
+                {
+                    "type": "paragraph",
+                    "text": node.get("text", ""),
+                    "bold": styled("bold"),
+                    "italic": styled("italic"),
+                    "underline": styled("underline"),
+                    "images": images,
+                }
+            )
+        elif node.get("type") == "table":
+            style = node.get("style") or {}
+            nodes.append(
+                {
+                    "type": "table",
+                    "rows": [
+                        [str(cell.get("text", "")) for cell in row.get("cells", [])]
+                        for row in node.get("rows", [])
+                    ],
+                    "layout": style.get("layout"),
+                    "columnWidthsTwips": style.get("columnWidthsTwips"),
+                    "widthTwips": style.get("widthTwips"),
+                }
+            )
+    return {
+        "nodes": nodes,
+        "tableCount": snapshot.get("tableCount"),
+        "imageCount": snapshot.get("imageCount"),
     }
 
 
@@ -122,7 +207,7 @@ def docx_switch_and_recover(page: Page, attempt_dir: Path) -> dict[str, object]:
         '[data-testid="docx-viewer-page"] details.runtime-details'
     )
     if runtime_details.get_attribute("open") is None:
-        runtime_details.locator("summary").click()
+        runtime_details.locator("summary").first.click()
     diagnostics = page.locator('[data-testid="docx-diagnostics"]').inner_text()
     assert "worker-success" in diagnostics, diagnostics[-2_000:]
     page.screenshot(path=str(attempt_dir / "recovered-ready.png"), full_page=True)
@@ -149,6 +234,15 @@ def docx_edit_undo_export(page: Page, attempt_dir: Path) -> dict[str, object]:
 
     paragraph.fill(marker)
     page.locator("h2").click()
+    edited_model = wait_for_editor_model(
+        page,
+        lambda model: any(
+            node.get("type") == "paragraph" and node.get("text") == marker
+            for node in model.get("nodes", [])
+            if isinstance(node, dict)
+        ),
+        "the edited paragraph to reach the public editor model",
+    )
     with page.expect_download(timeout=30_000) as download_info:
         page.locator('[data-testid="editor-export"]').click()
     saved = save_download(download_info.value, attempt_dir / "downloads")
@@ -158,8 +252,55 @@ def docx_edit_undo_export(page: Page, attempt_dir: Path) -> dict[str, object]:
         "() => document.querySelector('[data-testid=\"editor-status\"]')?.textContent?.includes('Exported DOCX')",
         timeout=30_000,
     )
+
+    # Reopen the downloaded package with a real parser, not a byte-length check.
+    exported_path = Path(str(saved["path"]))
+    document = Document(str(exported_path))
+    paragraph_texts = [item.text for item in document.paragraphs]
+    assert marker in paragraph_texts, paragraph_texts[-5:]
+    assert len(document.tables) == 1, len(document.tables)
+    assert document.tables[0].rows[0].cells[0].text == "Launch readiness"
+    assert len(document.inline_shapes) == 0, len(document.inline_shapes)
+
+    # Re-import the exported file through the public import path and diff the
+    # text, tables and images of the before/after models.
+    with page.expect_file_chooser(timeout=30_000) as chooser_info:
+        page.locator('[data-testid="editor-import"]').click()
+    chooser_info.value.set_files(str(exported_path))
+    page.wait_for_function(
+        "name => document.querySelector('[data-testid=\"loaded-file\"]')?.textContent?.includes(name)",
+        arg=str(saved["fileName"]),
+        timeout=30_000,
+    )
+    reimported_model = wait_for_editor_model(
+        page,
+        lambda model: any(
+            node.get("type") == "paragraph" and node.get("text") == marker
+            for node in model.get("nodes", [])
+            if isinstance(node, dict)
+        ),
+        "the exported file to be re-imported through the editor",
+    )
+    before_projection = docx_model_projection(edited_model)
+    after_projection = docx_model_projection(reimported_model)
+    assert before_projection == after_projection, {
+        "before": before_projection,
+        "after": after_projection,
+    }
+
     page.screenshot(path=str(attempt_dir / "edited-exported.png"), full_page=True)
-    return {"original": original, "edited": marker, "download": saved}
+    return {
+        "original": original,
+        "edited": marker,
+        "download": saved,
+        "pythonDocx": {
+            "paragraphs": len(document.paragraphs),
+            "tables": len(document.tables),
+            "inlineShapes": len(document.inline_shapes),
+            "markerParagraph": marker,
+        },
+        "reimported": after_projection,
+    }
 
 
 def docx_reference_roundtrip(page: Page, attempt_dir: Path) -> dict[str, object]:
@@ -262,13 +403,59 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         '[data-testid="xlsx-viewer-page"] details.runtime-details'
     )
     if runtime_details.get_attribute("open") is None:
-        runtime_details.locator("summary").click()
+        runtime_details.locator("summary").first.click()
     with page.expect_download(timeout=30_000) as download_info:
         page.locator('[data-testid="xlsx-download-source"]').click()
     saved = save_download(download_info.value, attempt_dir / "downloads")
     assert saved["bytes"] > 0, saved
     assert str(saved["fileName"]).endswith(".xlsx"), saved
+    # XLSX-013: the source download must be the verified fixture bytes, not a
+    # re-requested URL or a re-serialized workbook.
+    fixture = ROOT / "apps" / "demo" / "public" / "samples" / "sales-table.xlsx"
+    assert hashlib.sha256(Path(str(saved["path"])).read_bytes()).hexdigest() == hashlib.sha256(
+        fixture.read_bytes()
+    ).hexdigest(), "the source download must match the fixture bytes"
     page.screenshot(path=str(attempt_dir / "xlsx-recovered-downloaded.png"), full_page=True)
+
+    # XLSX-011/013: edit a real workbook, export it through the toolbar, and
+    # reopen the downloaded file with the pinned independent parser.
+    assert openpyxl_version == EXPECTED_OPENPYXL, openpyxl_version
+    if runtime_details.get_attribute("open") is not None:
+        runtime_details.locator("summary").first.click()
+    grid_box = grid.bounding_box()
+    assert grid_box, "the XLSX grid has no bounding box"
+    page.mouse.click(grid_box["x"] + 48 + 20, grid_box["y"] + 24 + 12)
+    page.wait_for_function(
+        "() => !document.querySelector('[data-testid=\"xlsx-formula-input\"]')?.disabled",
+        timeout=10_000,
+    )
+    marker = "E2E-XLSX-EXPORT"
+    formula.fill(marker)
+    page.locator('[data-testid="page-status"]').click()
+    page.wait_for_function(
+        "expected => document.querySelector('[data-testid=\"xlsx-formula-input\"]')?.value === expected",
+        arg=marker,
+        timeout=10_000,
+    )
+    with page.expect_download(timeout=30_000) as export_info:
+        page.locator('[data-testid="xlsx-toolbar-export"]').click()
+    exported = save_download(export_info.value, attempt_dir / "downloads")
+    assert exported["bytes"] > 0, exported
+    assert str(exported["fileName"]).endswith(".xlsx"), exported
+
+    workbook = load_workbook(Path(str(exported["path"])), data_only=False)
+    try:
+        sales = workbook["Sales Data"]
+        assert sales["A1"].value == marker, sales["A1"].value
+        assert sales["A1"].font.bold is True, sales["A1"].font
+        assert str(sales["A1"].fill.fgColor.rgb).endswith("1C3A5E"), sales["A1"].fill
+        assert sales.freeze_panes == "A2", sales.freeze_panes
+        assert "SalesRecords" in sales.tables, list(sales.tables)
+        assert workbook.sheetnames == ["Sales Data"]
+    finally:
+        workbook.close()
+    page.screenshot(path=str(attempt_dir / "xlsx-exported.png"), full_page=True)
+
     return {
         "firstSheet": first_name,
         "secondSheet": second_name,
@@ -276,6 +463,11 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         "errorCode": error_code,
         "recoveredFile": "sales-table.xlsx",
         "download": saved,
+        "exported": exported,
+        "exportEdit": marker,
+        "merged": ["A7:C8"],
+        "freezePanes": "C3",
+        "openpyxl": openpyxl_version,
     }
 
 

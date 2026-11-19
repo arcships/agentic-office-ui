@@ -22,7 +22,9 @@ export type {
 export { default as PdfViewer } from "./components/PdfViewer.vue"
 /**
  * Minimal embeddable PDF renderer with vertical scroll through all pages.
- * No toolbar, thumbnails panel, or search bar — host owns all controls.
+ * No toolbar or search bar — host owns all controls. A bookmark outline is
+ * shown when the document has one, and page thumbnails use the shared viewer
+ * strip; both can be disabled through `showOutline` / `showThumbnails`.
  * Renders every page as a stacked image in a scrollable container.
  *
  * @example
@@ -37,6 +39,13 @@ export { default as PdfViewer } from "./components/PdfViewer.vue"
  */
 export { default as PdfSurface } from "./components/PdfSurface.vue"
 export {
+  PDF_FILE_ACCEPT,
+  PDF_FILE_EXTENSIONS,
+  PDF_FILE_MIME_TYPES,
+  isSupportedPdfFileName,
+  pdfFileExtension,
+} from "./pdf-file-types"
+export {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfSourceError,
   loadVerifiedPdfSource,
@@ -45,6 +54,7 @@ export {
 } from "./pdf-url-policy"
 export type { PdfLoadErrorMessages } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
+export type { PdfOutlineItem } from "./pdf/pdf-outline"
 export {
   DEFAULT_PDF_MAX_RENDER_PIXELS,
   MAX_PDF_RENDER_DPR,
@@ -106,5 +116,28 @@ export type {
   PdfUrlPolicy,
   PdfVerifiedDocument,
 } from "./pdf-url-policy"
+
+/** Page layout modes (continuous / single / spread) and their row geometry. */
+export {
+  PDF_PAGE_LAYOUTS,
+  isPdfSpreadLayout,
+  normalizePdfPageLayout,
+  pdfPageAtPoint,
+  pdfPageIndexAtOffset,
+  pdfPageLayoutRows,
+  pdfRowIndexAtOffset,
+  pdfRowsInViewport,
+  pdfSnapTopForRow,
+  pdfSpreadPagePair,
+  pdfSpreadStepPage,
+  resolvePdfPageLayoutMetrics,
+} from "./pdf/pdf-page-layout"
+export type {
+  PdfPageDisplaySize,
+  PdfPageLayout,
+  PdfPageLayoutMetrics,
+  PdfPageLayoutOptions,
+  PdfPageLayoutRow,
+} from "./pdf/pdf-page-layout"
 
 export type { PdfViewerProps } from "./types"

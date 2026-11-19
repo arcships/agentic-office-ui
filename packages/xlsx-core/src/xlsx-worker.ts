@@ -6,7 +6,7 @@ import {
 } from "@xmldom/xmldom";
 import { strFromU8, unzipSync } from "fflate";
 import { OfficeLoadError } from "@arcships/office-runtime";
-import { loadWorkbookChartAssets, refreshChartDataFromWorkbook } from "./charts";
+import { loadWorkbookChartAssets, isWorksheetTabListed, refreshChartDataFromWorkbook } from "./charts";
 import {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
@@ -16,19 +16,25 @@ import {
   resolveWorksheetDefaultColumnWidthPixels,
   resolveWorksheetDefaultRowHeightPixels,
   resolveWorksheetMergeMetadata,
+  resolveRichTextRuns,
   revokeWorkbookImageAssets
 } from "./images";
 import type { WorkbookStructureAssets } from "./images";
+import { resolveWorksheetPrintState } from "./print/page-setup";
 import { safeCalculate } from "./safe-calculate";
+import { summarizeSelectionValues } from "./selection-stats";
+import type { XlsxSelectionStatsQuery, XlsxSelectionSummary } from "./selection-stats";
 import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 import { getSheetsWasmModule, setWasmSource, type WorkerWasmSource } from "./wasm";
 import type {
+  XlsxAutoFilterSnapshot,
   XlsxChart,
   XlsxChartsheet,
   XlsxCellAddress,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
+  XlsxCellTextRun,
   XlsxDataValidation,
   XlsxFreezePanes,
   XlsxFormControl,
@@ -134,6 +140,23 @@ type WorkerRequest =
         startRow: number;
         rowCount: number;
       };
+    }
+  | {
+      id: number;
+      type: "getAutoFilterRows";
+      payload: {
+        workbookSheetIndex: number;
+        startRow: number;
+        endRow: number;
+        startCol: number;
+        endCol: number;
+        maxRows: number;
+      };
+    }
+  | {
+      id: number;
+      type: "getSelectionStats";
+      payload: XlsxSelectionStatsQuery & { workbookSheetIndex: number };
     };
 
 type WorkerSuccessResponse = {
@@ -160,8 +183,11 @@ type WorkerSuccessResponse = {
         displayValue: string;
         formula: string;
         numberFormat?: XlsxCellNumberFormatInput | null;
+        runs?: XlsxCellTextRun[];
       }
     | unknown[]
+    | XlsxAutoFilterSnapshot
+    | XlsxSelectionSummary
     | null;
 };
 
@@ -300,7 +326,7 @@ function buildVisibleSheetIndexByWorkbookSheetIndex(nextWorkbook: Workbook, show
   for (let workbookSheetIndex = 0; workbookSheetIndex < nextWorkbook.sheetCount; workbookSheetIndex += 1) {
     const worksheet = nextWorkbook.getSheet(workbookSheetIndex);
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       continue;
     }
     mapping.set(workbookSheetIndex, visibleIndex);
@@ -495,6 +521,21 @@ function resolveSheetDisplayUsedRange(
   ];
 }
 
+/**
+ * Runs of a sheet, or `undefined` when no cell is rich, so painters do not
+ * build an A1 key for every visible cell of a plain sheet.
+ */
+function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
+  return runs && Object.keys(runs).length > 0 ? runs : undefined;
+}
+
+/** Per-cell rotation/shrink flags, or `undefined` when every cell inherits. */
+function hasCellTextLayouts(
+  layouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> | undefined,
+) {
+  return layouts && Object.keys(layouts).length > 0 ? layouts : undefined;
+}
+
 function buildSheetList(
   nextWorkbook: Workbook,
   structureAssets?: WorkbookStructureAssets | null,
@@ -506,6 +547,7 @@ function buildSheetList(
   for (let index = 0; index < nextWorkbook.sheetCount; index += 1) {
     const worksheet = nextWorkbook.getSheet(index);
     const sheetState = structureAssets?.sheetStatesByWorkbookSheetIndex[index] ?? sheetLayoutStates?.[index] ?? null;
+    const printState = resolveWorksheetPrintState(sheetState, worksheet);
     const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
     const effectiveSheetState = {
       ...sheetState,
@@ -521,7 +563,7 @@ function buildSheetList(
       sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
     );
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       continue;
     }
 
@@ -546,9 +588,17 @@ function buildSheetList(
     const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
     if (!usedRange) {
       sheetsByWorkbookSheetIndex.push({
+        autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+        definedNames: sheetState?.definedNames ?? [],
+        pivotTables: sheetState?.pivotTables ?? [],
+        hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+        slicers: sheetState?.slicers ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellStyleIds: sheetState?.cellStyleIds,
+        cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colCount: 0,
+        richTextCells: hasRichTextCells(sheetState?.richTextCells),
         colStyleIds: sheetState?.colStyleIds ?? {},
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colWidths: [],
@@ -556,6 +606,7 @@ function buildSheetList(
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
         dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+        ...printState,
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -578,6 +629,7 @@ function buildSheetList(
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
         rowHeights: [],
         rowStyleIds: sheetState?.rowStyleIds ?? {},
+        rightToLeft: sheetState?.rightToLeft ?? false,
         showGridLines: sheetState?.showGridLines ?? true,
         sparklines: sheetState?.sparklines ?? [],
         styleById: structureAssets?.styleById ?? {},
@@ -613,9 +665,17 @@ function buildSheetList(
     }
 
     sheetsByWorkbookSheetIndex.push({
+      autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+      definedNames: sheetState?.definedNames ?? [],
+      pivotTables: sheetState?.pivotTables ?? [],
+      hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+      slicers: sheetState?.slicers ?? [],
       cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+      cellStyleIds: sheetState?.cellStyleIds,
+      cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colCount: visibleCols.length,
+      richTextCells: hasRichTextCells(sheetState?.richTextCells),
       colStyleIds: sheetState?.colStyleIds ?? {},
       colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
       colWidths: visibleCols.map(resolveColumnWidthPx),
@@ -623,6 +683,7 @@ function buildSheetList(
       hyperlinks: sheetState?.hyperlinks ?? [],
       comments: sheetState?.comments ?? [],
       dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+      ...printState,
       defaultColWidthPx,
       defaultRowHeightPx,
       freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -645,6 +706,7 @@ function buildSheetList(
       rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
       rowHeights: visibleRows.map(resolveRowHeightPx),
       rowStyleIds: sheetState?.rowStyleIds ?? {},
+      rightToLeft: sheetState?.rightToLeft ?? false,
       showGridLines: sheetState?.showGridLines ?? true,
       sparklines: sheetState?.sparklines ?? [],
       styleById: structureAssets?.styleById ?? {},
@@ -788,6 +850,15 @@ function resolveSnapshotNumberFormat(
   return normalizeSnapshotNumberFormat(sheet.styleById[rowStyleId ?? colStyleId ?? -1]?.numberFormat);
 }
 
+function resolveSnapshotRichTextRuns(
+  sheet: XlsxSheetData | null,
+  row: number,
+  col: number,
+  displayValue: string
+): XlsxCellTextRun[] | undefined {
+  return resolveRichTextRuns(sheet?.richTextCells?.[cellAddressToA1({ row, col })], displayValue);
+}
+
 function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: number, col: number, activeSheet?: XlsxSheetData | null) {
   const formula = worksheet.getFormulaAt(row, col);
   const cachedFormulaValue = formula ? activeSheet?.cachedFormulaValues?.[cellAddressToA1({ row, col })] : undefined;
@@ -812,6 +883,57 @@ function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: n
   } finally {
     cellValue.free();
   }
+}
+
+/**
+ * Aggregates one selection from the Worker-owned worksheet.
+ *
+ * Only cells inside the query window are touched, the scan stops at
+ * `maxCells`, and `hiddenRows` mirrors the AutoFilter view state, so the
+ * returned totals match what the grid shows without ever posting the cells
+ * themselves across the thread boundary.
+ */
+function summarizeWorksheetSelection(
+  worksheet: ReturnType<Workbook["getSheet"]>,
+  sheet: XlsxSheetData | null,
+  query: XlsxSelectionStatsQuery
+): XlsxSelectionSummary {
+  const values: Array<number | null> = [];
+  const hidden = new Set<number>(query.hiddenRows ?? []);
+  const maxCells = Math.max(1, Math.floor(Number(query.maxCells) || 1));
+  let scannedCells = 0;
+  let numberFormat: XlsxCellNumberFormatInput | null = null;
+
+  scan: for (let row = query.startRow; row <= query.endRow; row += 1) {
+    for (let col = query.startCol; col <= query.endCol; col += 1) {
+      if (scannedCells >= maxCells) break scan;
+      scannedCells += 1;
+      // Filtered rows still consume the budget, so a filter that hides most
+      // of a huge selection cannot make the scan size depend on the data.
+      if (hidden.has(row)) continue;
+      const cellValue = worksheet.getCalculatedValueAt(row, col);
+      try {
+        if (cellValue.is_empty) continue;
+        let number: number | null = null;
+        if (cellValue.is_number) {
+          const parsed = cellValue.asNumber();
+          if (parsed !== undefined && Number.isFinite(parsed)) number = parsed;
+        }
+        if (number !== null && numberFormat === null) {
+          numberFormat = resolveSnapshotNumberFormat(worksheet, sheet, row, col);
+        }
+        values.push(number);
+      } finally {
+        cellValue.free();
+      }
+    }
+  }
+
+  return summarizeSelectionValues(values, {
+    numberFormat,
+    scannedCells,
+    totalCells: query.cellCount,
+  });
 }
 
 function cellAddressToA1(cell: XlsxCellAddress) {
@@ -1118,10 +1240,13 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
       const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === message.payload.workbookSheetIndex) ?? null;
       const worksheet = workbook.getSheet(message.payload.workbookSheetIndex);
       try {
+        const displayValue = getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet);
+        const runs = resolveSnapshotRichTextRuns(targetSheet, message.payload.row, message.payload.col, displayValue);
         return {
-          displayValue: getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet),
+          displayValue,
           formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? "",
-          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col)
+          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col),
+          ...(runs ? { runs } : {})
         };
       } finally {
         worksheet.free();
@@ -1144,6 +1269,49 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
           includeStyles: true,
           useFormattedValues: true
         }) as unknown[] | null;
+      } finally {
+        worksheet.free();
+      }
+    }
+    case "getAutoFilterRows": {
+      if (!workbook) {
+        return null;
+      }
+      const { endCol, endRow, maxRows, startCol, startRow, workbookSheetIndex } = message.payload;
+      const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === workbookSheetIndex) ?? null;
+      const worksheet = workbook.getSheet(workbookSheetIndex);
+      try {
+        const columnCount = Math.max(1, endCol - startCol + 1);
+        // A transferable snapshot must stay bounded even when the caller asks
+        // for many rows: 250k cells is already a very large filter menu.
+        const rowLimit = Math.min(maxRows, Math.floor(250_000 / columnCount));
+        const rows: XlsxAutoFilterSnapshot["rows"] = [];
+        let truncated = false;
+        for (let row = startRow; row <= endRow; row += 1) {
+          if (rows.length >= rowLimit) {
+            truncated = true;
+            break;
+          }
+          const values: string[] = [];
+          for (let col = startCol; col <= endCol; col += 1) {
+            values.push(getCellDisplayValue(worksheet, row, col, targetSheet));
+          }
+          rows.push({ row, values });
+        }
+        return { rows, truncated };
+      } finally {
+        worksheet.free();
+      }
+    }
+    case "getSelectionStats": {
+      if (!workbook) {
+        return null;
+      }
+      const { workbookSheetIndex, ...query } = message.payload;
+      const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === workbookSheetIndex) ?? null;
+      const worksheet = workbook.getSheet(workbookSheetIndex);
+      try {
+        return summarizeWorksheetSelection(worksheet, targetSheet, query);
       } finally {
         worksheet.free();
       }

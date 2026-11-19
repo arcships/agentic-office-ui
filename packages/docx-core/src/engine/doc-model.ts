@@ -10,9 +10,12 @@ import {
 import { parseDocx } from "./ooxml-core";
 
 import { normalizeDocModel } from "./normalize";
+import { resolveDocxRuntimeLimits } from "../resource-limits";
 import { parseDocumentBackground } from "./page-background";
+import { attachDocumentDefaults } from "./document-defaults";
 import { parseNoteProperties } from "./note-properties";
 import { enrichDocModelFormFields } from "./form-field-enrichment";
+import { enrichDocModelDrawingObjects } from "./drawing-object-model";
 import { enrichDocModelTypography } from "./model-enrichment";
 import type { DocModel, DocumentNoteProperties } from "./types";
 
@@ -86,7 +89,16 @@ export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
   enrichDocModelFormFields(model);
   enrichDocModelTypography(model, pkg);
   return normalizeDocModel(
-    attachDocumentBackground(attachDocumentNoteProperties(model, pkg), pkg)
+    attachDocumentDefaults(
+      attachDocumentBackground(
+        attachDocumentNoteProperties(
+          enrichDocModelDrawingObjects(model, pkg),
+          pkg,
+        ),
+        pkg,
+      ),
+      pkg,
+    ),
   );
 }
 
@@ -98,6 +110,16 @@ export async function buildDocModelFromBytes(
     payload.byteOffset,
     payload.byteOffset + payload.byteLength,
   ) as ArrayBuffer;
+  // OpenDocument text has no OOXML package. Keep the root helper usable for
+  // both families, matching the upstream `buildDocModelFromBytes` contract.
+  const openDocument = await import("../viewer/open-document");
+  if (openDocument.isOpenDocumentBytes(buffer)) {
+    const imported = await openDocument.importOpenDocumentBuffer(
+      buffer,
+      resolveDocxRuntimeLimits(undefined),
+    );
+    return { package: imported.package, model: imported.model };
+  }
   const pkg = await parseDocx(buffer);
   const model = await buildDocModel(pkg);
   return { package: pkg, model };

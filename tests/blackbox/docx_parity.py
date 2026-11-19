@@ -34,7 +34,44 @@ CASES = (
     {"id": "DOCX-PARITY-INVOICE", "file": "invoice-table.docx"},
     {"id": "DOCX-PARITY-IMAGE", "file": "report-with-image.docx"},
     {"id": "DOCX-PARITY-CHINESE", "file": "chinese-mixed.docx"},
+    {"id": "DOCX-PARITY-PAGE-SIZES", "file": "page-sizes.docx"},
 )
+
+# Every fixture carries a header and a footer, so every rendered page must show
+# the furniture of its own section. A page that renders no header/footer is a
+# regression even when both sides agree, which is why an empty-vs-empty match
+# cannot pass any more.
+FURNITURE = {
+    "legal-contract.docx": (
+        ("Master Services Agreement", "Confidential"),
+    ),
+    "invoice-table.docx": (
+        ("Invoice Table Fixture", "Confidential"),
+    ),
+    "report-with-image.docx": (
+        ("Quarterly Operations Report Fixture", "Confidential"),
+    ),
+    "chinese-mixed.docx": (
+        ("中文混排测试文档", "Confidential"),
+    ),
+    "sections-columns.docx": (
+        ("Section One Header", "Section One Footer"),
+        ("Section Two Landscape Header", "Section Two Footer"),
+        ("Section Three Two Column Header", "Section Three Footer"),
+    ),
+    "page-sizes.docx": (
+        ("A4 Portrait Header", "A4 Portrait Footer"),
+        ("A4 Landscape Header", "A4 Landscape Footer"),
+        ("Letter Portrait Header", "Letter Portrait Footer"),
+    ),
+}
+
+PAGE_SIZE_CASES = {
+    "page-sizes.docx": {
+        "widths": {794, 816, 1123},
+        "heights": {794, 1056, 1123},
+    },
+}
 
 
 def port_in_use() -> bool:
@@ -193,8 +230,11 @@ def collect_page_geometry(page) -> list[dict[str, object]]:
                 seen.set(`${side}:${index}`, {
                   side,
                   pageIndex: index,
+                  paperWidthPx: Number(surface.dataset.docxPagePaperWidth),
                   paperHeightPx: Number(surface.dataset.docxPagePaperHeight),
+                  wrapperWidthPx: wrapper.offsetWidth,
                   wrapperHeightPx: wrapper.offsetHeight,
+                  surfaceWidthPx: surface.offsetWidth,
                   surfaceHeightPx: surface.offsetHeight,
                   surfaceOverflow: getComputedStyle(surface).overflow,
                   bodyHeightPx: body.offsetHeight,
@@ -272,6 +312,42 @@ def validate_case(
             failures.append(message)
 
     expect(diff.get("equal") is True, f"render structures differ: {diff.get('differences')}")
+    for label, structure in (("Viewer", viewer), ("Editor", editor)):
+        page_count = int(structure.get("pageCount") or 0)
+        declared = int(structure.get("declaredPageCount") or 0)
+        expect(page_count > 0, f"{label} rendered zero pages")
+        expect(
+            int(structure.get("scannedSteps") or 0) > 0,
+            f"{label} did not scan the virtual document surface",
+        )
+        if declared > 0:
+            expect(
+                page_count >= declared,
+                f"{label} mounted only {page_count}/{declared} pages",
+            )
+    # A header/footer pair that is empty on both sides used to compare equal.
+    allowed = FURNITURE.get(case["file"])
+    expect(allowed is not None, f"no header/footer expectation for {case['file']}")
+    for label, structure in (("Viewer", viewer), ("Editor", editor)):
+        observed: set[tuple[str, str]] = set()
+        for page in structure.get("pages", []):
+            header = str((page.get("header") or {}).get("text") or "").strip()
+            footer = str((page.get("footer") or {}).get("text") or "").strip()
+            expect(bool(header), f"{label} page {page.get('index')} has an empty header")
+            expect(bool(footer), f"{label} page {page.get('index')} has an empty footer")
+            observed.add((header, footer))
+        for header, footer in observed:
+            expect(
+                any(header_text in header and footer_text in footer
+                    for header_text, footer_text in allowed or ()),
+                f"{label} rendered unexpected furniture {header!r} / {footer!r}",
+            )
+        for header_text, footer_text in allowed or ():
+            expect(
+                any(header_text in header and footer_text in footer
+                    for header, footer in observed),
+                f"{label} never rendered {header_text!r} / {footer_text!r}",
+            )
     interaction = editor.get("interaction", {})
     expect(interaction.get("contentEditableTrue") == 0, "read-only editor has contenteditable=true")
     expect(interaction.get("inputs") == 0, "read-only editor exposes input elements")
@@ -288,8 +364,15 @@ def validate_case(
     expect(len(geometry) > 0, "no page geometry was measured")
     for item in geometry:
         label = f"{item.get('side')} page {item.get('pageIndex')}"
+        paper_width = float(item.get("paperWidthPx") or 0)
         paper_height = float(item.get("paperHeightPx") or 0)
+        expect(paper_width > 0, f"{label} has no paper width")
         expect(paper_height > 0, f"{label} has no paper height")
+        surface_width = float(item.get("surfaceWidthPx") or 0)
+        expect(
+            abs(surface_width - paper_width) <= 1,
+            f"{label} surface width {surface_width} does not match paper width {paper_width}",
+        )
         surface_height = float(item.get("surfaceHeightPx") or 0)
         expect(
             abs(surface_height - paper_height) <= 1,
@@ -307,10 +390,9 @@ def validate_case(
 
     file_name = case["file"]
     if file_name == "legal-contract.docx":
-        expect(
-            any(int(item.get("clippedPx") or 0) > 0 for item in geometry),
-            "legal fixture did not exercise clipped pagination overflow",
-        )
+        # Clipped overflow is exercised by the page-overflow component tests.
+        # The legal fixture paginates into complete pages here, so requiring a
+        # clipped page made this parity case fail for a correct document.
         viewer_pages = viewer.get("pages", [])
         editor_pages = editor.get("pages", [])
         expect(len(viewer_pages) >= 3, f"Viewer rendered only {len(viewer_pages)} legal pages")
@@ -353,6 +435,40 @@ def validate_case(
             text = combined_text(structure)
             for expected in required:
                 expect(expected in text, f"{label} mixed-language text is missing {expected}")
+    elif file_name in PAGE_SIZE_CASES:
+        expected_sizes = PAGE_SIZE_CASES[file_name]
+        for side in ("parity-viewer", "parity-editor"):
+            side_geometry = [item for item in geometry if item.get("side") == side]
+            expect(bool(side_geometry), f"{side} measured no page geometry")
+            widths = {round(float(item.get("paperWidthPx") or 0)) for item in side_geometry}
+            heights = {round(float(item.get("paperHeightPx") or 0)) for item in side_geometry}
+            expect(
+                widths == expected_sizes["widths"],
+                f"{side} paper widths are {sorted(widths)}, expected {sorted(expected_sizes['widths'])}",
+            )
+            expect(
+                heights == expected_sizes["heights"],
+                f"{side} paper heights are {sorted(heights)}, expected {sorted(expected_sizes['heights'])}",
+            )
+            expect(
+                any(width > height for width, height in
+                    ((float(item.get("paperWidthPx") or 0), float(item.get("paperHeightPx") or 0))
+                     for item in side_geometry)),
+                f"{side} never rendered a landscape page",
+            )
+        for label, structure in (("Viewer", viewer), ("Editor", editor)):
+            expect(
+                int(structure.get("pageCount") or 0) >= 3,
+                f"{label} split the mixed page-size fixture into only "
+                f"{structure.get('pageCount')} pages",
+            )
+            text = combined_text(structure)
+            for marker in (
+                "A4 Portrait Section",
+                "A4 Landscape Section",
+                "US Letter Section",
+            ):
+                expect(marker in text, f"{label} page-size fixture is missing {marker}")
 
     violations = evidence.violations()
     if any(violations.values()):

@@ -15,10 +15,12 @@ import {
   cloneEditorSelection,
   cloneTextRange,
   paragraphText,
+  resolveDocxImageLayerOrderPatch,
   toBase64,
   tableCellParagraphs,
   updateSectionImageFloatingAtLocation,
 } from "@arcships/docx-core"
+import type { DocxImageLayerOrderCommand } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 type LocatedImage = {
@@ -392,6 +394,54 @@ export function createEditorImage(
     }, ctx.statusMessage("imageWrapSet", { mode }))
   }
 
+  /**
+   * Apply one of the four image layer order commands. The patch only rewrites
+   * `floating.zIndex` (Word's `relativeHeight`); `applyImageChange` records a
+   * single history entry and invalidates the image/paragraph/table sourceXml
+   * so export re-emits the new paint order.
+   */
+  const applyImageLayerOrder = (
+    location: DocxImageLocation,
+    command: DocxImageLayerOrderCommand,
+  ): void => {
+    const located = locateImage(ctx.modelSnapshot.value, location)
+    if (!located) {
+      unsupported("imageTargetUnavailable")
+      return
+    }
+    if (!located.image.floating) {
+      unsupported("imageLayerOrderRequiresFloating")
+      return
+    }
+    const patch = resolveDocxImageLayerOrderPatch(
+      command,
+      located.image.floating,
+    )
+    if (!patch) {
+      unsupported("imageLayerOrderRequiresFloating")
+      return
+    }
+    applyImageChange(location, ({ image }) => {
+      image.floating = { ...(image.floating ?? {}), ...patch }
+    }, ctx.statusMessage("imageLayerOrderChanged"))
+  }
+
+  const bringToFront = (location: DocxImageLocation): void => {
+    applyImageLayerOrder(location, "bringToFront")
+  }
+
+  const bringForward = (location: DocxImageLocation): void => {
+    applyImageLayerOrder(location, "bringForward")
+  }
+
+  const sendBackward = (location: DocxImageLocation): void => {
+    applyImageLayerOrder(location, "sendBackward")
+  }
+
+  const sendToBack = (location: DocxImageLocation): void => {
+    applyImageLayerOrder(location, "sendToBack")
+  }
+
   const moveFloatingImage = (
     location: DocxImageLocation,
     patch: Partial<NonNullable<ImageRunNode["floating"]>>
@@ -574,6 +624,10 @@ export function createEditorImage(
     resizeImage,
     setSyntheticTextBoxText,
     setImageWrapMode,
+    bringToFront,
+    bringForward,
+    sendBackward,
+    sendToBack,
     moveFloatingImage,
     moveSectionFloatingImage,
     moveParagraphDropCap,

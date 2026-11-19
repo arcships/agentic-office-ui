@@ -18,6 +18,13 @@ export type {
 export const PptxViewer = PptxViewerComponent
 export { default as PptxThumbnail } from "./PptxThumbnail.vue"
 export { default as PptxStage } from "./PptxStage.vue"
+export {
+  PPTX_FILE_ACCEPT,
+  PPTX_FILE_EXTENSIONS,
+  PPTX_FILE_MIME_TYPES,
+  isSupportedPptxFileName,
+  pptxFileExtension,
+} from "./pptx-file-types"
 export { usePptxDocument } from "./composables/usePptxDocument"
 export { usePptxPlayback } from "./composables/usePptxPlayback"
 
@@ -27,6 +34,7 @@ export type {
   PptxSearchStatus,
   PptxStageContextMenu,
   PptxStageExpose,
+  PptxStageLinkActivate,
   PptxStageObjectClick,
   PptxStageSelection,
   PptxStageTarget,
@@ -40,6 +48,7 @@ export type {
   PptxCapabilityReport,
   PptxFeatureDisposition,
   PptxFeatureRecord,
+  PptxObjectHyperlink,
   PptxObjectIdentity,
   PptxPlaybackDocument,
   PptxPlaybackErrorCode,

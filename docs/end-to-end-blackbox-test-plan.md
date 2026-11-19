@@ -158,9 +158,9 @@ P0/P1 整改必须同时提供一个只使用公开接口的测试消费页。�
 
 | 类型 | 材料 |
 |---|---|
-| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`corrupted.docx` |
+| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`review-comments.docx`、`review-threads.docx`（批注线程/跨段范围/表格修订）、`table-structures.docx`（vMerge/嵌套表/重复表头/页眉表格）、`sections-columns.docx`（纵横混排/分栏/文本框/水印）、`page-sizes.docx`（A4 纵向/A4 横向/Letter 混排与逐节页眉页脚）、`corrupted.docx` |
 | XLSX | `financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx` |
-| PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`corrupted.pdf` |
+| PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`cjk-report.pdf`、`encrypted.pdf`、`corrupted.pdf` |
 | 图像与结构数据 | `invoice.png`、`contract-page.png`、`ocr-layout.json`、`field-citations.json` |
 
 每次候选版本执行前保存材料文件名、字节数和 SHA-256。若材料发生变化，必须重新建立视觉和性能基线，不能沿用旧截图。
@@ -259,7 +259,7 @@ output/acceptance/<commit>/<suite-id>/<run-id>/
 | DOCX-002 | P0 | 在测试消费页通过公开 runtime 配置传入无效 `workerUrl` | 页面显示可操作错误；默认不在主线程继续重解析 | console、公开诊断事件、错误结构、主线程长任务 |
 | DOCX-003 | P0 | 在测试消费页通过公开 runtime 配置传入自定义 `wasmUrl` | 主线程和 Worker 使用同一配置；没有未配置的默认 WASM 请求 | 完整网络记录和公开诊断事件 |
 | DOCX-004 | P1 | 逐个切换五个有效 DOCX | 每份文档标题、正文和页数属于当前材料；无旧状态 | 每份材料截图、页面数、材料名 |
-| DOCX-005 | P1 | 加载合同、表格、图片、中文材料 | 分页、表格正文、图片、中文、页眉页脚按承诺显示；未支持项明确标注 | 关键区域截图和已知差异 |
+| DOCX-005 | P1 | 加载合同、表格、图片、中文与 `page-sizes.docx`（A4/横向/Letter 混排）材料 | 分页、表格正文、图片、中文、逐节纸张尺寸和页眉页脚按承诺显示；未支持项明确标注 | 关键区域截图和已知差异 |
 | DOCX-006 | P1 | 加载 `corrupted.docx` 后恢复到 `demo.docx` | 损坏文件有稳定错误；恢复后内容和工具栏可用 | 错误与恢复证据 |
 
 ### 7.2 编辑器
@@ -273,10 +273,21 @@ output/acceptance/<commit>/<suite-id>/<run-id>/
 | DOCX-105 | P1 | 插入表格，编辑不同单元格，增删行列 | 单元格正文可见，操作只影响目标表格，可撤销 | 表格截图和导出结果 |
 | DOCX-106 | P1 | 插入图片，拖动、缩放并切换环绕方式 | 预览和提交尺寸/位置一致；导出后保留 | 操作轨迹、导出再导入截图 |
 | DOCX-107 | P1 | 切换只读、修订、批注、表单域 | 只读禁止修改；任何可见入口都有真实行为或明确禁用说明 | 控件状态和结果 |
-| DOCX-108 | P1 | 导出 DOCX，再在新上下文重新导入 | 文本、表格、图片和关键格式保留；文件可由 `python-docx` 打开 | 下载文件、校验值、重导截图 |
+| DOCX-108 | P1 | 导出 DOCX，再在新上下文重新导入 | 文本、表格、图片和关键格式保留；python-docx 能打开下载文件并读到编辑后的段落；重新导入后的模型投影与导出前一致 | 下载文件、SHA-256、python-docx 结果、重导模型差分 |
 | DOCX-109 | P2 | 快捷键、右键菜单、主题、缩放和缩略图 | 可见功能与说明一致，不影响文档状态和撤销历史 | 交互录像或连续截图 |
 
 通过条件：真实 Worker 必须被证明；Viewer 和 Editor 都使用正式构建；所有可见且宣称支持的 P1 能力必须通过，不能用隐藏错误或主线程回退代替。
+
+### 7.3 验收完整性约束
+
+下列约束由 `tests/blackbox/docx_parity.py`、`tests/blackbox/docx_editing.py`、`tests/blackbox/e2e_workflows.py` 与 `tests/blackbox/race_workflows.py` 直接执行，不能靠截图或代码审查代替：
+
+- 一致性页面在任一侧渲染 0 页时判 FAIL；虚拟滚动必须挂载到声明的全部页数，扫描不再有固定 64 步上限。采集结果携带 `declaredPageCount` 与 `scannedSteps`，未完成的结构不能判为一致。
+- 每一页都必须渲染非空页眉和页脚，且页眉/页脚文本必须属于该材料声明的集合；`page-sizes.docx` 还必须出现 A4 纵向（794×1123）、A4 横向（1123×794）和 Letter（816×1056）三种纸张尺寸。
+- Demo 页面不得向 Viewer/Surface 传入 `layout-options` 或固定 816×1056；纸张尺寸必须来自每节 `w:pgSz`。
+- 表格和图片验收只能通过真实工具栏与指针事件完成：点击插入表格、选中单元格后增行增列、拖动列边界、通过文件选择器插入图片、拖动图片和缩放手柄。Demo 里的测试专用按钮已删除，仅保留明确标注“不计入验收”的公开 API 快照与导出字节夹具。
+- 导出验收必须把下载文件写盘、用 python-docx 重新打开并断言段落/表格/图片，再通过公开导入路径重新导入，对文本、表格和图片投影做差分。
+- `/docx-surface` 使用请求序号与 `AbortController`；延迟返回的旧样例不得覆盖新样例，该竞态由 `RACE-DOCX-SURFACE-SLOW-LATEST` 覆盖。
 
 `DOCX-107` 中批注与修订 gutter 的自动覆盖点由 `tests/blackbox/docx_annotations.py` 提供（默认 3 张卡片，隐藏批注后剩 2 张，全部隐藏后为 0，恢复后回到 3 张），它已登记在根 `pnpm test:blackbox` 套件中；该用例只运行 headless Chromium，不需要上游仓库。
 
@@ -421,20 +432,27 @@ find "$PACK_DIR" -maxdepth 1 -name '*.tgz' -print
 
 材料的来源、类别、关键行为和校验值必须来自 `test-data/manifest.json`；更细的工作表、公式、合并、图表和图片断言由独立核心测试明确写出，不能由测试读取同一渲染结果后自我验证。上述用例分别纳入 `BB-P0-ROUTES`、`BB-RACE`、`BB-PERF-XLSX`、`BB-SEC-URL` 和 `BB-RELEASE`。
 
+XLSX 的单元/组件用例由每次 CI 运行执行；浏览器用例（`E2E-XLSX-WORKFLOW`、`BB-RACE`、`P4-FIDELITY-XLSX-WORKER-01`、`CI-ROUTE-XLSX-SURFACE`）由 `.github/workflows/ci.yml` 的 `blackbox` 作业在夜间或手动触发时执行。`XLSX-011` 同时由无浏览器的控制器+工具栏导出用例覆盖（`tests/blackbox/xlsx_export_controller_openpyxl.py`）；条件格式和迷你图以正文画布像素采样断言，不再比较演示页自己计算出的模型计数；合并区、双轴冻结、数据验证和 `AA`/`AB` 列宽由真实夹具与 `scripts/verify_test_materials.py` 的材料契约共同约束。
+
 ### 13.2 PDF Viewer
 
 | 用例 ID | 优先级 | 操作 | 可观察断言 |
 |---|---:|---|---|
-| PDF-001 | P1 | 加载 `sample.pdf` | 使用 PDF 引擎从已验证字节渲染；页数正确 |
+| PDF-001 | P1 | 加载 `sample.pdf` | 使用 PDF 引擎从已验证字节渲染；页数正确；页面位图采样后非白像素和深色墨迹像素超过阈值，空白画布不能通过 |
 | PDF-002 | P1 | 缩略图、前后页和页码导航 | 显示页、页码和选中缩略图同步 |
-| PDF-003 | P1 | 缩放、旋转、搜索真实文本 | 页面真实变化；搜索定位到结果，不只改本地数字 |
-| PDF-004 | P1 | 加载扫描、旋转和大合同材料 | 图像页、混合方向和长文档可操作 |
+| PDF-003 | P1 | 缩放、旋转、搜索真实文本 | 页面真实变化并仍有非白像素；搜索定位到结果，不只改本地数字 |
+| PDF-004 | P1 | 加载扫描、旋转和大合同材料 | 扫描件为无文本层图像页；`rotated-pages.pdf` 第二页 `/Rotate 90` 由 `data-page-rotation` 与横向位图共同证明；240 页长文档可操作 |
 | PDF-005 | P1 | 下载后检查 MIME、文件名和 SHA | 下载的是验证过的 PDF 字节，不是二次原始 URL |
 | PDF-006 | P1 | 损坏材料后恢复 | 不留旧页数、缩略图、搜索和 iframe 内容 |
 | PDF-007 | P2 | 四种视口和纯键盘 | 工具栏、缩略图和页面不遮挡，焦点可见 |
 | PDF-008 | P1 | 检查默认上限，再通过公开 `maxFileSize` 调整为略低于 `sample.pdf` | 默认值为 `50 MiB`；超过当前值返回 `PDF_TOO_LARGE`，不创建引擎、页面或缩略图；恢复配置后可正常打开。该配置可由宿主调整，不叠加第二层隐藏硬上限 |
+| PDF-009 | P1 | 未提供密码时打开 `encrypted.pdf`，再通过公开 `password` 输入 `arcships` | 第一次返回 `ENCRYPTED`，不保留页面或缩略图；提供密码后 2 页正常渲染并暴露文本层 |
+| PDF-010 | P1 | 进入 `/pdf-surface`，加载 `encrypted.pdf`，再加载 `scanned-invoice.pdf` | 页面 UI 展示 `ENCRYPTED` 而不只是 console 记录；加载成功后清除错误；图像页不挂载文本层 |
+| PDF-TEXT-FIDELITY | P1 | 逐页读取 `sample.pdf` 文本层，搜索 `PdfViewer`，再打开 `cjk-report.pdf` 搜索 `合同` | 每页包含本页 `Section N` 与 `ALPHA-N`；多命中数量来自全部页面而不只是当前页；中文文本和中文关键字可提取、可搜索 |
 
 PDF-008 是 PDF 唯一的资源拒绝边界。PDF-001～007 不以页数、单页像素、总内存、并发页或其他复杂度阈值为前置，也不能因为这些未设置的阈值而把真实查看功能标为阻断。
+
+PDF 材料在浏览器用例之前由 `scripts/verify_test_materials.py` 用 pypdf 核对页数、`/Rotate`、加密、文本层和中文提取；`.github/workflows/ci.yml` 的 `PDF suite` 作业执行 `node scripts/ci/run-suite.mjs pdf`，因此本节的用例与材料断言会真实阻断 CI，而不是只登记不执行。
 
 ### 13.3 Components 页面
 

@@ -118,9 +118,9 @@ Date: 2026-07-06
 
 ### 2.5 `colors.ts`（224行）— 直接复制
 
-**上游实现**：纯颜色解析。`resolveWorkbookColor` 解析 hex/rgb/argb/theme + tint（HSL 调亮度）。`resolveWorkbookFillStyle` 返回 `{backgroundColor, backgroundImage}`，支持 gradient（linear/path）。
+**上游实现**：纯颜色解析。`resolveWorkbookColor` 解析 hex/rgb/argb/theme/indexed + tint（HSL 调亮度）。`resolveWorkbookFillStyle` 返回 `{backgroundColor, backgroundImage}`，支持 gradient（linear/path）。
 
-**注意**：indexed color 未实现（已知 gap）。tint 用 HSL 实现，与 images.ts 的 DrawingML 变换（lumMod/lumOff/shade）是**不同体系**，不能混用。
+**indexed**：`parseWorkbookStyles()` 读取 `xl/styles.xml` 的 `<colors><indexedColors>`，`buildThemePalette()` 与 ECMA-376 18.8.27 默认调色板（0–63 及系统色 64/65）合并到 `XlsxThemePalette.indexedColors`，`resolveWorkbookColor` 再按索引解析并应用 tint；规格外索引返回 `null`。tint 用 HSL 实现，与 images.ts 的 DrawingML 变换（lumMod/lumOff/shade）是**不同体系**，不能混用。
 
 **迁移操作**：直接 `cp`，零修改。
 
@@ -223,34 +223,39 @@ UI 事件 → controller 方法 → worksheet wasm 方法 → maybeRecalculate �
 17. `sortTable`：capture 每格 `{formula, style, value}`（完整 CellMutationState），sort key 用 `getCalculatedValueAt` + `getFormattedValueAt`（计算值，不是原始公式）。排序：empty 沉底 → number → boolean → localeCompare(numeric:true)。无变化时只 setSortState 不写 cell。历史走 range-edit。
 
 #### F. merge/unmerge/resize
-18. merge/unmerge 走 **snapshot 历史**，调 `worksheet.mergeCells`/`unmergeCells`。
+18. merge/unmerge 走 **snapshot 历史**，调 `worksheet.mergeCells`/`unmergeCells`；`mergeAndCenterSelection` 在同一条 snapshot 里再写入 `horizontal: center` + `vertical: center`（单格选区只居中，不写一格合并区），`mergeSelection` 保留纯合并。
 19. resize：worker-backed 或 readOnly → `applyReadOnlyResizeOverride`（纯前端，不碰 workbook）；正常 → `worksheet.setColumnWidth`/`setRowHeight` + snapshot 历史。
 20. `pxToSheetColumnWidth` / `pxToSheetRowHeight` 换算公式。
 
 #### G. style
 21. `setCellStyle`：单格 `worksheet.setCellStyleAt`，走 cell-edit 历史。
 22. `setRangeStyle`：范围 `worksheet.setRangeStyle(a1)`（单次 wasm 批量调用），走 range-edit 历史。
-23. `cloneCellStyle`：`structuredClone` 优先，回退 JSON。
+23. `setSelectionBorders({ preset, style, color })`：`all`/`left`/`right`/`top`/`bottom`/`none` 复用一次范围样式命令；`outside` 只对选区外围格子逐个 `worksheet.setCellStyleAt`，合并成一条 range-edit 历史（引擎按边合并 patch，角落格的两面不会互相覆盖）。
+24. `resolveCellFallbackStyle`：把 `styleById[0]`（OOXML 形状：`{theme}`/`{rgb}`/`{indexed}`）转成引擎颜色入参后补齐 `DEFAULT_CELL_STYLE_PATCH`，撤销才能把无显式样式的格子真正还原。
+25. `cloneCellStyle`：`structuredClone` 优先，回退 JSON。
 
 #### H. formula/recalculate
-24. `maybeRecalculateWorkbook`：仅 `shouldAutoCalculate` 为真才 `tryRecalculate`，trap 时关 `shouldAutoCalculate`（一次性降级）。
-25. `recalculate`（手动）：成功→`refreshWorkbookState`；trap→跳过 refresh（避免崩溃）。
-26. `refreshWorkbookState`：`buildSheetList` + `loadWorkbookChartAssets` + `setRevision+1`。
+26. `maybeRecalculateWorkbook`：仅 `shouldAutoCalculate` 为真才 `tryRecalculate`，trap 时关 `shouldAutoCalculate`（一次性降级）。
+27. `recalculate`（手动）：成功→`refreshWorkbookState`；trap→跳过 refresh（避免崩溃）。
+28. `refreshWorkbookState`：`buildSheetList` + `loadWorkbookChartAssets` + `setRevision+1`。
 
 #### I. sheet 管理
-27. `addSheet`：去重命名（`workbook.sheetIndex` 循环加后缀）→ `workbook.addSheet` → buildSheetList 重建。
-28. `removeActiveSheet`：`workbook.removeSheet(index)` → filter sheetOrigins/images/shapes → buildSheetList。
+29. `addSheet`：去重命名（`workbook.sheetIndex` 循环加后缀）→ `workbook.addSheet` → buildSheetList 重建。
+30. `removeActiveSheet`：`workbook.removeSheet(index)` → filter sheetOrigins/images/shapes → buildSheetList。
+31. `renameSheet`/`renameActiveSheet`：`validateWorksheetName`（Excel 规则，跨工作表与图表工作表大小写不敏感）→ WASM 无 rename setter，用 `applyWorkbookSheetRename` 重写存档的 `<sheet name>` 与全部引用（公式/定义名称/内部链接/图表系列/透视缓存）→ `Workbook.fromBytes` 重建模型；快照历史，工作表顺序与活动 tab 不变。
+32. `moveSheet(fromIndex, toIndex)`：索引是 `tabs` 的 tab 下标（工作表与图表工作表交错），不是 `sheets`/`chartsheets` 下标；WASM 无 reorder setter，用 `applyWorkbookSheetOrder` 重写存档 `<sheets>` 顺序并重映射 `localSheetId`/`activeTab`/`firstSheet` → `Workbook.fromBytes` 重建模型，`sheetStatesByWorkbookSheetIndex`/images/shapes/`sheetOrigins`/可见索引映射全部从重排后的包按工作表下标重读（图表工作表不再占用这些数组的槽位），因此不会串到相邻表；被移动的 tab 保持活动并滚入视野，拖拽时有插入指示线、`Esc` 取消、同槽放下为无操作；快照历史可撤销/重做，导出与重载保留新顺序。
+33. `setSheetVisibility(workbookSheetIndex, visibility)`：索引是工作簿工作表下标（隐藏表没有 tab 下标），不是 `sheets`/`tabs` 下标；WASM 的 `Worksheet.visibility` 只读，用 `applyWorkbookSheetVisibility` 重写存档 `<sheet state>`（`visible` 删除属性）→ `Workbook.fromBytes` 重建模型并重读所有按工作表下标键控的 assets；隐藏活动表时选下一个可见 tab（没有则前一个/第一个），最后一张可见表拒绝隐藏（同 `removeActiveSheet` 的保护），取消隐藏会激活该表；`veryHidden` 即使 `showHiddenSheets` 展开也不进 tab 与 Unhide 列表，只能用 API 恢复；每次变更是一条快照历史，导出/重载保留新可见性。`setShowHiddenSheets` 是纯视图开关，不写历史。
 
 #### J. image/chart selection
-29. selectChart/selectImage 互斥（与 selectCell 也互斥）。
-30. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
-31. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
+34. selectChart/selectImage 互斥（与 selectCell 也互斥）。
+35. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
+36. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
 
 #### K. zoom
-32. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
+37. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
 
 #### L. getCellStyle
-33. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
+38. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
 
 **迁移操作（机械改写）**：
 
@@ -439,7 +444,7 @@ inheritedStyle(col⊕row) → cellStyle → tableStyle → `buildCellStyle`(CSS)
 | 75 | 地图 chart：内置 us-atlas + world-atlas topojson | chart-renderer.tsx |
 | 76 | 3D surface：regl WebGL，自定义旋转+透视+法线光照+墙体 | surface-regl.tsx |
 | 77 | contour(2D) 走 SVG fallback，不用 WebGL | surface-regl.tsx |
-| 78 | colors.ts indexed color 未实现（已知 gap） | colors.ts |
+| 78 | colors.ts 支持 indexed 调色板（ECMA-376 标准 64 色 + 系统色 + `styles.xml` `indexedColors` 覆盖） | colors.ts |
 
 ---
 
@@ -777,12 +782,12 @@ pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types
 | 自定义单元格高亮 | 1131-1142 | `getCellStyle` 回调，奇数行加底色 |
 | 单元格样式编辑 | 377-397, 512-727 | font/alignment/number-format/border/fill |
 | 撤销/重做 | 337/331, 503-508 | `undo`/`redo` |
-| 合并/拆分 | 328/338, 732-737 | `mergeSelection`/`unmergeSelection` |
+| 合并/拆分 | 328/338, 732-737 | `mergeAndCenterSelection`（默认）/`mergeSelection`/`unmergeSelection` |
 | 公式编辑栏 | 996-1028 | Name box + fx + 公式 Input，支持图表 SERIES |
 | 命名区域定义 | 431-439, 856-872 | `defineNamedRange` |
 | 公式重算 | 318, 850-855 | `recalculate`（Formulas + Data 两个 tab） |
-| 工作表增删 | 324/329, 782-790 | `addSheet`/`removeActiveSheet` |
-| 工作表切换+缩略图 | 1033-1074 | hover Tooltip 显示 canvas 缩略图 |
+| 工作表增删/重命名/排序/隐藏 | 324/329, 782-790 | `addSheet`/`removeActiveSheet`/`renameSheet`/`moveSheet`/`setSheetVisibility` |
+| 工作表切换+缩略图 | 1033-1074 | hover Tooltip 显示 canvas 缩略图；`showSheetTabs`/受控 `activeTabIndex`/`tabChange` 把标签条交给宿主 chrome |
 | 缩放控制 | 340, 900-924 | zoomIn/out/reset，预设 50-200% |
 | 加载后自动重置缩放 | 1170-1193 | sourceKey 变化时 setZoomScale(100) |
 | 导出 | 470-473, 831-844 | download（源文件）/exportXlsx/exportCsv |

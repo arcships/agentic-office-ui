@@ -9,6 +9,7 @@
 
 import {
   h,
+  computed,
   defineComponent,
   nextTick,
   onMounted,
@@ -20,6 +21,7 @@ import {
 } from "vue"
 import {
   type DocxEditorController,
+  type DocxRevisionDisplay,
   type DocxFloatingPageOriginPx,
   type DocModel,
   type ParagraphNode,
@@ -30,7 +32,14 @@ import {
   DEFAULT_DOC_PAGE_MARGIN,
   resolveFloatingPageOriginPx,
   resolveWrappedImageFlowClearancePx,
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  resolveParagraphAutoSpacingInStory,
+  resolveClippedBodyRenderedBottomPx,
+  resolveClippedMeasuredHeightPx,
+  docxNodeSourceId,
   type DocxPageFlowWrapClearance,
+  type DocumentLayoutDefaults,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -38,6 +47,7 @@ import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
 } from "../composables/editor-selection"
+import type { DocxBookmarkTargetHighlight } from "../composables/docx-bookmarks"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface PageLayoutInfo {
@@ -63,6 +73,8 @@ export default defineComponent({
   },
   props: {
     pageIndex: { type: Number, required: true },
+    /** Zoom applied to the page subtree; measured rects are unscaled by it. */
+    zoomFactor: { type: Number, default: 1 },
     pageNodeSegments: {
       type: Array as PropType<DocumentPageNodeSegment[]>,
       required: true,
@@ -104,6 +116,11 @@ export default defineComponent({
       default: "light",
     },
     trackedChangesEnabled: { type: Boolean, default: false },
+    /** Review display mode; controls inline revision markup and gutter cards. */
+    revisionDisplay: {
+      type: String as PropType<DocxRevisionDisplay>,
+      default: "balloons",
+    },
     commentsEnabled: { type: Boolean, default: false },
     pageNumber: { type: Number, required: true },
     totalPages: { type: Number, required: true },
@@ -136,15 +153,44 @@ export default defineComponent({
     },
     headerReservePx: { type: Number, default: 0 },
     footerReservePx: { type: Number, default: 0 },
+    /** Internal `#bookmark` link clicked in a paragraph or table cell. */
+    onInternalLinkClick: {
+      type: Function as PropType<(bookmarkName: string) => void>,
+      required: false,
+    },
+    /** Transient bookmark highlight for this page's body. */
+    bookmarkTarget: {
+      type: Object as PropType<DocxBookmarkTargetHighlight>,
+      required: false,
+    },
   },
   emits: ["measure", "paragraphMeasure", "tableRowMeasure", "contentMeasure"],
   setup(props, { emit, slots }) {
     const selectionOwner = {}
     const bodyElement = ref<HTMLElement>()
 
+    // Revisions hidden means the final text, regardless of the preferred
+    // markup mode chosen for the gutter selector.
+    const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+      props.trackedChangesEnabled ? props.revisionDisplay : "none"
+    )
+
     function emitContentMeasure(): void {
-      const heightPx = bodyElement.value?.scrollHeight ?? 0
-      if (Number.isFinite(heightPx) && heightPx > 0) {
+      const body = bodyElement.value
+      if (!body) return
+      // `scrollHeight` counts content that a clipping ancestor cut off, so a
+      // page whose body, column or sliced cell clips overflowing paragraphs
+      // would report a taller body and push pagination away from Word. Measure
+      // the visible bottom instead and keep `scrollHeight` as the fallback.
+      const heightPx = resolveClippedMeasuredHeightPx({
+        fallbackHeightPx: body.scrollHeight,
+        // A body never reports less than the height it occupies on screen.
+        minimumHeightPx: body.clientHeight,
+        clippedContentBottomPx: resolveClippedBodyRenderedBottomPx(body, {
+          zoomFactor: props.zoomFactor,
+        }),
+      })
+      if (heightPx !== undefined && Number.isFinite(heightPx) && heightPx > 0) {
         emit("contentMeasure", heightPx)
       }
     }
@@ -185,6 +231,7 @@ export default defineComponent({
       if (!props.editable || !props.controller || !root) return
       syncDomSelectionToEditor(props.controller, root, undefined, {
         preserveExpandedSelection: toolbarPointerDown,
+        revisionDisplay: effectiveRevisionDisplay.value,
       })
     }
 
@@ -229,6 +276,8 @@ export default defineComponent({
         const restored = restoreDomSelectionFromTextRange(root, range, {
           focus,
           owner: bodyElement.value,
+          sourceModel: controller.model,
+          revisionDisplay: effectiveRevisionDisplay.value,
         })
         if (restored) {
           // Focusing a contenteditable can synchronously collapse its native
@@ -236,7 +285,9 @@ export default defineComponent({
           // emits selectionchange. Confirm the restored DOM range back into
           // the public controller immediately so undo/redo never exposes that
           // transient collapsed range as the final editor state.
-          syncDomSelectionToEditor(controller, root)
+          syncDomSelectionToEditor(controller, root, undefined, {
+            revisionDisplay: effectiveRevisionDisplay.value,
+          })
         }
       })
     }
@@ -323,6 +374,24 @@ export default defineComponent({
       )
     }
 
+    // Automatic (HTML) paragraph spacing and document tab grid, resolved once
+    // per page so every host renders the numbers the paginator measured.
+    const layoutDefaults: DocumentLayoutDefaults = resolveDocumentLayoutDefaults(
+      props.model.metadata
+    )
+    const defaultTabStopPx = resolveDefaultTabStopPx(
+      layoutDefaults.defaultTabStopTwips
+    )
+
+    function paragraphAutoSpacing(nodeIndex: number, paragraph: ParagraphNode) {
+      return resolveParagraphAutoSpacingInStory(
+        props.model.nodes,
+        nodeIndex,
+        paragraph,
+        layoutDefaults
+      )
+    }
+
     function ensureParagraphSelection(nodeIndex: number): void {
       const controller = props.controller
       if (!controller) return
@@ -368,11 +437,18 @@ export default defineComponent({
         } else if (node.type === "paragraph") {
           const wrapClearanceTopPx =
             wrapClearances[paragraphSlotRef.value++]?.marginTopPx ?? 0
+          const autoSpacing = paragraphAutoSpacing(
+            segment.nodeIndex,
+            node as ParagraphNode
+          )
+          const bookmarkTarget = props.bookmarkTarget?.nodeIndex === segment.nodeIndex &&
+            props.bookmarkTarget?.tableRowIndex === undefined
           children.push(
             h(DocxParagraphHost, {
               key,
               paragraph: node as ParagraphNode,
               paragraphIndex: segment.nodeIndex,
+              sourceId: docxNodeSourceId(segment.nodeIndex),
               // Showing revisions is a display choice: it must not turn the
               // document read-only, otherwise a document with revisions can
               // never be edited or cleaned up.
@@ -383,8 +459,12 @@ export default defineComponent({
               wrapClearanceTopPx,
               lineRange: segment.paragraphLineRange,
               showTrackedChanges: props.trackedChangesEnabled,
+              revisionDisplay: effectiveRevisionDisplay.value,
               showCommentHighlights: props.commentsEnabled,
               numberingDefinitions: props.model.metadata.numberingDefinitions,
+              autoSpacingBeforePx: autoSpacing.beforePx,
+              autoSpacingAfterPx: autoSpacing.afterPx,
+              defaultTabStopPx,
               pageNumber: props.pageNumber,
               totalPages: props.totalPages,
               pageNumberFormat: props.pageNumberFormat,
@@ -405,6 +485,8 @@ export default defineComponent({
               onClick: (nodeIndex: number, _event: MouseEvent) => {
                 ensureParagraphSelection(nodeIndex)
               },
+              onInternalLinkClick: props.onInternalLinkClick,
+              bookmarkTarget,
               onMeasure: (nodeIndex: number, heightPx: number) => {
                 emit("paragraphMeasure", nodeIndex, heightPx)
               },
@@ -416,6 +498,7 @@ export default defineComponent({
               key,
               table: node as TableNode,
               tableIndex: segment.nodeIndex,
+              sourceId: docxNodeSourceId(segment.nodeIndex),
               editable: props.editable,
               controller: props.controller,
               rowRange: segment.tableRowRange,
@@ -423,6 +506,7 @@ export default defineComponent({
               documentTheme: props.theme,
               floatingPageOriginPx: floatingPageOrigin(),
               showTrackedChanges: props.trackedChangesEnabled,
+              revisionDisplay: effectiveRevisionDisplay.value,
               showCommentHighlights: props.commentsEnabled,
               numberingDefinitions: props.model.metadata.numberingDefinitions,
               pageNumber: props.pageNumber,
@@ -438,6 +522,16 @@ export default defineComponent({
                   ? props.columnLayout?.widthsPx?.[columnIndex]
                   : undefined) ?? props.pageContentWidthPx,
               noteMarkerLabels: props.noteMarkerLabels,
+              onInternalLinkClick: props.onInternalLinkClick,
+              bookmarkTarget: props.bookmarkTarget?.nodeIndex === segment.nodeIndex,
+              bookmarkCell: props.bookmarkTarget?.nodeIndex === segment.nodeIndex &&
+                props.bookmarkTarget?.tableRowIndex !== undefined &&
+                props.bookmarkTarget?.tableCellIndex !== undefined
+                ? {
+                    rowIndex: props.bookmarkTarget.tableRowIndex,
+                    cellIndex: props.bookmarkTarget.tableCellIndex,
+                  }
+                : undefined,
               onMeasure: (tableIndex: number, rowHeightsPx: number[]) => {
                 emit("tableRowMeasure", tableIndex, rowHeightsPx)
               },
@@ -455,7 +549,7 @@ export default defineComponent({
       const wrapClearances = wrappedImageClearances()
       const paragraphSlotRef = { value: 0 }
       const columns =
-        !props.editable && props.pageColumns && props.pageColumns.length > 1
+        props.pageColumns && props.pageColumns.length > 1
           ? props.pageColumns
           : undefined
 

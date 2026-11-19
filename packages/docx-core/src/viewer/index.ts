@@ -6,6 +6,9 @@
 // Consumers must use the package root (for example `setWasmSource`) instead of
 // unsupported source-file deep imports.
 
+// Inline line metrics (ascent/descent/baseline, suppressible bottom space)
+export * from "./line-metrics";
+
 // Pretext layout (text layout around exclusions)
 export * from "./pretext-layout";
 
@@ -24,6 +27,9 @@ export * from "./thumbnail-cache";
 // DOCX import (main thread + worker dual path)
 export * from "./docx-import";
 
+// OpenDocument text detection (view-only models built without a Word package)
+export { isOpenDocumentModel, OPEN_DOCUMENT_VIEW_ONLY_REASON } from "./open-document";
+
 // DOCX export (dedicated Worker; headless inline fallback)
 export * from "./docx-export";
 
@@ -39,8 +45,23 @@ export * from "./page-pattern-paint";
 // Image rendering (TIFF → PNG, EMF/WMF placeholder)
 export * from "./image-render";
 
-// Page count reconciliation (height-scaling page count alignment)
+// SVG picture layer (sanitised vector rendering + unsupported-feature fallback)
+export * from "./svg-picture";
+
+// Page count reconciliation (deprecated height-scaling helper; kept for 0.x)
 export * from "./page-count-reconciliation";
+
+// Measure→repaginate scroll anchoring helpers (#99)
+export * from "./pagination-scroll-anchor";
 
 // Text-measurement cache invalidation (web-font loading, font-set changes)
 export * from "./font-metrics";
+
+// DOCX font subsystem: advances, kerning, OpenType features, script slots and
+// document font loading.
+export * from "./font-advances";
+export * from "./font-kerning";
+export * from "./font-features";
+export * from "./font-table";
+export * from "./script-fonts";
+export * from "./document-fonts";

@@ -27,8 +27,26 @@ export interface OfficeSearchMessages {
   searching: string
   error: string
   noResults: string
+  /** Toggle label: match case exactly. */
+  caseSensitive: string
+  /** Toggle label: match whole words only. */
+  wholeWord: string
+  /** Toggle label: treat the query as a regular expression. */
+  regex: string
   /** Template with `{current}` and `{total}` placeholders. */
   resultOf: string
+  /** Placeholder of the replace field. */
+  replacePlaceholder: string
+  /** Replace the active result. */
+  replace: string
+  /** Replace every result of the query. */
+  replaceAll: string
+  /** Template with a `{count}` placeholder: summary after a replace. */
+  replaced: string
+  /** Toggle label: match the whole cell instead of a substring. */
+  wholeCell: string
+  /** Toggle label: include formulas in the search and replace. */
+  formulas: string
 }
 
 export interface OfficeZoomMessages {
@@ -138,6 +156,8 @@ export interface OfficeDocxMessages {
     unsupportedFile: string
     /** Template with `{actual}` and `{allowed}` placeholders. */
     fileTooLarge: string
+    /** Shown for OpenDocument text, which has no DOCX writer. */
+    viewOnlyReason: string
     live: {
       loading: string
       error: string
@@ -147,6 +167,8 @@ export interface OfficeDocxMessages {
     }
     /** Template with `{count}` and `{allowed}` placeholders. */
     pageLimitExceeded: string
+    /** Template with a `{name}` placeholder for an unresolved internal link. */
+    bookmarkMissing: string
   }
   toolbar: {
     sidebarToggle: string
@@ -164,6 +186,19 @@ export interface OfficeDocxMessages {
     /** Template with a `{count}` placeholder. */
     commentsHide: string
     commentsNone: string
+    /** Label for the inline/balloons/none revision display control. */
+    revisionDisplay: string
+    revisionDisplayInline: string
+    revisionDisplayBalloons: string
+    revisionDisplayNone: string
+    /** Page layout control: continuous scroll, one page, or spreads. */
+    viewMode: string
+    viewModeContinuous: string
+    viewModeSingle: string
+    viewModeSpread: string
+    /** Fit-to-viewport toggles. */
+    fitWidth: string
+    fitPage: string
     lightThemeAction: string
     darkThemeAction: string
     lightDocument: string
@@ -182,6 +217,7 @@ export interface OfficeDocxMessages {
     exportTitle: string
     edits: string
     toggleTheme: string
+    find: string
     undo: string
     redo: string
     fontFamily: string
@@ -204,6 +240,12 @@ export interface OfficeDocxMessages {
     justify: string
     bulletList: string
     numberedList: string
+    columns: string
+    columnsOne: string
+    columnsTwo: string
+    columnsThree: string
+    /** Template with a `{count}` placeholder. */
+    columnsMore: string
     increaseIndent: string
     increaseIndentTitle: string
     decreaseIndent: string
@@ -214,6 +256,8 @@ export interface OfficeDocxMessages {
     borders: string
     insertImage: string
     insertTable: string
+    /** Tooltip of the drag handle that floats a table. */
+    moveTableHandle: string
     zoom: string
     /** Template with a `{url}` placeholder. */
     removeLink: string
@@ -225,6 +269,10 @@ export interface OfficeDocxMessages {
     acceptAllTitle: string
     rejectAll: string
     rejectAllTitle: string
+    addComment: string
+    addCommentTitle: string
+    /** Default author name stored on comments created without one. */
+    commentAuthor: string
     status: {
       ready: string
       copied: string
@@ -240,6 +288,10 @@ export interface OfficeDocxMessages {
       /** Template with a `{message}` placeholder. */
       importFailed: string
       unsupportedFile: string
+      /** Shown when an OpenDocument file is opened (view-only). */
+      viewOnly: string
+      /** Template with a `{name}` placeholder for an OpenDocument import. */
+      loadedViewOnly: string
       exportCancelledChanged: string
       exportNotReady: string
       /** Template with a `{message}` placeholder. */
@@ -256,6 +308,14 @@ export interface OfficeDocxMessages {
       /** Template with a `{count}` placeholder. */
       acceptedChanges: string
       acceptedChange: string
+      commentAdded: string
+      commentReplied: string
+      commentResolved: string
+      commentReopened: string
+      commentDeleted: string
+      /** The selection or comment a comment command targets is gone. */
+      commentTargetMissing: string
+      commentTextRequired: string
       /** Template with a `{count}` placeholder. */
       rejectedChanges: string
       rejectedChange: string
@@ -286,6 +346,9 @@ export interface OfficeDocxMessages {
       updatedTextBox: string
       /** Template with a `{mode}` placeholder. */
       imageWrapSet: string
+      /** The image is not floating, so it has no layer order. */
+      imageLayerOrderRequiresFloating: string
+      imageLayerOrderChanged: string
       movedImage: string
       movedSectionImage: string
       movedDropCap: string
@@ -327,6 +390,17 @@ export interface OfficeDocxMessages {
       splitTableCell: string
       movedTable: string
       movedEmbeddedTable: string
+      resizedTableRow: string
+      tableRowHeightPositive: string
+      tableRowHeightTargetUnavailable: string
+      floatedTable: string
+      inlinedTable: string
+      cannotFloatTableNotFound: string
+      movedBodyNode: string
+      cannotMoveBodyNodeNotFound: string
+      updatedFormField: string
+      formFieldTargetUnavailable: string
+      formFieldOptionsRequired: string
       /** Template with a `{preset}` placeholder. */
       unsupportedDiagonalTableCellBorders: string
       /** Template with a `{preset}` placeholder. */
@@ -334,6 +408,14 @@ export interface OfficeDocxMessages {
       revisionLossOne: string
       /** Template with a `{count}` placeholder. */
       revisionLossMany: string
+      pageMarginsUpdated: string
+      pageSizeUpdated: string
+      sectionColumnsUpdated: string
+      headerAdded: string
+      footerAdded: string
+      /** Template with a `{count}` placeholder. */
+      replacedMatches: string
+      replaceTargetUnavailable: string
     }
     borderPresets: {
       bottom: string
@@ -350,6 +432,49 @@ export interface OfficeDocxMessages {
       diagonalUp: string
       horizontalLine: string
     }
+  }
+  pageSetup: {
+    title: string
+    open: string
+    /** Template with an `{index}` placeholder. */
+    sectionOption: string
+    sectionLabel: string
+    paperSize: string
+    paperSizeCustom: string
+    presetLetter: string
+    presetLegal: string
+    presetTabloid: string
+    presetA3: string
+    presetA4: string
+    presetA5: string
+    presetB5: string
+    orientation: string
+    orientationPortrait: string
+    orientationLandscape: string
+    width: string
+    height: string
+    margins: string
+    marginTop: string
+    marginRight: string
+    marginBottom: string
+    marginLeft: string
+    units: string
+    apply: string
+    cancel: string
+    close: string
+    invalidValue: string
+  }
+  headerFooter: {
+    header: string
+    footer: string
+    editHeader: string
+    editFooter: string
+    addHeader: string
+    addFooter: string
+    closeEditing: string
+    editingHeader: string
+    editingFooter: string
+    placeholder: string
   }
   contextMenu: {
     label: string
@@ -375,6 +500,13 @@ export interface OfficeDocxMessages {
     deleteTable: string
     mergeCells: string
     splitCell: string
+    selectTable: string
+    clearContents: string
+    layer: string
+    bringToFront: string
+    bringForward: string
+    sendBackward: string
+    sendToBack: string
   }
   colors: {
     black: string
@@ -431,6 +563,57 @@ export interface OfficeDocxMessages {
       maxLength: string
     }
   }
+  formFieldDialog: {
+    title: string
+    fieldType: string
+    name: string
+    namePlaceholder: string
+    value: string
+    placeholder: string
+    required: string
+    checked: string
+    options: string
+    option: string
+    optionValue: string
+    addOption: string
+    removeOption: string
+    maxLength: string
+    save: string
+    cancel: string
+    close: string
+    noOptions: string
+    types: {
+      text: string
+      checkbox: string
+      dropdown: string
+      date: string
+    }
+  }
+  linkCard: {
+    label: string
+    open: string
+    edit: string
+    remove: string
+    save: string
+    cancel: string
+    url: string
+    urlPlaceholder: string
+    internal: string
+  }
+  stylePreview: {
+    label: string
+    sample: string
+    apply: string
+    normal: string
+    heading: string
+  }
+  nodeDrag: {
+    handle: string
+    handleTitle: string
+    moveUp: string
+    moveDown: string
+    dropBefore: string
+  }
   notes: {
     footnote: string
     endnote: string
@@ -464,6 +647,20 @@ export interface OfficeDocxMessages {
     commentMarker: string
     /** Template with `{ordinal}` and `{author}` placeholders. */
     commentMarkerWithAuthor: string
+    reply: string
+    replyTitle: string
+    resolve: string
+    resolveTitle: string
+    reopen: string
+    reopenTitle: string
+    delete: string
+    deleteTitle: string
+    composerTitle: string
+    composerReplyTitle: string
+    composerPlaceholder: string
+    composerReplyPlaceholder: string
+    composerSubmit: string
+    composerCancel: string
   }
   dragOverlay: {
     drop: string
@@ -471,6 +668,27 @@ export interface OfficeDocxMessages {
   diagnostics: {
     imageDecodeFailed: string
     numberingImageDecodeFailed: string
+    /** Template with a `{feature}` placeholder. */
+    unsupportedImageFeature: string
+  }
+  /**
+   * Labels for drawing objects the model cannot paint itself (shapes, charts,
+   * SmartArt, embedded objects, 3D models) and the equations it shows as text.
+   */
+  drawing: {
+    textBox: string
+    shape: string
+    wordArt: string
+    group: string
+    smartArt: string
+    chart: string
+    oleObject: string
+    model3d: string
+    equation: string
+    /** Template with a `{progId}` placeholder. */
+    embeddedObject: string
+    /** Template with a `{count}` placeholder. */
+    chartSeries: string
   }
 }
 
@@ -484,6 +702,8 @@ export interface OfficeXlsxMessages {
     deferredDetail: string
     resumeParsing: string
     cancel: string
+    /** Rejected drop: the file type is outside the workbook accept list. */
+    unsupportedDrop: string
     live: {
       loading: string
       error: string
@@ -499,10 +719,52 @@ export interface OfficeXlsxMessages {
     upload: string
     download: string
     export: string
+    printPreview: string
+    pageBreaks: string
+  }
+  statusBar: {
+    /** Accessible label of the selected cell/range address. */
+    range: string
+    /** Shown when nothing is selected. */
+    ready: string
+    count: string
+    numericalCount: string
+    sum: string
+    average: string
+    min: string
+    max: string
+    /** Multi-cell selection without filtered rows. */
+    selected: string
+    /** The selection contains rows hidden by the active AutoFilter. */
+    filtered: string
+    /** Template with a `{count}` placeholder. */
+    truncated: string
+  }
+  print: {
+    title: string
+    close: string
+    print: string
+    noPages: string
+    /** Template with `{count}`, `{paper}`, `{orientation}` and `{scale}` placeholders. */
+    summary: string
+    orientationPortrait: string
+    orientationLandscape: string
   }
   ribbon: {
     undo: string
     redo: string
+    cut: string
+    copy: string
+    paste: string
+    pasteSpecial: string
+    insertRowAbove: string
+    insertRowBelow: string
+    deleteRow: string
+    insertColumnLeft: string
+    insertColumnRight: string
+    deleteColumn: string
+    numberFormatDialog: string
+    nameManager: string
     fontFamily: string
     fontSize: string
     bold: string
@@ -521,8 +783,17 @@ export interface OfficeXlsxMessages {
     numberFormat: string
     currency: string
     percent: string
+    borders: string
     allBorders: string
+    outsideBorders: string
+    leftBorder: string
+    rightBorder: string
+    topBorder: string
+    bottomBorder: string
+    noBorders: string
+    borderColor: string
     merge: string
+    mergeAndCenter: string
     unmerge: string
     readOnlyTitle: string
     numberFormats: {
@@ -540,19 +811,73 @@ export interface OfficeXlsxMessages {
     add: string
     remove: string
     defaultName: string
+    rename: string
+    renameLabel: string
+    renameEmpty: string
+    renameTooLong: string
+    renameDuplicate: string
+    renameApostrophe: string
+    renameFailed: string
+    moveFailed: string
+    menuLabel: string
+    hide: string
+    hideFailed: string
+    unhide: string
+    unhideFailed: string
+    hiddenTab: string
+    noHiddenSheets: string
+    tabListLabel: string
   }
   contextMenu: {
     label: string
     copy: string
+    cut: string
     paste: string
+    pasteSpecial: string
+    pasteAll: string
+    pasteValues: string
+    pasteFormats: string
+    pasteTranspose: string
+    editCell: string
     clear: string
+    clearContents: string
     sortAscending: string
     sortDescending: string
     undo: string
     redo: string
+    changeChartType: string
+    duplicate: string
+    delete: string
+    insertRowAbove: string
+    insertRowBelow: string
+    deleteRow: string
+    insertColumnLeft: string
+    insertColumnRight: string
+    deleteColumn: string
+    mergeAndCenter: string
+    mergeAcross: string
+    mergeCells: string
+    unmerge: string
+    selectRow: string
+    selectColumn: string
+    selectAll: string
+  }
+  autoFilter: {
+    label: string
+    apply: string
+    blanks: string
+    clear: string
+    filterByValue: string
+    noValues: string
+    openMenu: string
+    selectAll: string
   }
   formulaBar: {
     activeCell: string
+    /** Tooltip/accessible label of the name box that navigates to a name. */
+    goToName: string
+    /** Accessible label of the defined-name list. */
+    definedNames: string
     placeholder: string
   }
   chart: {
@@ -580,6 +905,176 @@ export interface OfficeXlsxMessages {
     /** Template with a `{number}` placeholder. */
     defaultColumn: string
   }
+  authoring: {
+    close: string
+    /** Template with a `{range}` placeholder. */
+    rangeLabel: string
+    chart: {
+      title: string
+      insertMode: string
+      editMode: string
+      family: string
+      familyBar: string
+      familyLine: string
+      familyPie: string
+      chartTitle: string
+      chartTitlePlaceholder: string
+      showDataLabels: string
+      headerRow: string
+      headerColumn: string
+      insert: string
+      update: string
+      delete: string
+      /** Template with a `{title}` placeholder. */
+      selectedChart: string
+      noneSelected: string
+    }
+    comment: {
+      title: string
+      text: string
+      textPlaceholder: string
+      author: string
+      authorPlaceholder: string
+      save: string
+      delete: string
+    }
+    hyperlink: {
+      title: string
+      target: string
+      targetPlaceholder: string
+      tooltip: string
+      tooltipPlaceholder: string
+      save: string
+      remove: string
+    }
+    table: {
+      title: string
+      name: string
+      namePlaceholder: string
+      hasHeaders: string
+      create: string
+      remove: string
+      /** Template with a `{name}` and an `{range}` placeholder. */
+      existing: string
+    }
+    conditional: {
+      title: string
+      kind: string
+      kindColorScale: string
+      kindDataBar: string
+      kindIconSet: string
+      thresholds: string
+      typeMin: string
+      typeMax: string
+      typePercentile: string
+      typeNumber: string
+      typePercent: string
+      value: string
+      color: string
+      iconSet: string
+      showValue: string
+      reverse: string
+      add: string
+      update: string
+      delete: string
+      edit: string
+      empty: string
+      /** Template with a `{kind}` and an `{ranges}` placeholder. */
+      ruleSummary: string
+    }
+    validation: {
+      title: string
+      type: string
+      typeList: string
+      typeWhole: string
+      typeDecimal: string
+      typeDate: string
+      typeTextLength: string
+      source: string
+      sourcePlaceholder: string
+      value1: string
+      value2: string
+      allowBlank: string
+      showDropdown: string
+      inputMessage: string
+      errorMessage: string
+      apply: string
+      remove: string
+      /** Template with a `{type}` and an `{ranges}` placeholder. */
+      existing: string
+    }
+    freeze: {
+      freezeHere: string
+      unfreeze: string
+    }
+    pasteSpecial: {
+      title: string
+      mode: string
+      modeAll: string
+      modeValues: string
+      modeFormats: string
+      transpose: string
+      paste: string
+      empty: string
+    }
+    numberFormat: {
+      title: string
+      category: string
+      number: string
+      currency: string
+      percent: string
+      date: string
+      text: string
+      custom: string
+      decimals: string
+      thousands: string
+      pattern: string
+      preview: string
+      apply: string
+    }
+    names: {
+      title: string
+      name: string
+      namePlaceholder: string
+      refersTo: string
+      refersToPlaceholder: string
+      add: string
+      update: string
+      delete: string
+      useSelection: string
+      empty: string
+    }
+    context: {
+      insertComment: string
+      editComment: string
+      insertHyperlink: string
+      editHyperlink: string
+      conditional: string
+      createTable: string
+      removeTable: string
+      insertChart: string
+      validation: string
+      freezeHere: string
+      unfreeze: string
+    }
+    status: {
+      chartInserted: string
+      chartUpdated: string
+      chartDeleted: string
+      commentSaved: string
+      commentDeleted: string
+      hyperlinkSaved: string
+      hyperlinkRemoved: string
+      tableCreated: string
+      tableRemoved: string
+      ruleAdded: string
+      ruleUpdated: string
+      ruleRemoved: string
+      validationSet: string
+      validationRemoved: string
+      actionFailed: string
+    }
+  }
   drawing: {
     button: string
     dropdown: string
@@ -590,11 +1085,19 @@ export interface OfficeXlsxMessages {
     label: string
     groupBox: string
     unknown: string
+    /** Template with a `{name}` placeholder for a slicer card. */
+    slicerHint: string
+  }
+  pivot: {
+    /** Template with a `{name}` placeholder; the cached output is static. */
+    staticPreview: string
   }
   selection: {
     /** Template with an `{address}` placeholder. */
     current: string
     none: string
+    /** Template with an `{address}` placeholder for a pending cut. */
+    cutPending: string
   }
   validation: {
     list: string
@@ -619,6 +1122,8 @@ export interface OfficeXlsxMessages {
   grid: {
     openValidation: string
     closeValidation: string
+    /** Handle at the selection's bottom-right that drag-fills cells. */
+    fillHandle: string
     worksheet: string
     /** Template with a `{name}` placeholder. */
     worksheetNamed: string
@@ -661,6 +1166,12 @@ export interface OfficePptxMessages {
     previousSlide: string
     nextSlide: string
     hiddenSlide: string
+    /** Browse layout control: single slide list or slide-sorter grid. */
+    viewMode: string
+    viewModeSingle: string
+    viewModeSorter: string
+    /** Accessible name of the slide-sorter grid. */
+    sorter: string
     searchPlaceholder: string
     search: string
     sidebar: string
@@ -668,6 +1179,8 @@ export interface OfficePptxMessages {
     loading: string
     waiting: string
     cancelled: string
+    /** Rejected drop: the file type is not a PowerPoint presentation. */
+    unsupportedDrop: string
     reload: string
     retry: string
     skip: string
@@ -680,6 +1193,15 @@ export interface OfficePptxMessages {
     resumeMedia: string
     resumeMediaAction: string
     fullscreen: string
+    /** Built-in right-click link menu and its two entries. */
+    link: {
+      /** Accessible name of the menu. */
+      menu: string
+      open: string
+      copy: string
+      /** Template with a `{number}` placeholder. */
+      openSlide: string
+    }
     capability: {
       /** Template with `{count}` and `{total}` placeholders. */
       strict: string
@@ -689,6 +1211,21 @@ export interface OfficePptxMessages {
       static: string
       /** Template with a `{count}` placeholder. */
       unparsed: string
+    }
+    notes: {
+      /** Accessible name of the speaker-notes panel in browse mode. */
+      panel: string
+      /** Accessible name of the presenter rail in presentation mode. */
+      presenter: string
+      title: string
+      /** Shown when the current slide has no notes. */
+      empty: string
+      /** Heading above the next-slide preview. */
+      next: string
+      /** Shown when the current slide is the last one. */
+      noNext: string
+      /** Accessible name of the elapsed-time readout. */
+      timer: string
     }
     status: {
       idle: string
@@ -750,6 +1287,11 @@ export interface OfficePdfMessages {
     noPdf: string
     opening: string
     toggleThumbnails: string
+    /** Page layout control label and its three modes. */
+    pageLayout: string
+    pageLayoutContinuous: string
+    pageLayoutSingle: string
+    pageLayoutSpread: string
     pageInput: string
     rotateClockwise: string
     searchLabel: string
@@ -772,6 +1314,8 @@ export interface OfficePdfMessages {
     searchResult: string
     renderFailed: string
     invalidPdf: string
+    /** Rejected drop: the file type is not a PDF document. */
+    unsupportedDrop: string
     selectionLayer: string
   }
   surface: {
@@ -785,6 +1329,8 @@ export interface OfficePdfMessages {
     pageAlt: string
     selectionRegion: string
     selectionText: string
+    /** Accessible name of the bookmark/outline navigation panel. */
+    outline: string
   }
   errors: {
     sourceNotAllowed: string
@@ -805,6 +1351,7 @@ export interface OfficePdfMessages {
     workerStartup: string
     textSearch: string
     textExtraction: string
+    outline: string
     documentClose: string
     runtimeDestroy: string
   }
@@ -875,7 +1422,16 @@ export const officeMessagesEn: OfficeMessages = {
       searching: "Searching…",
       error: "Search failed",
       noResults: "No results",
+      caseSensitive: "Match case",
+      wholeWord: "Match whole word",
+      regex: "Use regular expression",
       resultOf: "{current} of {total}",
+      replacePlaceholder: "Replace with",
+      replace: "Replace",
+      replaceAll: "Replace all",
+      replaced: "Replaced {count}",
+      wholeCell: "Match entire cell",
+      formulas: "Include formulas",
     },
     zoom: {
       in: "Zoom in",
@@ -944,8 +1500,9 @@ export const officeMessagesEn: OfficeMessages = {
       emptyDetail: "Upload or provide a DOCX file to start.",
       chooseFile: "Choose Word file",
       parseError: "Unknown DOCX parse error",
-      unsupportedFile: "Only .docx, .docm, .dotx and .dotm files are supported",
+      unsupportedFile: "Only Word (.docx, .docm, .dotx, .dotm) and OpenDocument text (.odt, .ott, .odm, .otm, .oth, .fodt) files are supported",
       fileTooLarge: "DOCX file size {actual} bytes exceeds the allowed maximum of {allowed} bytes.",
+      viewOnlyReason: "OpenDocument files are view-only: they cannot be edited or saved as DOCX.",
       live: {
         loading: "Opening DOCX document",
         error: "Unable to open document: {message}",
@@ -954,6 +1511,7 @@ export const officeMessagesEn: OfficeMessages = {
       },
       pageLimitExceeded:
         "DOCX page count {count} exceeds the allowed maximum of {allowed}.",
+      bookmarkMissing: "Bookmark \"{name}\" was not found in this document.",
     },
     toolbar: {
       sidebarToggle: "Toggle page thumbnails",
@@ -967,6 +1525,16 @@ export const officeMessagesEn: OfficeMessages = {
       commentsShow: "Show {count} comments",
       commentsHide: "Hide {count} comments",
       commentsNone: "No comments",
+      revisionDisplay: "Display for review",
+      revisionDisplayInline: "All markup",
+      revisionDisplayBalloons: "Balloons",
+      revisionDisplayNone: "No markup",
+      viewMode: "Page layout",
+      viewModeContinuous: "Continuous scroll",
+      viewModeSingle: "Single page",
+      viewModeSpread: "Two-page spread",
+      fitWidth: "Fit width",
+      fitPage: "Fit page",
       lightThemeAction: "Use light document theme",
       darkThemeAction: "Use dark document theme",
       lightDocument: "Light document",
@@ -985,6 +1553,7 @@ export const officeMessagesEn: OfficeMessages = {
       exportTitle: "Export DOCX",
       edits: "Edits",
       toggleTheme: "Toggle document theme",
+      find: "Find and replace",
       undo: "Undo (⌘Z)",
       redo: "Redo (⇧⌘Z)",
       fontFamily: "Font family",
@@ -1007,6 +1576,11 @@ export const officeMessagesEn: OfficeMessages = {
       justify: "Justify",
       bulletList: "Bullet list",
       numberedList: "Numbered list",
+      columns: "Columns",
+      columnsOne: "1 column",
+      columnsTwo: "2 columns",
+      columnsThree: "3 columns",
+      columnsMore: "{count} columns",
       increaseIndent: "Increase indent",
       increaseIndentTitle: "Increase list indent (Tab)",
       decreaseIndent: "Decrease indent",
@@ -1017,6 +1591,7 @@ export const officeMessagesEn: OfficeMessages = {
       borders: "Borders",
       insertImage: "Insert image",
       insertTable: "Insert table",
+      moveTableHandle: "Drag to move or float this table",
       zoom: "Zoom",
       removeLink: 'Remove link "{url}"?',
       unsupportedLink: "Only http, https, mailto, internal #fragment, and relative links are allowed.",
@@ -1027,6 +1602,9 @@ export const officeMessagesEn: OfficeMessages = {
       acceptAllTitle: "Accept all tracked changes",
       rejectAll: "Reject all",
       rejectAllTitle: "Reject all tracked changes",
+      addComment: "New comment",
+      addCommentTitle: "Comment on the selection",
+      commentAuthor: "Author",
       status: {
         ready: "Ready",
         copied: "Copied to clipboard",
@@ -1038,7 +1616,9 @@ export const officeMessagesEn: OfficeMessages = {
         discardChanges: "Discard unsaved changes?",
         loadingFile: "Loading {name}...",
         importFailed: "Failed to load file: {message}",
-        unsupportedFile: "Only .docx, .docm, .dotx and .dotm files are supported",
+        unsupportedFile: "Only Word (.docx, .docm, .dotx, .dotm) and OpenDocument text (.odt, .ott, .odm, .otm, .oth, .fodt) files are supported",
+        viewOnly: "OpenDocument files are view-only: they cannot be edited or saved as DOCX.",
+        loadedViewOnly: "Loaded {name} (view-only)",
         exportCancelledChanged: "Export cancelled: document changed",
         exportNotReady: "Wait for the document to finish loading before exporting",
         exportFailed: "Export failed: {message}",
@@ -1051,6 +1631,13 @@ export const officeMessagesEn: OfficeMessages = {
         unknownExportError: "Unknown export error",
         acceptedChanges: "Accepted {count} tracked changes",
         acceptedChange: "Accepted 1 tracked change",
+        commentAdded: "Comment added",
+        commentReplied: "Reply added",
+        commentResolved: "Comment thread resolved",
+        commentReopened: "Comment thread reopened",
+        commentDeleted: "Comment deleted",
+        commentTargetMissing: "Unsupported: the comment or selection is no longer available",
+        commentTextRequired: "Unsupported: a comment needs text",
         rejectedChanges: "Rejected {count} tracked changes",
         rejectedChange: "Rejected 1 tracked change",
         formattingCleared: " ({count} formatting revisions cleared without reverting; the model keeps no previous formatting)",
@@ -1075,6 +1662,8 @@ export const officeMessagesEn: OfficeMessages = {
         resizedImage: "Resized image to {width}×{height}",
         updatedTextBox: "Updated text box",
         imageWrapSet: "Set image wrap: {mode}",
+        imageLayerOrderRequiresFloating: "Unsupported: layer order applies to floating images only",
+        imageLayerOrderChanged: "Changed image layer order",
         movedImage: "Moved image",
         movedSectionImage: "Moved section image",
         movedDropCap: "Moved drop cap",
@@ -1113,10 +1702,28 @@ export const officeMessagesEn: OfficeMessages = {
         splitTableCell: "Split table cell",
         movedTable: "Moved table",
         movedEmbeddedTable: "Moved embedded table",
+        resizedTableRow: "Resized table row",
+        tableRowHeightPositive: "Unsupported: row height must be positive",
+        tableRowHeightTargetUnavailable: "Unsupported: table row target unavailable",
+        floatedTable: "Floated table",
+        inlinedTable: "Table back in the text flow",
+        cannotFloatTableNotFound: "Cannot float: table not found",
+        movedBodyNode: "Moved paragraph or table",
+        cannotMoveBodyNodeNotFound: "Cannot move: paragraph or table not found",
+        updatedFormField: "Updated form field",
+        formFieldTargetUnavailable: "Unsupported: form field target unavailable",
+        formFieldOptionsRequired: "Unsupported: a dropdown needs at least one option",
         unsupportedDiagonalTableCellBorders: "Unsupported: diagonal table-cell borders ({preset})",
         unsupportedDiagonalParagraphBorders: "Unsupported: diagonal paragraph borders ({preset})",
         revisionLossOne: "Tracked changes in an edited paragraph were resolved with the edit",
         revisionLossMany: "Tracked changes in {count} edited paragraphs were resolved with the edit",
+        pageMarginsUpdated: "Page margins updated",
+        pageSizeUpdated: "Paper size and orientation updated",
+        sectionColumnsUpdated: "Section columns updated",
+        headerAdded: "Header added",
+        footerAdded: "Footer added",
+        replacedMatches: "Replaced {count}",
+        replaceTargetUnavailable: "Unsupported: this result is in a header, footer or note and cannot be replaced",
       },
       borderPresets: {
         bottom: "Bottom Border",
@@ -1133,6 +1740,48 @@ export const officeMessagesEn: OfficeMessages = {
         diagonalUp: "Diagonal Up",
         horizontalLine: "Horizontal Line",
       },
+    },
+    pageSetup: {
+      title: "Page setup",
+      open: "Page setup",
+      sectionOption: "Section {index}",
+      sectionLabel: "Apply to",
+      paperSize: "Paper size",
+      paperSizeCustom: "Custom",
+      presetLetter: "Letter (8.5 × 11 in)",
+      presetLegal: "Legal (8.5 × 14 in)",
+      presetTabloid: "Tabloid (11 × 17 in)",
+      presetA3: "A3 (297 × 420 mm)",
+      presetA4: "A4 (210 × 297 mm)",
+      presetA5: "A5 (148 × 210 mm)",
+      presetB5: "B5 (176 × 250 mm)",
+      orientation: "Orientation",
+      orientationPortrait: "Portrait",
+      orientationLandscape: "Landscape",
+      width: "Paper width",
+      height: "Paper height",
+      margins: "Margins",
+      marginTop: "Top margin",
+      marginRight: "Right margin",
+      marginBottom: "Bottom margin",
+      marginLeft: "Left margin",
+      units: "Values are in inches",
+      apply: "Apply",
+      cancel: "Cancel",
+      close: "Close page setup",
+      invalidValue: "Enter a non-negative number",
+    },
+    headerFooter: {
+      header: "Header",
+      footer: "Footer",
+      editHeader: "Edit header",
+      editFooter: "Edit footer",
+      addHeader: "Add header",
+      addFooter: "Add footer",
+      closeEditing: "Done editing",
+      editingHeader: "Editing header",
+      editingFooter: "Editing footer",
+      placeholder: "Type header text",
     },
     contextMenu: {
       label: "Editor context menu",
@@ -1158,6 +1807,13 @@ export const officeMessagesEn: OfficeMessages = {
       deleteTable: "Delete Table",
       mergeCells: "Merge cells",
       splitCell: "Split cell",
+      selectTable: "Select table",
+      clearContents: "Clear contents",
+      layer: "Layer",
+      bringToFront: "Bring to Front",
+      bringForward: "Bring Forward",
+      sendBackward: "Send Backward",
+      sendToBack: "Send to Back",
     },
     colors: {
       black: "Black",
@@ -1212,6 +1868,57 @@ export const officeMessagesEn: OfficeMessages = {
         maxLength: "Use at most {max} characters.",
       },
     },
+    formFieldDialog: {
+      title: "Form field properties",
+      fieldType: "Type",
+      name: "Name",
+      namePlaceholder: "Field name",
+      value: "Value",
+      placeholder: "Placeholder",
+      required: "Required",
+      checked: "Checked",
+      options: "Options",
+      option: "Display text",
+      optionValue: "Value",
+      addOption: "Add option",
+      removeOption: "Remove option",
+      maxLength: "Maximum length",
+      save: "Save",
+      cancel: "Cancel",
+      close: "Close form field properties",
+      noOptions: "This dropdown has no options yet.",
+      types: {
+        text: "Text",
+        checkbox: "Check box",
+        dropdown: "Dropdown",
+        date: "Date",
+      },
+    },
+    linkCard: {
+      label: "Link actions",
+      open: "Open link",
+      edit: "Edit link",
+      remove: "Remove link",
+      save: "Save link",
+      cancel: "Cancel link edit",
+      url: "Address",
+      urlPlaceholder: "https://example.com",
+      internal: "Links to a place in this document",
+    },
+    stylePreview: {
+      label: "Paragraph styles",
+      sample: "The quick brown fox jumps over the lazy dog",
+      apply: "Apply {style}",
+      normal: "Normal",
+      heading: "Heading",
+    },
+    nodeDrag: {
+      handle: "Reorder",
+      handleTitle: "Drag to move this paragraph or table",
+      moveUp: "Move up",
+      moveDown: "Move down",
+      dropBefore: "Drop here",
+    },
     notes: {
       footnote: "Footnotes",
       endnote: "Endnotes",
@@ -1243,6 +1950,20 @@ export const officeMessagesEn: OfficeMessages = {
       comments: "Comments",
       commentMarker: "Comment {ordinal}",
       commentMarkerWithAuthor: "Comment {ordinal} — {author}",
+      reply: "Reply",
+      replyTitle: "Reply to this comment",
+      resolve: "Resolve",
+      resolveTitle: "Resolve this comment thread",
+      reopen: "Reopen",
+      reopenTitle: "Reopen this comment thread",
+      delete: "Delete",
+      deleteTitle: "Delete this comment",
+      composerTitle: "New comment",
+      composerReplyTitle: "Reply",
+      composerPlaceholder: "Write a comment…",
+      composerReplyPlaceholder: "Write a reply…",
+      composerSubmit: "Comment",
+      composerCancel: "Cancel",
     },
     dragOverlay: {
       drop: "Drop DOCX file to import",
@@ -1250,6 +1971,20 @@ export const officeMessagesEn: OfficeMessages = {
     diagnostics: {
       imageDecodeFailed: "DOCX image could not be decoded.",
       numberingImageDecodeFailed: "DOCX numbering image could not be decoded.",
+      unsupportedImageFeature: "DOCX SVG picture uses unsupported {feature} content; showing a placeholder.",
+    },
+    drawing: {
+      textBox: "Text box",
+      shape: "Shape",
+      wordArt: "WordArt",
+      group: "Grouped shapes",
+      smartArt: "SmartArt",
+      chart: "Chart",
+      oleObject: "Embedded object",
+      model3d: "3D model",
+      equation: "Equation",
+      embeddedObject: "Embedded object ({progId})",
+      chartSeries: "{count} series",
     },
   },
   xlsx: {
@@ -1261,6 +1996,7 @@ export const officeMessagesEn: OfficeMessages = {
       deferredDetail: "File size {size}. Resuming parsing uses more memory.",
       resumeParsing: "Resume parsing",
       cancel: "Cancel",
+      unsupportedDrop: "Only .xlsx, .xls, .xlsm, .xlsb, .xltx, .xltm and .csv files are supported",
       live: {
         loading: "Loading workbook",
         error: "Unable to open workbook: {message}",
@@ -1276,10 +2012,46 @@ export const officeMessagesEn: OfficeMessages = {
       upload: "Upload XLSX",
       download: "Download source",
       export: "Export XLSX",
+      printPreview: "Print preview",
+      pageBreaks: "Page break preview",
+    },
+    statusBar: {
+      range: "Selected range",
+      ready: "Ready",
+      count: "Count",
+      numericalCount: "Numerical count",
+      sum: "Sum",
+      average: "Average",
+      min: "Min",
+      max: "Max",
+      selected: "Selected",
+      filtered: "Filtered",
+      truncated: "Showing the first {count} cells",
+    },
+    print: {
+      title: "Print preview",
+      close: "Close print preview",
+      print: "Print",
+      noPages: "This sheet has no printable pages",
+      summary: "{count} pages · {paper} {orientation} · {scale}%",
+      orientationPortrait: "portrait",
+      orientationLandscape: "landscape",
     },
     ribbon: {
       undo: "Undo",
       redo: "Redo",
+      cut: "Cut",
+      copy: "Copy",
+      paste: "Paste",
+      pasteSpecial: "Paste special",
+      insertRowAbove: "Insert row above",
+      insertRowBelow: "Insert row below",
+      deleteRow: "Delete row",
+      insertColumnLeft: "Insert column left",
+      insertColumnRight: "Insert column right",
+      deleteColumn: "Delete column",
+      numberFormatDialog: "Number format…",
+      nameManager: "Name manager",
       fontFamily: "Font family",
       fontSize: "Font size",
       bold: "Bold",
@@ -1298,8 +2070,17 @@ export const officeMessagesEn: OfficeMessages = {
       numberFormat: "Number format",
       currency: "Currency",
       percent: "Percent",
+      borders: "Borders",
       allBorders: "All borders",
+      outsideBorders: "Outside borders",
+      leftBorder: "Left border",
+      rightBorder: "Right border",
+      topBorder: "Top border",
+      bottomBorder: "Bottom border",
+      noBorders: "No border",
+      borderColor: "Border color",
       merge: "Merge",
+      mergeAndCenter: "Merge & center",
       unmerge: "Unmerge",
       readOnlyTitle: "Read-only mode",
       numberFormats: {
@@ -1317,19 +2098,71 @@ export const officeMessagesEn: OfficeMessages = {
       add: "Add sheet",
       remove: "Delete sheet",
       defaultName: "Sheet",
+      rename: "Rename",
+      renameLabel: "Sheet name",
+      renameEmpty: "Enter a sheet name.",
+      renameTooLong: "Sheet names cannot be longer than 31 characters.",
+      renameDuplicate: "A sheet with that name already exists.",
+      renameApostrophe: "Sheet names cannot start or end with an apostrophe.",
+      renameFailed: "The sheet could not be renamed.",
+      moveFailed: "The sheet could not be moved.",
+      menuLabel: "Sheet menu",
+      hide: "Hide",
+      hideFailed: "The sheet could not be hidden.",
+      unhide: "Unhide…",
+      unhideFailed: "The sheet could not be unhidden.",
+      hiddenTab: "Hidden sheet",
+      noHiddenSheets: "No hidden sheets.",
+      tabListLabel: "Sheets",
     },
     contextMenu: {
       label: "Cell menu",
       copy: "Copy",
+      cut: "Cut",
       paste: "Paste",
+      pasteSpecial: "Paste special",
+      pasteAll: "Paste all",
+      pasteValues: "Values only",
+      pasteFormats: "Formats only",
+      pasteTranspose: "Transpose",
+      editCell: "Edit cell",
       clear: "Clear contents",
+      clearContents: "Clear contents",
       sortAscending: "Sort ascending",
       sortDescending: "Sort descending",
       undo: "Undo",
       redo: "Redo",
+      changeChartType: "Change Chart Type",
+      duplicate: "Duplicate",
+      delete: "Delete",
+      insertRowAbove: "Insert row above",
+      insertRowBelow: "Insert row below",
+      deleteRow: "Delete row",
+      insertColumnLeft: "Insert column left",
+      insertColumnRight: "Insert column right",
+      deleteColumn: "Delete column",
+      mergeAndCenter: "Merge & center",
+      mergeAcross: "Merge across",
+      mergeCells: "Merge cells",
+      unmerge: "Unmerge cells",
+      selectRow: "Select row",
+      selectColumn: "Select column",
+      selectAll: "Select all",
+    },
+    autoFilter: {
+      label: "Filter",
+      apply: "Apply",
+      blanks: "(Blanks)",
+      clear: "Clear filter",
+      filterByValue: "Filter by value",
+      noValues: "No values to filter.",
+      openMenu: "Filter column {column}",
+      selectAll: "Select all",
     },
     formulaBar: {
       activeCell: "Active cell",
+      goToName: "Go to a cell, range or defined name",
+      definedNames: "Defined names",
       placeholder: "Enter a formula or value",
     },
     chart: {
@@ -1352,6 +2185,171 @@ export const officeMessagesEn: OfficeMessages = {
       defaultName: "Table {number}",
       defaultColumn: "Column {number}",
     },
+    authoring: {
+      close: "Close",
+      rangeLabel: "Range {range}",
+      chart: {
+        title: "Chart",
+        insertMode: "New chart",
+        editMode: "Edit chart",
+        family: "Chart type",
+        familyBar: "Column",
+        familyLine: "Line",
+        familyPie: "Pie",
+        chartTitle: "Chart title",
+        chartTitlePlaceholder: "Quarterly revenue",
+        showDataLabels: "Show values on the chart",
+        headerRow: "First row contains series names",
+        headerColumn: "First column contains categories",
+        insert: "Insert chart",
+        update: "Update chart",
+        delete: "Delete chart",
+        selectedChart: "Editing {title}",
+        noneSelected: "Select a chart first",
+      },
+      comment: {
+        title: "Comment",
+        text: "Comment",
+        textPlaceholder: "Add a note for this cell",
+        author: "Author",
+        authorPlaceholder: "Your name",
+        save: "Save comment",
+        delete: "Delete comment",
+      },
+      hyperlink: {
+        title: "Hyperlink",
+        target: "Address",
+        targetPlaceholder: "https://example.com or #Sheet1!A1",
+        tooltip: "Tooltip",
+        tooltipPlaceholder: "Shown on hover",
+        save: "Save link",
+        remove: "Remove link",
+      },
+      table: {
+        title: "Table",
+        name: "Table name",
+        namePlaceholder: "Table1",
+        hasHeaders: "First row contains headers",
+        create: "Create table",
+        remove: "Remove table",
+        existing: "{name} covers {range}",
+      },
+      conditional: {
+        title: "Conditional formatting",
+        kind: "Rule type",
+        kindColorScale: "Colour scale",
+        kindDataBar: "Data bar",
+        kindIconSet: "Icon set",
+        thresholds: "Thresholds",
+        typeMin: "Minimum",
+        typeMax: "Maximum",
+        typePercentile: "Percentile",
+        typeNumber: "Number",
+        typePercent: "Percent",
+        value: "Value",
+        color: "Colour",
+        iconSet: "Icon set",
+        showValue: "Show value",
+        reverse: "Reverse icons",
+        add: "Add rule",
+        update: "Update rule",
+        delete: "Delete rule",
+        edit: "Edit rule",
+        empty: "No conditional formats on this sheet",
+        ruleSummary: "{kind} · {ranges}",
+      },
+      validation: {
+        title: "Data validation",
+        type: "Allow",
+        typeList: "List",
+        typeWhole: "Whole number",
+        typeDecimal: "Decimal",
+        typeDate: "Date",
+        typeTextLength: "Text length",
+        source: "List source",
+        sourcePlaceholder: "Red,Green,Blue or A1:A5",
+        value1: "Minimum",
+        value2: "Maximum",
+        allowBlank: "Allow blank",
+        showDropdown: "Show dropdown",
+        inputMessage: "Input message",
+        errorMessage: "Error message",
+        apply: "Apply validation",
+        remove: "Remove validation",
+        existing: "{type} on {ranges}",
+      },
+      freeze: {
+        freezeHere: "Freeze panes here",
+        unfreeze: "Unfreeze panes",
+      },
+      pasteSpecial: {
+        title: "Paste special",
+        mode: "Paste",
+        modeAll: "All",
+        modeValues: "Values only",
+        modeFormats: "Formats only",
+        transpose: "Transpose",
+        paste: "Paste",
+        empty: "Copy or cut a range first, then choose the paste options.",
+      },
+      numberFormat: {
+        title: "Format cells",
+        category: "Category",
+        number: "Number",
+        currency: "Currency",
+        percent: "Percentage",
+        date: "Date",
+        text: "Text",
+        custom: "Custom",
+        decimals: "Decimal places",
+        thousands: "Use thousands separator",
+        pattern: "Format code",
+        preview: "Preview",
+        apply: "Apply",
+      },
+      names: {
+        title: "Name manager",
+        name: "Name",
+        namePlaceholder: "QuarterlyRevenue",
+        refersTo: "Refers to",
+        refersToPlaceholder: "Sheet1!$A$1:$C$3",
+        add: "Add",
+        update: "Update",
+        delete: "Delete",
+        useSelection: "Use selection",
+        empty: "No defined names yet.",
+      },
+      context: {
+        insertComment: "Insert comment",
+        editComment: "Edit comment",
+        insertHyperlink: "Insert hyperlink",
+        editHyperlink: "Edit hyperlink",
+        conditional: "Conditional formatting…",
+        createTable: "Create table",
+        removeTable: "Remove table",
+        insertChart: "Insert chart",
+        validation: "Data validation…",
+        freezeHere: "Freeze panes here",
+        unfreeze: "Unfreeze panes",
+      },
+      status: {
+        chartInserted: "Chart inserted",
+        chartUpdated: "Chart updated",
+        chartDeleted: "Chart deleted",
+        commentSaved: "Comment saved",
+        commentDeleted: "Comment deleted",
+        hyperlinkSaved: "Hyperlink saved",
+        hyperlinkRemoved: "Hyperlink removed",
+        tableCreated: "Table created",
+        tableRemoved: "Table removed",
+        ruleAdded: "Conditional format added",
+        ruleUpdated: "Conditional format updated",
+        ruleRemoved: "Conditional format deleted",
+        validationSet: "Data validation applied",
+        validationRemoved: "Data validation removed",
+        actionFailed: "Nothing to change: check the selected range and values",
+      },
+    },
     drawing: {
       button: "Button",
       dropdown: "Dropdown",
@@ -1362,10 +2360,15 @@ export const officeMessagesEn: OfficeMessages = {
       label: "Label",
       groupBox: "Group box",
       unknown: "Control",
+      slicerHint: "Slicer \u201c{name}\u201d: static preview. Change the selection in Excel.",
+    },
+    pivot: {
+      staticPreview: "Pivot table \u201c{name}\u201d: static cached values. Refresh it in Excel.",
     },
     selection: {
       current: "Current selection {address}",
       none: "No cells selected",
+      cutPending: "Cut {address}, press Escape to cancel",
     },
     validation: {
       list: "The value is not in the allowed list.",
@@ -1393,6 +2396,7 @@ export const officeMessagesEn: OfficeMessages = {
       worksheet: "Worksheet",
       worksheetNamed: "Worksheet {name}",
       blank: "Blank",
+      fillHandle: "Fill handle: drag to fill the selection's pattern into more cells",
     },
     surface: {
       region: "Choose worksheet area",
@@ -1428,6 +2432,10 @@ export const officeMessagesEn: OfficeMessages = {
       previousSlide: "Previous slide",
       nextSlide: "Next slide",
       hiddenSlide: "Hidden slide",
+      viewMode: "Browse layout",
+      viewModeSingle: "Single slide view",
+      viewModeSorter: "Slide sorter",
+      sorter: "Slide sorter",
       searchPlaceholder: "Search slides",
       search: "Search",
       sidebar: "Slides",
@@ -1435,6 +2443,7 @@ export const officeMessagesEn: OfficeMessages = {
       loading: "Loading PPTX…",
       waiting: "Waiting for the slide stage…",
       cancelled: "PPTX loading was cancelled.",
+      unsupportedDrop: "Only .pptx, .pptm, .ppsx, .ppsm, .potx and .potm files are supported",
       reload: "Reload",
       retry: "Retry",
       skip: "Skip",
@@ -1447,11 +2456,26 @@ export const officeMessagesEn: OfficeMessages = {
       resumeMedia: "Resume media",
       resumeMediaAction: "Resume media playback",
       fullscreen: "Fullscreen",
+      link: {
+        menu: "Link actions",
+        open: "Open link",
+        copy: "Copy link",
+        openSlide: "Go to slide {number}",
+      },
       capability: {
         strict: "Exact {count}/{total}",
         approximate: "Approximate {count}",
         static: "Static {count}",
         unparsed: "Unparsed {count}",
+      },
+      notes: {
+        panel: "Speaker notes",
+        presenter: "Presenter view",
+        title: "Notes",
+        empty: "No speaker notes for this slide.",
+        next: "Next slide",
+        noNext: "Last slide",
+        timer: "Elapsed time",
       },
       status: {
         idle: "Not started",
@@ -1509,6 +2533,10 @@ export const officeMessagesEn: OfficeMessages = {
       noPdf: "No PDF loaded",
       opening: "Opening PDF…",
       toggleThumbnails: "Show or hide thumbnails",
+      pageLayout: "Page layout",
+      pageLayoutContinuous: "Continuous scroll",
+      pageLayoutSingle: "Single page",
+      pageLayoutSpread: "Two-page spread",
       pageInput: "Page number",
       rotateClockwise: "Rotate clockwise",
       searchLabel: "Search PDF text",
@@ -1526,6 +2554,7 @@ export const officeMessagesEn: OfficeMessages = {
       searchResult: "Result {current} / {total}, page {page}",
       renderFailed: "The PDF page could not be rendered.",
       invalidPdf: "The PDF file could not be parsed or rendered.",
+      unsupportedDrop: "Only PDF files are supported",
       selectionLayer: "PDF page text selection layer",
     },
     surface: {
@@ -1536,6 +2565,7 @@ export const officeMessagesEn: OfficeMessages = {
       pageAlt: "Page {page}",
       selectionRegion: "Choose PDF page region",
       selectionText: "PDF page text selection layer",
+      outline: "Document outline",
     },
     errors: {
       sourceNotAllowed: "The PDF URL is outside the allowed policy.",
@@ -1553,6 +2583,7 @@ export const officeMessagesEn: OfficeMessages = {
       workerStartup: "PDF Worker startup and document open",
       textSearch: "PDF text search",
       textExtraction: "PDF text extraction",
+      outline: "PDF outline",
       documentClose: "PDF document close",
       runtimeDestroy: "PDF runtime destroy",
     },
@@ -1604,7 +2635,16 @@ export const officeMessagesZhCN: OfficeMessages = {
       searching: "正在搜索",
       error: "搜索失败",
       noResults: "没有结果",
+      caseSensitive: "区分大小写",
+      wholeWord: "全字匹配",
+      regex: "使用正则表达式",
       resultOf: "第 {current} 项，共 {total} 项",
+      replacePlaceholder: "替换为",
+      replace: "替换",
+      replaceAll: "全部替换",
+      replaced: "已替换 {count} 处",
+      wholeCell: "匹配整个单元格",
+      formulas: "包含公式",
     },
     zoom: {
       in: "放大",
@@ -1673,8 +2713,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       emptyDetail: "上传或提供 DOCX 文件开始查看。",
       chooseFile: "选择 Word 文件",
       parseError: "未知的 DOCX 解析错误",
-      unsupportedFile: "仅支持 .docx、.docm、.dotx 和 .dotm 文件",
+      unsupportedFile: "仅支持 Word（.docx、.docm、.dotx、.dotm）和 OpenDocument 文本（.odt、.ott、.odm、.otm、.oth、.fodt）文件",
       fileTooLarge: "DOCX 文件大小 {actual} 字节超过允许值 {allowed} 字节。",
+      viewOnlyReason: "OpenDocument 文件为只读：无法编辑，也无法另存为 DOCX。",
       live: {
         loading: "正在打开 DOCX 文档",
         error: "无法打开文档：{message}",
@@ -1682,6 +2723,7 @@ export const officeMessagesZhCN: OfficeMessages = {
         readyPages: "文档已就绪，第 {page} 页，共 {total} 页",
       },
       pageLimitExceeded: "DOCX 页数 {count} 超过允许值 {allowed}。",
+      bookmarkMissing: "未找到书签“{name}”。",
     },
     toolbar: {
       sidebarToggle: "显示或隐藏页面缩略图",
@@ -1695,6 +2737,16 @@ export const officeMessagesZhCN: OfficeMessages = {
       commentsShow: "显示 {count} 条批注",
       commentsHide: "隐藏 {count} 条批注",
       commentsNone: "没有批注",
+      revisionDisplay: "审阅显示方式",
+      revisionDisplayInline: "所有标记",
+      revisionDisplayBalloons: "批注框",
+      revisionDisplayNone: "无标记",
+      viewMode: "页面布局",
+      viewModeContinuous: "连续滚动",
+      viewModeSingle: "单页",
+      viewModeSpread: "双页",
+      fitWidth: "适应宽度",
+      fitPage: "适应页面",
       lightThemeAction: "使用浅色文档主题",
       darkThemeAction: "使用深色文档主题",
       lightDocument: "浅色文档",
@@ -1713,6 +2765,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       exportTitle: "导出 DOCX",
       edits: "修订",
       toggleTheme: "切换文档主题",
+      find: "查找和替换",
       undo: "撤销 (⌘Z)",
       redo: "重做 (⇧⌘Z)",
       fontFamily: "字体",
@@ -1735,6 +2788,11 @@ export const officeMessagesZhCN: OfficeMessages = {
       justify: "两端对齐",
       bulletList: "项目符号列表",
       numberedList: "编号列表",
+      columns: "分栏",
+      columnsOne: "1 栏",
+      columnsTwo: "2 栏",
+      columnsThree: "3 栏",
+      columnsMore: "{count} 栏",
       increaseIndent: "增加缩进",
       increaseIndentTitle: "增加列表缩进 (Tab)",
       decreaseIndent: "减少缩进",
@@ -1745,6 +2803,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       borders: "边框",
       insertImage: "插入图片",
       insertTable: "插入表格",
+      moveTableHandle: "拖动以移动或浮动表格",
       zoom: "缩放",
       removeLink: "移除链接“{url}”？",
       unsupportedLink: "仅允许 http、https、mailto、内部 #片段和相对链接。",
@@ -1755,6 +2814,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       acceptAllTitle: "接受所有修订",
       rejectAll: "全部拒绝",
       rejectAllTitle: "拒绝所有修订",
+      addComment: "新建批注",
+      addCommentTitle: "为所选内容添加批注",
+      commentAuthor: "批注人",
       status: {
         ready: "就绪",
         copied: "已复制到剪贴板",
@@ -1766,7 +2828,9 @@ export const officeMessagesZhCN: OfficeMessages = {
         discardChanges: "放弃未保存的更改？",
         loadingFile: "正在加载 {name}…",
         importFailed: "文件加载失败：{message}",
-        unsupportedFile: "仅支持 .docx、.docm、.dotx 和 .dotm 文件",
+        unsupportedFile: "仅支持 Word（.docx、.docm、.dotx、.dotm）和 OpenDocument 文本（.odt、.ott、.odm、.otm、.oth、.fodt）文件",
+        viewOnly: "OpenDocument 文件为只读：无法编辑，也无法另存为 DOCX。",
+        loadedViewOnly: "已加载 {name}（只读）",
         exportCancelledChanged: "导出已取消：文档已更改",
         exportNotReady: "请等待文档加载完成后再导出",
         exportFailed: "导出失败：{message}",
@@ -1779,6 +2843,13 @@ export const officeMessagesZhCN: OfficeMessages = {
         unknownExportError: "未知导出错误",
         acceptedChanges: "已接受 {count} 处修订",
         acceptedChange: "已接受 1 处修订",
+        commentAdded: "已添加批注",
+        commentReplied: "已添加回复",
+        commentResolved: "批注已标记为已解决",
+        commentReopened: "批注已重新打开",
+        commentDeleted: "已删除批注",
+        commentTargetMissing: "不支持：批注或选区已不存在",
+        commentTextRequired: "不支持：批注内容不能为空",
         rejectedChanges: "已拒绝 {count} 处修订",
         rejectedChange: "已拒绝 1 处修订",
         formattingCleared: "（已清除 {count} 处格式修订且未回退；模型未保留旧格式）",
@@ -1803,6 +2874,8 @@ export const officeMessagesZhCN: OfficeMessages = {
         resizedImage: "已将图片调整为 {width}×{height}",
         updatedTextBox: "已更新文本框",
         imageWrapSet: "已设置图片环绕方式：{mode}",
+        imageLayerOrderRequiresFloating: "不支持：图层顺序仅适用于浮动图片",
+        imageLayerOrderChanged: "已更改图片图层顺序",
         movedImage: "已移动图片",
         movedSectionImage: "已移动节图片",
         movedDropCap: "已移动首字下沉",
@@ -1841,10 +2914,28 @@ export const officeMessagesZhCN: OfficeMessages = {
         splitTableCell: "已拆分表格单元格",
         movedTable: "已移动表格",
         movedEmbeddedTable: "已移动嵌入表格",
+        resizedTableRow: "已调整表格行高",
+        tableRowHeightPositive: "不支持：表格行高必须为正数",
+        tableRowHeightTargetUnavailable: "不支持：表格行目标不可用",
+        floatedTable: "已将表格浮动",
+        inlinedTable: "表格已回到文字流",
+        cannotFloatTableNotFound: "无法浮动：未找到表格",
+        movedBodyNode: "已移动段落或表格",
+        cannotMoveBodyNodeNotFound: "无法移动：未找到段落或表格",
+        updatedFormField: "已更新表单域",
+        formFieldTargetUnavailable: "不支持：表单域目标不可用",
+        formFieldOptionsRequired: "不支持：下拉框至少需要一个选项",
         unsupportedDiagonalTableCellBorders: "不支持：对角线表格单元格边框（{preset}）",
         unsupportedDiagonalParagraphBorders: "不支持：对角线段落边框（{preset}）",
         revisionLossOne: "已编辑段落中的修订已随编辑一起处理",
         revisionLossMany: "已编辑的 {count} 个段落中的修订已随编辑一起处理",
+        pageMarginsUpdated: "已更新页边距",
+        pageSizeUpdated: "已更新纸张大小与方向",
+        sectionColumnsUpdated: "已更新分栏",
+        headerAdded: "已添加页眉",
+        footerAdded: "已添加页脚",
+        replacedMatches: "已替换 {count} 处",
+        replaceTargetUnavailable: "不支持：该结果位于页眉、页脚或注释中，无法替换",
       },
       borderPresets: {
         bottom: "下边框",
@@ -1861,6 +2952,48 @@ export const officeMessagesZhCN: OfficeMessages = {
         diagonalUp: "斜上边框",
         horizontalLine: "水平线",
       },
+    },
+    pageSetup: {
+      title: "页面设置",
+      open: "页面设置",
+      sectionOption: "第 {index} 节",
+      sectionLabel: "应用于",
+      paperSize: "纸张大小",
+      paperSizeCustom: "自定义",
+      presetLetter: "Letter（8.5 × 11 英寸）",
+      presetLegal: "Legal（8.5 × 14 英寸）",
+      presetTabloid: "Tabloid（11 × 17 英寸）",
+      presetA3: "A3（297 × 420 毫米）",
+      presetA4: "A4（210 × 297 毫米）",
+      presetA5: "A5（148 × 210 毫米）",
+      presetB5: "B5（176 × 250 毫米）",
+      orientation: "方向",
+      orientationPortrait: "纵向",
+      orientationLandscape: "横向",
+      width: "纸张宽度",
+      height: "纸张高度",
+      margins: "页边距",
+      marginTop: "上边距",
+      marginRight: "右边距",
+      marginBottom: "下边距",
+      marginLeft: "左边距",
+      units: "数值单位为英寸",
+      apply: "应用",
+      cancel: "取消",
+      close: "关闭页面设置",
+      invalidValue: "请输入非负数",
+    },
+    headerFooter: {
+      header: "页眉",
+      footer: "页脚",
+      editHeader: "编辑页眉",
+      editFooter: "编辑页脚",
+      addHeader: "添加页眉",
+      addFooter: "添加页脚",
+      closeEditing: "完成编辑",
+      editingHeader: "正在编辑页眉",
+      editingFooter: "正在编辑页脚",
+      placeholder: "输入页眉文字",
     },
     contextMenu: {
       label: "编辑器上下文菜单",
@@ -1886,6 +3019,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       deleteTable: "删除表格",
       mergeCells: "合并单元格",
       splitCell: "拆分单元格",
+      selectTable: "选择整个表格",
+      clearContents: "清除内容",
+      layer: "图层",
+      bringToFront: "置于顶层",
+      bringForward: "上移一层",
+      sendBackward: "下移一层",
+      sendToBack: "置于底层",
     },
     colors: {
       black: "黑色",
@@ -1940,6 +3080,57 @@ export const officeMessagesZhCN: OfficeMessages = {
         maxLength: "最多使用 {max} 个字符。",
       },
     },
+    formFieldDialog: {
+      title: "表单域属性",
+      fieldType: "类型",
+      name: "名称",
+      namePlaceholder: "字段名称",
+      value: "值",
+      placeholder: "占位提示",
+      required: "必填",
+      checked: "已选中",
+      options: "选项",
+      option: "显示文本",
+      optionValue: "值",
+      addOption: "添加选项",
+      removeOption: "删除选项",
+      maxLength: "最大长度",
+      save: "保存",
+      cancel: "取消",
+      close: "关闭表单域属性",
+      noOptions: "此下拉框还没有选项。",
+      types: {
+        text: "文本",
+        checkbox: "复选框",
+        dropdown: "下拉框",
+        date: "日期",
+      },
+    },
+    linkCard: {
+      label: "链接操作",
+      open: "打开链接",
+      edit: "编辑链接",
+      remove: "删除链接",
+      save: "保存链接",
+      cancel: "取消编辑链接",
+      url: "地址",
+      urlPlaceholder: "https://example.com",
+      internal: "链接到本文档中的位置",
+    },
+    stylePreview: {
+      label: "段落样式",
+      sample: "敏捷的棕色狐狸跳过懒狗",
+      apply: "应用{style}",
+      normal: "正文",
+      heading: "标题",
+    },
+    nodeDrag: {
+      handle: "重新排序",
+      handleTitle: "拖动以移动此段落或表格",
+      moveUp: "上移",
+      moveDown: "下移",
+      dropBefore: "放置到此处",
+    },
     notes: {
       footnote: "脚注",
       endnote: "尾注",
@@ -1971,6 +3162,20 @@ export const officeMessagesZhCN: OfficeMessages = {
       comments: "批注",
       commentMarker: "批注 {ordinal}",
       commentMarkerWithAuthor: "批注 {ordinal} — {author}",
+      reply: "回复",
+      replyTitle: "回复此批注",
+      resolve: "标记为已解决",
+      resolveTitle: "将此批注标记为已解决",
+      reopen: "重新打开",
+      reopenTitle: "重新打开此批注",
+      delete: "删除",
+      deleteTitle: "删除此批注",
+      composerTitle: "新建批注",
+      composerReplyTitle: "回复",
+      composerPlaceholder: "输入批注…",
+      composerReplyPlaceholder: "输入回复…",
+      composerSubmit: "批注",
+      composerCancel: "取消",
     },
     dragOverlay: {
       drop: "拖放 DOCX 文件以导入",
@@ -1978,6 +3183,20 @@ export const officeMessagesZhCN: OfficeMessages = {
     diagnostics: {
       imageDecodeFailed: "DOCX 图片无法解码。",
       numberingImageDecodeFailed: "DOCX 编号图片无法解码。",
+      unsupportedImageFeature: "DOCX SVG 图片包含不支持的 {feature} 内容，已显示占位符。",
+    },
+    drawing: {
+      textBox: "文本框",
+      shape: "形状",
+      wordArt: "艺术字",
+      group: "组合形状",
+      smartArt: "SmartArt",
+      chart: "图表",
+      oleObject: "嵌入对象",
+      model3d: "3D 模型",
+      equation: "公式",
+      embeddedObject: "嵌入对象（{progId}）",
+      chartSeries: "{count} 个系列",
     },
   },
   xlsx: {
@@ -1989,6 +3208,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       deferredDetail: "文件大小 {size}，继续解析会占用更多内存。",
       resumeParsing: "继续解析",
       cancel: "取消",
+      unsupportedDrop: "仅支持 .xlsx、.xls、.xlsm、.xlsb、.xltx、.xltm 和 .csv 文件",
       live: {
         loading: "正在加载工作簿",
         error: "无法打开工作簿：{message}",
@@ -2004,10 +3224,46 @@ export const officeMessagesZhCN: OfficeMessages = {
       upload: "上传 XLSX",
       download: "下载源文件",
       export: "导出 XLSX",
+      printPreview: "打印预览",
+      pageBreaks: "分页预览",
+    },
+    statusBar: {
+      range: "选定区域",
+      ready: "就绪",
+      count: "计数",
+      numericalCount: "数值计数",
+      sum: "求和",
+      average: "平均值",
+      min: "最小值",
+      max: "最大值",
+      selected: "已选定",
+      filtered: "已筛选",
+      truncated: "仅显示前 {count} 个单元格",
+    },
+    print: {
+      title: "打印预览",
+      close: "关闭打印预览",
+      print: "打印",
+      noPages: "此工作表没有可打印的页面",
+      summary: "{count} 页 · {paper} {orientation} · {scale}%",
+      orientationPortrait: "纵向",
+      orientationLandscape: "横向",
     },
     ribbon: {
       undo: "撤销",
       redo: "重做",
+      cut: "剪切",
+      copy: "复制",
+      paste: "粘贴",
+      pasteSpecial: "选择性粘贴",
+      insertRowAbove: "在上方插入行",
+      insertRowBelow: "在下方插入行",
+      deleteRow: "删除行",
+      insertColumnLeft: "在左侧插入列",
+      insertColumnRight: "在右侧插入列",
+      deleteColumn: "删除列",
+      numberFormatDialog: "数字格式…",
+      nameManager: "名称管理器",
       fontFamily: "字体",
       fontSize: "字号",
       bold: "加粗",
@@ -2026,8 +3282,17 @@ export const officeMessagesZhCN: OfficeMessages = {
       numberFormat: "数字格式",
       currency: "货币",
       percent: "百分比",
+      borders: "边框",
       allBorders: "所有边框",
+      outsideBorders: "外侧边框",
+      leftBorder: "左侧边框",
+      rightBorder: "右侧边框",
+      topBorder: "上边框",
+      bottomBorder: "下边框",
+      noBorders: "无边框",
+      borderColor: "边框颜色",
       merge: "合并",
+      mergeAndCenter: "合并并居中",
       unmerge: "取消合并",
       readOnlyTitle: "只读模式",
       numberFormats: {
@@ -2045,19 +3310,71 @@ export const officeMessagesZhCN: OfficeMessages = {
       add: "添加工作表",
       remove: "删除当前工作表",
       defaultName: "工作表",
+      rename: "重命名",
+      renameLabel: "工作表名称",
+      renameEmpty: "请输入工作表名称。",
+      renameTooLong: "工作表名称不能超过 31 个字符。",
+      renameDuplicate: "已存在同名工作表。",
+      renameApostrophe: "工作表名称不能以撇号开头或结尾。",
+      renameFailed: "无法重命名该工作表。",
+      moveFailed: "无法移动该工作表。",
+      menuLabel: "工作表菜单",
+      hide: "隐藏",
+      hideFailed: "无法隐藏该工作表。",
+      unhide: "取消隐藏…",
+      unhideFailed: "无法取消隐藏该工作表。",
+      hiddenTab: "隐藏的工作表",
+      noHiddenSheets: "没有隐藏的工作表。",
+      tabListLabel: "工作表标签",
     },
     contextMenu: {
       label: "单元格菜单",
       copy: "复制",
+      cut: "剪切",
       paste: "粘贴",
+      pasteSpecial: "选择性粘贴",
+      pasteAll: "全部",
+      pasteValues: "仅值",
+      pasteFormats: "仅格式",
+      pasteTranspose: "转置",
+      editCell: "编辑单元格",
       clear: "清除内容",
+      clearContents: "清除内容",
       sortAscending: "按此列升序",
       sortDescending: "按此列降序",
       undo: "撤销",
       redo: "重做",
+      changeChartType: "更改图表类型",
+      duplicate: "创建副本",
+      delete: "删除",
+      insertRowAbove: "在上方插入行",
+      insertRowBelow: "在下方插入行",
+      deleteRow: "删除行",
+      insertColumnLeft: "在左侧插入列",
+      insertColumnRight: "在右侧插入列",
+      deleteColumn: "删除列",
+      mergeAndCenter: "合并并居中",
+      mergeAcross: "跨列合并",
+      mergeCells: "合并单元格",
+      unmerge: "取消合并",
+      selectRow: "选择整行",
+      selectColumn: "选择整列",
+      selectAll: "全选",
+    },
+    autoFilter: {
+      label: "筛选",
+      apply: "应用",
+      blanks: "（空白）",
+      clear: "清除筛选",
+      filterByValue: "按值筛选",
+      noValues: "没有可筛选的值。",
+      openMenu: "筛选 {column} 列",
+      selectAll: "全选",
     },
     formulaBar: {
       activeCell: "活动单元格",
+      goToName: "跳转到单元格、区域或定义名称",
+      definedNames: "定义名称",
       placeholder: "输入公式或值",
     },
     chart: {
@@ -2080,6 +3397,171 @@ export const officeMessagesZhCN: OfficeMessages = {
       defaultName: "表格 {number}",
       defaultColumn: "列 {number}",
     },
+    authoring: {
+      close: "关闭",
+      rangeLabel: "区域 {range}",
+      chart: {
+        title: "图表",
+        insertMode: "新建图表",
+        editMode: "编辑图表",
+        family: "图表类型",
+        familyBar: "柱形图",
+        familyLine: "折线图",
+        familyPie: "饼图",
+        chartTitle: "图表标题",
+        chartTitlePlaceholder: "季度收入",
+        showDataLabels: "在图表上显示数值",
+        headerRow: "首行是系列名称",
+        headerColumn: "首列是分类标签",
+        insert: "插入图表",
+        update: "更新图表",
+        delete: "删除图表",
+        selectedChart: "正在编辑 {title}",
+        noneSelected: "请先选择图表",
+      },
+      comment: {
+        title: "批注",
+        text: "批注内容",
+        textPlaceholder: "为这个单元格添加备注",
+        author: "作者",
+        authorPlaceholder: "你的名字",
+        save: "保存批注",
+        delete: "删除批注",
+      },
+      hyperlink: {
+        title: "超链接",
+        target: "地址",
+        targetPlaceholder: "https://example.com 或 #Sheet1!A1",
+        tooltip: "提示文字",
+        tooltipPlaceholder: "悬停时显示",
+        save: "保存链接",
+        remove: "移除链接",
+      },
+      table: {
+        title: "表格",
+        name: "表格名称",
+        namePlaceholder: "Table1",
+        hasHeaders: "首行是标题行",
+        create: "创建表格",
+        remove: "删除表格",
+        existing: "{name} 覆盖 {range}",
+      },
+      conditional: {
+        title: "条件格式",
+        kind: "规则类型",
+        kindColorScale: "色阶",
+        kindDataBar: "数据条",
+        kindIconSet: "图标集",
+        thresholds: "阈值",
+        typeMin: "最小值",
+        typeMax: "最大值",
+        typePercentile: "百分位",
+        typeNumber: "数值",
+        typePercent: "百分比",
+        value: "值",
+        color: "颜色",
+        iconSet: "图标集",
+        showValue: "显示数值",
+        reverse: "反转图标",
+        add: "添加规则",
+        update: "更新规则",
+        delete: "删除规则",
+        edit: "编辑规则",
+        empty: "此工作表没有条件格式",
+        ruleSummary: "{kind} · {ranges}",
+      },
+      validation: {
+        title: "数据验证",
+        type: "允许",
+        typeList: "序列",
+        typeWhole: "整数",
+        typeDecimal: "小数",
+        typeDate: "日期",
+        typeTextLength: "文本长度",
+        source: "序列来源",
+        sourcePlaceholder: "红,绿,蓝 或 A1:A5",
+        value1: "最小值",
+        value2: "最大值",
+        allowBlank: "允许空值",
+        showDropdown: "显示下拉箭头",
+        inputMessage: "输入提示",
+        errorMessage: "错误信息",
+        apply: "应用验证",
+        remove: "移除验证",
+        existing: "{type}，区域 {ranges}",
+      },
+      freeze: {
+        freezeHere: "在此冻结窗格",
+        unfreeze: "取消冻结窗格",
+      },
+      pasteSpecial: {
+        title: "选择性粘贴",
+        mode: "粘贴",
+        modeAll: "全部",
+        modeValues: "仅值",
+        modeFormats: "仅格式",
+        transpose: "转置",
+        paste: "粘贴",
+        empty: "请先复制或剪切一个区域，再选择粘贴方式。",
+      },
+      numberFormat: {
+        title: "设置单元格格式",
+        category: "分类",
+        number: "数值",
+        currency: "货币",
+        percent: "百分比",
+        date: "日期",
+        text: "文本",
+        custom: "自定义",
+        decimals: "小数位数",
+        thousands: "使用千位分隔符",
+        pattern: "格式代码",
+        preview: "预览",
+        apply: "应用",
+      },
+      names: {
+        title: "名称管理器",
+        name: "名称",
+        namePlaceholder: "季度收入",
+        refersTo: "引用位置",
+        refersToPlaceholder: "Sheet1!$A$1:$C$3",
+        add: "添加",
+        update: "更新",
+        delete: "删除",
+        useSelection: "使用当前选区",
+        empty: "尚未定义名称。",
+      },
+      context: {
+        insertComment: "插入批注",
+        editComment: "编辑批注",
+        insertHyperlink: "插入超链接",
+        editHyperlink: "编辑超链接",
+        conditional: "条件格式…",
+        createTable: "创建表格",
+        removeTable: "删除表格",
+        insertChart: "插入图表",
+        validation: "数据验证…",
+        freezeHere: "在此冻结窗格",
+        unfreeze: "取消冻结窗格",
+      },
+      status: {
+        chartInserted: "已插入图表",
+        chartUpdated: "已更新图表",
+        chartDeleted: "已删除图表",
+        commentSaved: "已保存批注",
+        commentDeleted: "已删除批注",
+        hyperlinkSaved: "已保存超链接",
+        hyperlinkRemoved: "已移除超链接",
+        tableCreated: "已创建表格",
+        tableRemoved: "已删除表格",
+        ruleAdded: "已添加条件格式",
+        ruleUpdated: "已更新条件格式",
+        ruleRemoved: "已删除条件格式",
+        validationSet: "已应用数据验证",
+        validationRemoved: "已移除数据验证",
+        actionFailed: "没有可应用的更改：请检查组区域和输入内容",
+      },
+    },
     drawing: {
       button: "按钮",
       dropdown: "下拉框",
@@ -2090,10 +3572,15 @@ export const officeMessagesZhCN: OfficeMessages = {
       label: "标签",
       groupBox: "分组框",
       unknown: "控件",
+      slicerHint: "切片器“{name}”：静态预览，请在 Excel 中更改选择。",
+    },
+    pivot: {
+      staticPreview: "透视表“{name}”：静态缓存值，请在 Excel 中刷新。",
     },
     selection: {
       current: "当前选择 {address}",
       none: "当前没有选择单元格",
+      cutPending: "已剪切 {address}，按 Esc 取消",
     },
     validation: {
       list: "输入值不在允许的列表中。",
@@ -2121,6 +3608,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       worksheet: "工作表",
       worksheetNamed: "工作表 {name}",
       blank: "空白",
+      fillHandle: "填充柄：拖动以将选区内容填充到更多单元格",
     },
     surface: {
       region: "选择工作表区域",
@@ -2156,6 +3644,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       previousSlide: "上一页",
       nextSlide: "下一页",
       hiddenSlide: "隐藏页",
+      viewMode: "浏览布局",
+      viewModeSingle: "单页视图",
+      viewModeSorter: "幻灯片浏览",
+      sorter: "幻灯片浏览",
       searchPlaceholder: "搜索幻灯片",
       search: "搜索",
       sidebar: "幻灯片列表",
@@ -2163,6 +3655,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       loading: "正在加载 PPTX…",
       waiting: "正在等待幻灯片舞台…",
       cancelled: "PPTX 加载已取消。",
+      unsupportedDrop: "仅支持 .pptx、.pptm、.ppsx、.ppsm、.potx 和 .potm 文件",
       reload: "重新加载",
       retry: "重试",
       skip: "跳过",
@@ -2175,11 +3668,26 @@ export const officeMessagesZhCN: OfficeMessages = {
       resumeMedia: "继续媒体",
       resumeMediaAction: "继续播放媒体",
       fullscreen: "全屏",
+      link: {
+        menu: "链接操作",
+        open: "打开链接",
+        copy: "复制链接",
+        openSlide: "跳到第 {number} 页",
+      },
       capability: {
         strict: "精确 {count}/{total}",
         approximate: "近似 {count}",
         static: "静态 {count}",
         unparsed: "未解析 {count}",
+      },
+      notes: {
+        panel: "演讲者备注",
+        presenter: "演讲者视图",
+        title: "备注",
+        empty: "当前幻灯片没有演讲者备注。",
+        next: "下一页",
+        noNext: "已是最后一页",
+        timer: "已用时间",
       },
       status: {
         idle: "尚未开始",
@@ -2237,6 +3745,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       noPdf: "未加载 PDF",
       opening: "正在打开 PDF…",
       toggleThumbnails: "显示或隐藏缩略图",
+      pageLayout: "页面布局",
+      pageLayoutContinuous: "连续滚动",
+      pageLayoutSingle: "单页",
+      pageLayoutSpread: "双页",
       pageInput: "页码",
       rotateClockwise: "顺时针旋转",
       searchLabel: "搜索 PDF 文本",
@@ -2254,6 +3766,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       searchResult: "第 {current} / {total} 项，第 {page} 页",
       renderFailed: "PDF 页面渲染失败。",
       invalidPdf: "PDF 文件无法解析或渲染。",
+      unsupportedDrop: "仅支持 PDF 文件",
       selectionLayer: "PDF 页面文本选择层",
     },
     surface: {
@@ -2264,6 +3777,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageAlt: "第 {page} 页",
       selectionRegion: "选择 PDF 页面区域",
       selectionText: "PDF 页面文本选择层",
+      outline: "文档大纲",
     },
     errors: {
       sourceNotAllowed: "PDF 地址不在允许范围内。",
@@ -2281,6 +3795,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       workerStartup: "PDF Worker 启动和文档打开",
       textSearch: "PDF 文本搜索",
       textExtraction: "PDF 文本提取",
+      outline: "PDF 大纲",
       documentClose: "PDF 文档关闭",
       runtimeDestroy: "PDF 运行时销毁",
     },

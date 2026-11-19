@@ -2,8 +2,57 @@
 // Kept as a re-export to preserve the public import path for consumers.
 export { useXlsxViewerController } from "./composables/useXlsxViewerController";
 export { useXlsxSearch } from "./composables/useXlsxSearch";
+export { useXlsxSelectionStats } from "./composables/selection-stats";
+export type {
+  XlsxSelectionStatsRequest,
+  XlsxSelectionStatsState,
+} from "./composables/selection-stats";
+export {
+  CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE,
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  chartRangeCellAt,
+  collectChartRangeHighlights,
+  normalizeHighlightRange,
+  parseChartSourceA1Range,
+  parseChartSourceRange,
+} from "./composables/chart-range-highlight";
+export type {
+  ChartSourceHighlightRole,
+  ChartSourceRange,
+  ChartSourceSheet,
+  CollectChartRangeHighlightsOptions,
+  ParseChartSourceRangeOptions,
+} from "./composables/chart-range-highlight";
+export {
+  FORMULA_REFERENCE_COLORS,
+  collectFormulaReferences,
+  formulaReferenceColor,
+  formulaReferenceSegments,
+  parseFormulaReferences,
+  resolveNamedRangeTarget,
+} from "./composables/formula-reference-highlight";
+export type {
+  FormulaReference,
+  FormulaReferenceCollection,
+  FormulaReferenceKind,
+  FormulaReferenceNameTarget,
+  FormulaReferenceOptions,
+  FormulaReferenceSegment,
+} from "./composables/formula-reference-highlight";
+export {
+  FORMULA_REFERENCE_OWNER_FORMULA_BAR,
+  FORMULA_REFERENCE_OWNER_GRID,
+  createNamedRangeResolver,
+  isReferenceOnActiveSheet,
+  useFormulaReferenceEditing,
+} from "./composables/useFormulaReferenceEditing";
+export type {
+  FormulaReferenceEditing,
+  FormulaReferenceEditingSession,
+} from "./composables/useFormulaReferenceEditing";
 export type {
   XlsxSearchMatch,
+  XlsxSearchOptions,
   XlsxSearchState,
   XlsxSearchStatus,
   XlsxSurfaceSearch,
@@ -13,6 +62,7 @@ export { XlsxFileSizeLimitExceededError } from "./composables/formatting";
 // Re-export domain helpers for direct consumers
 export { createEditingDomain } from "./composables/editing";
 export { createClipboardDomain } from "./composables/clipboard";
+export { createDrawingClipboardDomain } from "./composables/drawing-clipboard";
 export { createChartImageDomain } from "./composables/chart-controller";
 export { createNavigationDomain } from "./composables/navigation";
 export { createHistoryDomain } from "./composables/workbook-state";

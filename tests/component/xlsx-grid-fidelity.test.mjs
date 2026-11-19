@@ -37,32 +37,52 @@ const PAINT_SOURCE = readFileSync(PAINT_PATH, "utf8");
 const CONDITIONAL_PATH = path.join(ROOT, "packages/vue-xlsx/src/render/conditional-format.ts");
 const CONDITIONAL_SOURCE = readFileSync(CONDITIONAL_PATH, "utf8");
 
-function loadTsModule(source) {
-  return import(
-    `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-      },
-    }).outputText).toString("base64")}`
-  );
+function transpileModuleSource(source) {
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
 }
+
+function dataUrl(source) {
+  return `data:text/javascript;base64,${Buffer.from(transpileModuleSource(source)).toString("base64")}`;
+}
+
+function loadTsModule(source) {
+  return import(dataUrl(source));
+}
+
+const RICH_TEXT_LAYOUT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/rich-text-layout.ts");
+const RICH_TEXT_LAYOUT_SOURCE = readFileSync(RICH_TEXT_LAYOUT_PATH, "utf8");
 
 const paintModule = await loadTsModule(PAINT_SOURCE);
 const conditionalModule = await loadTsModule(CONDITIONAL_SOURCE);
+const richTextModule = await loadTsModule(RICH_TEXT_LAYOUT_SOURCE);
 // `drawCellText` is the shared renderer used by both `drawCellContent` and the
-// overflow pass. Transpile it with a stub icon resolver so the canvas calls can
-// be asserted without a real Canvas implementation.
+// overflow pass. Transpile it with a stub icon resolver and a colour stub so the
+// canvas calls can be asserted without a real Canvas implementation.
 const drawTextModule = await loadTsModule([
   "let __iconGeometry = null;",
   "function resolveIconGeometry() { return __iconGeometry; }",
   "export function setIconGeometry(value) { __iconGeometry = value; }",
+  `import { wrapRichTextRuns, measureRichTextSegments, richTextBaselineOffset, richTextFontScale } from "${dataUrl(RICH_TEXT_LAYOUT_SOURCE)}";`,
+  `import { resolveRotatedTextBounds, resolveRotatedTextCenter, resolveRotatedTextFitWidth, resolveShrinkToFitFontSize } from "${dataUrl(PAINT_SOURCE)}";`,
+  "function resolveWorkbookColor(color) { return color?.rgb ? `#${String(color.rgb).slice(2)}` : null; }",
   gridFunctionText("truncateText"),
   gridFunctionText("wrapCellText"),
+  gridFunctionText("baseCellFont"),
+  gridFunctionText("richTextRunFont"),
+  gridFunctionText("drawRichTextRuns"),
+  gridFunctionText("richTextNaturalWidth"),
+  gridFunctionText("drawRotatedPlainCellText"),
+  gridFunctionText("drawRotatedRichTextRuns"),
   gridFunctionText("drawCellText"),
-  "export { drawCellText };",
+  "export { drawCellText, wrapCellText };",
 ].join("\n"));
-const { drawCellText, setIconGeometry } = drawTextModule;
+const { drawCellText, setIconGeometry, wrapCellText } = drawTextModule;
+const { truncateRichTextRuns, wrapRichTextRuns } = richTextModule;
 
 const {
   MAX_CANVAS_AREA_PX,
@@ -172,6 +192,49 @@ function baseTextState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("cell text honours hard line breaks from Alt+Enter", () => {
+  const { ctx, calls } = createTextContext();
+  assert.deepEqual(
+    wrapCellText(ctx, "first\nsecond", 70, 3),
+    ["first", "second"],
+    "wrap text breaks at the hard newline and keeps every line",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "first\nsecond", 70, 1),
+    ["first"],
+    "without wrap text only the first hard line is visible",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "abcdefghijklmnop\nsecond", 30, 3),
+    ["abcde", "fghij", "k"],
+    "soft wrapping applies inside each hard line and the line cap still wins",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "a\n", 70, 3),
+    ["a", ""],
+    "a trailing hard break keeps its empty line",
+  );
+
+  // The renderer draws the hard lines one below the other when wrap text is on.
+  let state = baseTextState({ style: { ...baseTextState().style, wrap: true }, value: "first\nsecond" });
+  drawCellText(ctx, 0, 0, 80, 40, state, "#2563eb");
+  assert.deepEqual(
+    calls.filter((call) => call.type === "fillText").map((call) => call.text),
+    ["first", "second"],
+    "both hard lines reach the canvas",
+  );
+
+  // Wrap text off is Excel's first-line-only display.
+  const plain = createTextContext();
+  state = baseTextState({ value: "first\nsecond" });
+  drawCellText(plain.ctx, 0, 0, 80, 24, state, "#2563eb");
+  assert.deepEqual(
+    plain.calls.filter((call) => call.type === "fillText").map((call) => call.text),
+    ["first"],
+    "a cell without wrap text shows only the first line",
+  );
+});
 
 test("drawCellText spills text across empty neighbours and still clips to the cell", () => {
   let { ctx, calls } = createTextContext();
@@ -315,7 +378,10 @@ test("XlsxGrid wires merged clipping, overflow, icon layout, DPR and zoom into p
   assert.match(GRID_SOURCE, /overflowTextTasks/);
   assert.match(GRID_SOURCE, /drawCellText\(ctx, task\.x, task\.y, task\.width, task\.height, task\.state, "#2563eb"\)/);
   assert.match(GRID_SOURCE, /resolveOverflowTextWidth\(/);
-  assert.match(GRID_SOURCE, /style\.wrap \|\| style\.alignment !== "left"/);
+  assert.match(
+    GRID_SOURCE,
+    /style\.wrap \|\| style\.rotation != null \|\| style\.shrinkToFit \|\| style\.alignment !== trailingAlignment/,
+  );
   assert.match(GRID_SOURCE, /conditionalHidesValue/);
 
   assert.match(GRID_SOURCE, /resolveIconGeometry\(/);

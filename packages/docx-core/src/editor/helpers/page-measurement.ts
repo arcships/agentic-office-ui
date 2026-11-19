@@ -222,6 +222,9 @@ export function resolveMeasuredPageContentHeightPx(params: {
   return resolveMeasuredPageContentHeightDiagnostics(params).heightPx;
 }
 
+// Visible bottom of the rendered descendants that count toward the page body.
+// The descendants come from `createClippedBodyRectReader` (body-measurement.ts),
+// which has already intersected every clipping ancestor's box.
 export function resolveMeasuredBodyRenderedBottomPx(
   descendants: Array<{
     bottomPx: number;

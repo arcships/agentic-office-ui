@@ -16,9 +16,12 @@ import {
   type PptxObjectStateMap,
 } from "../playback/track-compiler"
 import type { PptxMediaItem, PptxPlaybackDocument } from "../playback/types"
+import { pptxEffectTargetKey, pptxEffectTargetSupport } from "../playback/targets"
+import { isPptxTransitionExecutable } from "../playback/transitions"
 import { createPptxClock } from "./clock"
 import { createPptxMediaPlayer, type PptxMediaPlayer } from "./media-player"
 import { applyPptxObjectState, capturePptxStaticState, createPptxTrackTargets, type PptxTrackTargets } from "./track-player"
+import { createPptxTransitionSoundPlayer, type PptxTransitionSoundPlayer } from "./transition-sound"
 import {
   capturePptxTransition,
   mountPptxTransition,
@@ -106,6 +109,7 @@ export function createPptxPlaybackController(
   let operationId = 0
   let playStarted = false
   let mediaPlayer: PptxMediaPlayer | null = null
+  let transitionSoundPlayer: PptxTransitionSoundPlayer | null = null
   const completedGroups = new Set<string>()
   const startedEffects = new Set<string>()
   const endedEffects = new Set<string>()
@@ -118,7 +122,10 @@ export function createPptxPlaybackController(
     activeNodeIds: Object.freeze(activeGroup?.effects
       .filter((effect) => startedEffects.has(effect.nodeId) && !endedEffects.has(effect.nodeId))
       .map((effect) => effect.nodeId) ?? []),
-    blockedMediaIds: Object.freeze([...(mediaPlayer?.blockedMediaIds ?? [])]),
+    blockedMediaIds: Object.freeze([
+      ...(mediaPlayer?.blockedMediaIds ?? []),
+      ...(transitionSoundPlayer?.blockedMediaIds ?? []),
+    ]),
     generation,
   })
   const emit = (event: PptxPlaybackEvent) => {
@@ -176,30 +183,40 @@ export function createPptxPlaybackController(
     const slide = host.document.slides[slideIndex]
     if (!slide) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "当前页面没有播放模型。", { slideIndex })
     // The rendered slide is the only moment targets can change: resolve them once and
-    // let every animation frame reuse the index.
-    targets = createPptxTrackTargets(host.root)
+    // let every animation frame reuse the index. Character-range targets are passed
+    // up front so only animated text is split into word/character boxes.
+    const requestedTargets = Object.values(slide.nodes ?? {}).flatMap((node) => {
+      if (!node.effect || pptxEffectTargetSupport(node.effect).disposition === "static") return []
+      const key = pptxEffectTargetKey(node.effect)
+      return key ? [key] : []
+    })
+    targets = createPptxTrackTargets(host.root, requestedTargets)
     compiled = compilePptxSlideTracks(slide, capturePptxStaticState(host.root, targets))
     const checkedTargets = new Set<string>()
     for (const effect of compiled.groups.flatMap((group) => group.effects)) {
-      const objectKey = effect.effect.targetObjectKey
-      if (!objectKey || checkedTargets.has(objectKey)) continue
-      checkedTargets.add(objectKey)
-      const count = targets.elements.get(objectKey)?.length ?? 0
-      if (count === 1) continue
+      const target = pptxEffectTargetKey(effect.effect)
+      if (!target || checkedTargets.has(target)) continue
+      checkedTargets.add(target)
+      if (pptxEffectTargetSupport(effect.effect).disposition === "static") continue
+      const count = targets.elements.get(target)?.length ?? 0
+      // Paragraph and character ranges intentionally cover several leaf boxes.
+      const rangeLike = /#(?:text|paragraph):/u.test(target)
+      if (count === 1 || rangeLike && count > 0) continue
       emit({
         type: "warning",
         warning: {
           code: count === 0 ? "TARGET_NOT_FOUND" : "TARGET_AMBIGUOUS",
           message: count === 0
-            ? `动画目标 ${objectKey} 没有对应页面元素。`
-            : `动画目标 ${objectKey} 对应了 ${count} 个页面元素。`,
+            ? `动画目标 ${target} 没有对应页面元素。`
+            : `动画目标 ${target} 对应了 ${count} 个页面元素。`,
           slideIndex,
-          objectKey,
+          objectKey: effect.effect.targetObjectKey,
           recoverable: true,
         },
       })
     }
     mediaPlayer?.prepare(slide)
+    transitionSoundPlayer?.prepare(slide)
     stableState = compiled.initialState
     clickBoundary = 0
     completedGroups.clear()
@@ -410,33 +427,46 @@ export function createPptxPlaybackController(
     } else clock.play()
   }
 
+  const onMediaBlocked = (mediaId: string) => {
+    blockedActivity = activeGroup ? "group" : activeTransition ? "transition" : activeAdvance ? "advance" : "media"
+    if (clock.running) clock.pause()
+    status = "blocked"
+    emit({ type: "mediarequest", mediaId, reason: "autoplay-blocked" })
+    emitState()
+  }
+  const onMediaError = (mediaId: string, reason: unknown) => {
+    emit({
+      type: "warning",
+      warning: {
+        code: "MEDIA_FAILED",
+        message: `媒体 ${mediaId} 无法挂载或播放。`,
+        slideIndex,
+        recoverable: true,
+      },
+    })
+    if (reason instanceof Error && reason.message) emit({
+      type: "error",
+      error: new PptxPlaybackError("MEDIA_FAILED", reason.message, { cause: reason, slideIndex }),
+    })
+  }
+
   mediaPlayer = createPptxMediaPlayer(host.root, {
-    onBlocked(mediaId) {
-      blockedActivity = activeGroup ? "group" : activeTransition ? "transition" : activeAdvance ? "advance" : "media"
-      if (clock.running) clock.pause()
-      status = "blocked"
-      emit({ type: "mediarequest", mediaId, reason: "autoplay-blocked" })
-      emitState()
-    },
-    onError(mediaId, reason) {
-      emit({
-        type: "warning",
-        warning: {
-          code: "MEDIA_FAILED",
-          message: `媒体 ${mediaId} 无法挂载或播放。`,
-          slideIndex,
-          recoverable: true,
-        },
-      })
-      if (reason instanceof Error && reason.message) emit({
-        type: "error",
-        error: new PptxPlaybackError("MEDIA_FAILED", reason.message, { cause: reason, slideIndex }),
-      })
-    },
+    onBlocked: onMediaBlocked,
+    onError: onMediaError,
     onBookmark(_mediaId, bookmarkName) {
       const group = compiled?.groups.find((candidate) => candidate.key === `bookmark:${bookmarkName}`)
       if (group) void runGroup(group).then(maybeArmAutoAdvance)
     },
+    onStateChange() {
+      if (!disposed) emitState()
+    },
+    resolveSource: host.resolveMediaSource,
+    releaseSource: host.releaseMediaSource,
+  })
+
+  transitionSoundPlayer = createPptxTransitionSoundPlayer({
+    onBlocked: onMediaBlocked,
+    onError: onMediaError,
     onStateChange() {
       if (!disposed) emitState()
     },
@@ -461,6 +491,7 @@ export function createPptxPlaybackController(
       if (activeTransition) finishActiveTransition()
       const from = slideIndex
       const capture = capturePptxTransition(host.root)
+      transitionSoundPlayer?.stop()
       const previousStatus = status
       status = "transitioning"
       generation += 1
@@ -472,18 +503,25 @@ export function createPptxPlaybackController(
         slideIndex = index
         prepareCurrentSlide()
         const targetSlide = host.document.slides[index]
-        const transitionKind = targetSlide.transition?.kind.toLowerCase()
-        const executableTransition = transitionKind && (
-          ["cut", "fade", "push", "wipe"].includes(transitionKind)
-          || options.approximation === "safe"
-        ) ? targetSlide.transition : undefined
+        const transitionKind = targetSlide.transition?.kind
+        // Strict kinds always run; approximate and unknown kinds need the
+        // caller's `approximation: "safe"` opt-in. `mountPptxTransition` turns a
+        // `cut` into no layer at all, which is the hard cut this replaced.
+        const executableTransition = isPptxTransitionExecutable(transitionKind, options.approximation)
+          ? targetSlide.transition
+          : undefined
         const transition = mountPptxTransition(
           host.root,
           capture,
           executableTransition,
           from === index - 1 ? targetSlide.morphFromPrevious : [],
         )
-        await runTransition(transition)
+        // Transition sounds follow the same autoplay gate as audio shapes and
+        // play for cut/fade/push/wipe alike; start them once the transition is
+        // active so a blocked sound pauses the transition, not the previous gap.
+        const transitionRun = runTransition(transition)
+        void transitionSoundPlayer?.play()
+        await transitionRun
       } catch (reason) {
         if (disposed || commandId !== operationId) throw reason
         status = previousStatus
@@ -609,6 +647,7 @@ export function createPptxPlaybackController(
       pausedActivity = activeGroup ? "group" : activeTransition ? "transition" : activeAdvance ? "advance" : "media"
       if (clock.running) clock.pause()
       mediaPlayer?.pause()
+      transitionSoundPlayer?.pause()
       status = "paused"
       emitState()
     },
@@ -620,6 +659,7 @@ export function createPptxPlaybackController(
       status = activity === "transition" ? "transitioning" : activity === "group" ? "running" : "waiting"
       if (activity !== "media") clock.play()
       await mediaPlayer?.resume()
+      await transitionSoundPlayer?.resume()
       emitState()
       if (activity === "group") await activePromise
       else if (activity === "transition") await transitionPromise
@@ -642,7 +682,10 @@ export function createPptxPlaybackController(
     async resumeBlockedMedia(mediaId) {
       assertUsable()
       await mediaPlayer?.resumeBlocked(mediaId)
-      if (mediaPlayer?.blockedMediaIds.length === 0 && status === "blocked") {
+      await transitionSoundPlayer?.resumeBlocked(mediaId)
+      const stillBlocked = (mediaPlayer?.blockedMediaIds.length ?? 0) > 0
+        || (transitionSoundPlayer?.blockedMediaIds.length ?? 0) > 0
+      if (!stillBlocked && status === "blocked") {
         const activity = blockedActivity
         blockedActivity = null
         status = activity === "transition" ? "transitioning" : activity === "group" ? "running" : "waiting"
@@ -678,6 +721,8 @@ export function createPptxPlaybackController(
       clock.dispose()
       mediaPlayer?.dispose()
       mediaPlayer = null
+      transitionSoundPlayer?.dispose()
+      transitionSoundPlayer = null
       host.onDispose?.()
       activeResolve?.()
       activeResolve = null

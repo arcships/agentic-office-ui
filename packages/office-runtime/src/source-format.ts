@@ -17,7 +17,20 @@ export type OoxmlSourceFormat =
   | "potx"
   | "potm";
 
-export type OfficeSourceFormat = OoxmlSourceFormat | "xls" | "csv" | "pdf";
+export type OpenDocumentTextSourceFormat =
+  | "odt"
+  | "ott"
+  | "odm"
+  | "otm"
+  | "oth"
+  | "fodt";
+
+export type OfficeSourceFormat =
+  | OoxmlSourceFormat
+  | OpenDocumentTextSourceFormat
+  | "xls"
+  | "csv"
+  | "pdf";
 
 export interface DetectSourceFormatInput {
   bytes?: ArrayBuffer | Uint8Array;
@@ -69,6 +82,12 @@ const FORMAT_BY_EXTENSION = new Map<string, { family: OfficeSourceFamily; format
   }] as const),
   ["xls", { family: "xlsx", format: "xls" }],
   ["csv", { family: "xlsx", format: "csv" }],
+  ["odt", { family: "docx", format: "odt" }],
+  ["ott", { family: "docx", format: "ott" }],
+  ["odm", { family: "docx", format: "odm" }],
+  ["otm", { family: "docx", format: "otm" }],
+  ["oth", { family: "docx", format: "oth" }],
+  ["fodt", { family: "docx", format: "fodt" }],
   ["pdf", { family: "pdf", format: "pdf" }],
 ]);
 
@@ -96,6 +115,12 @@ const FORMAT_BY_MIME = new Map<string, { family: OfficeSourceFamily; format: Off
   ["application/vnd.ms-powerpoint.slideshow.macroenabled.12", { family: "pptx", format: "ppsm" }],
   ["application/vnd.openxmlformats-officedocument.presentationml.template", { family: "pptx", format: "potx" }],
   ["application/vnd.ms-powerpoint.template.macroenabled.12", { family: "pptx", format: "potm" }],
+  ["application/vnd.oasis.opendocument.text", { family: "docx", format: "odt" }],
+  ["application/vnd.oasis.opendocument.text-template", { family: "docx", format: "ott" }],
+  ["application/vnd.oasis.opendocument.text-master", { family: "docx", format: "odm" }],
+  ["application/vnd.oasis.opendocument.text-master-template", { family: "docx", format: "otm" }],
+  ["application/vnd.oasis.opendocument.text-web", { family: "docx", format: "oth" }],
+  ["application/vnd.oasis.opendocument.text-flat-xml", { family: "docx", format: "fodt" }],
   ["application/pdf", { family: "pdf", format: "pdf" }],
 ]);
 

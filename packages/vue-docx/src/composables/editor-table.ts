@@ -19,6 +19,7 @@ import {
   insertTableColumn as insertTableColumnOnGrid,
   insertTableRow as insertTableRowOnGrid,
   mergeTableCells as mergeTableCellsOnGrid,
+  mergeTableFloatingStyle,
   moveBodyNodeInModel,
   paragraphLocationFromTextRangeLocation,
   paragraphText,
@@ -28,7 +29,10 @@ import {
   splitParagraphChildrenAtTextOffsets,
   splitParagraphStyleWithDefaultSpacing,
   splitTableCell as splitTableCellOnGrid,
+  tableCellSelectionRangeCells,
+  tableCellSelectionRangeHasMultipleCells,
   tableColumnCount,
+  type DocxTableFloatingUpdate,
 } from "@arcships/docx-core"
 import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
 
@@ -358,6 +362,35 @@ export function createEditorTable(
     }, ctx.statusMessage("clearedTableCells"))
   }
 
+  /**
+   * Clears every cell covered by the active table range through
+   * `clearTableCellContents(tableIndex, cells[])`, so a rectangular selection
+   * clears as one undo entry. Returns false when no multi-cell range is active
+   * or the table is nested (nested ranges are addressed by runtime key, not by
+   * body-table coordinates).
+   */
+  const clearTableSelection = (): boolean => {
+    const selection = ctx.selectionSnapshot.value
+    if (
+      selection.kind !== "table-cell" ||
+      selection.tableRuntimeKey ||
+      !selection.cellRange ||
+      !tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+    ) {
+      return false
+    }
+    const table = ctx.modelSnapshot.value.nodes[selection.tableIndex]
+    if (!table || table.type !== "table") {
+      return false
+    }
+    const cells = tableCellSelectionRangeCells(table, selection.cellRange)
+    if (cells.length === 0) {
+      return false
+    }
+    clearTableCellContents(selection.tableIndex, cells)
+    return true
+  }
+
   const setTableColumnWidths = (tableIndex: number, widthsPx: number[]): void => {
     if (
       widthsPx.length === 0 ||
@@ -386,9 +419,104 @@ export function createEditorTable(
         widthTwips: columnWidthsTwips.reduce((sum, width) => sum + width, 0),
         columnWidthsTwips,
       }
+      // A manual column resize materializes the physical grid: the logical
+      // zero-width columns no longer describe what is drawn, so the collapsed
+      // marker must not survive into export.
+      if (node.style) delete node.style.collapsedGridColumns
       node.sourceXml = undefined
       return nextModel
     }, ctx.statusMessage("resizedTableColumns"))
+  }
+
+  const setTableRowHeight = (
+    tableIndex: number,
+    rowIndex: number,
+    heightPx: number
+  ): void => {
+    if (!Number.isFinite(heightPx) || heightPx <= 0) {
+      unsupported("tableRowHeightPositive")
+      return
+    }
+
+    const table = ctx.modelSnapshot.value.nodes[tableIndex]
+    if (
+      table?.type !== "table" ||
+      !Number.isInteger(rowIndex) ||
+      !table.rows[rowIndex]
+    ) {
+      unsupported("tableRowHeightTargetUnavailable")
+      return
+    }
+
+    const heightTwips = Math.max(1, Math.round(Math.round(heightPx) * TWIPS_PER_PIXEL))
+    applyChange((current) => {
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
+      const row = node.rows[rowIndex]
+      if (!row) return current
+      if (row.style?.heightTwips === heightTwips && row.style?.heightRule === "atLeast") {
+        return current
+      }
+      // A dragged height is a minimum: content that needs more room still grows
+      // the row instead of being clipped like an `exact` height would.
+      row.style = { ...(row.style ?? {}), heightTwips, heightRule: "atLeast" }
+      node.sourceXml = undefined
+      return nextModel
+    }, ctx.statusMessage("resizedTableRow"))
+  }
+
+  /**
+   * Floats a body table at a drop position, or (`update === null`) puts it back
+   * into the text flow. The model carries the position in `TableStyle.floating`,
+   * which the wrapper style renders and the serializer writes as `w:tblpPr`.
+   */
+  const setTableFloating = (
+    tableIndex: number,
+    update: DocxTableFloatingUpdate | null
+  ): void => {
+    const table = ctx.modelSnapshot.value.nodes[tableIndex]
+    if (table?.type !== "table") {
+      refuse("cannotFloatTableNotFound")
+      return
+    }
+
+    if (update === null) {
+      // An inline table has nothing to clear, and a no-op must not open an undo
+      // entry the user cannot see.
+      if (!table.style?.floating) return
+      applyChange((current) => {
+        const nextModel = cloneModelForTableEdit(current, tableIndex)
+        const node = nextModel.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        if (node.style) {
+          const { floating: _floating, ...rest } = node.style
+          node.style = rest
+        }
+        // The rebuilt table must not carry the old `w:tblpPr`.
+        node.sourceXml = undefined
+        return nextModel
+      }, ctx.statusMessage("inlinedTable"))
+      return
+    }
+
+    const floating = mergeTableFloatingStyle(table.style?.floating, update)
+    if (!floating) return
+    if (
+      JSON.stringify(floating) ===
+      JSON.stringify(table.style?.floating ?? null)
+    ) {
+      return
+    }
+
+    applyChange((current) => {
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
+      node.style = { ...(node.style ?? {}), floating }
+      node.sourceXml = undefined
+      return nextModel
+    }, ctx.statusMessage("floatedTable"))
   }
 
   const mergeTableCells = (
@@ -452,6 +580,30 @@ export function createEditorTable(
       }
       return nextModel
     }, ctx.statusMessage("movedTable"))
+  }
+
+  // Paragraph and table reordering share one body-node move: section starts are
+  // re-anchored by `moveBodyNodeInModel`, so a node that crosses a section break
+  // joins the section at its new position instead of redefining the break.
+  const moveBodyNode = (
+    fromNodeIndex: number,
+    targetNodeIndex: number
+  ): boolean => {
+    let moved = false
+    applyChange((current) => {
+      const node = current.nodes[fromNodeIndex]
+      if (!node) {
+        refuse("cannotMoveBodyNodeNotFound")
+        return current
+      }
+      const nextModel = cloneModelForSectionEdit(current)
+      if (!moveBodyNodeInModel(nextModel, fromNodeIndex, targetNodeIndex)) {
+        return current
+      }
+      moved = true
+      return nextModel
+    }, ctx.statusMessage("movedBodyNode"))
+    return moved
   }
 
   const moveEmbeddedTableToBody = (
@@ -523,10 +675,14 @@ export function createEditorTable(
     deleteTableColumn,
     deleteTable,
     clearTableCellContents,
+    clearTableSelection,
     setTableColumnWidths,
+    setTableRowHeight,
+    setTableFloating,
     mergeTableCells,
     splitTableCell,
     moveTable,
+    moveBodyNode,
     moveEmbeddedTableToBody,
   }
 }

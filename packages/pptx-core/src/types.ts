@@ -49,9 +49,18 @@ export interface PptxSlideInfo {
   index: number
   number: number
   hidden: boolean
+  /**
+   * Speaker notes of this slide, one paragraph per line. Absent when the deck
+   * has no notes part for the slide or the notes body is empty.
+   */
+  notes?: string
 }
 
 export interface PptxPreviewWarning {
+  /**
+   * `NOTES_UNSUPPORTED` is no longer emitted — speaker notes are parsed now —
+   * and stays in the union so consumers switching on the code still compile.
+   */
   code: "NOTES_UNSUPPORTED" | "UNSUPPORTED_CONTENT"
   message: string
   slideIndex?: number

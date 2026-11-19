@@ -1,11 +1,15 @@
 [
   {
     "name": "charts-images.xlsx",
-    "bytes": 32070
+    "bytes": 32255
   },
   {
     "name": "chinese-mixed.docx",
     "bytes": 35981
+  },
+  {
+    "name": "cjk-report.pdf",
+    "bytes": 3301
   },
   {
     "name": "contract-page.png",
@@ -28,6 +32,10 @@
     "bytes": 37275
   },
   {
+    "name": "encrypted.pdf",
+    "bytes": 2710
+  },
+  {
     "name": "field-citations.json",
     "bytes": 1142
   },
@@ -45,7 +53,7 @@
   },
   {
     "name": "large-contract.pdf",
-    "bytes": 27641
+    "bytes": 208838
   },
   {
     "name": "large-grid.xlsx",
@@ -60,6 +68,10 @@
     "bytes": 1734
   },
   {
+    "name": "page-sizes.docx",
+    "bytes": 38003
+  },
+  {
     "name": "report-with-image.docx",
     "bytes": 56892
   },
@@ -68,8 +80,16 @@
     "bytes": 36885
   },
   {
+    "name": "review-threads.docx",
+    "bytes": 38005
+  },
+  {
     "name": "rotated-pages.pdf",
-    "bytes": 2376
+    "bytes": 2413
+  },
+  {
+    "name": "sales-table-validated.xlsx",
+    "bytes": 14290
   },
   {
     "name": "sales-table.xlsx",
@@ -81,6 +101,14 @@
   },
   {
     "name": "scanned-invoice.pdf",
-    "bytes": 39568
+    "bytes": 39398
+  },
+  {
+    "name": "sections-columns.docx",
+    "bytes": 59524
+  },
+  {
+    "name": "table-structures.docx",
+    "bytes": 37303
   }
 ]

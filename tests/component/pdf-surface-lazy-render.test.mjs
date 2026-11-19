@@ -142,6 +142,9 @@ async function mountLazySurface({
           blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }),
         },
         runtime: fake.runtime,
+        // These tests measure page bitmaps; the shared thumbnail strip has its
+        // own navigation-aids coverage.
+        showThumbnails: false,
         zoom: zoomState.value,
         maxBitmapBytes,
         maxPagePixels,

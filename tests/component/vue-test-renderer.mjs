@@ -40,6 +40,12 @@ function createHostNode(type, text = "") {
     focus() {},
     blur() {},
     select() {},
+    // Scroll APIs used by components that keep the active tab in view. Tests
+    // can inspect the recorded calls or replace the method with their own spy.
+    scrollIntoViewCalls: [],
+    scrollIntoView(options) {
+      this.scrollIntoViewCalls.push(options);
+    },
   };
 }
 
@@ -126,6 +132,39 @@ const renderer = vue.createRenderer({
     return [node, node];
   },
 });
+
+/**
+ * Build a real cancelable `Event` shaped like a KeyboardEvent.
+ *
+ * Node has no global `KeyboardEvent`, but `Event` is real: the viewer handler
+ * sees a genuine event object whose `defaultPrevented` flips when the viewer
+ * calls `preventDefault()`. The returned counter tracks those calls.
+ */
+export function keydownEvent(key, init = {}) {
+  const event = new Event("keydown", { cancelable: true });
+  for (const [name, value] of Object.entries({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    target: null,
+    ...init,
+  })) {
+    if (name === "preventDefault") continue;
+    Object.defineProperty(event, name, { configurable: true, value });
+  }
+  let prevented = 0;
+  const nativePreventDefault = event.preventDefault.bind(event);
+  Object.defineProperty(event, "preventDefault", {
+    configurable: true,
+    value() {
+      prevented += 1;
+      nativePreventDefault();
+    },
+  });
+  return { event, preventedCount: () => prevented };
+}
 
 export function walk(node, result = []) {
   result.push(node);

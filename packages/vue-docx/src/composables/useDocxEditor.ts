@@ -21,6 +21,10 @@ import {
   tableBorderPresetState,
   paragraphBorderPresetState,
   parseEmbeddedTableRuntimeKey,
+  cloneTableCellSelectionRange,
+  normalizeTableCellSelectionRange,
+  tableCellSelectionRangeHasMultipleCells,
+  isOpenDocumentModel,
 } from "@arcships/docx-core"
 import {
   firstRunStyle,
@@ -35,6 +39,10 @@ import {
   collectCommentsFromModel,
   primeCommentAnchors,
   applyTrackedChangeDecision,
+  addHeaderFooter as addSectionHeaderFooter,
+  setPageMargins as applySectionPageMargins,
+  setPageSize as applySectionPageSize,
+  setSectionColumns as applySectionColumns,
 } from "@arcships/docx-core"
 
 import type {
@@ -58,6 +66,7 @@ import type {
   DocxSelectedFormField,
   DocxFormFieldLocation,
   DocxDocumentTheme,
+  DocxCommentComposer,
   DocxSelectionSessionKind,
   DocxTableCellSelectionRange,
   DocxLineSpacingInfo,
@@ -72,6 +81,13 @@ import type {
   DocxImageWrapMode,
   DocxSectionParagraphLocation,
   DocxSectionImageLocation,
+  DocxSectionRegion,
+  DocxPageMarginsUpdate,
+  DocxPageSizeUpdate,
+  DocxSectionColumnsUpdate,
+  DocxPageSetupCommandOptions,
+  DocxRevisionDisplay,
+  AddHeaderFooterOptions,
   UseDocxEditorOptions,
   DocxEditorStatusMessages,
   ParagraphLocation,
@@ -90,6 +106,8 @@ import { createEditorFormField } from "./editor-form-field"
 import { createEditorList } from "./editor-list"
 import { createEditorClipboard } from "./editor-clipboard"
 import { createEditorImportExport } from "./editor-import-export"
+import { createEditorComments } from "./editor-comments"
+import { createEditorSearchReplace } from "./editor-search-replace"
 import {
   DEFAULT_DOCX_HISTORY_MAX_BYTES,
   estimateHistoryEntryBytes,
@@ -174,7 +192,14 @@ export function useDocxEditor(
   // --- theme / UI toggles ---
   const documentTheme = ref<DocxDocumentTheme>(options.initialDocumentTheme ?? "light")
   const showTrackedChanges = ref(options.initialShowTrackedChanges ?? false)
+  const revisionDisplay = ref<DocxRevisionDisplay>(
+    options.initialRevisionDisplay ?? "balloons"
+  )
+  const setRevisionDisplay = (display: DocxRevisionDisplay): void => {
+    revisionDisplay.value = display
+  }
   const showComments = ref(options.initialShowComments ?? false)
+  const commentComposer = ref<DocxCommentComposer | undefined>(undefined)
 
   // --- pagination ---
   const paginationInfo = ref<DocxPaginationInfo>({ currentPage: 1, totalPages: 1 })
@@ -529,6 +554,7 @@ export function useDocxEditor(
     statusMessage,
     selectedFormFieldLocation, documentLoadNonce, fileName, initialFileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
+    commentComposer,
     paginationInfo, historyRestoreRequest, basePackage,
     selectionSessionKind, selectionSessionKindInternal, embeddedFontLoadNonce,
 
@@ -610,10 +636,23 @@ export function useDocxEditor(
   const lst = createEditorList(ctx, applyModelChange)
 
   // 10. editor-clipboard
-  const clp = createEditorClipboard(ctx, txt.insertTextAtSelection)
+  const clp = createEditorClipboard(ctx, {
+    insertTextAtSelection: txt.insertTextAtSelection,
+    insertClipboardParagraphsAtSelection: txt.insertClipboardParagraphsAtSelection,
+  })
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
+
+  // 12. editor-comments (authoring: add/reply/resolve/delete)
+  const cmt = createEditorComments(ctx, applyModelChange, {
+    author: options.commentAuthor ?? officeMessagesEn.docx.editor.commentAuthor,
+    initials: options.commentInitials,
+    clock: options.commentClock ?? (() => new Date()),
+  })
+
+  // 13. editor-search-replace (find & replace over search results)
+  const repl = createEditorSearchReplace(ctx, applyModelChange)
 
   // ═══════════════════════════════════════════════════════════════════
   // Thin wrappers (state accessors + trivial dispatch calls)
@@ -697,6 +736,54 @@ export function useDocxEditor(
   const acceptAllTrackedChanges = (): boolean => decideTrackedChanges("accept")
   const rejectAllTrackedChanges = (): boolean => decideTrackedChanges("reject")
 
+  // ── page setup / header + footer authoring ────────────────────────
+  // Every command is a single undoable step: the edited section lives in
+  // `metadata.sections`, which the history snapshot already covers.
+  const setPageMargins = (
+    sectionIndex: number,
+    margins: DocxPageMarginsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionPageMargins(current, sectionIndex, margins),
+      ctx.statusMessage("pageMarginsUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
+  const setPageSize = (
+    sectionIndex: number,
+    pageSize: DocxPageSizeUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionPageSize(current, sectionIndex, pageSize),
+      ctx.statusMessage("pageSizeUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
+  const setSectionColumns = (
+    sectionIndex: number,
+    columns: DocxSectionColumnsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionColumns(current, sectionIndex, columns),
+      ctx.statusMessage("sectionColumnsUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
+  const addHeaderFooter = (
+    sectionIndex: number,
+    kind: DocxSectionRegion,
+    options?: AddHeaderFooterOptions
+  ): boolean => {
+    const status = ctx.statusMessage(kind === "header" ? "headerAdded" : "footerAdded")
+    return applyModelChange(
+      (current) => addSectionHeaderFooter(current, sectionIndex, kind, options),
+      status
+    )
+  }
+
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
   // would fight the user's live selection.
@@ -740,24 +827,97 @@ export function useDocxEditor(
     range: DocxTableCellSelectionRange,
     tableRuntimeKey?: string
   ): void => {
+    const table = model.value.nodes[tableIndex]
+    const normalized =
+      !tableRuntimeKey && table?.type === "table"
+        ? normalizeTableCellSelectionRange(table, range)
+        : cloneTableCellSelectionRange(range)
+    if (!normalized) return
+    normalized.tableIndex = tableIndex
     clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: {
         kind: "table-cell",
         tableIndex,
-        rowIndex: range.focusRowIndex,
-        cellIndex: range.focusCellIndex,
+        rowIndex: normalized.focusRowIndex,
+        cellIndex: normalized.focusCellIndex,
         ...(tableRuntimeKey ? { tableRuntimeKey } : undefined),
-        cellRange: {
-          tableIndex,
-          anchorRowIndex: range.anchorRowIndex,
-          anchorCellIndex: range.anchorCellIndex,
-          focusRowIndex: range.focusRowIndex,
-          focusCellIndex: range.focusCellIndex,
-        },
+        cellRange: normalized,
       },
       activeTextRange: undefined,
     }))
+  }
+  /**
+   * Selects every cell of the table as one rectangular range. The anchor is
+   * the top-left cell and the focus is the bottom-right cell; normalization
+   * expands the grid span over merged cells.
+   */
+  const selectWholeTable = (tableIndex?: number): void => {
+    const selection = selectionSnapshot
+    const targetTableIndex =
+      tableIndex ??
+      (selection.kind === "table-cell" ? selection.tableIndex : undefined)
+    if (targetTableIndex === undefined) return
+    const table = model.value.nodes[targetTableIndex]
+    if (!table || table.type !== "table" || table.rows.length === 0) return
+    let focusRowIndex = table.rows.length - 1
+    while (focusRowIndex >= 0 && (table.rows[focusRowIndex]?.cells.length ?? 0) === 0) {
+      focusRowIndex -= 1
+    }
+    if (focusRowIndex < 0) return
+    let anchorRowIndex = 0
+    while (anchorRowIndex <= focusRowIndex && (table.rows[anchorRowIndex]?.cells.length ?? 0) === 0) {
+      anchorRowIndex += 1
+    }
+    if (anchorRowIndex > focusRowIndex) return
+    const columnCount = table.rows.reduce(
+      (max, row) =>
+        Math.max(
+          max,
+          row.cells.reduce(
+            (count, cell) => count + (cell.style?.gridSpan ?? 1),
+            0
+          )
+        ),
+      0
+    )
+    selectTableCellRange(targetTableIndex, {
+      tableIndex: targetTableIndex,
+      anchorRowIndex,
+      anchorCellIndex: 0,
+      focusRowIndex,
+      focusCellIndex: (table.rows[focusRowIndex]?.cells.length ?? 1) - 1,
+      gridRange: {
+        startColumnIndex: 0,
+        endColumnIndex: Math.max(0, columnCount - 1),
+      },
+    })
+  }
+  /** Collapses a multi-cell range to its anchor cell. Returns true if it did. */
+  const collapseTableCellSelection = (): boolean => {
+    const selection = selectionSnapshot
+    if (
+      selection.kind !== "table-cell" ||
+      !selection.cellRange ||
+      !tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+    ) {
+      return false
+    }
+    const range = selection.cellRange
+    clearPendingRunStyle()
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex: selection.tableIndex,
+        rowIndex: range.anchorRowIndex,
+        cellIndex: range.anchorCellIndex,
+        ...(selection.tableRuntimeKey
+          ? { tableRuntimeKey: selection.tableRuntimeKey }
+          : undefined),
+      },
+      activeTextRange: undefined,
+    }))
+    return true
   }
   const selectTableCellByRuntimeKey = (
     tableRuntimeKey: string,
@@ -785,6 +945,9 @@ export function useDocxEditor(
   return {
     get model() { return model.value },
     get isDirty() { return isDirty.value },
+    get viewOnlyReason() {
+      return isOpenDocumentModel(model.value) ? statusMessage("viewOnly") : undefined
+    },
     get documentLoadNonce() { return documentLoadNonce.value },
     get fileName() { return fileName.value },
     get status() { return status.value },
@@ -792,6 +955,11 @@ export function useDocxEditor(
     get isImporting() { return isImporting.value },
     get documentTheme() { return documentTheme.value },
     get selection() { return selection.value },
+    get selectedTableCellRange() {
+      return selection.value.kind === "table-cell"
+        ? selection.value.cellRange
+        : undefined
+    },
     get activeTextRange() { return activeTextRange.value },
     get historyRestoreRequest() { return historyRestoreRequest.value },
     get selectedFormField() { return selectedFormField.value },
@@ -811,8 +979,11 @@ export function useDocxEditor(
     get trackedChanges() { return trackedChanges.value },
     get trackedChangeCount() { return trackedChangeCount.value },
     get showTrackedChanges() { return showTrackedChanges.value },
+    get revisionDisplay() { return revisionDisplay.value },
+    setRevisionDisplay,
     get comments() { return comments.value },
     get showComments() { return showComments.value },
+    get commentComposer() { return commentComposer.value },
     get currentPage() { return paginationInfo.value.currentPage },
     get totalPages() { return paginationInfo.value.totalPages },
     get hasUnorderedList() { return hasUnorderedList.value },
@@ -827,6 +998,14 @@ export function useDocxEditor(
     setDocumentTheme: setDocumentThemeFn,
     setShowTrackedChanges: setShowTrackedChangesFn,
     setShowComments: setShowCommentsFn,
+    beginComment: cmt.beginComment,
+    beginCommentReply: cmt.beginCommentReply,
+    cancelCommentComposer: cmt.cancelCommentComposer,
+    submitCommentComposer: cmt.submitCommentComposer,
+    addComment: cmt.addComment,
+    replyToComment: cmt.replyToComment,
+    resolveComment: cmt.resolveComment,
+    deleteComment: cmt.deleteComment,
     syncPaginationInfo,
     toggleShowTrackedChanges: toggleShowTrackedChangesFn,
     toggleShowComments: toggleShowCommentsFn,
@@ -839,6 +1018,8 @@ export function useDocxEditor(
     importDocxFile: ie.importDocxFile,
     newDocument: ie.newDocument,
     exportDocx: ie.exportDocx,
+    getDocxBytes: ie.getDocxBytes,
+    getDocxBlob: ie.getDocxBlob,
     undo,
     redo,
     setHeading: fmt.setHeading,
@@ -860,6 +1041,7 @@ export function useDocxEditor(
     setFormFieldValue: ff.setFormFieldValue,
     endFormFieldEdit: ff.endFormFieldEdit,
     updateFormFieldWidget: ff.updateFormFieldWidget,
+    updateFormField: ff.updateFormField,
     applyBorderPreset: fmt.applyBorderPreset,
     setAlignment: fmt.setAlignment,
     toggleList: lst.toggleList,
@@ -872,6 +1054,10 @@ export function useDocxEditor(
     resizeImage: img.resizeImage,
     setSyntheticTextBoxText: img.setSyntheticTextBoxText,
     setImageWrapMode: img.setImageWrapMode,
+    bringToFront: img.bringToFront,
+    bringForward: img.bringForward,
+    sendBackward: img.sendBackward,
+    sendToBack: img.sendToBack,
     moveFloatingImage: img.moveFloatingImage,
     moveSectionFloatingImage: img.moveSectionFloatingImage,
     moveParagraphDropCap: img.moveParagraphDropCap,
@@ -882,9 +1068,14 @@ export function useDocxEditor(
     selectParagraph,
     selectTableCell,
     selectTableCellRange,
+    selectWholeTable,
+    collapseTableCellSelection,
     selectTableCellByRuntimeKey,
     clearTableCellContents: tbl.clearTableCellContents,
+    clearTableSelection: tbl.clearTableSelection,
     setTableColumnWidths: tbl.setTableColumnWidths,
+    setTableRowHeight: tbl.setTableRowHeight,
+    setTableFloating: tbl.setTableFloating,
     insertTableRow: tbl.insertTableRow,
     insertTableColumn: tbl.insertTableColumn,
     deleteTableRow: tbl.deleteTableRow,
@@ -893,15 +1084,24 @@ export function useDocxEditor(
     mergeTableCells: tbl.mergeTableCells,
     splitTableCell: tbl.splitTableCell,
     moveTable: tbl.moveTable,
+    moveBodyNode: tbl.moveBodyNode,
     moveEmbeddedTableToBody: tbl.moveEmbeddedTableToBody,
     replaceExpandedSelection: txt.replaceExpandedSelection,
     deleteExpandedSelection: txt.deleteExpandedSelection,
+    replaceMatch: repl.replaceMatch,
+    replaceAll: repl.replaceAll,
     commitParagraphText: txt.commitParagraphText,
     commitTableCellText: txt.commitTableCellText,
     commitTableCellTextByRuntimeKey: txt.commitTableCellTextByRuntimeKey,
     commitTableCellParagraphTextByRuntimeKey: txt.commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
+    setPageMargins,
+    setPageSize,
+    setSectionColumns,
+    addHeaderFooter,
+    writeSelectionToClipboardData: clp.writeSelectionToClipboardData,
+    pasteClipboardData: async (sources) => clp.pasteClipboardData(sources),
     copy: clp.copy,
     paste: clp.paste,
   }

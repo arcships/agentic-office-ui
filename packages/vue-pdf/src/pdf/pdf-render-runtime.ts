@@ -16,6 +16,8 @@ import {
 import { pdfIntrinsicRectToCanonical } from "./pdf-coordinate-transform"
 import { mapPdfAnnotationObjects } from "./pdf-annotation"
 import { pdfPageTextHash } from "./pdf-page-signature"
+import { mapPdfBookmarks, type PdfOutlineItem } from "./pdf-outline"
+import { readPdfPageLabels } from "./pdf-page-labels"
 
 export type PdfRotation = 0 | 90 | 180 | 270
 
@@ -63,8 +65,15 @@ export interface PdfOpenDocumentOptions {
 export interface PdfRenderPageInfo {
   /** Zero-based page index. */
   index: number
+  /** Canonical page width in 0-degree space (the visible width at zero user rotation). */
   width: number
+  /** Canonical page height in 0-degree space (the visible height at zero user rotation). */
   height: number
+  /**
+   * Intrinsic `/Rotate` value in degrees. Documents are opened with normalized
+   * rotation, so this is metadata for display math and diagnostics; engine
+   * coordinates already account for it and must not apply it again.
+   */
   rotation: PdfRotation
   /**
    * Digest of the page text, populated lazily by this runtime. Page and region
@@ -462,6 +471,22 @@ export interface PdfRenderRuntime {
     options?: { signal?: AbortSignal },
   ): Promise<PdfPageTextLayer>
   /**
+   * Document bookmark tree for outline navigation. Optional so injected
+   * runtimes that only render pages simply render no outline panel.
+   */
+  getOutline?(
+    document: PdfRenderDocument,
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly PdfOutlineItem[]>
+  /**
+   * Display label of every page (`1`, `iv`, `A-3`) in document order. Optional;
+   * consumers fall back to decimal page numbers when it is absent.
+   */
+  getPageLabels?(
+    document: PdfRenderDocument,
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly string[]>
+  /**
    * Write one AcroForm widget value and return the refreshed annotation.
    *
    * Runtime implementers that cannot write forms omit this method; the Surface
@@ -619,6 +644,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
   private readonly contentHashRequests = new Map<string, Promise<string>>()
   private readonly rawPageAnnotations = new Map<string, readonly PdfAnnotationObject[]>()
   private readonly pageTextLayers = new Map<string, PdfPageTextLayer>()
+  private readonly documentPageLabels = new Map<string, readonly string[]>()
   private documentSequence = 0
   private disposed = false
 
@@ -670,7 +696,15 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       const id = `${this.runtimeId}-document-${++this.documentSequence}`
       const task = engine.openDocumentBuffer(
         { id, content: bytes },
-        password === undefined ? undefined : { password },
+        {
+          ...(password === undefined ? {} : { password }),
+          // Page sizes from PDFium are already rotated for /Rotate pages, while
+          // this runtime keeps the original rotation in `page.rotation` and
+          // applies it explicitly to rendering and canonical geometry. Opening
+          // in normalized (0-degree) space makes both models agree; without it
+          // a /Rotate 90 page is rotated twice and renders sideways.
+          normalizeRotation: true,
+        },
       )
       try {
         nativeDocument = await runPdfTask(task, {
@@ -718,6 +752,13 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       throw new Error("PDF document contains no renderable pages.")
     }
     this.documents.set(nativeDocument.id, nativeDocument)
+    // Parse `/PageLabels` while the verified bytes are still in hand. The tree
+    // is tiny and optional, and keeping only the labels avoids retaining the
+    // whole document buffer in the runtime.
+    this.documentPageLabels.set(
+      nativeDocument.id,
+      readPdfPageLabels(new Uint8Array(bytes), nativeDocument.pageCount),
+    )
     return {
       id: nativeDocument.id,
       pageCount: nativeDocument.pageCount,
@@ -775,6 +816,9 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
     const task = this.getEngine().renderThumbnail(nativeDocument, page, {
       scaleFactor: parameters.scaleFactor,
+      // Thumbnails must show the page as it is displayed at zero user rotation,
+      // so the intrinsic /Rotate value is applied here explicitly.
+      rotation: asRotation(parameters.rotation),
       dpr: 1,
       imageType: "image/png",
       withAnnotations: true,
@@ -1013,6 +1057,30 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     return layer
   }
 
+  async getOutline(
+    document: PdfRenderDocument,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly PdfOutlineItem[]> {
+    const nativeDocument = this.getNativeDocument(document)
+    const bookmarks = await runPdfTask(this.getEngine().getBookmarks(nativeDocument), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: officeMessagesEn.pdf.runtime.outline,
+    })
+    return mapPdfBookmarks(bookmarks?.bookmarks, document.pageCount)
+  }
+
+  async getPageLabels(
+    document: PdfRenderDocument,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    this.getNativeDocument(document)
+    if (options.signal?.aborted || this.disposed) throw createAbortError()
+    const labels = this.documentPageLabels.get(document.id)
+    if (labels) return labels
+    return Array.from({ length: document.pageCount }, (_, index) => String(index + 1))
+  }
+
   async setFormFieldValue(
     document: PdfRenderDocument,
     pageIndex: number,
@@ -1113,6 +1181,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     for (const key of this.pageTextLayers.keys()) {
       if (key.startsWith(`${document.id}:`)) this.pageTextLayers.delete(key)
     }
+    this.documentPageLabels.delete(document.id)
     const engine = this.engine
     if (!engine) return
     try {
@@ -1132,6 +1201,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     this.contentHashRequests.clear()
     this.rawPageAnnotations.clear()
     this.pageTextLayers.clear()
+    this.documentPageLabels.clear()
     const engine = this.engine
     this.engine = undefined
     if (!engine) return

@@ -14,6 +14,7 @@ import type {
   XlsxChartWall,
   XlsxChartsheet,
   XlsxImageAnchor,
+  XlsxSheetVisibility,
   XlsxThemePalette,
   XlsxWorkbookTab,
 } from "../types";
@@ -94,6 +95,7 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     max: typeof axis.max === "number" ? axis.max : undefined,
     min: typeof axis.min === "number" ? axis.min : undefined,
     majorGridlines: typeof axis.majorGridlines === "boolean" ? axis.majorGridlines : undefined,
+    majorGridlineColor: typeof axis.majorGridlineColor === "string" ? axis.majorGridlineColor : undefined,
     majorTickMark: typeof axis.majorTickMark === "string" ? axis.majorTickMark : undefined,
     minorUnit: typeof axis.minorUnit === "number" ? axis.minorUnit : undefined,
     minorGridlines: typeof axis.minorGridlines === "boolean" ? axis.minorGridlines : undefined,
@@ -122,7 +124,7 @@ export function mergeChartAxis(target: XlsxChartAxis | null | undefined, patch: 
   };
 }
 
-export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChartAxis> | null {
+export function readChartAxisFromXml(axisNode: Element | null, themePalette?: XlsxThemePalette | null): Partial<XlsxChartAxis> | null {
   if (!axisNode) {
     return null;
   }
@@ -153,6 +155,14 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
     minorTimeUnit: getFirstLocalChild(axisNode, "minorTimeUnit")?.getAttribute("val") ?? undefined,
     orientation: getFirstLocalChild(scalingNode ?? axisNode, "orientation")?.getAttribute("val") ?? undefined,
     majorGridlines: Boolean(getFirstLocalChild(axisNode, "majorGridlines")),
+    majorGridlineColor: (() => {
+      const gridlines = getFirstLocalChild(axisNode, "majorGridlines");
+      if (!gridlines) {
+        return undefined;
+      }
+      const style = resolveChartLineStyle(getFirstLocalChild(gridlines, "spPr"), themePalette);
+      return style.hidden ? "transparent" : style.color ?? undefined;
+    })(),
     majorTickMark: getFirstLocalChild(axisNode, "majorTickMark")?.getAttribute("val") ?? undefined,
     majorUnit: readChartNumericAttribute(axisNode, "majorUnit"),
     max: readChartNumericAttribute(scalingNode, "max"),
@@ -435,6 +445,21 @@ export function normalizeChartsheet(raw: unknown, index: number): XlsxChartsheet
   };
 }
 
+/**
+ * Whether a worksheet belongs in the parsed sheet list and the tab strip.
+ *
+ * `veryHidden` sheets never do, even when hidden sheets are requested: Excel
+ * keeps them out of its Unhide dialog and tab strip too, so the only way to
+ * bring one back is the controller API. Plain `hidden` sheets are listed only
+ * when the caller asks for them.
+ */
+export function isWorksheetTabListed(
+  visibility: XlsxSheetVisibility,
+  showHiddenSheets = false
+) {
+  return visibility === "visible" || (showHiddenSheets && visibility === "hidden");
+}
+
 export function buildTabs(
   workbook: Workbook,
   chartsheets: XlsxChartsheet[],
@@ -446,7 +471,7 @@ export function buildTabs(
     return workbook.sheetNames.flatMap((name, index) => {
       const worksheet = workbook.getSheet(index);
       const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-      if (!showHiddenSheets && visibility !== "visible") {
+      if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
         return [];
       }
 
@@ -478,7 +503,7 @@ export function buildTabs(
 
     const worksheet = workbook.getSheet(slotIndex);
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       return [];
     }
 
@@ -669,7 +694,7 @@ export function updateAnchorNode(anchorNode: Element, anchor: XlsxImageAnchor) {
 export function setChartTitle(chartNode: Element, value: string | undefined) {
   const existing = getFirstLocalChild(chartNode, "title");
   if (!value) {
-    existing?.remove();
+    if (existing?.parentNode) existing.parentNode.removeChild(existing);
     return;
   }
 
@@ -787,7 +812,7 @@ export function updateAxisNode(axisNode: Element | null, axis: XlsxChartAxis | n
     if (axis.majorGridlines && !gridlines) {
       axisNode.appendChild(axisNode.ownerDocument.createElementNS(CHART_NS, "c:majorGridlines"));
     } else if (!axis.majorGridlines) {
-      gridlines?.remove();
+      if (gridlines?.parentNode) gridlines.parentNode.removeChild(gridlines);
     }
   }
   if (axis.minorGridlines !== undefined) {
@@ -795,7 +820,7 @@ export function updateAxisNode(axisNode: Element | null, axis: XlsxChartAxis | n
     if (axis.minorGridlines && !gridlines) {
       axisNode.appendChild(axisNode.ownerDocument.createElementNS(CHART_NS, "c:minorGridlines"));
     } else if (!axis.minorGridlines) {
-      gridlines?.remove();
+      if (gridlines?.parentNode) gridlines.parentNode.removeChild(gridlines);
     }
   }
   if (axis.majorTickMark) {

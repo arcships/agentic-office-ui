@@ -4,9 +4,12 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
-import { officeMessagesEn } from "@arcships/office-interaction"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type { ImageRunNode, ParagraphNode } from "@arcships/docx-core"
-import type { DocxSectionImageLocation } from "@arcships/docx-core"
+import type {
+  DocxSectionImageLocation,
+  SvgPictureUnsupportedReason,
+} from "@arcships/docx-core"
 import {
   shouldRenderWrappedFloatingImage,
   shouldRenderAbsoluteFloatingImage,
@@ -21,6 +24,7 @@ import {
   resolveRenderableImageSource,
   imageUsesPlaceholderFallback,
   unsupportedImageFallbackLabel,
+  svgPictureUnsupportedDiagnostic,
   appendCssFilters,
   resolveImageRenderTransformStyle,
   syntheticTextBoxSvg,
@@ -38,9 +42,13 @@ export interface ImageRunRenderExtra {
   imageFilterSuffix?: string
   /** Reports a browser decode failure without exposing document bytes. */
   onImageDecodeError?: (error: DocxImageDecodeError) => void
+  /** Reports an SVG picture that fell back to a placeholder. */
+  onImageUnsupported?: (diagnostic: DocxImageUnsupportedDiagnostic) => void
   /** Localized alt text and missing-source fallback. */
   imageAltText?: string
   imageMissingText?: string
+  /** Localized `{feature}` template for an unsupported SVG picture. */
+  imageUnsupportedText?: string
 
   // Section image interaction callbacks
   sectionImageInteraction?: ImageInteraction | undefined
@@ -50,6 +58,15 @@ export interface DocxImageDecodeError {
   code: "IMAGE_DECODE_FAILED"
   phase: "image-decode"
   imageKey: string
+  message: string
+}
+
+export interface DocxImageUnsupportedDiagnostic {
+  code: "IMAGE_UNSUPPORTED_FEATURE"
+  phase: "image-render"
+  imageKey: string
+  reason: SvgPictureUnsupportedReason
+  partName?: string
   message: string
 }
 
@@ -76,6 +93,8 @@ export interface ImageRunRenderContext {
   child: ImageRunNode
   key: string
   childIndex: number
+  /** Source id of the owning paragraph; figures expose it for geometry. */
+  paragraphSourceId?: string
   pageNumber?: number
   totalPages?: number
   pageNumberFormat?: string
@@ -154,6 +173,9 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
 
   const imageLayoutAttributes: Record<string, string> = {
     "data-docx-image-child-index": String(childIndex),
+    ...(ctx.paragraphSourceId
+      ? { "data-docx-source-id": `${ctx.paragraphSourceId}/child/${childIndex}` }
+      : {}),
     "data-docx-image-layout": isWrappedFloatingImage
       ? "wrapped"
       : isAbsoluteFloatingImage
@@ -341,6 +363,18 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   ) {
     const isSmallIcon = (widthPx ?? 0) <= 56 && (heightPx ?? 0) <= 56
     const fallbackText = unsupportedImageFallbackLabel(child, widthPx, heightPx)
+    const unsupportedDiagnostic = svgPictureUnsupportedDiagnostic(child)
+    if (unsupportedDiagnostic) {
+      extra?.onImageUnsupported?.({
+        ...unsupportedDiagnostic,
+        imageKey: key,
+        message: formatOfficeMessage(
+          extra?.imageUnsupportedText ??
+            officeMessagesEn.docx.diagnostics.unsupportedImageFeature,
+          { feature: unsupportedDiagnostic.reason },
+        ),
+      })
+    }
     return {
       vnode: h(
         "span",
@@ -711,7 +745,9 @@ function buildPlaceholderStyle(
     textTransform: "lowercase",
     fontFamily: "Arial, sans-serif",
     lineHeight: 1,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
     cursor,
@@ -738,7 +774,9 @@ function buildCropFrameStyle(
     display: isCentered ? "block" : "inline-block",
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
     cursor,
@@ -765,7 +803,9 @@ function buildRotationFrameStyle(
     display: isCentered ? "block" : "inline-block",
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Same baseline rule as an unrotated inline picture.
+    verticalAlign:
+      isWrapped || isAbsolute || isCentered ? "middle" : "baseline",
     lineHeight: 0,
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
@@ -797,7 +837,9 @@ function buildDirectImageStyle(
     display: isCentered ? "block" : undefined,
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...imageVisualStyle,
     ...transformStyle,

@@ -12,6 +12,10 @@ export type {
   DocumentCompatibilitySettings,
   DocumentNoteDefinition,
   DocumentSection,
+  DrawingAnchor,
+  DrawingObjectKind,
+  DrawingObjectShapeStyle,
+  DrawingRunNode,
   FooterSection,
   FormFieldCheckboxWidgetSettings,
   FormFieldDropdownWidgetSettings,
@@ -21,9 +25,12 @@ export type {
   FormFieldTextWidgetSettings,
   FormFieldType,
   FormFieldWidgetSettings,
+  ChartData,
+  ChartSeriesData,
   HeaderSection,
   HeadingLevel,
   ImageRunNode,
+  MathRunNode,
   NumberingAbstractDefinition,
   NumberingDefinitionSet,
   NumberingInstanceDefinition,
@@ -52,6 +59,9 @@ export type {
   TableRowNode,
   TableRowStyle,
   TableStyle,
+  TextBoxContent,
+  TextBoxParagraph,
+  TextBoxRunSegment,
   TextRunBorderStyle,
   TextRunNode,
   TextStyle,
@@ -102,6 +112,18 @@ export {
   setParagraphAlignment,
   toggleRunStyleFlag,
 } from "./editor/run-style-ops";
+export type {
+  DocxParagraphTextReplacement,
+  DocxReplaceNestedTableStep,
+  DocxReplaceParagraphLocation,
+  DocxReplaceParagraphLocationInNestedTableCell,
+  DocxReplaceParagraphResult,
+} from "./editor/search-replace-ops";
+export {
+  replaceTextInDocxParagraphs,
+  replaceTextInParagraphLocation,
+  replaceTextRangeInParagraph,
+} from "./editor/search-replace-ops";
 export {
   updateTableCellParagraphText,
   updateTableCellText,

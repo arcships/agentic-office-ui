@@ -5,11 +5,16 @@
     :class="{
       'docx-table-host--editable': editable && !isReadOnly,
       'docx-table-host--active': isActiveTable,
+      'docx-table-host--bookmark-target': bookmarkTarget,
     }"
     :style="wrapperStyle"
     :data-docx-table-host="true"
     :data-docx-table-index="domTableIndex"
+    :data-docx-table-node-index="tableIndex"
     :data-docx-table-runtime-key="tableRuntimeKey"
+    :data-docx-table-nesting-path="tableNestingPath || undefined"
+    @pointerenter="onTablePointerEnter"
+    @pointerleave="onTablePointerLeave"
   >
     <!-- Column resize handles -->
     <div
@@ -26,8 +31,47 @@
       />
     </div>
 
+    <!-- Row resize handles -->
+    <div
+      v-if="showRowHandles"
+      class="docx-table-row-handles"
+      data-docx-thumbnail-exclude="true"
+      data-docx-table-row-handles="true"
+    >
+      <div
+        v-for="boundary of rowBoundaries"
+        :key="`row-handle-${boundary.rowIndex}`"
+        class="docx-table-row-handle"
+        :data-docx-table-row-handle="boundary.rowIndex"
+        :style="{ top: `${boundary.bottomPx}px` }"
+        @mousedown.prevent="onRowResizeStart(boundary.rowIndex, $event)"
+      />
+    </div>
+
+    <!-- Table move handle (top-left) and the drag ghost it moves -->
+    <div
+      v-if="showMoveHandle"
+      class="docx-table-move-handle"
+      data-docx-table-move-handle="true"
+      data-docx-thumbnail-exclude="true"
+      :title="m.docx.editor.moveTableHandle"
+      :aria-label="m.docx.editor.moveTableHandle"
+      @mousedown.prevent="onTableMoveStart($event)"
+    />
+    <div
+      v-if="moveGhost"
+      class="docx-table-drag-ghost"
+      data-docx-table-drag-ghost="true"
+      data-docx-thumbnail-exclude="true"
+      :style="moveGhostStyle"
+    />
+
     <!-- Table -->
-    <table class="docx-table-host-table" :style="tableStyle">
+    <table
+      class="docx-table-host-table"
+      :style="tableStyle"
+      :data-docx-source-id="sourceId"
+    >
       <colgroup>
         <col
           v-for="(width, ci) of resolvedColumnWidths"
@@ -40,6 +84,7 @@
           v-for="row of gridRows"
           :key="`row-${row.rowIndex}`"
           :data-docx-table-row-index="row.rowIndex"
+          :data-docx-source-id="rowSourceId(row.rowIndex)"
           :class="rowClass(row.rowIndex)"
           :data-docx-tracked-change="rowTrackedKind(row.rowIndex)"
           :data-docx-tracked-change-id="rowTrackedId(row.rowIndex)"
@@ -54,16 +99,20 @@
             :rowspan="cell.rowSpan > 1 ? cell.rowSpan : undefined"
             :data-docx-table-cell="true"
             :data-docx-table-index="domTableIndex"
+            :data-docx-source-id="cellSourceId(cell.rowIndex, cell.cellIndex)"
             :data-docx-table-runtime-key="tableRuntimeKey"
             :data-docx-table-row-index="cell.rowIndex"
             :data-docx-table-cell-index="cell.cellIndex"
             class="docx-table-cell"
             :class="{
               'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
+              'docx-table-cell--range-selected': isCellInSelectedRange(cell.rowIndex, cell.cellIndex),
+              'docx-table-cell--range-focus': isCellRangeFocus(cell.rowIndex, cell.cellIndex),
               'docx-table-cell--merge-fallback': cell.continuationFallback,
               'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
               'docx-table-cell--insertion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'insertion',
               'docx-table-cell--deletion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'deletion',
+              'docx-table-cell--bookmark-target': isBookmarkTargetCell(cell.rowIndex, cell.cellIndex),
             }"
             :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
             :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
@@ -83,11 +132,14 @@
                 :contenteditable="editable && controller && !isReadOnly ? 'true' : undefined"
                 :data-docx-table-cell-paragraph-host="true"
                 :data-docx-table-index="domTableIndex"
+                :data-docx-table-node-index="tableIndex"
+                :data-docx-source-id="cellParagraphSourceId(cell, pi)"
                 :data-docx-table-runtime-key="tableRuntimeKey"
                 :data-docx-table-row-index="cell.rowIndex"
                 :data-docx-table-cell-index="cell.cellIndex"
                 :data-docx-paragraph-index="cellParagraphIndex(cell.cell.nodes, pi)"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
+                :dir="node.style?.direction"
                 :style="{ ...cellParagraphStyle(node), ...cellParagraphSliceStyle(cell.rowIndex) }"
                 @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
                 @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi))"
@@ -98,11 +150,14 @@
                 v-else
                 :table="node"
                 :table-index="tableIndex"
+                :source-id="cellNodeSourceId(cell, pi)"
                 :table-runtime-key="nestedTableRuntimeKey(cell.rowIndex, cell.cellIndex, pi)"
+                :nesting-path="nestedTableNestingPath(cell.rowIndex, cell.cellIndex, pi)"
                 :editable="editable && !isReadOnly"
                 :controller="controller"
                 :document-theme="documentTheme"
                 :show-tracked-changes="showTrackedChanges"
+                :revision-display="effectiveRevisionDisplay"
                 :show-comment-highlights="showCommentHighlights"
                 :numbering-definitions="numberingDefinitions"
                 :page-number="pageNumber"
@@ -118,6 +173,7 @@
                 :max-available-width-px="cellContentWidthPx(cell)"
                 :note-marker-labels="noteMarkerLabels"
                 :floating-page-origin-px="floatingPageOriginPx"
+                :on-internal-link-click="onInternalLinkClick"
               />
             </template>
             </template>
@@ -145,6 +201,7 @@ import {
   mergeTableSpacing,
   resolveTableCellBorderCss,
   resolveTableCellDiagonalOverlayCss,
+  resolveTableFloatingDropPatch,
   resolveTableRenderMetricsPx,
   resolveTableRowHeightCss,
   resolveTableSpacingPaddingPx,
@@ -157,6 +214,7 @@ import {
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
+  type DocxRevisionDisplay,
   type DocxTableCellSelectionRange,
   type NumberingDefinitionSet,
   type ParagraphNode,
@@ -165,12 +223,21 @@ import {
   type TableRowRange,
   paragraphText,
   paragraphTypographyStyle,
+  isCellSelected,
+  isCellWithinTableSelectionRange,
+  tableCellSelectionRangeHasMultipleCells,
+  resolveDefaultTabStopPx,
   resolveTableTrackedMarkup,
+  docxTableCellSourceId,
+  docxTableRowSourceId,
+  docxCellParagraphSourceId,
+  docxNestedTableSourceId,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
 import { readDocxTextHostText } from "../composables/editor-selection"
 import { useDocxMessages } from "../i18n"
+import { docxBookmarkNameFromClick } from "../composables/docx-bookmarks"
 import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -187,6 +254,10 @@ const HIGHLIGHT_TO_CSS: Record<string, string> = {
 const SCRIPT_FONT_SCALE = 0.65
 const DEFAULT_COLUMN_WIDTH = 100
 const MIN_COLUMN_WIDTH = 48
+const MIN_ROW_HEIGHT_PX = 20
+const FALLBACK_ROW_HEIGHT_PX = 24
+/** Pointer travel below this stays a click: the handle then only selects. */
+const TABLE_MOVE_THRESHOLD_PX = 3
 
 defineOptions({ name: "DocxTableHost" })
 
@@ -195,9 +266,17 @@ const props = withDefaults(
   defineProps<{
     table: TableNode
     tableIndex: number
+    /** Source id consumed by block/word geometry (`data-docx-source-id`). */
+    sourceId?: string
     editable?: boolean
     controller?: DocxEditorController
     tableRuntimeKey?: string
+    /**
+     * Slash-separated `rowIndex-cellIndex-contentIndex` steps from the
+     * top-level table to this nested table. Search uses it to project matches
+     * into the DOM independently of the page-specific runtime key.
+     */
+    nestingPath?: string
     rowRange?: TableRowRange
     /** Partial row slice produced by the pagination engine. */
     rowSlice?: {
@@ -208,6 +287,8 @@ const props = withDefaults(
     }
     documentTheme?: DocxDocumentTheme
     showTrackedChanges?: boolean
+    /** `inline`, `balloons` or `none`; omitted keeps historical inline markup. */
+    revisionDisplay?: DocxRevisionDisplay
     showCommentHighlights?: boolean
     numberingDefinitions?: NumberingDefinitionSet
     pageNumber?: number
@@ -221,16 +302,31 @@ const props = withDefaults(
     resolveBookmarkFieldValue?: (target: string) => string | undefined
     resolveBookmarkPageNumber?: (target: string) => number | undefined
     model?: DocModel
+    /** Document `w:defaultTabStop`; resolved from `model` when omitted. */
+    defaultTabStopPx?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     maxAvailableWidthPx?: number
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
     /** Page-relative origin used to place margin/page/column anchored images. */
     floatingPageOriginPx?: DocxFloatingPageOriginPx
+    /** Row resize handles; hosts that manage row heights themselves set false. */
+    showRowResizeHandles?: boolean
+    /** Table move handle (drag to float the table); set false to render none. */
+    showTableMoveHandle?: boolean
+    /** Internal `#bookmark` link clicked inside a cell paragraph. */
+    onInternalLinkClick?: (bookmarkName: string) => void
+    /** Transient highlight after the viewer revealed a bookmark in this table. */
+    bookmarkTarget?: boolean
+    /** Cell coordinates of a table bookmark, when known. */
+    bookmarkCell?: { rowIndex: number; cellIndex: number }
   }>(),
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
+    revisionDisplay: "inline" as DocxRevisionDisplay,
+    showRowResizeHandles: true,
+    showTableMoveHandle: true,
   }
 )
 
@@ -241,6 +337,13 @@ const emit = defineEmits<{
 }>()
 
 const m = useDocxMessages()
+
+// Cell paragraphs are measured and rendered on the document's tab grid.
+const documentTabStopPx = computed(() =>
+  Number.isFinite(props.defaultTabStopPx)
+    ? Math.max(1, Math.round(props.defaultTabStopPx as number))
+    : resolveDefaultTabStopPx(props.model?.metadata?.defaultTabStopTwips)
+)
 
 // ── State ──────────────────────────────────────────────────────────
 const tableEl = ref<HTMLElement | undefined>()
@@ -255,6 +358,25 @@ const resizeStartWidths = ref<number[]>([])
 const localColumnWidths = ref<number[] | null>(null)
 let activeColumnMouseMove: ((event: MouseEvent) => void) | undefined
 let activeColumnMouseUp: (() => void) | undefined
+
+// Local row height overrides (from user resizing) and the measured row heights
+// the row handles are positioned from.
+const localRowHeights = ref<Record<number, number>>({})
+const measuredRowHeights = ref<number[]>([])
+const tableOffsetTopPx = ref(0)
+const isRowResizing = ref(false)
+let activeRowMouseMove: ((event: MouseEvent) => void) | undefined
+let activeRowMouseUp: (() => void) | undefined
+let rowResizeTarget: { rowIndex: number; heightPx: number } | undefined
+
+// Table move drag: live pointer offset while the handle is held, committed as a
+// floating position on drop.
+const isMovingTable = ref(false)
+const moveDelta = ref<{ x: number; y: number } | null>(null)
+let moveStartClientX = 0
+let moveStartClientY = 0
+let activeMoveMouseMove: ((event: MouseEvent) => void) | undefined
+let activeMoveMouseUp: (() => void) | undefined
 
 // Cell text drafts. Each editable cell paragraph keeps its uncommitted DOM
 // text here until blur, export, or unmount; committing the whole cell's
@@ -382,6 +504,47 @@ const isNestedTable = computed(() => Boolean(props.tableRuntimeKey))
 
 const domTableIndex = computed(() => props.tableRuntimeKey ?? props.tableIndex)
 
+const tableNestingPath = computed(() => props.nestingPath ?? "")
+
+function nestedTableNestingPath(
+  rowIndex: number,
+  cellIndex: number,
+  contentIndex: number,
+): string {
+  const step = `${rowIndex}-${cellIndex}-${contentIndex}`
+  return tableNestingPath.value ? `${tableNestingPath.value}/${step}` : step
+}
+
+// Source ids shared with `extractDocumentBlocks`; geometry resolves the rendered
+// table, rows, cells and cell paragraphs through these attributes.
+function rowSourceId(rowIndex: number): string | undefined {
+  return props.sourceId ? docxTableRowSourceId(props.sourceId, rowIndex) : undefined
+}
+
+function cellSourceId(rowIndex: number, cellIndex: number): string | undefined {
+  return props.sourceId
+    ? docxTableCellSourceId(props.sourceId, rowIndex, cellIndex)
+    : undefined
+}
+
+function cellParagraphSourceId(
+  cell: TableGridCell,
+  contentIndex: number,
+): string | undefined {
+  const cellId = cellSourceId(cell.rowIndex, cell.cellIndex)
+  return cellId
+    ? docxCellParagraphSourceId(cellId, cellParagraphIndex(cell.cell.nodes, contentIndex))
+    : undefined
+}
+
+function cellNodeSourceId(
+  cell: TableGridCell,
+  contentIndex: number,
+): string | undefined {
+  const cellId = cellSourceId(cell.rowIndex, cell.cellIndex)
+  return cellId ? docxNestedTableSourceId(cellId, contentIndex) : undefined
+}
+
 // Visible revisions no longer imply a read-only table: the document stays
 // editable and revisions are resolved through accept/reject.
 const isReadOnly = computed(() => !props.editable || !props.controller)
@@ -445,6 +608,79 @@ const showColumnHandles = computed(
     (hovered.value || isActiveTable.value)
 )
 
+const showRowHandles = computed(
+  () =>
+    props.showRowResizeHandles !== false &&
+    props.editable &&
+    !isReadOnly.value &&
+    !isNestedTable.value &&
+    (hovered.value || isActiveTable.value)
+)
+
+/**
+ * Tables that can float: a body table, on its first page fragment only. A
+ * nested table lives inside a cell, and a header/footer table has no body node
+ * `setTableFloating` could address.
+ */
+const isFloatableTable = computed(
+  () =>
+    !isNestedTable.value &&
+    !props.withinHeaderFooter &&
+    (props.rowRange?.startRowIndex ?? 0) === 0
+)
+
+const showMoveHandle = computed(
+  () =>
+    props.showTableMoveHandle !== false &&
+    isFloatableTable.value &&
+    props.editable &&
+    !isReadOnly.value &&
+    (hovered.value || isActiveTable.value)
+)
+
+const moveGhost = computed(() => isMovingTable.value && moveDelta.value !== null)
+
+const moveGhostStyle = computed<Record<string, string>>(() => {
+  const delta = moveDelta.value ?? { x: 0, y: 0 }
+  const boundaries = rowBoundaries.value
+  const lastBottomPx = boundaries[boundaries.length - 1]?.bottomPx ?? 0
+  return {
+    width: `${Math.max(1, Math.round(renderedTableWidthPx.value))}px`,
+    height: `${Math.max(1, Math.round(lastBottomPx - tableOffsetTopPx.value))}px`,
+    top: `${Math.round(tableOffsetTopPx.value)}px`,
+    left: "0px",
+    transform: `translate(${Math.round(delta.x)}px, ${Math.round(delta.y)}px)`,
+  }
+})
+
+/**
+ * Bottom edge of every rendered row, in table-host coordinates. Measured row
+ * heights win over the model's `w:trHeight`, because a row that grew to fit its
+ * content is taller than the height stored in the document.
+ */
+const rowBoundaries = computed<Array<{ rowIndex: number; bottomPx: number; heightPx: number }>>(
+  () => {
+    let top = tableOffsetTopPx.value
+    return gridRows.value.map((row) => {
+      const measured = measuredRowHeights.value[row.rowIndex]
+      const modelHeightPx = twipsToPixels(row.row.style?.heightTwips)
+      const heightPx = Math.max(
+        MIN_ROW_HEIGHT_PX,
+        Math.round(
+          localRowHeights.value[row.rowIndex] ??
+            (Number.isFinite(measured) && (measured as number) > 0
+              ? (measured as number)
+              : Number.isFinite(modelHeightPx) && (modelHeightPx as number) > 0
+                ? (modelHeightPx as number)
+                : FALLBACK_ROW_HEIGHT_PX)
+        )
+      )
+      top += heightPx
+      return { rowIndex: row.rowIndex, bottomPx: top, heightPx }
+    })
+  }
+)
+
 const gridRows = computed(() => {
   const range = props.rowRange
   const bodyRows = resolveTableGrid(props.table, {
@@ -471,7 +707,15 @@ const gridRows = computed(() => {
 })
 
 const tableTrackedMarkup = computed(() =>
-  props.showTrackedChanges ? resolveTableTrackedMarkup(props.table) : undefined
+  props.showTrackedChanges && props.revisionDisplay !== "none"
+    ? resolveTableTrackedMarkup(props.table)
+    : undefined
+)
+
+// Hidden revisions mean the final text, regardless of the preferred markup
+// mode chosen for the gutter selector.
+const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  props.showTrackedChanges ? props.revisionDisplay : "none"
 )
 
 function rowTrackedRevision(rowIndex: number) {
@@ -545,6 +789,12 @@ function rowStyle(
   const explicitHeightPx = twipsToPixels(row.style?.heightTwips)
   const heightCss = resolveTableRowHeightCss(row, explicitHeightPx)
   if (heightCss) Object.assign(style, heightCss)
+  const draggedHeightPx = localRowHeights.value[rowIndex]
+  if (draggedHeightPx !== undefined) {
+    // Live drag feedback only; the committed height comes from the model.
+    style.height = `${Math.round(draggedHeightPx)}px`
+    style.minHeight = `${Math.round(draggedHeightPx)}px`
+  }
   if (row.style?.backgroundColor) style.backgroundColor = row.style.backgroundColor
   if (row.style?.cantSplit) style.breakInside = "avoid"
   const trackedKind = rowTrackedKind(rowIndex)
@@ -651,8 +901,11 @@ function cellParagraphHtml(
 ): string {
   const runOptions: ParagraphRunRenderOptions = {
     showTrackedChanges: props.showTrackedChanges,
+    revisionDisplay: effectiveRevisionDisplay.value,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
+    paragraphSourceId: cellParagraphSourceId(cell, pi),
+    emitTextRangeAttributes: true,
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
@@ -667,13 +920,17 @@ function cellParagraphHtml(
     tableCellLayout: { widthPx: cellContentWidthPx(cell) },
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
+    drawingLabels: m.value.docx.drawing,
+    defaultTabStopPx: documentTabStopPx.value,
+    emitLinkRangeAttributes:
+      props.editable && !isReadOnly.value && !props.withinHeaderFooter,
   }
   const rendered = renderParagraphRuns(
     para,
     `table-${domTableIndex.value}-r${cell.rowIndex}-c${cell.cellIndex}-p${pi}`,
     props.documentTheme,
     undefined,
-    undefined,
+    props.onInternalLinkClick,
     props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
@@ -684,22 +941,62 @@ function cellParagraphHtml(
   return nodes.map((node) => renderStaticHtml(node)).join("")
 }
 
+function isBookmarkTargetCell(rowIndex: number, cellIndex: number): boolean {
+  return Boolean(
+    props.bookmarkTarget &&
+    props.bookmarkCell &&
+    props.bookmarkCell.rowIndex === rowIndex &&
+    props.bookmarkCell.cellIndex === cellIndex,
+  )
+}
+
 function isCellActive(rowIndex: number, cellIndex: number): boolean {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
-  if (sel.kind === "table-cell") {
-    if (
-      sel.tableIndex !== props.tableIndex ||
-      selectionRuntimeKey(sel) !== props.tableRuntimeKey
-    ) {
-      return false
-    }
-    if (sel.cellRange) {
-      return cellInsideRange(rowIndex, cellIndex, sel.cellRange)
-    }
-    return sel.rowIndex === rowIndex && sel.cellIndex === cellIndex
+  if (sel.kind !== "table-cell") return false
+  if (
+    sel.tableIndex !== props.tableIndex ||
+    selectionRuntimeKey(sel) !== props.tableRuntimeKey
+  ) {
+    return false
   }
-  return false
+  return isCellSelected(sel, props.tableIndex, rowIndex, cellIndex, props.table)
+}
+
+/** True for every cell the current multi-cell range highlights. */
+function isCellInSelectedRange(rowIndex: number, cellIndex: number): boolean {
+  if (!props.editable || !props.controller) return false
+  const sel = props.controller.selection
+  if (
+    sel.kind !== "table-cell" ||
+    sel.tableIndex !== props.tableIndex ||
+    selectionRuntimeKey(sel) !== props.tableRuntimeKey ||
+    !sel.cellRange ||
+    !tableCellSelectionRangeHasMultipleCells(sel.cellRange)
+  ) {
+    return false
+  }
+  return isCellWithinTableSelectionRange(
+    props.table,
+    sel.cellRange,
+    rowIndex,
+    cellIndex
+  )
+}
+
+/** The active (focus) cell of a multi-cell range. */
+function isCellRangeFocus(rowIndex: number, cellIndex: number): boolean {
+  if (!props.editable || !props.controller) return false
+  const sel = props.controller.selection
+  return Boolean(
+    sel.kind === "table-cell" &&
+      sel.tableIndex === props.tableIndex &&
+      selectionRuntimeKey(sel) === props.tableRuntimeKey &&
+      sel.cellRange &&
+      tableCellSelectionRangeHasMultipleCells(sel.cellRange) &&
+      sel.cellRange.focusRowIndex === rowIndex &&
+      sel.cellRange.focusCellIndex === cellIndex
+  )
 }
 
 function cellInsideRange(
@@ -707,15 +1004,11 @@ function cellInsideRange(
   cellIndex: number,
   range: DocxTableCellSelectionRange
 ): boolean {
-  const minRow = Math.min(range.anchorRowIndex, range.focusRowIndex)
-  const maxRow = Math.max(range.anchorRowIndex, range.focusRowIndex)
-  const minCell = Math.min(range.anchorCellIndex, range.focusCellIndex)
-  const maxCell = Math.max(range.anchorCellIndex, range.focusCellIndex)
-  return (
-    rowIndex >= minRow &&
-    rowIndex <= maxRow &&
-    cellIndex >= minCell &&
-    cellIndex <= maxCell
+  return isCellWithinTableSelectionRange(
+    props.table,
+    range,
+    rowIndex,
+    cellIndex
   )
 }
 
@@ -748,7 +1041,14 @@ function selectCell(rowIndex: number, cellIndex: number): void {
 }
 
 // ── Event handlers ─────────────────────────────────────────────────
-function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): void {
+function onCellClick(rowIndex: number, cellIndex: number, event: MouseEvent): void {
+  const bookmarkName = docxBookmarkNameFromClick(event?.target)
+  if (bookmarkName && props.onInternalLinkClick) {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onInternalLinkClick(bookmarkName)
+    return
+  }
   if (!props.editable || !props.controller || isReadOnly.value) return
   const sel = props.controller.selection
   if (
@@ -765,10 +1065,7 @@ function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): v
 }
 
 function selectionRangeHasMultipleCells(range: DocxTableCellSelectionRange): boolean {
-  return (
-    range.anchorRowIndex !== range.focusRowIndex ||
-    range.anchorCellIndex !== range.focusCellIndex
-  )
+  return tableCellSelectionRangeHasMultipleCells(range)
 }
 
 const rangeAnchor = ref<{ rowIndex: number; cellIndex: number } | null>(null)
@@ -803,22 +1100,39 @@ function onCellMouseDown(
   cellIndex: number,
   event: MouseEvent
 ): void {
+  if (docxBookmarkNameFromClick(event?.target)) {
+    event.preventDefault()
+    return
+  }
   if (!props.editable || !props.controller || isReadOnly.value) return
-  if (props.tableRuntimeKey) return
   if (event.button !== 0) return
+  // Nested cell mousedowns bubble to the host table; keep the range anchor in
+  // the table whose cell the pointer is actually over.
+  event.stopPropagation?.()
   const target = event.target as HTMLElement | undefined
   const insideEditable = target?.closest?.("[contenteditable='true']")
   if (insideEditable && !event.shiftKey) return
 
   const selection = props.controller.selection
-  const currentRange =
+  const selectionMatchesTable =
     selection.kind === "table-cell" &&
     selection.tableIndex === props.tableIndex &&
     selectionRuntimeKey(selection) === props.tableRuntimeKey
+  const currentRange =
+    selectionMatchesTable && selection.kind === "table-cell"
       ? selection.cellRange
       : undefined
-  const anchor = event.shiftKey && currentRange
-    ? { rowIndex: currentRange.anchorRowIndex, cellIndex: currentRange.anchorCellIndex }
+  // Shift extends from the range anchor, or from the single active cell when
+  // no rectangle exists yet. Clicking a cell without Shift starts a new anchor.
+  const anchor = event.shiftKey
+    ? currentRange
+      ? {
+          rowIndex: currentRange.anchorRowIndex,
+          cellIndex: currentRange.anchorCellIndex,
+        }
+      : selectionMatchesTable && selection.kind === "table-cell"
+        ? { rowIndex: selection.rowIndex, cellIndex: selection.cellIndex }
+        : { rowIndex, cellIndex }
     : { rowIndex, cellIndex }
 
   event.preventDefault()
@@ -875,6 +1189,21 @@ function onCellFocus(
   paragraphIndex: number
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
+  // Focusing a cell inside the selected rectangle must not collapse it: the
+  // click that completes a drag or a Shift+click lands in the focus cell and
+  // would otherwise discard the range before the next command runs.
+  const selection = props.controller.selection
+  if (
+    selection.kind === "table-cell" &&
+    selection.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(selection) === props.tableRuntimeKey &&
+    selection.cellRange &&
+    tableCellSelectionRangeHasMultipleCells(selection.cellRange) &&
+    cellInsideRange(rowIndex, cellIndex, selection.cellRange)
+  ) {
+    emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
+    return
+  }
   selectCell(rowIndex, cellIndex)
   emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
 }
@@ -907,6 +1236,15 @@ function onCellBlur(
   commitCellParagraph(rowIndex, cellIndex, paragraphIndex, text)
   // Blur closes the typing burst: the next edit in this cell is a new undo step.
   props.controller.endTextCommitBurst?.()
+}
+
+function onTablePointerEnter(): void {
+  if (!props.editable) return
+  hovered.value = true
+}
+
+function onTablePointerLeave(): void {
+  hovered.value = false
 }
 
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
@@ -961,9 +1299,148 @@ function cleanupColumnResize(commit: boolean): void {
   if (shouldCommit) props.controller!.setTableColumnWidths(props.tableIndex, widths)
 }
 
+function onRowResizeStart(rowIndex: number, event: MouseEvent): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
+  cleanupRowResize(false)
+  const startHeight =
+    rowBoundaries.value.find((boundary) => boundary.rowIndex === rowIndex)?.heightPx ??
+    FALLBACK_ROW_HEIGHT_PX
+  const startY = event.clientY
+  isRowResizing.value = true
+  rowResizeTarget = { rowIndex, heightPx: startHeight }
+
+  activeRowMouseMove = (e: MouseEvent) => {
+    if (!isRowResizing.value) return
+    const heightPx = Math.max(
+      MIN_ROW_HEIGHT_PX,
+      Math.round(startHeight + (e.clientY - startY))
+    )
+    // A drag that grows the row also has to grow the host, otherwise the
+    // measured table height wins and the row snaps back mid-drag.
+    localRowHeights.value = { ...localRowHeights.value, [rowIndex]: heightPx }
+    rowResizeTarget = { rowIndex, heightPx }
+  }
+
+  activeRowMouseUp = () => cleanupRowResize(true)
+
+  document.addEventListener("mousemove", activeRowMouseMove)
+  document.addEventListener("mouseup", activeRowMouseUp)
+}
+
+function cleanupRowResize(commit: boolean): void {
+  if (activeRowMouseMove) {
+    document.removeEventListener("mousemove", activeRowMouseMove)
+  }
+  if (activeRowMouseUp) {
+    document.removeEventListener("mouseup", activeRowMouseUp)
+  }
+  activeRowMouseMove = undefined
+  activeRowMouseUp = undefined
+
+  const target = rowResizeTarget
+  const shouldCommit =
+    commit && isRowResizing.value && target && props.controller && !props.tableRuntimeKey
+  isRowResizing.value = false
+  rowResizeTarget = undefined
+  localRowHeights.value = {}
+  if (shouldCommit && target) {
+    props.controller!.setTableRowHeight(props.tableIndex, target.rowIndex, target.heightPx)
+  }
+}
+
 function onAddRow(): void {
   const lastRowIndex = Math.max(0, props.table.rows.length - 1)
   props.controller?.insertTableRow(props.tableIndex, lastRowIndex, "below")
+}
+
+/**
+ * Selects every cell of the table, the way Word's table selector does: the
+ * table gets its active outline and the cell-range commands (merge, clear,
+ * borders) apply to the whole table after a click on the move handle.
+ */
+function selectWholeTable(): void {
+  const controller = props.controller
+  if (!controller || isNestedTable.value) return
+  const lastRowIndex = Math.max(0, props.table.rows.length - 1)
+  const lastCellIndex = Math.max(0, (props.table.rows[lastRowIndex]?.cells.length ?? 1) - 1)
+  controller.selectTableCellRange(
+    props.tableIndex,
+    {
+      tableIndex: props.tableIndex,
+      anchorRowIndex: 0,
+      anchorCellIndex: 0,
+      focusRowIndex: lastRowIndex,
+      focusCellIndex: lastCellIndex,
+    },
+    props.tableRuntimeKey
+  )
+}
+
+function onTableMoveStart(event: MouseEvent): void {
+  if (!showMoveHandle.value) return
+  if (typeof event.button === "number" && event.button !== 0) return
+  event.preventDefault()
+  selectWholeTable()
+  cleanupTableMove(false)
+  isMovingTable.value = true
+  moveStartClientX = event.clientX
+  moveStartClientY = event.clientY
+  moveDelta.value = { x: 0, y: 0 }
+
+  activeMoveMouseMove = (e: MouseEvent) => {
+    if (!isMovingTable.value) return
+    moveDelta.value = {
+      x: e.clientX - moveStartClientX,
+      y: e.clientY - moveStartClientY,
+    }
+  }
+  activeMoveMouseUp = () => cleanupTableMove(true)
+
+  document.addEventListener("mousemove", activeMoveMouseMove)
+  document.addEventListener("mouseup", activeMoveMouseUp)
+}
+
+function cleanupTableMove(commit: boolean): void {
+  if (activeMoveMouseMove) {
+    document.removeEventListener("mousemove", activeMoveMouseMove)
+  }
+  if (activeMoveMouseUp) {
+    document.removeEventListener("mouseup", activeMoveMouseUp)
+  }
+  activeMoveMouseMove = undefined
+  activeMoveMouseUp = undefined
+
+  const delta = moveDelta.value
+  const shouldCommit =
+    commit &&
+    isMovingTable.value &&
+    Boolean(delta) &&
+    Boolean(props.controller) &&
+    !isReadOnly.value &&
+    isFloatableTable.value
+  isMovingTable.value = false
+  moveDelta.value = null
+  if (!shouldCommit || !delta || !props.controller) return
+  // A click (no real travel) only selects the table; it must not turn a table
+  // floating at its own position.
+  if (
+    Math.abs(delta.x) < TABLE_MOVE_THRESHOLD_PX &&
+    Math.abs(delta.y) < TABLE_MOVE_THRESHOLD_PX
+  ) {
+    return
+  }
+
+  props.controller.setTableFloating(
+    props.tableIndex,
+    resolveTableFloatingDropPatch({
+      startXPx: twipsToPixels(props.table.style?.floating?.xTwips) ?? 0,
+      startYPx: twipsToPixels(props.table.style?.floating?.yTwips) ?? 0,
+      deltaXPx: delta.x,
+      deltaYPx: delta.y,
+      pageWidthPx: props.floatingPageOriginPx?.pageWidth,
+      tableWidthPx: renderedTableWidthPx.value,
+    })
+  )
 }
 
 watch(
@@ -975,7 +1452,11 @@ watch(
 )
 
 watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
-  if (!editable || readOnly) cleanupColumnResize(false)
+  if (!editable || readOnly) {
+    cleanupColumnResize(false)
+    cleanupRowResize(false)
+    cleanupTableMove(false)
+  }
 })
 
 function emitMeasuredRowHeights(): void {
@@ -991,7 +1472,11 @@ function emitMeasuredRowHeights(): void {
         rowHeightsPx[rowIndex] = Math.round(heightPx)
       }
     })
+  const tableElement = root.querySelector?.("table") as HTMLElement | null | undefined
+  const offsetTop = tableElement?.offsetTop
+  if (Number.isFinite(offsetTop)) tableOffsetTopPx.value = Math.max(0, Math.round(offsetTop as number))
   if (rowHeightsPx.some((heightPx) => Number.isFinite(heightPx) && heightPx > 0)) {
+    measuredRowHeights.value = rowHeightsPx
     emit("measure", props.tableIndex, rowHeightsPx)
   }
 }
@@ -1023,6 +1508,8 @@ onUnmounted(() => {
   unregisterDraftFlusher = undefined
   finishRangeSelection()
   cleanupColumnResize(false)
+  cleanupRowResize(false)
+  cleanupTableMove(false)
 })
 </script>
 
@@ -1063,6 +1550,56 @@ onUnmounted(() => {
   background: #3b82f6;
 }
 
+.docx-table-row-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+.docx-table-row-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  margin-top: -2px;
+  cursor: row-resize;
+  pointer-events: auto;
+  background: transparent;
+}
+.docx-table-row-handle:hover {
+  background: #3b82f6;
+}
+
+.docx-table-move-handle {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #93c5fd;
+  border-radius: 2px;
+  background: #eff6ff;
+  cursor: move;
+  pointer-events: auto;
+  z-index: 12;
+}
+.docx-table-move-handle:hover {
+  background: #bfdbfe;
+  border-color: #3b82f6;
+}
+
+.docx-table-drag-ghost {
+  position: absolute;
+  border: 1px dashed #3b82f6;
+  border-radius: 2px;
+  background: rgba(59, 130, 246, 0.08);
+  pointer-events: none;
+  z-index: 11;
+}
+
 .docx-table-host-table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -1076,6 +1613,20 @@ onUnmounted(() => {
 }
 .docx-table-cell--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-table-cell--range-selected {
+  background: rgba(59, 130, 246, 0.16);
+}
+.docx-table-cell--range-focus {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.55);
+}
+.docx-table-cell--bookmark-target {
+  background: rgba(250, 204, 21, 0.22);
+  box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.55);
+}
+.docx-table-host--bookmark-target .docx-table-host-table {
+  outline: 2px solid rgba(250, 204, 21, 0.55);
+  outline-offset: 2px;
 }
 .docx-table-row--insertion .docx-table-cell {
   box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);

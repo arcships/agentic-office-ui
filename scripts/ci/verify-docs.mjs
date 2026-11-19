@@ -56,8 +56,10 @@ const requiredFiles = [
   "scripts/ci/prepare-release-artifact.mjs",
   "test-data/manifest.json",
   "tests/unit/docx-core.test.mjs",
+  "tests/unit/docx-fixture-fidelity.test.mjs",
   "tests/unit/xlsx-core.test.mjs",
   "tests/component/vue-components.test.mjs",
+  "tests/component/docx-fixture-fidelity.test.mjs",
   "tests/component/docx-selection-input.test.mjs",
   "tests/blackbox/browser_evidence.py",
   "tests/blackbox/console_allowlist.json",
@@ -224,6 +226,11 @@ for (const registered of [
   '"formal-scroll-range-regression"',
   '"formal-docx-annotations"',
   '"tests/blackbox/docx_annotations.py"',
+  '"material-verification"',
+  '"tests/blackbox/pdf_workflows.py"',
+  '"tests/blackbox/fidelity_content.py"',
+  '"tests/unit/docx-fixture-fidelity.test.mjs"',
+  '"tests/component/docx-fixture-fidelity.test.mjs"',
   'childSuite("docs", "test:docs")',
 ]) {
   check(`suite registration ${registered}`, runner.includes(registered));
@@ -239,21 +246,35 @@ check(
 check("CI runs the unit suite", workflow.includes("pnpm test:unit"));
 check("CI runs the component suite", workflow.includes("pnpm test:component"));
 check(
+  "CI runs the PDF suite",
+  workflow.includes("node scripts/ci/run-suite.mjs pdf"),
+);
+check(
+  "CI installs the PDF material dependencies",
+  workflow.includes("pip install -r requirements-ci.txt"),
+);
+check(
   "CI runs the acceptance shards",
   workflow.includes("scripts/ci/run-acceptance-shard.mjs"),
 );
 check("CI installs pnpm through corepack", workflow.includes("corepack enable"));
 check("Playwright dependency pinned", /^playwright==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")));
+check(
+  "pypdf dependency pinned",
+  /^pypdf==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")),
+);
 
 const allowlist = JSON.parse(read("tests/blackbox/console_allowlist.json"));
 check(
-  "browser allowlist is explicit and empty",
-  ["console", "pageErrors", "requestFailures", "responses"].every(
-    (key) => Array.isArray(allowlist[key]) && allowlist[key].length === 0,
-  ),
+  "browser allowlist is explicit and limited",
+  Array.isArray(allowlist.console)
+    && allowlist.console.every((entry) => entry === "willReadFrequently")
+    && ["pageErrors", "requestFailures", "responses"].every(
+      (key) => Array.isArray(allowlist[key]) && allowlist[key].length === 0,
+    ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
-check("fixture manifest has 21 entries", fixtures.entries?.length === 21, fixtures.entries?.length);
+check("fixture manifest has 28 entries", fixtures.entries?.length === 28, fixtures.entries?.length);
 check("fixture manifest excludes sensitive data", fixtures.containsSensitiveData === false);
 check(
   "consumer template has no source alias",

@@ -2,15 +2,19 @@ import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
+  XlsxCellEditRequest,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
+  XlsxCellTextRun,
   XlsxChart,
   XlsxChartElementSelection,
   XlsxChartsheet,
   XlsxDataValidation,
   XlsxDataValidationFeedback,
+  XlsxDrawingClipboardItem,
   XlsxFormControl,
   XlsxImage,
+  XlsxNamedRange,
   XlsxShape,
   XlsxSheetData,
   XlsxTable,
@@ -31,6 +35,7 @@ import type {
 import { cellAddressToA1 } from "./selection";
 import { DEFAULT_CELL_STYLE_PATCH, coerceEnteredValue } from "./cell-input";
 import type { CellInputOptions } from "./cell-input";
+import { toEngineCellStyle } from "./engine-style";
 import type { XlsxDataValidationCheck } from "./validation";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
@@ -102,6 +107,8 @@ export type SnapshotHistoryEntry = {
   kind: "snapshot";
   activeCell: XlsxCellAddress | null;
   activeSheetIndex: number;
+  /** Active tab, so undoing a chartsheet move restores that chartsheet. */
+  activeTabIndex?: number;
   bytes: Uint8Array;
   selection: XlsxCellRange | null;
 };
@@ -177,6 +184,8 @@ export type ClipboardMerge = {
 export type ClipboardPayload = {
   cells: ClipboardMatrixCell[];
   cols: number;
+  /** Drawings copied from the sheet; drawings paste without a cell matrix. */
+  drawings?: XlsxDrawingClipboardItem[];
   merges: ClipboardMerge[];
   /**
    * Top-left cell the payload was copied from. Paste uses it to shift relative
@@ -369,6 +378,12 @@ export function applyCellMutationState(
  * rather than to a hard-coded Calibri style, so a workbook with its own default
  * font (or a default number format) keeps it. The number format is always
  * explicit, because that is the group undo is usually restoring.
+ *
+ * The parsed model mirrors the source OOXML, so its colours are translated to
+ * the engine's colour input before the patch reaches `setCellStyleAt`. The
+ * result always names every style group and every property inside a group: the
+ * engine merges groups and their properties, so a patch that only mentioned the
+ * default font would leave the bold or the border undo is removing in place.
  */
 export function resolveCellFallbackStyle(
   sheet: { styleById?: Record<number, unknown> } | null | undefined
@@ -377,11 +392,17 @@ export function resolveCellFallbackStyle(
   if (!defaultStyle || typeof defaultStyle !== "object") {
     return null;
   }
-  const record = defaultStyle as Record<string, unknown>;
-  if (record.numberFormat) {
-    return defaultStyle;
+  const converted = toEngineCellStyle(defaultStyle);
+  const style: Record<string, unknown> = { ...DEFAULT_CELL_STYLE_PATCH };
+  if (converted && typeof converted === "object") {
+    for (const [group, value] of Object.entries(converted as Record<string, unknown>)) {
+      const base = style[group];
+      style[group] = base && typeof base === "object" && value && typeof value === "object"
+        ? { ...base, ...value }
+        : value;
+    }
   }
-  return { ...record, numberFormat: { formatType: "general" } };
+  return style;
 }
 
 /**
@@ -397,7 +418,10 @@ export interface XlsxControllerContext {
   maxFileSizeBytes: number;
   deferLoadingAboveBytes: number;
   skipXmlParsing: boolean;
+  /** Current hidden-tab mode; reads the runtime ref, not a parse-time snapshot. */
   showHiddenSheets: boolean;
+  /** Updates the hidden-tab mode; callers rebuild the sheet model themselves. */
+  setShowHiddenSheetsMode: (includeHidden: boolean) => void;
   workerSupported: boolean;
   shouldDeferLoading: boolean;
   canUseWorkerForRequestedReadOnly: boolean;
@@ -441,6 +465,12 @@ export interface XlsxControllerContext {
   isWorkerBacked: Ref<boolean>;
   sortState: Ref<XlsxTableSortState | null>;
   forcedReadOnly: Ref<boolean>;
+  /** Inline-edit request watched by the grid; `token` retriggers the same cell. */
+  editRequestRef: Ref<XlsxCellEditRequest | null>;
+  /** Name Manager edits layered over the engine's defined names. */
+  definedNameOverridesRef: Ref<Record<string, XlsxNamedRange>>;
+  /** Names the Name Manager deleted; the engine cannot remove a defined name. */
+  removedDefinedNamesRef: Ref<string[]>;
   dataValidationFeedback: Ref<XlsxDataValidationFeedback | null>;
   lastExportWarning: Ref<string | null>;
   deferredBufferRef: ShallowRef<ArrayBuffer | null>;
@@ -455,7 +485,7 @@ export interface XlsxControllerContext {
   chartDisplayFallbackCleanupRef: ShallowRef<(() => void) | null>;
   sheetOriginsRef: ShallowRef<Array<WorkbookImageSheetOrigin | null>>;
   workerClientRef: ShallowRef<XlsxWorkerClient | null>;
-  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string; numberFormat?: XlsxCellNumberFormatInput | null }>>;
+  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string; numberFormat?: XlsxCellNumberFormatInput | null; runs?: XlsxCellTextRun[] }>>;
 
   // Derived computeds defined in the orchestrator
   activeTab: ComputedRef<XlsxWorkbookTab | null>;
@@ -483,6 +513,17 @@ export interface XlsxControllerContext {
    * it; only history restores use it, because they restore selection themselves.
    */
   switchToSheet: (visibleSheetIndex: number, options?: { preserveSelection?: boolean }) => void;
+  /**
+   * Activates one tab, worksheet or chartsheet, keeping the grid and the tab
+   * strip in agreement. `preserveSelection` keeps the current selection across
+   * a switch that does not change the sheet the user is working on.
+   */
+  activateTab: (tabIndex: number, options?: { preserveSelection?: boolean }) => void;
+  /**
+   * Restores a history snapshot's sheet and tab together without letting the
+   * tab watcher reset the selection the snapshot restored.
+   */
+  restoreActiveSheetAndTab: (visibleSheetIndex: number, tabIndex?: number) => void;
   /**
    * Consumes the marker set by a `preserveSelection` switch. True means the
    * pending tab-index change must not reset sheet-scoped state.
@@ -530,7 +571,7 @@ export interface XlsxControllerContext {
   setValidationFeedback: (feedback: XlsxDataValidationFeedback | null) => void;
   dismissValidationFeedback: () => void;
   setExportWarning: (message: string | null) => void;
-  recordHistoryBeforeMutation: () => void;
+  recordHistoryBeforeMutation: (precomputedBytes?: Uint8Array) => void;
   recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
   recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null, before?: SelectionSnapshot) => void;
   setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;

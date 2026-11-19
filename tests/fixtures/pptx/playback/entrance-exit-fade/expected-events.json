@@ -43,25 +43,29 @@
         "id": "transition:1",
         "slideIndex": 1,
         "feature": "transition:fade",
-        "disposition": "strict"
+        "disposition": "strict",
+        "reason": null
       },
       {
         "id": "transition:2",
         "slideIndex": 2,
         "feature": "transition:push",
-        "disposition": "strict"
+        "disposition": "strict",
+        "reason": null
       },
       {
         "id": "transition:3",
         "slideIndex": 3,
         "feature": "transition:wipe",
-        "disposition": "strict"
+        "disposition": "strict",
+        "reason": null
       },
       {
         "id": "transition:4",
         "slideIndex": 4,
         "feature": "transition:morph",
-        "disposition": "static"
+        "disposition": "static",
+        "reason": "近似播放未开启，保留静态页面。"
       },
       {
         "id": "morph:4:explicit-name:ppt/slides/slide5.xml|slide|shape:2",
@@ -233,7 +237,8 @@
         "id": "transition:7",
         "slideIndex": 7,
         "feature": "transition:cut",
-        "disposition": "strict"
+        "disposition": "strict",
+        "reason": null
       },
       {
         "id": "action:9:0",

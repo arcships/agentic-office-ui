@@ -432,6 +432,8 @@ export function renderCartesianAxes(
   const showValueLabels = valueAxis?.delete !== true && valueLabelPosition !== "none";
   const showValueGridlines = valueAxis?.majorGridlines === true;
   const showCategoryGridlines = categoryAxis?.majorGridlines === true;
+  const valueGridlineColor = valueAxis?.majorGridlineColor ?? lightenColor(axisColor, 0.7);
+  const categoryGridlineColor = categoryAxis?.majorGridlineColor ?? lightenColor(axisColor, 0.78);
   const valueLabelSkip = typeof valueAxis?.tickLabelSkip === "number" && valueAxis.tickLabelSkip > 0
     ? Math.max(1, Math.floor(valueAxis.tickLabelSkip))
     : 1;
@@ -462,7 +464,7 @@ export function renderCartesianAxes(
           return (
             <line
               key={`grid-v-${tick}`}
-              stroke={lightenColor(axisColor, 0.7)}
+              stroke={valueGridlineColor}
               stroke-width={1}
               x1={valuePosition}
               x2={valuePosition}
@@ -474,7 +476,7 @@ export function renderCartesianAxes(
         return (
           <line
             key={`grid-h-${tick}`}
-            stroke={lightenColor(axisColor, 0.7)}
+            stroke={valueGridlineColor}
             stroke-width={1}
             x1={plot.left}
             x2={plot.left + plot.width}
@@ -487,7 +489,7 @@ export function renderCartesianAxes(
         isHorizontal ? (
           <line
             key={`grid-category-${index}`}
-            stroke={lightenColor(axisColor, 0.78)}
+            stroke={categoryGridlineColor}
             stroke-width={1}
             x1={plot.left}
             x2={plot.left + plot.width}
@@ -497,7 +499,7 @@ export function renderCartesianAxes(
         ) : (
           <line
             key={`grid-category-${index}`}
-            stroke={lightenColor(axisColor, 0.78)}
+            stroke={categoryGridlineColor}
             stroke-width={1}
             x1={position}
             x2={position}

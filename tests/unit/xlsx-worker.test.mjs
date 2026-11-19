@@ -304,6 +304,39 @@ test("XLSX worker: a failed load keeps the previous workbook addressable", async
   );
 });
 
+test("XLSX worker: sheets carry pivot, slicer and defined-name metadata", async () => {
+  const bytes = readFileSync(
+    new URL("../../test-data/corpus/xlsx-pivot-slicers.xlsx", import.meta.url),
+  );
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const payload = { buffer, limits };
+  if (!wasmSourceSent) {
+    payload.wasmSource = wasmBuffer;
+    wasmSourceSent = true;
+  }
+  const response = await workerScope.request("load", payload).response;
+  assert.equal(response.success, true, `load failed: ${JSON.stringify(response)}`);
+  const [sheet] = response.result.sheets;
+  assert.equal(sheet.hasPivotTable, true);
+  assert.equal(sheet.pivotTables.length, 1);
+  assert.equal(sheet.pivotTables[0].name, "PivotTable1");
+  assert.deepEqual(sheet.pivotTables[0].rowFields, [0]);
+  assert.equal(sheet.pivotTables[0].dataFields[0].name, "Sum of Revenue");
+  assert.equal(sheet.slicers.length, 1);
+  assert.equal(sheet.slicers[0].name, "Region");
+  assert.deepEqual(sheet.slicers[0].items.map((item) => item.caption), [
+    "East",
+    "West",
+    "North",
+    "South",
+  ]);
+  assert.deepEqual(sheet.definedNames.map((entry) => entry.name), [
+    "SalesData",
+    "RevenueTotal",
+    "CurrentProduct",
+  ]);
+});
+
 test("XLSX worker: cell snapshots carry the resolved number format", async () => {
   const source = new sheetsWasm.Workbook();
   const sheet = source.getSheet(0);
@@ -331,4 +364,135 @@ test("XLSX worker: cell snapshots carry the resolved number format", async () =>
     formatString: "[$-407]#,##0.00",
   });
   assert.equal(snapshot.formula, "");
+});
+
+test("XLSX worker: AutoFilter rows expose formatted values and honour the row cap", async () => {
+  const loaded = await loadWorkbook("sales-table.xlsx");
+  assert.deepEqual(
+    loaded.sheets[0].autoFilterRanges.map((range) => [range.reference, range.source, range.tableName]),
+    [["A1:H181", "table", "SalesRecords"]],
+  );
+
+  const capped = await workerScope.request("getAutoFilterRows", {
+    endCol: 2,
+    endRow: 4,
+    maxRows: 2,
+    startCol: 0,
+    startRow: 1,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(capped.success, true, `AutoFilter rows failed: ${JSON.stringify(capped)}`);
+  assert.equal(capped.result.truncated, true);
+  assert.deepEqual(capped.result.rows, [
+    { row: 1, values: ["North", "Rep 2", "XLSX Engine"] },
+    { row: 2, values: ["South", "Rep 3", "Doc Extract"] },
+  ]);
+
+  const complete = await workerScope.request("getAutoFilterRows", {
+    endCol: 0,
+    endRow: 3,
+    maxRows: 10,
+    startCol: 0,
+    startRow: 1,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(complete.success, true);
+  assert.equal(complete.result.truncated, false);
+  assert.deepEqual(
+    complete.result.rows.map((row) => row.values[0]),
+    ["North", "South", "APAC"],
+  );
+});
+
+test("XLSX worker: selection stats summarize numbers, text and the cell budget", async () => {
+  const source = new sheetsWasm.Workbook();
+  const sheet = source.getSheet(0);
+  for (let row = 0; row < 10; row += 1) sheet.setCell(`A${row + 1}`, row + 1);
+  sheet.setCell("B1", "alpha");
+  sheet.free();
+  const bytes = source.saveXlsxBytes();
+  source.free();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  const payload = { buffer, limits };
+  if (!wasmSourceSent) {
+    payload.wasmSource = wasmBuffer;
+    wasmSourceSent = true;
+  }
+  const loaded = await workerScope.request("load", payload).response;
+  assert.equal(loaded.success, true, `load failed: ${JSON.stringify(loaded)}`);
+
+  const complete = await workerScope.request("getSelectionStats", {
+    cellCount: 10,
+    endCol: 0,
+    endRow: 9,
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(complete.success, true, `selection stats failed: ${JSON.stringify(complete)}`);
+  assert.deepEqual({
+    average: complete.result.average,
+    cellCount: complete.result.cellCount,
+    count: complete.result.count,
+    max: complete.result.max,
+    min: complete.result.min,
+    numericCount: complete.result.numericCount,
+    sum: complete.result.sum,
+    truncated: complete.result.truncated,
+  }, {
+    average: 5.5,
+    cellCount: 10,
+    count: 10,
+    max: 10,
+    min: 1,
+    numericCount: 10,
+    sum: 55,
+    truncated: false,
+  });
+
+  const budgeted = await workerScope.request("getSelectionStats", {
+    cellCount: 10,
+    endCol: 0,
+    endRow: 9,
+    maxCells: 3,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(budgeted.success, true);
+  assert.equal(budgeted.result.count, 3);
+  assert.equal(budgeted.result.sum, 6);
+  assert.equal(budgeted.result.truncated, true);
+
+  const filtered = await workerScope.request("getSelectionStats", {
+    cellCount: 9,
+    endCol: 0,
+    endRow: 9,
+    hiddenRows: [1],
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(filtered.success, true);
+  assert.equal(filtered.result.count, 9);
+  assert.equal(filtered.result.sum, 53, "the hidden row is excluded");
+  assert.equal(filtered.result.min, 1);
+  assert.equal(filtered.result.max, 10);
+
+  const mixed = await workerScope.request("getSelectionStats", {
+    cellCount: 2,
+    endCol: 1,
+    endRow: 0,
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(mixed.success, true);
+  assert.equal(mixed.result.count, 2, "text cells count");
+  assert.equal(mixed.result.numericCount, 1);
+  assert.equal(mixed.result.sum, 1);
 });

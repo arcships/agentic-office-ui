@@ -15,6 +15,7 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
+export type { XlsxGridRenderMode } from "./components/grid-dom"
 export { resolveChartAriaLabel } from "./render/chart-shared"
 export { localizeXlsxLoadError } from "./errors"
 export type { XlsxLoadErrorMessages } from "./errors"
@@ -28,10 +29,69 @@ export {
   localizeDataValidationFeedback,
 } from "./composables/validation"
 export type { XlsxValidationMessages } from "./composables/validation"
+export {
+  CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE,
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  chartRangeCellAt,
+  collectChartRangeHighlights,
+  normalizeHighlightRange,
+  parseChartSourceA1Range,
+  parseChartSourceRange,
+} from "./composables/chart-range-highlight"
+export type {
+  ChartSourceHighlightRole,
+  ChartSourceRange,
+  ChartSourceSheet,
+  CollectChartRangeHighlightsOptions,
+  ParseChartSourceRangeOptions,
+} from "./composables/chart-range-highlight"
+export {
+  createRangeHighlightLayout,
+  rangeHighlightStyle,
+} from "./components/range-highlight-geometry"
+export type {
+  RangeHighlightLayout,
+  RangeHighlightSegment,
+  RangeHighlightViewport,
+} from "./components/range-highlight-geometry"
+export {
+  FORMULA_REFERENCE_COLORS,
+  collectFormulaReferences,
+  formulaReferenceColor,
+  formulaReferenceSegments,
+  parseFormulaReferences,
+  resolveNamedRangeTarget,
+} from "./composables/formula-reference-highlight"
+export type {
+  FormulaReference,
+  FormulaReferenceCollection,
+  FormulaReferenceKind,
+  FormulaReferenceNameTarget,
+  FormulaReferenceOptions,
+  FormulaReferenceSegment,
+} from "./composables/formula-reference-highlight"
+export {
+  FORMULA_REFERENCE_OWNER_FORMULA_BAR,
+  FORMULA_REFERENCE_OWNER_GRID,
+  createNamedRangeResolver,
+  isReferenceOnActiveSheet,
+  useFormulaReferenceEditing,
+} from "./composables/useFormulaReferenceEditing"
+export type {
+  FormulaReferenceEditing,
+  FormulaReferenceEditingSession,
+} from "./composables/useFormulaReferenceEditing"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
+export { useXlsxSelectionStats } from "./composables/selection-stats"
+export type {
+  XlsxSelectionStatsRequest,
+  XlsxSelectionStatsState,
+} from "./composables/selection-stats"
+export { formatSelectionStatValue } from "./components/selection-status-format"
 export { useXlsxSearch } from "./composables/useXlsxSearch"
 export type {
   XlsxSearchMatch,
+  XlsxSearchOptions,
   XlsxSearchState,
   XlsxSearchStatus,
   XlsxSurfaceSearch,
@@ -84,8 +144,34 @@ export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
 export { default as XlsxDrawingLayer } from "./components/XlsxDrawingLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
+/** Range-highlight overlay used internally by `XlsxViewer` / `XlsxSheetSurface`. */
+export { default as XlsxRangeHighlightLayer } from "./components/XlsxRangeHighlightLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
+/**
+ * Authoring dialog for charts, comments, hyperlinks, tables, conditional
+ * formats and data validation. `XlsxViewer` renders it from the ribbon and
+ * context menu; hosts that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog.vue"
+/**
+ * Paginated print preview. `XlsxViewer` mounts it from the controller's print
+ * state; hosts that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxPrintPreview } from "./components/XlsxPrintPreview.vue"
+/**
+ * Selection status bar. `XlsxViewer` renders it under the sheet tabs; hosts
+ * that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxStatusBar } from "./components/XlsxStatusBar.vue"
+
+export {
+  XLSX_FILE_ACCEPT,
+  XLSX_FILE_EXTENSIONS,
+  XLSX_FILE_MIME_TYPES,
+  isSupportedXlsxFileName,
+  xlsxFileExtension,
+} from "./composables/xlsx-file-types"
 
 export const XlsxViewer = XlsxViewerComponent
 

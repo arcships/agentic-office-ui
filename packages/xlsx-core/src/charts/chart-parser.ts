@@ -1,6 +1,6 @@
 import type { Workbook } from "@dukelib/sheets-wasm";
 
-import type { WorkbookImageAssets, WorkbookImageSheetOrigin } from "../images";
+import type { WorkbookChartStyleAssets, WorkbookImageAssets, WorkbookImageSheetOrigin } from "../images";
 import type {
   XlsxChart,
   XlsxChartAxis,
@@ -24,6 +24,13 @@ import {
   CHART_STYLE_REL_TYPE,
   normalizeChartSeries,
 } from "./chart-series";
+
+import {
+  readChartBlipFillImage,
+  readChartEmbeddedMedia,
+} from "./chart-embedded-media";
+
+import { anchorToAbsoluteRect } from "../images/column-width";
 
 import {
   parseChartCacheValues,
@@ -75,7 +82,10 @@ import {
   buildChartExParetoLineSeries,
   resolveChartExTextFormula,
   PRIMARY_CHART_TYPE_LOCAL_NAMES,
+  resolveChartTypeFromTypeNode,
 } from "./chart-types";
+
+import { parseChartExChartXml } from "./chart-ex-parser";
 
 import {
   normalizeChartAxis,
@@ -294,8 +304,18 @@ function buildClassicChartFallbackFromOrigin(
   if (!chartTypeNode) {
     return null;
   }
+  // Combination and volume-stock charts keep series in several plot groups; all
+  // of them belong to the chart model, not just the first group's.
+  const typeNodes = plotAreaNode
+    ? Array.from(plotAreaNode.childNodes).filter(
+      (node): node is Element => (
+        node.nodeType === Node.ELEMENT_NODE
+        && (PRIMARY_CHART_TYPE_LOCAL_NAMES as readonly string[]).includes((node as Element).localName)
+      )
+    )
+    : [];
   const title = extractChartTitleFromXml(chartXml) ?? undefined;
-  const series = getLocalChildren(chartTypeNode, "ser").map((seriesNode) => ({
+  const readSeries = (typeNode: Element) => getLocalChildren(typeNode, "ser").map((seriesNode) => ({
     bubbleSize: readChartReferenceFromXml(getFirstLocalChild(seriesNode, "bubbleSize"), "value"),
     categories: readChartReferenceFromXml(
       getFirstLocalChild(seriesNode, "cat") ?? getFirstLocalChild(seriesNode, "xVal"),
@@ -307,11 +327,28 @@ function buildClassicChartFallbackFromOrigin(
       "value"
     ),
   }));
+  const series = typeNodes.flatMap(readSeries);
+  // Combination charts (column + line) keep per-group plot types; reporting them
+  // as type groups lets the renderer draw each group with its own type and lets
+  // the chart-type gallery mark the combination entry as active. Volume-stock
+  // and surface charts also use several plot nodes but are not combinations.
+  const combinationGroups = typeNodes.length > 1 && typeNodes.every((node) => (
+    !node.localName.includes("stock") && !node.localName.startsWith("surface")
+  ))
+    ? typeNodes.map((typeNode) => ({
+        axisIds: getLocalChildren(typeNode, "axId")
+          .map((axisNode) => Number(axisNode.getAttribute("val") ?? Number.NaN))
+          .filter((value) => Number.isFinite(value)),
+        chartType: resolveChartTypeFromTypeNode(typeNode) ?? "ColumnClustered",
+        series: readSeries(typeNode)
+      }))
+    : undefined;
   return {
-    chartType: "ColumnClustered",
+    chartType: resolveChartTypeFromTypeNode(chartTypeNode) ?? "ColumnClustered",
     name: title ?? `Chart ${chartIndex + 1}`,
     series,
     title,
+    typeGroups: combinationGroups,
   };
 }
 
@@ -330,17 +367,68 @@ function buildClassicChartFallbacksFromXml(
   });
 }
 
+/**
+ * Reads chartEx parts from the package.
+ *
+ * The workbook engine this package builds on does not model chartEx charts, so
+ * the chartEx parts authored by “Change Chart Type” would otherwise disappear
+ * on reload. Parsing the parts from the archive keeps modern charts visible
+ * after an export/reload cycle.
+ */
+function buildModernChartFallbacksFromXml(
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins">,
+  workbookSheetIndex: number
+): Array<Record<string, unknown>> {
+  const origins = collectChartOriginsForSheet(
+    imageAssets.archive,
+    imageAssets.sheetOrigins[workbookSheetIndex] ?? null
+  ).filter((origin) => origin.chartKind === "modern");
+
+  return origins.flatMap((origin) => {
+    const chartXml = readArchiveText(imageAssets.archive, origin.chartPath);
+    const fallback = chartXml ? parseChartExChartXml(chartXml) : null;
+    return fallback ? [fallback] : [];
+  });
+}
+
+/**
+ * Chart drawing-space size (the chart graphic frame ext) in EMU.
+ *
+ * `chartUserShapes` anchors live in that space, so the parser needs it to turn
+ * them into chart-relative fractions. Returns `null` when the anchor has no
+ * measurable size (the parser then falls back to the shapes' bounding box).
+ */
+function resolveChartDrawingExtent(
+  anchor: XlsxImageAnchor | null | undefined,
+  sheetState: Parameters<typeof anchorToAbsoluteRect>[1]
+) {
+  if (!anchor) {
+    return null;
+  }
+  const rect = anchorToAbsoluteRect(anchor, sheetState);
+  return rect.cx > 0 && rect.cy > 0 ? { cx: rect.cx, cy: rect.cy } : null;
+}
+
 function applyChartStyleFromXml(
   chart: XlsxChart,
   chartPath: string | undefined,
   archive: Record<string, Uint8Array>,
-  themePalette?: XlsxThemePalette | null
+  themePalette?: XlsxThemePalette | null,
+  chartExtentEmu?: { cx: number; cy: number } | null
 ) {
   const chartXml = readArchiveText(archive, chartPath);
   if (!chartXml) {
     return;
   }
   const relationships = chartPath ? readChartRelationships(archive, chartPath) : new Map<string, string>();
+  // Picture fills (`a:blipFill`) keep only relationship ids in the chart part;
+  // the bytes live in media parts, so the model carries the resolved data URLs.
+  const embeddedMedia = readChartEmbeddedMedia(archive, chartPath, {
+    extentEmu: chartExtentEmu ?? null,
+    themePalette,
+  });
+  chart.images = embeddedMedia.images;
+  chart.drawings = embeddedMedia.drawings;
   const fallbackPointStylesBySeries = parseFallbackPointStylesFromChartXml(chartXml, themePalette);
   const fallbackSeriesStyles = parseFallbackSeriesStylesFromChartXml(chartXml, themePalette);
   const fallbackBubbleSizesBySeries = parseFallbackBubbleSizesFromChartXml(chartXml);
@@ -383,6 +471,7 @@ function applyChartStyleFromXml(
           existingByIndex.set(fallbackStyle.index, {
             color: existing?.color ?? fallbackStyle.color,
             explosion: existing?.explosion ?? fallbackStyle.explosion,
+            fillImage: existing?.fillImage,
             index: fallbackStyle.index,
             lineColor: existing?.lineColor ?? fallbackStyle.lineColor
           });
@@ -402,11 +491,12 @@ function applyChartStyleFromXml(
           return series;
         }
         const fallbackColor = fallbackStyle.color ?? fallbackStyle.lineColor;
+        const pictureFilled = Boolean(series.fillImage);
         return {
           ...series,
-          color: series.color ?? fallbackColor,
+          color: pictureFilled ? undefined : series.color ?? fallbackColor,
           lineColor: series.lineColor ?? fallbackStyle.lineColor ?? fallbackColor,
-          markerColor: series.markerColor ?? fallbackColor ?? series.color,
+          markerColor: pictureFilled ? undefined : series.markerColor ?? fallbackColor ?? series.color,
           markerLineColor: series.markerLineColor ?? fallbackStyle.lineColor ?? fallbackColor ?? series.lineColor
         };
       });
@@ -414,6 +504,7 @@ function applyChartStyleFromXml(
   };
   const applyRelationshipStyles = () => {
     chart.chartColorPalette = readChartColorPalette(archive, relationships.get(CHART_COLOR_STYLE_REL_TYPE), themePalette);
+    chart.raw = { ...chart.raw, hasCustomChartColorStyle: Boolean(chart.chartColorPalette?.length) };
     const styleAppearance = readChartStyleAppearance(
       archive,
       relationships.get(CHART_STYLE_REL_TYPE),
@@ -470,7 +561,7 @@ function applyChartStyleFromXml(
       return;
     }
 
-    chart.series = chart.series.map((series, seriesIndex) => {
+    const styleModernSeries = (series: XlsxChartSeries, seriesIndex: number) => {
       const modernSeriesNode = modernSeriesNodes[seriesIndex] ?? null;
       if (!modernSeriesNode) {
         return series;
@@ -502,14 +593,26 @@ function applyChartStyleFromXml(
       const fallbackColor = fillColor ?? lineStyle.color ?? undefined;
       return {
         ...series,
-        color: series.color ?? fallbackColor,
+        color: series.color ?? fillColor ?? lineStyle.color ?? fallbackColor,
         lineColor: series.lineColor ?? lineStyle.color ?? fillColor ?? fallbackColor,
         lineWidthPx: series.lineWidthPx ?? (typeof lineStyle.widthPx === "number" ? lineStyle.widthPx : undefined),
         markerColor: series.markerColor ?? fallbackColor ?? series.color,
         markerLineColor: series.markerLineColor ?? lineStyle.color ?? fallbackColor ?? series.lineColor,
         raw: nextRaw
       };
-    });
+    };
+
+    chart.series = chart.series.map(styleModernSeries);
+    const chartRaw = chart.raw && typeof chart.raw === "object" ? chart.raw as Record<string, unknown> : null;
+    const chartExSourceSeries = chartRaw?.chartExSourceSeries;
+    if (chartRaw && Array.isArray(chartExSourceSeries)) {
+      chart.raw = {
+        ...chartRaw,
+        chartExSourceSeries: chartExSourceSeries.map((series, seriesIndex) => (
+          styleModernSeries(series as XlsxChartSeries, seriesIndex)
+        ))
+      };
+    }
 
     const seriesLayouts = modernSeriesNodes.map((node) => node.getAttribute("layoutId") ?? node.getAttribute("layout"));
     const clusteredColumnIndex = seriesLayouts.findIndex((layout) => layout === "clusteredColumn");
@@ -585,6 +688,20 @@ function applyChartStyleFromXml(
   const plotAreaNode = chartNode ? getFirstLocalChild(chartNode, "plotArea") : null;
   const styleIdNode = chartDocument?.documentElement ? getFirstLocalDescendant(chartDocument.documentElement, "style") : null;
   const chartTypeNode = findPrimaryChartTypeNode(plotAreaNode);
+
+  // Chart-area and plot-area picture fills are independent of the plot type, so
+  // they are applied on every path (unsupported chart types included).
+  const applyChartFillImages = () => {
+    const chartSpaceShapeProperties = chartDocument?.documentElement
+      ? getFirstLocalChild(chartDocument.documentElement, "spPr")
+      : null;
+    chart.chartAreaFillImage = readChartBlipFillImage(chartSpaceShapeProperties, chart.images);
+    chart.plotAreaFillImage = readChartBlipFillImage(
+      plotAreaNode ? getFirstLocalChild(plotAreaNode, "spPr") : null,
+      chart.images
+    );
+  };
+  applyChartFillImages();
 
   if (!chartNode || !chartTypeNode) {
     applyRelationshipStyles();
@@ -826,20 +943,20 @@ function applyChartStyleFromXml(
       return position === "l" || position === "r";
     }) ?? valueAxisNodes[1] ?? valueAxisNodes[0];
   }
-  chart.categoryAxis = mergeChartAxis(chart.categoryAxis, readChartAxisFromXml(categoryAxisNode));
-  chart.valueAxis = mergeChartAxis(chart.valueAxis, readChartAxisFromXml(valueAxisNode));
-  chart.seriesAxis = mergeChartAxis(chart.seriesAxis, readChartAxisFromXml(seriesAxisNode));
+  chart.categoryAxis = mergeChartAxis(chart.categoryAxis, readChartAxisFromXml(categoryAxisNode, themePalette));
+  chart.valueAxis = mergeChartAxis(chart.valueAxis, readChartAxisFromXml(valueAxisNode, themePalette));
+  chart.seriesAxis = mergeChartAxis(chart.seriesAxis, readChartAxisFromXml(seriesAxisNode, themePalette));
   chart.axes = chart.axes.length > 0
     ? chart.axes.map((axis, index) => (
       index === 0 && categoryAxisNode
-        ? { ...axis, ...readChartAxisFromXml(categoryAxisNode) }
+        ? { ...axis, ...readChartAxisFromXml(categoryAxisNode, themePalette) }
         : index === 1 && valueAxisNode
-          ? { ...axis, ...readChartAxisFromXml(valueAxisNode) }
+          ? { ...axis, ...readChartAxisFromXml(valueAxisNode, themePalette) }
           : axis
     ))
     : chart.axes;
   if (seriesAxisNode) {
-    const seriesAxis = readChartAxisFromXml(seriesAxisNode);
+    const seriesAxis = readChartAxisFromXml(seriesAxisNode, themePalette);
     if (seriesAxis && !chart.axes.some((axis) => axis.id != null && axis.id === seriesAxis.id)) {
       chart.axes = [...chart.axes, seriesAxis as XlsxChartAxis];
     }
@@ -908,6 +1025,7 @@ function applyChartStyleFromXml(
             existingByIndex.set(fallbackStyle.index, {
               color: existing?.color ?? fallbackStyle.color,
               explosion: existing?.explosion ?? fallbackStyle.explosion,
+              fillImage: existing?.fillImage,
               index: fallbackStyle.index,
               lineColor: existing?.lineColor ?? fallbackStyle.lineColor
             });
@@ -937,15 +1055,13 @@ function buildChartsheetCharts(
   workbook: Workbook,
   rawChartsheet: unknown,
   chartsheetIndex: number,
-  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "chartsheetOrigins" | "sheetOrigins" | "themePalette"> | null
 ) {
   const chartsheet = rawChartsheet && typeof rawChartsheet === "object"
     ? rawChartsheet as Record<string, unknown>
     : {};
   const workbookOrderIndex = resolveChartsheetWorkbookOrderIndex(workbook, chartsheetIndex);
-  const sheetOrigin = workbookOrderIndex >= 0
-    ? imageAssets?.sheetOrigins[workbookOrderIndex] ?? null
-    : null;
+  const sheetOrigin = imageAssets?.chartsheetOrigins?.[chartsheetIndex] ?? null;
   const origins = imageAssets && sheetOrigin
     ? collectChartOriginsForSheet(imageAssets.archive, sheetOrigin)
       .filter((origin) => origin.chartKind === "classic")
@@ -1003,7 +1119,13 @@ function buildChartsheetCharts(
     };
 
     if (imageAssets && chart.chartPath) {
-      applyChartStyleFromXml(chart, chart.chartPath, imageAssets.archive, imageAssets.themePalette);
+      applyChartStyleFromXml(
+        chart,
+        chart.chartPath,
+        imageAssets.archive,
+        imageAssets.themePalette,
+        resolveChartDrawingExtent(origin?.anchor ?? chart.anchor, null)
+      );
     } else {
       applyBuiltinChartDefaults(chart, imageAssets?.themePalette ?? null);
     }
@@ -1019,7 +1141,7 @@ function buildChartsheetCharts(
 
 export function loadWorkbookChartAssets(
   workbook: Workbook,
-  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null,
+  imageAssets: WorkbookChartStyleAssets | null,
   visibleSheetIndexByWorkbookSheetIndex: Map<number, number>,
   showHiddenSheets = false
 ): WorkbookChartAssets {
@@ -1033,7 +1155,16 @@ export function loadWorkbookChartAssets(
     const rawCharts = workbookCharts.length >= fallbackCharts.length
       ? workbookCharts
       : [...workbookCharts, ...fallbackCharts.slice(workbookCharts.length)];
-    const rawChartsEx = Array.isArray(worksheet.chartsEx) ? worksheet.chartsEx : [];
+    // The engine's chartEx model is thinner than the part itself (it does not
+    // report binning, cached points or per-series layouts), so prefer the parts
+    // read from the archive whenever they are available.
+    const engineChartsEx = Array.isArray(worksheet.chartsEx) ? worksheet.chartsEx : [];
+    const fallbackChartsEx = imageAssets
+      ? buildModernChartFallbacksFromXml(imageAssets, workbookSheetIndex)
+      : [];
+    const rawChartsEx = fallbackChartsEx.length >= engineChartsEx.length
+      ? fallbackChartsEx
+      : engineChartsEx;
     const visibleSheetIndex = visibleSheetIndexByWorkbookSheetIndex.get(workbookSheetIndex) ?? workbookSheetIndex;
 
     const classicCharts = rawCharts.map((rawChart, chartIndex) => {
@@ -1171,9 +1302,16 @@ export function loadWorkbookChartAssets(
 
   if (imageAssets) {
     applyChartOrigins(chartsByWorkbookSheetIndex, chartOriginsById, imageAssets.archive, imageAssets.sheetOrigins);
-    for (const charts of chartsByWorkbookSheetIndex) {
+    for (const [workbookSheetIndex, charts] of chartsByWorkbookSheetIndex.entries()) {
+      const sheetState = imageAssets.sheetStatesByWorkbookSheetIndex?.[workbookSheetIndex] ?? null;
       for (const chart of charts) {
-        applyChartStyleFromXml(chart, chart.chartPath, imageAssets.archive, imageAssets.themePalette);
+        applyChartStyleFromXml(
+          chart,
+          chart.chartPath,
+          imageAssets.archive,
+          imageAssets.themePalette,
+          resolveChartDrawingExtent(chart.anchor, sheetState)
+        );
         applyBuiltinChartDefaults(chart, imageAssets.themePalette);
       }
     }

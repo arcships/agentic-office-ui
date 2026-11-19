@@ -5,9 +5,11 @@
     :class="{
       'pptx-viewer--dark': isDark,
       'pptx-viewer--present': isPresent,
+      'pptx-viewer--presenter': presenterVisible,
     }"
     :style="rootStyle"
     :data-state="state"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     :data-playback-status="playbackSnapshot?.status"
     :data-slide-index="activeIndex"
     :data-slide-error="slideFailure?.index"
@@ -15,6 +17,10 @@
     data-testid="pptx-viewer"
     tabindex="0"
     @keydown="onKeydown"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <header v-if="showToolbar && !isPresent" class="pptx-viewer__toolbar">
       <div class="pptx-viewer__toolbar-group">
@@ -24,6 +30,38 @@
         </span>
         <button type="button" :disabled="!canGoNext" :aria-label="m.pptx.viewer.nextSlide" @click="run(() => goTo(activeIndex + 1))">›</button>
         <span v-if="activeSlide?.hidden" class="pptx-viewer__hidden-badge">{{ m.pptx.viewer.hiddenSlide }}</span>
+      </div>
+
+      <div class="pptx-viewer__toolbar-group pptx-viewer__view-modes" role="group" :aria-label="m.pptx.viewer.viewMode">
+        <button
+          type="button"
+          class="pptx-viewer__view-mode"
+          :class="{ 'pptx-viewer__view-mode--active': !isSorter }"
+          data-testid="pptx-view-mode-single"
+          :aria-label="m.pptx.viewer.viewModeSingle"
+          :title="m.pptx.viewer.viewModeSingle"
+          :aria-pressed="!isSorter"
+          :disabled="state !== 'ready'"
+          @click="setViewMode('single')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1" /></svg>
+        </button>
+        <button
+          type="button"
+          class="pptx-viewer__view-mode"
+          :class="{ 'pptx-viewer__view-mode--active': isSorter }"
+          data-testid="pptx-view-mode-sorter"
+          :aria-label="m.pptx.viewer.viewModeSorter"
+          :title="m.pptx.viewer.viewModeSorter"
+          :aria-pressed="isSorter"
+          :disabled="state !== 'ready'"
+          @click="setViewMode('sorter')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="2" y="2.5" width="9" height="8" rx="1" /><rect x="13" y="2.5" width="9" height="8" rx="1" />
+            <rect x="2" y="13.5" width="9" height="8" rx="1" /><rect x="13" y="13.5" width="9" height="8" rx="1" />
+          </svg>
+        </button>
       </div>
 
       <form v-if="showSearch" class="pptx-viewer__search" role="search" @submit.prevent="runSearch">
@@ -61,6 +99,10 @@
       </slot>
     </div>
 
+    <div v-if="dropError" class="pptx-viewer__drop-error" data-testid="pptx-drop-error" role="alert">
+      {{ dropError }}
+    </div>
+
     <div class="pptx-viewer__body">
       <OfficeLiveStatus
         test-id="pptx-live-status"
@@ -68,7 +110,7 @@
         :busy="state === 'loading'"
       />
       <aside
-        v-if="showSidebar && !isPresent && document"
+        v-if="showSidebar && !isPresent && !isSorter && document"
         ref="sidebarRef"
         class="pptx-viewer__sidebar"
         :aria-label="m.pptx.viewer.sidebar"
@@ -115,7 +157,7 @@
         </div>
         <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error" data-testid="pptx-error">
           <slot name="error" :error="error">{{ error?.message }}</slot>
-          <button v-if="props.source" type="button" data-testid="pptx-error-retry" @click="run(reopen)">{{ m.pptx.viewer.retry }}</button>
+          <button v-if="effectiveSource" type="button" data-testid="pptx-error-retry" @click="run(reopen)">{{ m.pptx.viewer.retry }}</button>
         </div>
         <div
           v-if="slideFailure"
@@ -135,7 +177,7 @@
           ref="stageRef"
           class="pptx-viewer__stage"
           :style="stageStyle"
-          :aria-hidden="state !== 'ready'"
+          :aria-hidden="state !== 'ready' || isSorter"
           :zoom="zoom / 100"
           :enable-gesture-zoom="!isPresent"
           :locale="locale"
@@ -143,8 +185,102 @@
           :scroll-container="stageScrollRef"
           @update:zoom="run(() => setZoom($event * 100))"
           @click="run(() => onStageClick($event))"
+          @context-menu="onStageContextMenu"
+          @link-activate="run(() => onLinkActivate($event))"
         />
       </main>
+
+      <div
+        v-if="sorterVisible"
+        ref="sorterRef"
+        class="pptx-viewer__sorter"
+        data-testid="pptx-sorter"
+        role="listbox"
+        :aria-label="m.pptx.viewer.sorter"
+        :style="{ '--pptx-sorter-item-height': `${sorterItemHeight}px` }"
+        @scroll.passive="onSorterScroll"
+      >
+        <div
+          class="pptx-viewer__sorter-spacer"
+          :style="{ height: `${sorterWindow.startRow * sorterItemHeight}px` }"
+          aria-hidden="true"
+        />
+        <div
+          class="pptx-viewer__sorter-grid"
+          :style="{ gridTemplateColumns: `repeat(${sorterColumns}, minmax(0, 1fr))` }"
+        >
+          <div
+            v-for="slide in sorterSlides"
+            :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
+            class="pptx-viewer__sorter-item"
+            data-testid="pptx-sorter-item"
+            :data-slide-index="slide.index"
+            :data-active="slide.index === activeIndex ? 'true' : 'false'"
+            role="option"
+            :aria-selected="slide.index === activeIndex"
+          >
+            <PptxThumbnail
+              :session="requireSession()"
+              :slide="slide"
+              :active="slide.index === activeIndex"
+              :width="sorterThumbnailWidth"
+              @select="run(() => goTo($event))"
+            />
+          </div>
+        </div>
+        <div
+          class="pptx-viewer__sorter-spacer"
+          :style="{ height: `${Math.max(0, sorterRowCount - sorterWindow.endRow) * sorterItemHeight}px` }"
+          aria-hidden="true"
+        />
+      </div>
+      <PptxPresenterPanel
+        v-if="presenterVisible"
+        class="pptx-viewer__presenter"
+        :session="pptxDocument.getSession()"
+        :slide="activeSlide"
+        :next-slide="nextSlide"
+        :present="isPresent"
+        :running="isPresent && state === 'ready'"
+      />
+    </div>
+
+    <div
+      v-if="contextMenuVisible"
+      class="pptx-viewer__context-backdrop"
+      data-testid="pptx-context-menu-backdrop"
+      @pointerdown="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    />
+    <div
+      v-if="contextMenuVisible"
+      ref="contextMenuRef"
+      class="pptx-viewer__context-menu"
+      role="menu"
+      tabindex="-1"
+      data-testid="pptx-context-menu"
+      :aria-label="m.pptx.viewer.link.menu"
+      :style="contextMenuStyle"
+      @contextmenu.prevent
+      @keydown="onContextMenuKeydown"
+    >
+      <button
+        type="button"
+        class="pptx-viewer__context-item"
+        role="menuitem"
+        tabindex="-1"
+        data-testid="pptx-context-menu-open-link"
+        @click="run(openContextMenuLink)"
+      >{{ contextMenuOpenLabel }}</button>
+      <button
+        v-if="contextMenuCopyValue"
+        type="button"
+        class="pptx-viewer__context-item"
+        role="menuitem"
+        tabindex="-1"
+        data-testid="pptx-context-menu-copy-link"
+        @click="run(copyContextMenuLink)"
+      >{{ m.pptx.viewer.link.copy }}</button>
     </div>
 
     <footer v-if="isPresent && showPlaybackControls" class="pptx-viewer__playback-controls">
@@ -180,15 +316,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
   type PptxCapabilityReport,
+  type PptxPlaybackDocument,
   type PptxPlaybackWarning,
   type PptxPreviewDocument,
   type PptxPreviewLimits,
   type PptxPreviewWarning,
+  type PptxSlideAction,
 } from "@arcships/pptx-core"
 import {
   createPptxDocumentSession,
@@ -205,10 +343,24 @@ import {
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
-import { OfficeLiveStatus } from "@arcships/vue-ui"
+import type { PptxStageContextMenu, PptxStageLinkActivate } from "./headless-types"
+import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useFileDrop, useOfficeMenuKeyboard, useViewerKeys, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
+import {
+  createPptxActionRequest,
+  createPptxLinkIndex,
+  openPptxLink,
+  pptxLinkCopyValue,
+  resolvePptxLinkEntry,
+  resolvePptxLinkTarget,
+  sanitizePptxActionRequest,
+  type PptxLinkEntry,
+  type PptxLinkTarget,
+} from "./links"
+import { PPTX_FILE_EXTENSIONS, PPTX_FILE_MIME_TYPES } from "./pptx-file-types"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
 import { watchFontLoading } from "./composables/font-loading"
@@ -218,6 +370,7 @@ import {
 } from "./composables/thumbnail-observer"
 import PptxStage from "./PptxStage.vue"
 import PptxThumbnail from "./PptxThumbnail.vue"
+import PptxPresenterPanel from "./PptxPresenterPanel.vue"
 
 const props = withDefaults(defineProps<{
   source?: PptxPreviewSource | null
@@ -237,12 +390,24 @@ const props = withDefaults(defineProps<{
   openTimeoutMs?: number
   showCapabilityStatus?: boolean
   showHiddenSlides?: boolean
+  showNotes?: boolean
   showPlaybackControls?: boolean
   showSearch?: boolean
   showSidebar?: boolean
   showToolbar?: boolean
   showWarnings?: boolean
+  /** Built-in link menu (open link / copy link) on right click. */
+  showContextMenu?: boolean
+  /**
+   * `built-in` opens approved links and copies them from the context menu;
+   * `host` only emits `action`/`contextMenu` and leaves the policy to the host.
+   */
+  linkHandling?: "built-in" | "host"
   thumbnailWidth?: number
+  /** Browse layout: one slide list (`single`) or a slide-sorter grid (`sorter`). */
+  viewMode?: "single" | "sorter" | null
+  /** Browse layout used while `viewMode` is uncontrolled. Defaults to single. */
+  defaultViewMode?: "single" | "sorter"
   locale?: OfficeLocale
   messages?: OfficeMessagesOverride
 }>(), {
@@ -262,12 +427,17 @@ const props = withDefaults(defineProps<{
   openTimeoutMs: 30_000,
   showCapabilityStatus: true,
   showHiddenSlides: false,
+  showNotes: false,
   showPlaybackControls: true,
   showSearch: true,
   showSidebar: true,
   showToolbar: true,
   showWarnings: true,
+  showContextMenu: true,
+  linkHandling: "built-in" as "built-in" | "host",
   thumbnailWidth: 148,
+  viewMode: null,
+  defaultViewMode: "single" as "single" | "sorter",
   locale: "en",
   messages: undefined,
 })
@@ -288,6 +458,12 @@ const emit = defineEmits<{
   searchStateChange: [state: PptxSearchState]
   slideError: [error: PptxPreviewError, slideIndex: number]
   documentError: [error: PptxPreviewError]
+  /** A supported presentation was dropped; the viewer opened it through `usePptxDocument`. */
+  fileDrop: [file: File]
+  /** Right-click on a slide or object; hosts can replace the built-in link menu. */
+  contextMenu: [ctx: PptxStageContextMenu]
+  /** The browse layout toggle changed; hosts can drive the `viewMode` prop. */
+  "update:viewMode": [mode: "single" | "sorter"]
 }>()
 
 type ViewerState = "empty" | "waiting" | "loading" | "ready" | "cancelled" | "error"
@@ -299,6 +475,30 @@ const SIDEBAR_OVERSCAN_ROWS = 3
 const SIDEBAR_FALLBACK_VIEWPORT_PX = 640
 
 const m = providePptxMessages(() => props.locale, () => props.messages)
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// A dropped presentation becomes the effective source; `usePptxDocument`
+// opens it through the same session pipeline as the `source` prop.
+const droppedSource = shallowRef<PptxPreviewSource | null>(null)
+const dropError = ref("")
+const effectiveSource = computed<PptxPreviewSource | null>(() => droppedSource.value ?? props.source ?? null)
+const fileDrop = useFileDrop({
+  accept: { extensions: PPTX_FILE_EXTENSIONS, mimeTypes: PPTX_FILE_MIME_TYPES },
+  onFile: (file) => {
+    dropError.value = ""
+    emit("fileDrop", file)
+    droppedSource.value = file
+  },
+  onReject: () => {
+    dropError.value = m.value.pptx.viewer.unsupportedDrop
+  },
+})
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
+
+// A host-owned source supersedes a file dropped earlier. This watcher is
+// registered before `usePptxDocument` opens its own source watcher below, so
+// the dropped source is already cleared when that one reads the new value.
+watch(() => props.source, () => { droppedSource.value = null; dropError.value = "" })
 
 const viewerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -320,7 +520,7 @@ const stopFontLoadingWatcher = watchFontLoading(() => {
 onBeforeUnmount(stopFontLoadingWatcher)
 
 const documentOptions = {
-  source: () => props.source,
+  source: () => effectiveSource.value,
   initialSlide: () => props.initialSlide,
   openTimeoutMs: () => props.openTimeoutMs,
   messages: () => m.value.pptx.documentErrors,
@@ -375,14 +575,131 @@ const slideFailure = computed(() => pptxDocument.slideError.value)
 const isFullscreen = ref(false)
 const printPageStyle = ref<HTMLStyleElement | undefined>()
 
+// ── Browse layout (single slide list / slide sorter) ────────────────
+// The sorter reuses the sidebar thumbnails in a windowed grid. The stage stays
+// mounted (a hidden overlay covers it) because the document session renders
+// into it; that is also what keeps the current slide across mode switches.
+const SORTER_MIN_COLUMNS = 2
+const SORTER_MAX_COLUMNS = 5
+const SORTER_FALLBACK_COLUMNS = 3
+const SORTER_GRID_GAP_PX = 12
+const SORTER_OVERSCAN_ROWS = 1
+const SORTER_FALLBACK_VIEWPORT_PX = 640
+const internalViewMode = ref<"single" | "sorter">(
+  props.defaultViewMode === "sorter" ? "sorter" : "single",
+)
+const effectiveViewMode = computed<"single" | "sorter">(() =>
+  props.viewMode === "sorter" || props.viewMode === "single"
+    ? props.viewMode
+    : internalViewMode.value,
+)
+const isSorter = computed(() => !isPresent.value && effectiveViewMode.value === "sorter")
+const sorterVisible = computed(
+  () => isSorter.value && state.value === "ready" && document.value !== null,
+)
+
+const sorterRef = ref<HTMLElement | null>(null)
+const sorterScrollTop = ref(0)
+const sorterViewportHeight = ref(SORTER_FALLBACK_VIEWPORT_PX)
+const sorterViewportWidth = ref(0)
+const sorterItemWidth = computed(() => Math.max(120, props.thumbnailWidth))
+const sorterThumbnailWidth = computed(() => Math.max(96, sorterItemWidth.value - 16))
+const sorterItemHeight = computed(() => {
+  const slideshow = document.value
+  const ratio = slideshow && slideshow.width > 0 ? slideshow.height / slideshow.width : 9 / 16
+  return Math.max(THUMBNAIL_MIN_CANVAS_PX, Math.round(sorterThumbnailWidth.value * ratio)) + THUMBNAIL_CHROME_PX
+})
+const sorterColumns = computed(() => {
+  const width = sorterViewportWidth.value
+  if (!(width > 0)) return SORTER_FALLBACK_COLUMNS
+  const columns = Math.floor((width - 24 + SORTER_GRID_GAP_PX) / (sorterItemWidth.value + SORTER_GRID_GAP_PX))
+  return Math.min(SORTER_MAX_COLUMNS, Math.max(SORTER_MIN_COLUMNS, columns))
+})
+const sorterRowCount = computed(() => {
+  const count = document.value?.slides.length ?? 0
+  return Math.ceil(count / sorterColumns.value)
+})
+const sorterWindow = computed(() => {
+  const count = document.value?.slides.length ?? 0
+  const columns = sorterColumns.value
+  const rowHeight = sorterItemHeight.value
+  const firstVisible = Math.floor(Math.max(0, sorterScrollTop.value) / Math.max(1, rowHeight))
+  const visibleRows = Math.ceil(sorterViewportHeight.value / Math.max(1, rowHeight)) + 1
+  const startRow = Math.max(0, Math.min(firstVisible, Math.max(0, sorterRowCount.value - 1)) - SORTER_OVERSCAN_ROWS)
+  const endRow = Math.min(
+    sorterRowCount.value,
+    Math.max(startRow, firstVisible + visibleRows + SORTER_OVERSCAN_ROWS),
+  )
+  return {
+    start: startRow * columns,
+    end: Math.min(count, endRow * columns),
+    startRow,
+    endRow,
+  }
+})
+const sorterSlides = computed(() =>
+  document.value?.slides.slice(sorterWindow.value.start, sorterWindow.value.end) ?? [],
+)
+
+function measureSorter(): void {
+  const element = sorterRef.value
+  if (!element) return
+  const height = typeof element.clientHeight === "number" ? element.clientHeight : 0
+  if (height > 0) sorterViewportHeight.value = height
+  const width = typeof element.clientWidth === "number" ? element.clientWidth : 0
+  if (width > 0) sorterViewportWidth.value = width
+}
+
+function setSorterScrollTop(value: number): void {
+  sorterScrollTop.value = Math.max(0, value)
+  const element = sorterRef.value
+  if (element && typeof element.scrollTop === "number") element.scrollTop = sorterScrollTop.value
+}
+
+function revealSorterSlide(index: number): void {
+  const element = sorterRef.value
+  if (!element) return
+  measureSorter()
+  const columns = sorterColumns.value
+  const row = Math.floor(Math.max(0, index) / Math.max(1, columns))
+  const top = row * sorterItemHeight.value
+  const bottom = top + sorterItemHeight.value
+  const current = sorterScrollTop.value
+  const viewport = sorterViewportHeight.value
+  const next = top < current ? top : bottom > current + viewport ? bottom - viewport : current
+  if (next !== current) setSorterScrollTop(next)
+}
+
+function onSorterScroll(event: Event): void {
+  const target = event.target as { scrollTop?: unknown; clientHeight?: unknown; clientWidth?: unknown } | null
+  if (typeof target?.scrollTop === "number") sorterScrollTop.value = Math.max(0, target.scrollTop)
+  if (typeof target?.clientHeight === "number" && target.clientHeight > 0) {
+    sorterViewportHeight.value = target.clientHeight
+  }
+  if (typeof target?.clientWidth === "number" && target.clientWidth > 0) {
+    sorterViewportWidth.value = target.clientWidth
+  }
+}
+
+function setViewMode(mode: "single" | "sorter"): void {
+  const next = mode === "sorter" ? "sorter" : "single"
+  if (next === effectiveViewMode.value) return
+  if (props.viewMode == null) internalViewMode.value = next
+  emit("update:viewMode", next)
+  // Switching back to the single view must not lose the selected slide.
+  if (next === "sorter") void nextTick(() => revealSorterSlide(activeIndex.value))
+}
+
 function toCssLength(value: string | number | undefined): string | undefined {
   if (value === undefined) return undefined
   return typeof value === "number" ? `${value}px` : value
 }
 
 const rootStyle = computed(() => {
-  if (isFullscreen.value) return undefined
+  const outline = isDragOver.value ? FILE_DROP_OUTLINE : undefined
+  if (isFullscreen.value) return outline ? { outline } : undefined
   const style: Record<string, string> = { height: props.height, maxHeight: props.height }
+  if (outline) style.outline = outline
   const minHeight = toCssLength(props.minHeight)
   if (minHeight) style.minHeight = minHeight
   return style
@@ -460,6 +777,22 @@ const canGoNext = computed(() =>
   && document.value !== null
   && activeIndex.value < document.value.slides.length - 1,
 )
+
+// ── Speaker notes and presenter view ────────────────────────────────
+// `showNotes` mounts the presenter rail: notes for the current slide in browse
+// mode, plus the next-slide preview and the elapsed clock in present mode.
+const presenterVisible = computed(() =>
+  props.showNotes && state.value === "ready" && !isSorter.value)
+const nextSlide = computed(() => {
+  const slides = document.value?.slides
+  if (!slides) return null
+  const skipHidden = !props.showHiddenSlides
+  for (let index = activeIndex.value + 1; index < slides.length; index += 1) {
+    const candidate = slides[index]
+    if (!skipHidden || !candidate.hidden) return candidate
+  }
+  return null
+})
 
 // Sidebar virtualization: keep the mounted thumbnail count proportional to the
 // visible rows instead of the deck length.
@@ -606,11 +939,203 @@ function onPlaybackEvent(event: PptxPlaybackEvent): void {
   } else if (event.type === "mediarequest") {
     emit("mediaRequest", event.mediaId)
   } else if (event.type === "action") {
-    emit("action", event.action)
+    // Present mode: the controller already navigated internal jumps, so only
+    // external targets need the built-in opener. The host still sees the same
+    // action request, re-checked against the shared URL policy.
+    const action = sanitizePptxActionRequest(event.action)
+    if (props.linkHandling !== "host" && (action.kind === "open-url" || action.kind === "mailto")) {
+      openPptxLink(action.url)
+    }
+    emit("action", action)
   } else if (event.type === "error") {
     emit("playbackError", event.error)
   }
 }
+
+// ── Hyperlinks and the built-in link menu ───────────────────────────
+// The playback parser resolves shape links for every render mode; browse mode
+// has no playback controller, so the viewer routes them itself. Both modes
+// share `resolvePptxLinkTarget()` (the office link policy) and both keep
+// emitting `action` for hosts.
+const CONTEXT_MENU_FALLBACK_WIDTH_PX = 208
+const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 92
+const CONTEXT_MENU_MARGIN_PX = 8
+
+interface ContextMenuState {
+  slideIndex: number
+  objectKey: string
+  x: number
+  y: number
+  action: PptxSlideAction
+  target: PptxLinkTarget
+}
+
+const EMPTY_LINK_INDEX: ReadonlyMap<string, PptxLinkEntry> = new Map()
+const contextMenu = shallowRef<ContextMenuState | null>(null)
+const contextMenuRef = ref<HTMLElement | null>(null)
+const contextMenuStyle = ref<Record<string, string>>({})
+const contextMenuVisible = computed(() => contextMenu.value !== null && props.showContextMenu !== false)
+const contextMenuCopyValue = computed(() => {
+  const target = contextMenu.value?.target
+  return target ? pptxLinkCopyValue(target) : undefined
+})
+const contextMenuOpenLabel = computed(() => {
+  const target = contextMenu.value?.target
+  if (target?.kind === "slide") {
+    return formatOfficeMessage(m.value.pptx.viewer.link.openSlide, { number: target.slideIndex + 1 })
+  }
+  return m.value.pptx.viewer.link.open
+})
+
+function currentPlaybackDocument(): PptxPlaybackDocument | null {
+  return pptxDocument.getSession()?.playbackDocument ?? null
+}
+
+// Reads `document` so a newly opened deck builds a fresh index.
+const linkIndex = computed<ReadonlyMap<string, PptxLinkEntry>>(() => {
+  if (state.value !== "ready" || !document.value) return EMPTY_LINK_INDEX
+  return createPptxLinkIndex(currentPlaybackDocument())
+})
+
+function linkActionFor(slideIndex: number, objectKey: string | undefined, trigger: "click" | "hover" = "click"): PptxSlideAction | undefined {
+  if (!objectKey || !Number.isInteger(slideIndex)) return undefined
+  return resolvePptxLinkEntry(linkIndex.value, slideIndex, objectKey)?.[trigger]
+}
+
+async function applyLinkTarget(target: PptxLinkTarget): Promise<void> {
+  if (props.linkHandling === "host") return
+  if (target.kind === "slide") {
+    await goTo(target.slideIndex)
+  } else if (target.kind === "url") {
+    openPptxLink(target.url)
+  }
+}
+
+/** Activate a parsed link: report it to the host, then run the built-in policy. */
+async function activateLink(action: PptxSlideAction): Promise<void> {
+  const target = resolvePptxLinkTarget(action)
+  emit("action", createPptxActionRequest(action, target))
+  await applyLinkTarget(target)
+}
+
+function objectKeyFromEvent(event: MouseEvent): { slideIndex: number; objectKey?: string } | null {
+  const target = event.target as Element | null
+  if (typeof target?.closest !== "function") return null
+  const slideElement = target.closest<HTMLElement>("[data-slide-index]")
+  const slideIndex = Number(slideElement?.dataset.slideIndex)
+  if (!Number.isInteger(slideIndex) || slideIndex < 0) return null
+  return {
+    slideIndex,
+    objectKey: target.closest<HTMLElement>("[data-pptx-object-key]")?.dataset.pptxObjectKey || undefined,
+  }
+}
+
+/**
+ * Browse-mode link clicks.
+ *
+ * The renderer already turns some text runs into anchors; once the shape has a
+ * parsed action the viewer owns the click so the URL policy applies once and
+ * the link does not also open natively.
+ */
+function onBrowseLinkClick(event: MouseEvent): void {
+  const hit = objectKeyFromEvent(event)
+  if (!hit?.objectKey) return
+  const action = linkActionFor(hit.slideIndex, hit.objectKey)
+  if (!action) return
+  if (props.linkHandling !== "host") event.preventDefault?.()
+  run(() => activateLink(action))
+}
+
+async function onLinkActivate(target: PptxStageLinkActivate): Promise<void> {
+  if (isPresent.value) {
+    // Present mode goes through the controller so it also runs the click-trigger
+    // animation; the controller emits the action the viewer then opens.
+    await invoke(async () => {
+      await requireController().activateObject(target.objectKey)
+    })
+    return
+  }
+  const action = linkActionFor(target.slideIndex, target.objectKey)
+  if (action) await activateLink(action)
+}
+
+function onStageContextMenu(context: PptxStageContextMenu): void {
+  emit("contextMenu", context)
+  if (props.showContextMenu === false || state.value !== "ready" || context.kind !== "object") {
+    closeContextMenu()
+    return
+  }
+  const action = linkActionFor(context.slideIndex, context.objectKey)
+  const target = resolvePptxLinkTarget(action)
+  if (!action || target.kind === "unsupported") {
+    closeContextMenu()
+    return
+  }
+  menuKeyboard.captureInvoker()
+  contextMenu.value = {
+    slideIndex: context.slideIndex,
+    objectKey: context.objectKey,
+    x: context.clientX,
+    y: context.clientY,
+    action,
+    target,
+  }
+  positionContextMenu(context.clientX, context.clientY)
+  void nextTick(() => {
+    positionContextMenu(context.clientX, context.clientY)
+    menuKeyboard.focusFirst()
+  })
+}
+
+function positionContextMenu(x: number, y: number): void {
+  const rect = contextMenuRef.value?.getBoundingClientRect?.()
+  const width = rect && rect.width > 0 ? rect.width : CONTEXT_MENU_FALLBACK_WIDTH_PX
+  const height = rect && rect.height > 0 ? rect.height : CONTEXT_MENU_FALLBACK_HEIGHT_PX
+  const viewportWidth = Number(globalThis.innerWidth) || 0
+  const viewportHeight = Number(globalThis.innerHeight) || 0
+  const left = viewportWidth > 0
+    ? Math.min(x, Math.max(CONTEXT_MENU_MARGIN_PX, viewportWidth - width - CONTEXT_MENU_MARGIN_PX))
+    : x
+  const top = viewportHeight > 0
+    ? Math.min(y, Math.max(CONTEXT_MENU_MARGIN_PX, viewportHeight - height - CONTEXT_MENU_MARGIN_PX))
+    : y
+  contextMenuStyle.value = { left: `${left}px`, top: `${top}px` }
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null
+}
+
+const menuKeyboard = useOfficeMenuKeyboard({
+  menu: () => contextMenuRef.value,
+  close: closeContextMenu,
+})
+
+function onContextMenuKeydown(event: KeyboardEvent): void {
+  menuKeyboard.onKeydown(event)
+}
+
+async function openContextMenuLink(): Promise<void> {
+  const state = contextMenu.value
+  closeContextMenu()
+  if (!state) return
+  await activateLink(state.action)
+}
+
+async function copyContextMenuLink(): Promise<void> {
+  const value = contextMenuCopyValue.value
+  closeContextMenu()
+  if (!value) return
+  const clipboard = (globalThis.navigator as { clipboard?: { writeText?: (text: string) => Promise<void> } } | undefined)?.clipboard
+  try {
+    await clipboard?.writeText?.(value)
+  } catch {
+    // Copying is a convenience; a blocked clipboard leaves the link untouched.
+  }
+}
+
+// A menu that outlives its target would act on the wrong slide.
+watch([document, activeIndex, state, () => props.mode], closeContextMenu)
 
 function requireSession(): PptxPreviewSession {
   const session = pptxDocument.getSession()
@@ -657,7 +1182,23 @@ watch(document, () => {
 watch(activeIndex, (index) => {
   measureSidebar()
   revealSidebarSlide(index)
+  if (isSorter.value) revealSorterSlide(index)
 }, { flush: "post" })
+
+// The sorter is a windowed grid; measure it once it is actually on screen so
+// the column count matches the width the host gave the viewer.
+watch(sorterVisible, (visible) => {
+  if (!visible) return
+  void nextTick(() => {
+    measureSorter()
+    revealSorterSlide(activeIndex.value)
+  })
+})
+
+watch(() => props.viewMode, (mode) => {
+  if (mode !== "single" && mode !== "sorter") return
+  if (mode === "sorter") void nextTick(() => revealSorterSlide(activeIndex.value))
+})
 
 watch(thumbnailItemHeight, () => {
   revealSidebarSlide(activeIndex.value)
@@ -687,7 +1228,7 @@ async function goTo(index: number): Promise<void> {
 }
 
 async function reopen(): Promise<void> {
-  const source = props.source
+  const source = effectiveSource.value
   if (!source) return
   await pptxDocument.open(source, { initialSlide: pptxDocument.activeIndex.value })
 }
@@ -777,16 +1318,24 @@ async function exitFullscreen(): Promise<void> {
 }
 
 async function onStageClick(event: MouseEvent): Promise<void> {
-  if (!isPresent.value || state.value !== "ready") return
+  if (state.value !== "ready") return
+  if (!isPresent.value) {
+    onBrowseLinkClick(event)
+    return
+  }
   viewerRef.value?.focus()
   const target = event.target as Element | null
   const objectElement = typeof target?.closest === "function"
     ? target.closest<HTMLElement>("[data-pptx-object-key]")
     : null
+  const objectKey = objectElement?.dataset.pptxObjectKey
+  // A nested text anchor would open natively in addition to the action; when
+  // the shape has a parsed link the viewer owns the single, policy-checked open.
+  if (objectKey && linkActionFor(playbackSnapshot.value?.slideIndex ?? activeIndex.value, objectKey)) {
+    event.preventDefault?.()
+  }
   await invoke(async () => {
-    const handled = objectElement?.dataset.pptxObjectKey
-      ? await requireController().activateObject(objectElement.dataset.pptxObjectKey)
-      : false
+    const handled = objectKey ? await requireController().activateObject(objectKey) : false
     if (!handled) await next()
   })
 }
@@ -806,44 +1355,155 @@ async function moveSearch(direction: 1 | -1): Promise<void> {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (
-    !isPresent.value
-    && props.showToolbar
-    && props.showSearch
-    && (event.ctrlKey || event.metaKey)
-    && event.key.toLocaleLowerCase() === "f"
-  ) {
-    event.preventDefault()
-    searchInputRef.value?.focus()
+  if (handleBrowseScrollKey(event)) return
+  viewerKeys.onKeydown(event)
+}
+
+const BROWSE_PAGE_SCROLL_RATIO = 0.9
+const BROWSE_LINE_SCROLL_PX = 48
+const BROWSE_SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  "ArrowDown",
+  "ArrowUp",
+  " ",
+  "Space",
+  "Spacebar",
+])
+
+/**
+ * PPTX keyboard map:
+ * - browse: arrows/PageUp/PageDown/Home/End/Space scroll the slide list; the
+ *   shared map adds Ctrl/Cmd zoom, Ctrl/Cmd+F search and Escape.
+ * - present: PageUp/PageDown/Home/End and arrows/Space navigate slides; Escape
+ *   leaves fullscreen; Ctrl/Cmd +/−/0 zoom.
+ */
+const viewerKeys = useViewerKeys({
+  mode: () => (isPresent.value ? "present" : "browse"),
+  pageNavigation: () => isPresent.value,
+  zoom: true,
+  search: () => !isPresent.value && props.showToolbar && props.showSearch,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      void invoke(next)
+      return true
+    case "page-previous":
+      void invoke(previous)
+      return true
+    case "page-first":
+      void invoke(() => goToSlide(0))
+      return true
+    case "page-last":
+      void invoke(() => goToSlide(Math.max((document.value?.slides.length ?? 1) - 1, 0)))
+      return true
+    case "zoom-in":
+      if (zoom.value >= 200) return false
+      run(() => setZoom(zoom.value + 25))
+      return true
+    case "zoom-out":
+      if (zoom.value <= 50) return false
+      run(() => setZoom(zoom.value - 25))
+      return true
+    case "zoom-reset":
+      if (zoom.value === 100) return false
+      run(() => setZoom(100))
+      return true
+    case "search":
+      if (isPresent.value || !props.showToolbar || !props.showSearch) return false
+      searchInputRef.value?.focus()
+      return true
+    case "escape":
+      if (isPresent.value) {
+        void invoke(exitFullscreen)
+        return true
+      }
+      if (searchQuery.value || searchResults.value.length) {
+        closeSearch()
+        return true
+      }
+      return false
+    default:
+      return false
+  }
+}
+
+/** Browse mode owns scrolling, not slide navigation. */
+function handleBrowseScrollKey(event: KeyboardEvent): boolean {
+  if (isPresent.value || state.value !== "ready" || event.defaultPrevented) return false
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  if (!BROWSE_SCROLL_KEYS.has(event.key) || isEditableViewerTarget(event.target)) return false
+  const space = event.key === " " || event.key === "Space" || event.key === "Spacebar"
+  if (space && isInteractiveViewerTarget(event.target)) return false
+  // The sorter owns scrolling while it is open; the slide stage is hidden behind it.
+  const container = isSorter.value ? sorterRef.value : stageScrollRef.value
+  if (!container) return false
+  const viewport = typeof container.clientHeight === "number" ? container.clientHeight : 0
+  if (event.key !== "Home" && event.key !== "End" && event.key !== "ArrowDown" && event.key !== "ArrowUp" && viewport <= 0) {
+    return false
+  }
+  const pageStep = Math.max(1, Math.round(viewport * BROWSE_PAGE_SCROLL_RATIO))
+  switch (event.key) {
+    case "PageDown":
+    case " ":
+    case "Space":
+    case "Spacebar":
+      scrollBrowseBy(pageStep)
+      break
+    case "PageUp":
+      scrollBrowseBy(-pageStep)
+      break
+    case "Home":
+      setBrowseScrollTop(0)
+      break
+    case "End":
+      setBrowseScrollTop(Number.MAX_SAFE_INTEGER)
+      break
+    case "ArrowDown":
+      scrollBrowseBy(BROWSE_LINE_SCROLL_PX)
+      break
+    case "ArrowUp":
+      scrollBrowseBy(-BROWSE_LINE_SCROLL_PX)
+      break
+    default:
+      return false
+  }
+  event.preventDefault?.()
+  return true
+}
+
+function setBrowseScrollTop(top: number): void {
+  if (isSorter.value) {
+    const element = sorterRef.value
+    const scrollHeight = typeof element?.scrollHeight === "number" ? element.scrollHeight : 0
+    const clientHeight = typeof element?.clientHeight === "number" ? element.clientHeight : 0
+    const max = Math.max(0, scrollHeight - clientHeight)
+    setSorterScrollTop(Math.min(max, Math.max(0, top)))
     return
   }
-  const target = event.target
-  if (
-    (typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement)
-    || (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement)
-  ) return
-  if (isPresent.value && event.key === "Escape") {
-    event.preventDefault()
-    void invoke(exitFullscreen)
-  } else if (isPresent.value && event.key === "Home") {
-    event.preventDefault()
-    void invoke(() => goToSlide(0))
-  } else if (isPresent.value && event.key === "End") {
-    event.preventDefault()
-    void invoke(() => goToSlide(Math.max((document.value?.slides.length ?? 1) - 1, 0)))
-  } else if ((isPresent.value && event.key === "ArrowLeft") || event.key === "ArrowUp" || event.key === "PageUp") {
-    event.preventDefault()
-    void invoke(previous)
-  } else if ((isPresent.value && event.key === "ArrowRight") || event.key === "ArrowDown" || event.key === "PageDown" || isPresent.value && event.key === " ") {
-    event.preventDefault()
-    void invoke(next)
-  } else if (!isPresent.value && (event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {
-    event.preventDefault()
-    run(() => setZoom(zoom.value + 25))
-  } else if ((event.ctrlKey || event.metaKey) && event.key === "-") {
-    event.preventDefault()
-    run(() => setZoom(zoom.value - 25))
+  const container = stageScrollRef.value
+  if (!container) return
+  const scrollHeight = typeof container.scrollHeight === "number" ? container.scrollHeight : 0
+  const clientHeight = typeof container.clientHeight === "number" ? container.clientHeight : 0
+  const max = Math.max(0, scrollHeight - clientHeight)
+  container.scrollTop = Math.min(max, Math.max(0, top))
+}
+
+function scrollBrowseBy(delta: number): void {
+  if (isSorter.value) {
+    setBrowseScrollTop(sorterScrollTop.value + delta)
+    return
   }
+  const container = stageScrollRef.value
+  if (!container) return
+  const top = typeof container.scrollTop === "number" ? container.scrollTop : 0
+  setBrowseScrollTop(top + delta)
 }
 
 watch(() => props.initialSlide, (index) => {
@@ -851,7 +1511,7 @@ watch(() => props.initialSlide, (index) => {
 })
 
 watch(() => props.mode, () => {
-  const source = props.source
+  const source = effectiveSource.value
   const index = pptxDocument.activeIndex.value
   resetSearch()
   if (!source) return

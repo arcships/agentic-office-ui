@@ -232,7 +232,7 @@ Date: 2026-07-06
 |---|---|---|
 | `layout-snapshot.ts` | 469 | 布局快照数据结构 + 选区/光标命中操作 |
 | `pagination-breaks.ts` | 225 | 显式分页符检测 |
-| `page-count-reconciliation.ts` | 278 | 页数校准（缩放高度逼近目标页数） |
+| `page-count-reconciliation.ts` | 278 | 页数校准（已弃用 #99；默认不再放大虚拟页） |
 | `image-render.ts` | 260 | TIFF→PNG 转换、EMF/WMF 占位 |
 | `content-signature.ts` | 155 | FNV-1a 内容签名（缓存友好） |
 | `canvas/layout-diagnostics.ts` | 156 | 布局诊断（Canvas 2D 绘制用） |
@@ -300,10 +300,11 @@ resolver(ctx) → patch {model?, selection?, range?, pendingRunStyle?, status?}
 | 表格 | insert/delete row/column、resize（pointer 事件）、跨页切分 |
 | 图片 | insert/resize/move/wrap mode、浮动定位、首字下沉 |
 | 表单域 | checkbox/text/date/dropdown，SDT + legacy 两种来源 |
-| 修订/评论 | **从 model 只读派生**（`collectTrackedChangesFromModel`/`collectCommentsFromModel`） |
+| 修订 | **从 model 只读派生**（`collectTrackedChangesFromModel`） |
+| 评论 | 读取派生（`collectCommentsFromModel`）+ 写入命令（`addDocumentComment`/`replyToDocumentComment`/`resolveDocumentComment`/`deleteDocumentComment`，导出 `comments.xml`/`commentsExtended.xml`；issue #96） |
 | 列表 | toggleList、adjustDepth、numbering labels |
 | 撤销/重做 | 快照式，每次 model 变化一个快照 |
-| 复制/粘贴 | 纯文本（navigator.clipboard） |
+| 复制/粘贴 | 富文本：`text/html`（内联 run 样式、链接、列表）+ `text/rtf` + 内部 MIME 片段（`DocxTextRange` + runs）+ `text/plain`；粘贴按“内部片段 → `text/html` → `text/rtf` → 纯文本”降级，外部 HTML/RTF 经净化后映射回 run |
 | 导入/导出 | importDocxFile（wasm worker）、exportDocx（serializeDocx + basePackage） |
 
 #### DocxEditorViewer 组件（32871–56454，~23584 行）
@@ -368,8 +369,8 @@ viewerRoot → before spacer（虚拟化占位）
 | 18 | 页首 spacing 抑制 | pagination.ts |
 | 19 | 表格内分页符（含签名表特殊处理） | pagination.ts |
 | 20 | lastRenderedPageBreak 段首提示 | pagination.ts |
-| 21 | 页数校准（缩放高度逼近目标，scale 0.2-1.3，二分 10 步） | page-count-reconciliation.ts |
-| 22 | 测量驱动迭代分页（先估算→渲染→测量→重新分页） | editor.tsx viewer |
+| 21 | ~~页数校准（缩放高度逼近目标，scale 0.2-1.3，二分 10 步）~~ **已废弃**：`documentPageCount` 只作为目标提示，不允许缩放/合并强制页数（#99） | page-count-reconciliation.ts（兼容保留，默认不再放大虚拟页） |
+| 22 | 测量驱动迭代分页（先估算→渲染→测量→重新分页，含收敛/振荡守卫） | `layout/pagination-iteration.ts`、`vue-docx/DocxViewerRoot.vue`（本地已实现，#99） |
 | 23 | pretext 变宽文本布局（绕排除区、光标/选区命中） | pretext-layout.ts |
 
 ### 3.3 编辑
@@ -817,9 +818,13 @@ for p in doc.paragraphs[:5]:
 | 脚注/尾注 | 加载含脚注的文档 | 脚注区域渲染 |
 | contentEditable draft | 连续输入文本 | 光标不跳 + draft 正确提交 |
 | DOM 选区恢复 | 编辑后 undo | 光标回到正确位置 |
-| 页数校准 | 加载有 documentPageCount 的文档 | 页数匹配（±3 内缩放收敛） |
+| 页数目标 | 加载有 documentPageCount 的文档 | 目标仅作提示；实际页数由测量驱动迭代决定，不缩放虚拟页、不合并尾页（#99） |
 
 ### 9.3 验收验证
+
+> 本节的验收表是 2026-07-06 的历史计划。当前可自动化的验收行及其测试映射见
+> [`docs/visual-acceptance-handoff.md`](visual-acceptance-handoff.md) 的
+> “Acceptance coverage map”：每一行都指向一个已注册的自动化测试，或显式标注为需要浏览器人工验收。
 
 对照 `docs/visual-acceptance-handoff.md`：
 

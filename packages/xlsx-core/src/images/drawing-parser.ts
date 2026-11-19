@@ -41,6 +41,10 @@ import {
 import { normalizeHexColor } from "./image-parser";
 import { anchorToAbsoluteRect } from "./column-width";
 import {
+  buildPresetShapePath,
+  isStrokeOnlyShapeGeometry
+} from "./preset-geometry";
+import {
   type ThemeState,
 } from "./theme-palette";
 import {
@@ -303,7 +307,7 @@ function mapVerticalAnchor(value: string | null | undefined): "bottom" | "middle
 // ── Shape geometry ──────────────────────────────────────────────────────────
 
 function isStrokeOnlyGeometry(geometry: string) {
-  return geometry === "line" || geometry === "arc" || geometry === "leftBrace";
+  return isStrokeOnlyShapeGeometry(geometry);
 }
 
 function parsePointNode(pointNode: Element | null) {
@@ -579,6 +583,13 @@ function parseShapeNode(
     ?? (getFirstDescendant(shapeNode, "custGeom") ? "custom" : "rect");
   const customPath = geometry === "custom" ? parseCustomGeometryPath(shapeNode) : undefined;
   const geometryAdjustments = parseShapeGeometryAdjustments(shapeNode);
+  const shapeRect = anchorToRect(transform.anchor);
+  const presetPath = customPath
+    ? undefined
+    : buildPresetShapePath(geometry, geometryAdjustments, {
+        height: emuToPixels(shapeRect.cy),
+        width: emuToPixels(shapeRect.cx)
+      });
   return {
     anchor: transform.anchor,
     description: nonVisualProps?.getAttribute("descr") ?? undefined,
@@ -596,8 +607,8 @@ function parseShapeNode(
     scaleX: transform.scaleX,
     scaleY: transform.scaleY,
     sheetIndex: workbookSheetIndex,
-    svgPath: customPath?.path,
-    svgViewBox: customPath?.viewBox,
+    svgPath: customPath?.path ?? presetPath?.path,
+    svgViewBox: customPath?.viewBox ?? presetPath?.viewBox,
     stroke: parseShapeStroke(shapeNode, styleNode, theme),
     textBox: parseTextBox(shapeNode),
     workbookSheetIndex,

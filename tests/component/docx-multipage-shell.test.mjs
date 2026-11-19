@@ -532,7 +532,7 @@ test("search highlights translate cached geometry while scrolling", async (t) =>
   };
   surfaceRoot.querySelectorAll = (selector) => {
     queryCount += 1;
-    return selector === '[data-docx-paragraph-node-index="0"]' ? [paragraphHost] : [];
+    return /\[data-docx-paragraph-node-index="0"\]/u.test(selector) ? [paragraphHost] : [];
   };
 
   const surface = mounted.app._instance.subTree.component.exposed;

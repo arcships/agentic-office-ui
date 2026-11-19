@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="positioned.length > 0"
+    v-if="positioned.length > 0 || composer"
     class="docx-tracked-change-gutter"
     :class="{
       'docx-tracked-change-gutter--drawer': drawerMode,
@@ -51,61 +51,200 @@
       @keydown.enter.prevent="emit('activate', entry.annotation.id)"
       @keydown.space.prevent="emit('activate', entry.annotation.id)"
     >
+      <!--
+        A host that provides `render-comment-card` / `render-tracked-change-card`
+        replaces the card body; the positioned wrapper, activation, measurement
+        and drawer visibility stay owned by this pane so cards keep anchoring.
+      -->
+      <HostCard
+        v-if="customCards[entry.annotation.id]"
+        v-bind="customCards[entry.annotation.id]"
+      />
+      <template v-else>
+        <div class="docx-gutter-card-header">
+          <span
+            class="docx-gutter-card-index"
+            :style="{ backgroundColor: accentColor(entry) }"
+          >{{ entry.annotation.ordinal }}</span>
+          <span class="docx-gutter-card-type">{{ cardTypeLabel(entry) }}</span>
+          <span class="docx-gutter-card-author">{{ authorOf(entry) }}</span>
+        </div>
+        <div class="docx-gutter-card-text">
+          {{ cardText(entry) }}
+        </div>
+        <div
+          v-if="canDecide(entry)"
+          class="docx-gutter-card-actions"
+          @click.stop
+          @keydown.enter.stop
+          @keydown.space.stop
+        >
+          <button
+            type="button"
+            class="docx-gutter-card-action docx-gutter-card-action--accept"
+            data-testid="docx-gutter-accept"
+            :title="m.docx.gutter.acceptTitle"
+            @click.stop="emit('decide', entry.annotation.id, 'accept')"
+          >
+            ✓ {{ m.docx.gutter.accept }}
+          </button>
+          <button
+            type="button"
+            class="docx-gutter-card-action docx-gutter-card-action--reject"
+            data-testid="docx-gutter-reject"
+            :title="m.docx.gutter.rejectTitle"
+            @click.stop="emit('decide', entry.annotation.id, 'reject')"
+          >
+            ✕ {{ m.docx.gutter.reject }}
+          </button>
+        </div>
+        <div
+          v-if="commentActions && entry.annotation.comment"
+          class="docx-gutter-card-actions"
+          @click.stop
+          @keydown.enter.stop
+          @keydown.space.stop
+        >
+          <button
+            type="button"
+            class="docx-gutter-card-action docx-gutter-card-action--comment"
+            data-testid="docx-gutter-comment-reply"
+            :title="m.docx.gutter.replyTitle"
+            @click.stop="emit('reply', entry.annotation.comment.commentId)"
+          >
+            {{ m.docx.gutter.reply }}
+          </button>
+          <button
+            v-if="isThreadRoot(entry)"
+            type="button"
+            class="docx-gutter-card-action docx-gutter-card-action--comment"
+            data-testid="docx-gutter-comment-resolve"
+            :title="entry.annotation.comment.resolved ? m.docx.gutter.reopenTitle : m.docx.gutter.resolveTitle"
+            @click.stop="emit('resolve', entry.annotation.comment.commentId, !entry.annotation.comment.resolved)"
+          >
+            {{ entry.annotation.comment.resolved ? m.docx.gutter.reopen : m.docx.gutter.resolve }}
+          </button>
+          <button
+            type="button"
+            class="docx-gutter-card-action docx-gutter-card-action--comment"
+            data-testid="docx-gutter-comment-delete"
+            :title="m.docx.gutter.deleteTitle"
+            @click.stop="emit('delete', entry.annotation.comment.commentId)"
+          >
+            {{ m.docx.gutter.delete }}
+          </button>
+        </div>
+        <!--
+          The reply editor lives inside the card it replies to, so the new text
+          appears in the thread instead of a detached dialog.
+        -->
+        <div
+          v-if="replyComposerFor(entry)"
+          class="docx-gutter-card-composer"
+          data-testid="docx-gutter-comment-composer"
+          :data-docx-comment-composer-mode="composerMode"
+          @click.stop
+          @keydown.enter.stop
+          @keydown.space.stop
+        >
+          <div class="docx-gutter-card-composer-title">
+            {{ m.docx.gutter.composerReplyTitle }}
+          </div>
+          <textarea
+            class="docx-gutter-card-composer-input"
+            data-testid="docx-gutter-comment-composer-input"
+            :aria-label="m.docx.gutter.composerReplyPlaceholder"
+            :placeholder="m.docx.gutter.composerReplyPlaceholder"
+            :value="draft"
+            rows="2"
+            @input="onComposerInput"
+          />
+          <div class="docx-gutter-card-actions">
+            <button
+              type="button"
+              class="docx-gutter-card-action docx-gutter-card-action--comment"
+              data-testid="docx-gutter-comment-composer-submit"
+              @click.stop="submitComposer"
+            >
+              {{ m.docx.gutter.composerSubmit }}
+            </button>
+            <button
+              type="button"
+              class="docx-gutter-card-action"
+              data-testid="docx-gutter-comment-composer-cancel"
+              @click.stop="cancelComposer"
+            >
+              {{ m.docx.gutter.composerCancel }}
+            </button>
+          </div>
+        </div>
+        <div v-if="entry.annotation.comment?.resolved" class="docx-gutter-card-resolved">
+          ✓ {{ m.docx.trackedChange.resolved }}
+        </div>
+        <div v-if="dateOf(entry)" class="docx-gutter-card-date">
+          {{ formatDate(dateOf(entry)) }}
+        </div>
+      </template>
+    </div>
+
+    <!--
+      A new comment has no gutter card yet, so its editor sits at the top of
+      the pane until the comment is submitted.
+    -->
+    <div
+      v-if="composer && composer.mode === 'new' && (!drawerMode || drawerOpen)"
+      class="docx-gutter-card docx-gutter-card--comment docx-gutter-card--composer"
+      data-testid="docx-gutter-comment-composer"
+      :data-docx-comment-composer-mode="composerMode"
+      @click.stop
+      @keydown.enter.stop
+      @keydown.space.stop
+    >
       <div class="docx-gutter-card-header">
-        <span
-          class="docx-gutter-card-index"
-          :style="{ backgroundColor: accentColor(entry) }"
-        >{{ entry.annotation.ordinal }}</span>
-        <span class="docx-gutter-card-type">{{ cardTypeLabel(entry) }}</span>
-        <span class="docx-gutter-card-author">{{ authorOf(entry) }}</span>
+        <span class="docx-gutter-card-type">{{ m.docx.gutter.composerTitle }}</span>
       </div>
-      <div class="docx-gutter-card-text">
-        {{ cardText(entry) }}
-      </div>
-      <div
-        v-if="canDecide(entry)"
-        class="docx-gutter-card-actions"
-        @click.stop
-        @keydown.enter.stop
-        @keydown.space.stop
-      >
+      <textarea
+        class="docx-gutter-card-composer-input"
+        data-testid="docx-gutter-comment-composer-input"
+        :aria-label="m.docx.gutter.composerPlaceholder"
+        :placeholder="m.docx.gutter.composerPlaceholder"
+        :value="draft"
+        rows="3"
+        @input="onComposerInput"
+      />
+      <div class="docx-gutter-card-actions">
         <button
           type="button"
-          class="docx-gutter-card-action docx-gutter-card-action--accept"
-          data-testid="docx-gutter-accept"
-          :title="m.docx.gutter.acceptTitle"
-          @click.stop="emit('decide', entry.annotation.id, 'accept')"
+          class="docx-gutter-card-action docx-gutter-card-action--comment"
+          data-testid="docx-gutter-comment-composer-submit"
+          @click.stop="submitComposer"
         >
-          ✓ {{ m.docx.gutter.accept }}
+          {{ m.docx.gutter.composerSubmit }}
         </button>
         <button
           type="button"
-          class="docx-gutter-card-action docx-gutter-card-action--reject"
-          data-testid="docx-gutter-reject"
-          :title="m.docx.gutter.rejectTitle"
-          @click.stop="emit('decide', entry.annotation.id, 'reject')"
+          class="docx-gutter-card-action"
+          data-testid="docx-gutter-comment-composer-cancel"
+          @click.stop="cancelComposer"
         >
-          ✕ {{ m.docx.gutter.reject }}
+          {{ m.docx.gutter.composerCancel }}
         </button>
-      </div>
-      <div v-if="entry.annotation.comment?.resolved" class="docx-gutter-card-resolved">
-        ✓ {{ m.docx.trackedChange.resolved }}
-      </div>
-      <div v-if="dateOf(entry)" class="docx-gutter-card-date">
-        {{ formatDate(dateOf(entry)) }}
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue"
+import { computed, defineComponent, nextTick, onMounted, ref, watch } from "vue"
+import type { PropType, VNodeChild } from "vue"
 import {
   commentAccentColor,
   trackedChangeAccentColor,
   trackedChangeUsesGutterBalloon,
+  type DocxCommentCardRenderProps,
   type DocxDocumentTheme,
   type DocxTrackedChange,
+  type DocxTrackedChangeCardRenderProps,
   type PositionedGutterAnnotation,
 } from "@arcships/docx-core"
 import {
@@ -131,6 +270,21 @@ const props = withDefaults(
     decidable?: boolean
     /** Render as an overlay drawer instead of a column beside the paper. */
     drawerMode?: boolean
+    /** True when the host can reply to, resolve and delete comments. */
+    commentActions?: boolean
+    /** Open inline comment editor rendered by this pane. */
+    composer?: { mode: "new" | "reply"; commentId?: number }
+    /** Zero-based page index these cards belong to. */
+    pageIndex?: number
+    /**
+     * Host renderer that replaces every comment card body. The pane keeps the
+     * positioned wrapper, activation and measurement.
+     */
+    renderCommentCard?: (props: DocxCommentCardRenderProps) => unknown
+    /** Host renderer that replaces every tracked-change card body. */
+    renderTrackedChangeCard?: (
+      props: DocxTrackedChangeCardRenderProps
+    ) => unknown
   }>(),
   {
     zoomFactor: 1,
@@ -138,6 +292,11 @@ const props = withDefaults(
     documentTheme: "light" as DocxDocumentTheme,
     decidable: false,
     drawerMode: false,
+    commentActions: false,
+    composer: undefined,
+    pageIndex: 0,
+    renderCommentCard: undefined,
+    renderTrackedChangeCard: undefined,
   }
 )
 
@@ -145,14 +304,171 @@ const emit = defineEmits<{
   activate: [annotationId: string]
   cardHeight: [annotationId: string, heightPx: number]
   decide: [annotationId: string, decision: "accept" | "reject"]
+  reply: [commentId: number]
+  resolve: [commentId: number, resolved: boolean]
+  delete: [commentId: number]
+  composerSubmit: [text: string]
+  composerCancel: []
 }>()
 const m = useDocxMessages()
 const locale = useDocxLocale()
+
+// ── Host-rendered cards ────────────────────────────────────────────
+// A host may replace the body of comment and tracked-change cards. The card
+// wrapper below still owns positioning, activation, measurement and drawer
+// visibility, so custom cards line up with the same anchors as the defaults.
+type HostCardRenderer =
+  | ((props: DocxCommentCardRenderProps) => unknown)
+  | ((props: DocxTrackedChangeCardRenderProps) => unknown)
+
+interface HostCardEntry {
+  render: HostCardRenderer
+  renderProps: DocxCommentCardRenderProps | DocxTrackedChangeCardRenderProps
+}
+
+const HostCard = defineComponent({
+  name: "DocxGutterHostCard",
+  props: {
+    render: {
+      type: Function as PropType<HostCardRenderer>,
+      required: true,
+    },
+    renderProps: {
+      type: Object as PropType<
+        DocxCommentCardRenderProps | DocxTrackedChangeCardRenderProps
+      >,
+      required: true,
+    },
+  },
+  setup(card) {
+    return () =>
+      (card.render as unknown as (props: unknown) => VNodeChild)(
+        card.renderProps
+      )
+  },
+})
+
+/** Positioning style handed to host cards; the pane already applies it. */
+function cardRenderStyle(
+  entry: PositionedGutterAnnotation
+): Record<string, string | number | undefined> {
+  return {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: `${annotationGutterCardTopPx(entry.top, props.zoomFactor)}px`,
+  }
+}
+
+function hostCardFor(entry: PositionedGutterAnnotation): HostCardEntry | undefined {
+  const comment = entry.annotation.comment
+  if (comment && props.renderCommentCard) {
+    return {
+      render: props.renderCommentCard,
+      renderProps: {
+        comment,
+        snippet: cardText(entry),
+        formattedDate: formatDate(comment.date) || undefined,
+        accentColor: accentColor(entry),
+        documentTheme: props.documentTheme,
+        pageIndex: props.pageIndex,
+        style: cardRenderStyle(entry),
+        canModify: props.commentActions,
+        activate: () => emit("activate", entry.annotation.id),
+        setResolved: (resolved: boolean) => {
+          if (!props.commentActions) return
+          emit("resolve", comment.commentId, resolved)
+        },
+      } satisfies DocxCommentCardRenderProps,
+    }
+  }
+
+  const change = entry.annotation.trackedChange
+  if (change && props.renderTrackedChangeCard) {
+    return {
+      render: props.renderTrackedChangeCard,
+      renderProps: {
+        change,
+        kindLabel: changeLabel(change),
+        snippet: cardText(entry),
+        formattedDate: formatDate(change.date) || undefined,
+        accentColor: accentColor(entry),
+        documentTheme: props.documentTheme,
+        pageIndex: props.pageIndex,
+        style: cardRenderStyle(entry),
+        canDecide: canDecide(entry),
+        activate: () => emit("activate", entry.annotation.id),
+        accept: () => {
+          if (!canDecide(entry)) return
+          emit("decide", entry.annotation.id, "accept")
+        },
+        reject: () => {
+          if (!canDecide(entry)) return
+          emit("decide", entry.annotation.id, "reject")
+        },
+      } satisfies DocxTrackedChangeCardRenderProps,
+    }
+  }
+
+  return undefined
+}
+
+const customCards = computed(() => {
+  const cards: Record<string, HostCardEntry> = {}
+  for (const entry of visibleCards.value) {
+    const card = hostCardFor(entry)
+    if (card) cards[entry.annotation.id] = card
+  }
+  return cards
+})
 
 // ── Revision decisions ─────────────────────────────────────────────
 // Only tracked-change cards expose decisions; comment cards stay activate-only.
 function canDecide(entry: PositionedGutterAnnotation): boolean {
   return props.decidable && Boolean(entry.annotation.trackedChange)
+}
+
+// ── Comment actions & inline editor ────────────────────────────────
+// Resolving is a thread-level action, so only the root card offers it; every
+// comment in the thread can be replied to (and deleted individually).
+function isThreadRoot(entry: PositionedGutterAnnotation): boolean {
+  const comment = entry.annotation.comment
+  return Boolean(comment) && comment?.parentId === undefined
+}
+
+function replyComposerFor(entry: PositionedGutterAnnotation): boolean {
+  return (
+    props.composer?.mode === "reply" &&
+    props.composer.commentId !== undefined &&
+    props.composer.commentId === entry.annotation.comment?.commentId
+  )
+}
+
+const composerMode = computed(() => props.composer?.mode ?? "")
+
+/** Draft text belongs to the open editor, so it resets when the editor moves. */
+const draft = ref("")
+watch(
+  () => [props.composer?.mode, props.composer?.commentId] as const,
+  () => {
+    draft.value = ""
+  }
+)
+
+function onComposerInput(event: Event): void {
+  draft.value = (event.target as HTMLTextAreaElement | null)?.value ?? ""
+}
+
+function submitComposer(): void {
+  if (draft.value.trim().length === 0) {
+    return
+  }
+  emit("composerSubmit", draft.value)
+}
+
+function cancelComposer(): void {
+  draft.value = ""
+  emit("composerCancel")
 }
 
 // ── Pane geometry ──────────────────────────────────────────────────
@@ -354,6 +670,9 @@ async function measureCardsAfterRender(): Promise<void> {
 
 onMounted(measureCardsAfterRender)
 watch(() => props.positioned, measureCardsAfterRender, { flush: "post" })
+// Host cards can change size without the annotation list changing (a renamed
+// action, a longer label), so measurement follows the resolved card entries.
+watch(customCards, measureCardsAfterRender, { flush: "post" })
 
 // Activating an annotation from the page (marker or highlighted text) brings
 // its card into view inside the pane.
@@ -490,6 +809,34 @@ watch(
   color: #22c55e;
   font-size: 11px;
   margin-top: 4px;
+}
+.docx-gutter-card--composer {
+  cursor: default;
+  top: 0;
+  z-index: 1;
+}
+.docx-gutter-card-composer {
+  border-top: 1px dashed #d1d5db;
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.docx-gutter-card-composer-title {
+  color: #374151;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.docx-gutter-card-composer-input {
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 12px;
+  min-height: 40px;
+  padding: 4px 6px;
+  resize: vertical;
+  width: 100%;
+}
+.docx-gutter-card-action--comment:hover {
+  background: #fffbeb;
+  border-color: #f59e0b;
 }
 .docx-gutter-card-date {
   color: #9ca3af;

@@ -10,6 +10,7 @@ import type {
   TextStyle
 } from "../engine/types";
 import { shareImageData } from "../engine/clone";
+import { estimateFontLineHeightPx } from "../engine/font-line-height";
 import type { DocumentLayoutMetrics } from "../viewer/section-layout";
 import { parseSectionLayout } from "../viewer/section-layout";
 import {
@@ -154,7 +155,9 @@ function runHeightPx(run: LayoutRun): number {
   }
 
   const fontSizePt = run.style?.fontSizePt ?? 12;
-  return Math.round(fontSizePt * 1.6);
+  // Same platform-neutral vertical metrics the canvas-less line-metrics path
+  // uses; the real pagination engine replaces them with measureText's font box.
+  return estimateFontLineHeightPx((fontSizePt * 96) / 72);
 }
 
 function lineHeightFromRuns(
@@ -205,7 +208,7 @@ export function paragraphToLayout(
         text: child.text,
         style: child.style,
         link: child.link
-      };
+      } as LayoutRun;
     }
 
     if (child.type === "form-field") {
@@ -218,6 +221,12 @@ export function paragraphToLayout(
       };
     }
 
+    // Drawing objects and equations are not part of the layout model yet; the
+    // renderer paints them from their model node.
+    if (child.type !== "image") {
+      return undefined;
+    }
+
     return {
       kind: "image",
       id: `${idPrefix}-run-${runIndex}`,
@@ -228,8 +237,8 @@ export function paragraphToLayout(
       contentType: child.contentType,
       data: shareImageData(child.data),
       floating: Boolean(child.floating)
-    };
-  });
+    } as LayoutRun;
+  }).filter((run): run is LayoutRun => run !== undefined);
 
   return {
     kind: "paragraph",
@@ -595,22 +604,29 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
 
   applyLayoutBounds();
 
-  const startSectionPage = (parity?: SectionStartPageParity): void => {
-    startPage();
+  const startSectionPage = (
+    parity: SectionStartPageParity | undefined,
+    previousSectionIndex: number,
+    previousLayout: DocumentLayoutMetrics
+  ): void => {
     if (parity) {
-      const nextPageNumber = pages.length;
+      // The number the new section's first page would get without a blank page.
+      const nextPageNumber = pages.length + 1;
       const startsOnEvenPage = nextPageNumber % 2 === 0;
       if (startsOnEvenPage !== (parity === "even")) {
-        // Word inserts a blank page so an `evenPage`/`oddPage` section starts
-        // on the required page-number parity.
+        // Word inserts a blank page at the end of the section that ends here, so
+        // the page keeps that section's header/footer and continues its
+        // numbering; the new section's first content page then lands on the
+        // required parity.
         pages.push({
-          number: pages.length + 1,
+          number: nextPageNumber,
           blocks: [],
-          sectionIndex: currentSectionIndex,
-          layout: layoutPageGeometry(currentLayout)
+          sectionIndex: previousSectionIndex,
+          layout: layoutPageGeometry(previousLayout)
         });
       }
     }
+    startPage();
   };
 
   startPage();
@@ -623,6 +639,7 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
     );
     if (sectionIndex !== currentSectionIndex) {
       const previousLayout = currentLayout;
+      const previousSectionIndex = currentSectionIndex;
       const nextSection = sections[sectionIndex];
       currentSectionIndex = sectionIndex;
       currentLayout = nextSection.layout;
@@ -631,7 +648,11 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
         layoutSectionGeometryChanged(previousLayout, currentLayout);
       if (startsNewPage) {
         if (pages[pages.length - 1].blocks.length > 0) {
-          startSectionPage(nextSection.parity);
+          startSectionPage(
+            nextSection.parity,
+            previousSectionIndex,
+            previousLayout
+          );
         } else {
           pages[pages.length - 1].sectionIndex = currentSectionIndex;
           pages[pages.length - 1].layout = layoutPageGeometry(currentLayout);

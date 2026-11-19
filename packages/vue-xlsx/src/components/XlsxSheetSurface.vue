@@ -2,6 +2,7 @@
   <div
     ref="surfaceRef"
     class="xlsx-sheet-surface"
+    :class="{ 'xlsx-sheet-surface--print-preview': controller.isPrintPreviewOpen }"
     data-testid="xlsx-sheet-surface"
     @keydown="onKeydown"
     @contextmenu="onContextMenu"
@@ -23,11 +24,27 @@
         :read-only="effectiveReadOnly"
         :selection-color="selectionColor"
         :selection-fill-color="selectionFillColor"
+        :render-mode="renderMode"
         @cell-double-click="emit('cellDoubleClick', $event)"
         @viewport-change="gridViewport = $event"
+      >
+        <template
+          v-if="$slots['table-header-menu']"
+          #table-header-menu="headerMenuProps"
+        >
+          <slot name="table-header-menu" v-bind="headerMenuProps" />
+        </template>
+      </XlsxGrid>
+      <XlsxRangeHighlightLayer
+        :controller="controller"
+        :scroll-left="gridViewport.scrollLeft"
+        :scroll-top="gridViewport.scrollTop"
+        :viewport-width="gridViewport.width"
+        :viewport-height="gridViewport.height"
       />
       <XlsxChartOverlay
         :controller="controller"
+        @chart-context-menu="onChartContextMenu"
         :is-dark="isDark ?? false"
         :scroll-left="gridViewport.scrollLeft"
         :scroll-top="gridViewport.scrollTop"
@@ -41,6 +58,7 @@
         :scroll-top="gridViewport.scrollTop"
         :viewport-width="gridViewport.width"
         :viewport-height="gridViewport.height"
+        @drawing-context-menu="onDrawingContextMenu"
       />
       <XlsxDrawingLayer
         :controller="controller"
@@ -48,6 +66,7 @@
         :scroll-top="gridViewport.scrollTop"
         :viewport-width="gridViewport.width"
         :viewport-height="gridViewport.height"
+        @drawing-context-menu="onDrawingContextMenu"
       />
       <XlsxSelectionOverlay
         :controller="controller"
@@ -60,8 +79,22 @@
         :controller="controller"
         :target-element="gridElement"
         :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
+        @authoring="openAuthoring"
       />
     </template>
+    <XlsxAuthoringDialog
+      v-if="authoringKind"
+      :controller="controller"
+      :kind="authoringKind"
+      :is-dark="isDark ?? false"
+      @close="authoringKind = null"
+    />
+    <XlsxPrintPreview
+      v-if="controller.isPrintPreviewOpen"
+      :controller="controller"
+      :is-dark="isDark ?? false"
+      @close="controller.closePrintPreview()"
+    />
     <div
       v-if="selectionMode === 'region'"
       class="xlsx-sheet-surface__region-layer"
@@ -106,11 +139,15 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import XlsxGrid from "./XlsxGrid.vue"
+import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue"
 import XlsxChartOverlay from "./XlsxChartOverlay.vue"
 import XlsxImageLayer from "./XlsxImageLayer.vue"
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue"
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
+import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue"
+import XlsxPrintPreview from "./XlsxPrintPreview.vue"
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
@@ -124,6 +161,8 @@ const props = withDefaults(
     readOnly?: boolean
     selectionColor?: string
     selectionFillColor?: string
+    /** Grid body renderer: canvas (default) or the DOM fallback. */
+    renderMode?: import("./grid-dom").XlsxGridRenderMode
     showImages?: boolean
     /** Controlled zoom factor. 1 = 100%. */
     zoom?: number
@@ -131,7 +170,13 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    /**
+     * Locale for the built-in UI copy and, unless `documentLocale` is set, for
+     * number and date formats that name no locale of their own.
+     */
     locale?: import("@arcships/office-interaction").OfficeLocale
+    /** Overrides the number/date locale; defaults to `locale`. */
+    documentLocale?: string
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
@@ -140,11 +185,13 @@ const props = withDefaults(
     readOnly: false,
     selectionColor: undefined,
     selectionFillColor: undefined,
+    renderMode: "canvas",
     showImages: true,
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
     locale: "en",
+    documentLocale: undefined,
     messages: undefined,
   },
 )
@@ -177,14 +224,37 @@ type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: 
 
 const surfaceRef = ref<HTMLElement | null>(null)
 const m = provideXlsxMessages(() => props.locale, () => props.messages)
+
+// Number/date formats without a `[$-…]` section follow the surface locale. A
+// default `"en"` leaves a controller created with its own locale untouched.
+let hasAppliedDocumentLocale = false
+const effectiveDocumentLocale = computed(() => props.documentLocale ?? (props.locale === "en" ? undefined : props.locale))
+watch(
+  effectiveDocumentLocale,
+  (locale) => {
+    if (locale === undefined && !hasAppliedDocumentLocale) return
+    hasAppliedDocumentLocale = locale !== undefined
+    props.controller.setDocumentLocale?.(locale)
+  },
+  { immediate: true },
+)
 const descriptor = (
   key: keyof typeof m.value.common.descriptors,
   values: Record<string, string | number> = {},
 ) => formatOfficeMessage(m.value.common.descriptors[key], values)
 const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "XLSX" })
 const gridRef = ref<GridInstance | null>(null)
-const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
+const contextMenuRef = ref<{
+  openAt(clientX: number, clientY: number, target?: unknown): boolean
+  openForChart(chartId: string, clientX: number, clientY: number): boolean
+  openForDrawing(kind: "image" | "shape", id: string, clientX: number, clientY: number): boolean
+} | null>(null)
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
+const authoringKind = ref<XlsxAuthoringDialogKind | null>(null)
+
+function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringKind.value = kind
+}
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly)
 const selectionMode = computed(() => props.selectionMode)
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null)
@@ -445,6 +515,19 @@ function onGestureEnd(): void {
   webkitGestureActive = false
 }
 
+function onChartContextMenu(payload: { chartId: string; clientX: number; clientY: number }): void {
+  contextMenuRef.value?.openForChart(payload.chartId, payload.clientX, payload.clientY);
+}
+
+function onDrawingContextMenu(payload: {
+  id: string;
+  kind: "image" | "shape";
+  clientX: number;
+  clientY: number;
+}): void {
+  contextMenuRef.value?.openForDrawing(payload.kind, payload.id, payload.clientX, payload.clientY);
+}
+
 function emitContextMenuAt(clientX: number, clientY: number): void {
   const sel = props.controller.selection
   const active = props.controller.activeCell
@@ -679,5 +762,10 @@ defineExpose({
   box-sizing: border-box;
   pointer-events: none;
   position: absolute;
+}
+
+@media print {
+  .xlsx-sheet-surface--print-preview > :not(.xlsx-print-preview) { display: none !important; }
+  .xlsx-sheet-surface { overflow: visible !important; }
 }
 </style>

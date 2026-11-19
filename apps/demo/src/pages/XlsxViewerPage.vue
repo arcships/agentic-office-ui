@@ -45,6 +45,7 @@
         @controller-ready="onControllerReady"
         @diagnostic="onDiagnostic"
         @upload="openFilePicker"
+        @file-drop="onViewerFileDrop"
         @update:read-only="onReadOnlyChange"
       />
       <div v-else class="empty"><p>请选择工作簿、拖入本地文件或输入地址。</p></div>
@@ -52,11 +53,12 @@
 
     <div class="status-grid info-grid verification-section">
       <div><strong>状态：</strong><span data-testid="page-status" :data-state="pageState">{{ pageState }}</span></div>
-      <div><strong>文件：</strong><span data-testid="loaded-file">{{ displayName || "未打开" }}</span></div>
+      <div><strong>文件：</strong><span data-testid="loaded-file">{{ controller?.displayFileName || displayName || "未打开" }}</span></div>
       <div><strong>来源：</strong>{{ sourceKind }}</div>
       <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
-      <div><strong>请求 Worker：</strong><span data-testid="xlsx-worker-requested">{{ useWorker ? "开启" : "关闭" }}</span></div>
-      <div><strong>实际执行：</strong><span data-testid="xlsx-worker-actual">{{ actualWorkerMode }}</span></div>
+      <div><strong>请求 Worker：</strong><span data-testid="xlsx-worker-requested" :data-worker-requested="String(useWorker)">{{ useWorker ? "开启" : "关闭" }}</span></div>
+      <div><strong>实际执行：</strong><span data-testid="xlsx-worker-actual" :data-worker-backed="String(Boolean(controller?.isWorkerBacked))">{{ actualWorkerMode }}</span></div>
+      <div v-if="workerModeNote" class="worker-note" data-testid="xlsx-worker-note">{{ workerModeNote }}</div>
       <div data-testid="xlsx-hyperlink-count"><strong>超链接：</strong>{{ controller?.activeSheet?.hyperlinks.length ?? 0 }}</div>
       <div data-testid="xlsx-comment-count"><strong>批注：</strong>{{ controller?.activeSheet?.comments.length ?? 0 }}</div>
       <div data-testid="xlsx-conditional-format-count"><strong>条件格式：</strong>{{ controller?.activeSheet?.conditionalFormatRules.length ?? 0 }}</div>
@@ -93,6 +95,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, type PropType } from "vue"
 import {
+  isSupportedXlsxFileName,
   useXlsxViewerController,
   XlsxViewer,
   type XlsxDiagnostic,
@@ -111,7 +114,7 @@ const XlsxViewerWrapper = defineComponent({
     deferLoadingAboveBytes: { type: Number, default: 0 },
     urlPolicy: { type: Object as PropType<XlsxUrlPolicy>, required: true },
   },
-  emits: ["controller-ready", "diagnostic", "update:readOnly", "upload"],
+  emits: ["controller-ready", "diagnostic", "update:readOnly", "upload", "file-drop"],
   setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file,
@@ -131,6 +134,7 @@ const XlsxViewerWrapper = defineComponent({
       showUpload: true,
       style: { height: "100%" },
       onUpload: () => emit("upload"),
+      onFileDrop: (file: File) => emit("file-drop", file),
       "onUpdate:readOnly": (value: boolean) => emit("update:readOnly", value),
     })
   },
@@ -183,7 +187,9 @@ const urlPolicy = computed<XlsxUrlPolicy>(() => ({
 
 const viewerKey = computed(() => {
   if (!src.value && !fileBuffer.value) return ""
-  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
+  // Only a source change remounts the wrapper: a dropped file loads through the
+  // controller, and the page only mirrors its name and origin in the label.
+  return `${loadCounter.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
 })
 const pageState = computed(() => {
   if (inputError.value) return "error"
@@ -197,6 +203,15 @@ const actualWorkerMode = computed(() => {
   if (current.sourceState === "loading") return "加载中"
   if (current.sourceState === "error") return "加载失败"
   return current.isWorkerBacked ? "Worker" : "主线程"
+})
+// The Worker is a read-only path: an editable load always parses on the main
+// thread. Say so instead of showing "requested: on / actual: main thread" with
+// no explanation.
+const workerModeNote = computed(() => {
+  if (!useWorker.value) return "Worker 已关闭：本次加载在主线程解析。"
+  const current = controller.value
+  if (!current || current.sourceState !== "ready" || current.isWorkerBacked) return ""
+  return "Worker 只用于只读加载；当前为可编辑模式，解析在主线程执行。勾选“只读”后重新加载即可使用 Worker。"
 })
 
 function beginLoad(kind: string, name: string) {
@@ -237,7 +252,7 @@ function loadUrl() {
 
 function processFile(file: File) {
   const requestId = invalidateFileRead()
-  if (!file.name.toLowerCase().match(/\.(xlsx|xls|xlsb|xlsm|xltx|xltm|csv)$/)) {
+  if (!isSupportedXlsxFileName(file.name)) {
     inputError.value = { code: "INVALID_WORKBOOK", message: "请选择受支持的 Excel 或 CSV 文件。", sourceKind: "file" }
     return
   }
@@ -272,6 +287,20 @@ function openFilePicker() {
 
 function onControllerReady(nextController: XlsxViewerController) {
   controller.value = nextController
+}
+
+// The dropped workbook is already loading through `controller.loadFile()`; the
+// page only mirrors its name and origin so the status grid stays truthful and
+// a later remount keeps the dropped bytes.
+function onViewerFileDrop(file: File) {
+  invalidateFileRead()
+  inputError.value = null
+  sourceKind.value = "拖放文件"
+  displayName.value = file.name
+  void file.arrayBuffer().then((buffer) => {
+    src.value = null
+    fileBuffer.value = buffer
+  })
 }
 
 function onReadOnlyChange(value: boolean) {
@@ -343,7 +372,8 @@ h2 { margin-bottom: 4px; }
 .policy-panel input:not([type="checkbox"]) { min-width: 180px; }
 .error { color: #dc2626; font-size: 13px; margin: 0 0 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
-.viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; background: white; position: relative; transition: border-color 0.2s, background 0.2s; }
+.worker-note { grid-column: 1 / -1; color: #b45309; }
+.viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; background: white; position: relative; height: clamp(420px, 70vh, 760px); transition: border-color 0.2s, background 0.2s; }
 .viewer-container--drag-active { border-color: #3b82f6; border-width: 2px; background: rgba(59, 130, 246, 0.04); }
 .drag-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.08); z-index: 100; pointer-events: none; }
 .drag-overlay span { color: #3b82f6; font-size: 18px; font-weight: 600; }

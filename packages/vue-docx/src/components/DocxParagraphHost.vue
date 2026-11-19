@@ -5,13 +5,16 @@
     :class="{
       'docx-paragraph-host--editable': editable,
       'docx-paragraph-host--active': isActiveParagraph,
+      'docx-paragraph-host--bookmark-target': bookmarkTarget,
     }"
     :contenteditable="editable ? 'true' : undefined"
     :data-docx-paragraph-host="true"
     :data-docx-paragraph-node-index="paragraphIndex"
+    :data-docx-source-id="sourceId"
     data-testid="editor-paragraph"
     :data-node-index="paragraphIndex"
     :suppresscontenteditablewarning="editable ? 'true' : undefined"
+    :dir="paragraph.style?.direction"
     :style="paragraphStyle"
     :spellcheck="editable ? 'true' : undefined"
     @input="onInput"
@@ -34,16 +37,20 @@ import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted
 import type {
   DocxFloatingPageOriginPx,
   DocxEditorController,
+  DocxRevisionDisplay,
   DocxTextRange,
   NumberingDefinitionSet,
   ParagraphNode,
   DocxDocumentTheme,
 } from "@arcships/docx-core"
 import {
+  DOCX_CLIPBOARD_MIME,
   compareTextRangeBoundaries,
   paragraphText,
   paragraphIsList,
   paragraphTypographyStyle,
+  findDocumentSectionNodes,
+  reviewDisplayParagraph,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { useDocxMessages } from "../i18n"
@@ -53,19 +60,32 @@ import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
   readDocxTextHostText,
+  displayTextRangeToSourceTextRange,
+  paragraphSourceOffsetToDisplayOffset,
 } from "../composables/editor-selection"
+import { docxBookmarkNameFromClick } from "../composables/docx-bookmarks"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<{
     paragraph: ParagraphNode
     paragraphIndex: number
+    /** Source id consumed by block/word geometry (`data-docx-source-id`). */
+    sourceId?: string
     editable?: boolean
     documentTheme?: DocxDocumentTheme
     controller?: DocxEditorController
     numberingLabel?: string
     numberingDefinitions?: NumberingDefinitionSet
+    /** Resolved `w:beforeAutospacing` gap in CSS pixels (0 when unused). */
+    autoSpacingBeforePx?: number
+    /** Resolved `w:afterAutospacing` gap in CSS pixels (0 when unused). */
+    autoSpacingAfterPx?: number
+    /** Document `w:defaultTabStop` in CSS pixels; 48px (Word) when omitted. */
+    defaultTabStopPx?: number
     showTrackedChanges?: boolean
+    /** `inline`, `balloons` or `none`; omitted keeps historical inline markup. */
+    revisionDisplay?: DocxRevisionDisplay
     showCommentHighlights?: boolean
     pageNumber?: number
     totalPages?: number
@@ -80,6 +100,10 @@ const props = withDefaults(
     fieldResolutionNodeIndex?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    /** Part name of the header/footer story this paragraph belongs to. */
+    headerFooterPartName?: string
+    /** Story-local node index (`ni`) of a header/footer paragraph. */
+    sectionStoryNodeIndex?: number
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
     skipImageChildIndexes?: readonly number[]
     /** Page-relative origin used to place margin/page/column anchored images. */
@@ -97,10 +121,15 @@ const props = withDefaults(
       totalLineCount: number
       lineHeightPx: number
     }
+    /** Internal `#bookmark` link clicked in this paragraph. */
+    onInternalLinkClick?: (bookmarkName: string) => void
+    /** Transient highlight after the viewer revealed this bookmark target. */
+    bookmarkTarget?: boolean
   }>(),
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
+    revisionDisplay: "inline" as DocxRevisionDisplay,
   }
 )
 
@@ -122,6 +151,18 @@ let draftDocumentNonce: number | undefined
 let unregisterDraftFlusher: (() => void) | undefined
 
 // ── Computed ───────────────────────────────────────────────────────
+/**
+ * Paragraph as drawn for the current review mode. The source paragraph stays
+ * untouched: balloon/none only hide deleted runs from the display text, while
+ * the editing model and export keep every revision.
+ */
+const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  props.showTrackedChanges ? props.revisionDisplay : "none"
+)
+const displayParagraph = computed(() =>
+  reviewDisplayParagraph(props.paragraph, effectiveRevisionDisplay.value)
+)
+
 const isActiveParagraph = computed(() => {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
@@ -137,6 +178,8 @@ const paragraphStyle = computed<Record<string, any>>(() => {
     "--docx-editor-placeholder": m.value.docx.editor.placeholder,
     ...paragraphStyleToCss(props.paragraph, {
       numberingDefinitions: props.numberingDefinitions,
+      autoSpacingBeforePx: props.autoSpacingBeforePx,
+      autoSpacingAfterPx: props.autoSpacingAfterPx,
     }),
     // Keep the shared paragraph typography (alignment/direction) too.
     ...paragraphTypographyStyle(props.paragraph.style),
@@ -151,7 +194,7 @@ const paragraphStyle = computed<Record<string, any>>(() => {
   }
 
   const lineRange = props.lineRange
-  if (lineRange && !props.editable) {
+  if (lineRange) {
     const lineHeightPx = Math.max(1, Math.round(lineRange.lineHeightPx))
     const startLineIndex = Math.max(0, Math.round(lineRange.startLineIndex))
     const endLineIndex = Math.max(
@@ -170,25 +213,69 @@ const paragraphStyle = computed<Record<string, any>>(() => {
       ? marginBottomPx
       : 0
     // Pull the paragraph up so the first line of the slice lands at the top of
-    // the slot, then clip everything after the slice.
+    // the slot, then clip everything after the slice. Editable slices use
+    // `clip` rather than `hidden`: a scroll container would let focus scroll
+    // the full paragraph inside the fragment and reveal the wrong lines.
     resolved.marginTop = `${topSpacingPx - startLineIndex * lineHeightPx}px`
     resolved.marginBottom = `${bottomSpacingPx}px`
     resolved.height = `${Math.max(
       lineHeightPx,
       sliceLineCount * lineHeightPx + topSpacingPx + bottomSpacingPx
     )}px`
-    resolved.overflow = "hidden"
+    resolved.overflow = props.editable ? "clip" : "hidden"
   }
 
   return resolved
 })
 
+/**
+ * Header/footer paragraphs render inside a story, not the body: their index is
+ * a per-page rendering key and the text lives in `metadata`. Editing keeps the
+ * draft handling but skips every body-selection/structural path.
+ */
+const isSectionStory = computed(
+  () => props.withinHeaderFooter === true && typeof props.headerFooterPartName === "string"
+)
+
+/** Source paragraph for revision offsets; the rendered prop may be a display clone. */
+const sourceParagraph = computed<ParagraphNode>(() => {
+  const controller = props.controller
+  if (isSectionStory.value) {
+    const partName = props.headerFooterPartName
+    const region = props.headerFooterRegion
+    const nodeIndex = props.sectionStoryNodeIndex
+    if (controller && partName && region && nodeIndex !== undefined) {
+      const node = findDocumentSectionNodes(controller.model, region, partName)?.[nodeIndex]
+      if (node?.type === "paragraph") return node
+    }
+  } else {
+    const node = controller?.model.nodes[props.paragraphIndex]
+    if (node?.type === "paragraph") return node
+  }
+  return props.paragraph
+})
+
+function sectionStoryParagraphText(): string | undefined {
+  const controller = props.controller
+  const partName = props.headerFooterPartName
+  const region = props.headerFooterRegion
+  const nodeIndex = props.sectionStoryNodeIndex
+  if (!controller || !partName || !region || nodeIndex === undefined) return undefined
+  const nodes = findDocumentSectionNodes(controller.model, region, partName)
+  const node = nodes?.[nodeIndex]
+  return node?.type === "paragraph"
+    ? paragraphText(reviewDisplayParagraph(node, effectiveRevisionDisplay.value))
+    : undefined
+}
+
 const displayHtml = computed(() => {
   const theme = props.documentTheme
   const runOptions: ParagraphRunRenderOptions = {
     showTrackedChanges: props.showTrackedChanges,
+    revisionDisplay: effectiveRevisionDisplay.value,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
+    defaultTabStopPx: props.defaultTabStopPx,
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
@@ -208,14 +295,20 @@ const displayHtml = computed(() => {
     skipImageChildIndexes: props.skipImageChildIndexes,
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
+    drawingLabels: m.value.docx.drawing,
+    // Editable body paragraphs expose the link range so the link hover card can
+    // select the linked text before editing or removing the link.
+    emitLinkRangeAttributes: props.editable && Boolean(props.controller) && !props.withinHeaderFooter,
+    emitTextRangeAttributes: true,
+    paragraphSourceId: props.sourceId,
   }
 
   const vnodes = renderParagraphRuns(
-    props.paragraph,
+    displayParagraph.value,
     `p-${props.paragraphIndex}`,
     theme,
     props.numberingLabel ? { label: props.numberingLabel } as any : undefined,
-    undefined,
+    props.onInternalLinkClick,
     props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
@@ -241,11 +334,11 @@ function syncDraftFromDom(): void {
   if (!props.editable || !paragraphEl.value) return
   const domText = readCurrentDomText()
   if (draftText.value === null) {
-    draftBaseText = paragraphText(props.paragraph)
+    draftBaseText = paragraphText(displayParagraph.value)
     draftDocumentNonce = props.controller?.documentLoadNonce
   }
   draftText.value = domText
-  draftDirty.value = domText !== paragraphText(props.paragraph)
+  draftDirty.value = domText !== paragraphText(displayParagraph.value)
 }
 
 function clearDraft(): void {
@@ -262,18 +355,34 @@ function commitDraft(requireUnchangedBase = false): void {
   }
   if (requireUnchangedBase) {
     const controller = props.controller
-    const currentParagraph = controller?.model.nodes[props.paragraphIndex]
-    if (
-      !controller ||
-      draftDocumentNonce !== controller.documentLoadNonce ||
-      !currentParagraph ||
-      currentParagraph.type !== "paragraph" ||
-      paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
-    ) {
-      // The document changed under the draft (import/new document/external
-      // edit). Dropping the stale draft is safer than writing it elsewhere.
-      clearDraft()
-      return
+    if (isSectionStory.value) {
+      // A header/footer draft is validated against its own story: the paragraph
+      // lives in `metadata`, not in the body node list.
+      const currentStoryText = sectionStoryParagraphText()
+      if (
+        !controller ||
+        draftDocumentNonce !== controller.documentLoadNonce ||
+        currentStoryText === undefined ||
+        currentStoryText !== (draftBaseText ?? paragraphText(displayParagraph.value))
+      ) {
+        clearDraft()
+        return
+      }
+    } else {
+      const currentParagraph = controller?.model.nodes[props.paragraphIndex]
+      if (
+        !controller ||
+        draftDocumentNonce !== controller.documentLoadNonce ||
+        !currentParagraph ||
+        currentParagraph.type !== "paragraph" ||
+        paragraphText(reviewDisplayParagraph(currentParagraph, effectiveRevisionDisplay.value)) !==
+          (draftBaseText ?? paragraphText(displayParagraph.value))
+      ) {
+        // The document changed under the draft (import/new document/external
+        // edit). Dropping the stale draft is safer than writing it elsewhere.
+        clearDraft()
+        return
+      }
     }
   }
   const text = draftText.value
@@ -294,9 +403,15 @@ function selectionRoot(): HTMLElement | undefined {
 }
 
 function syncCurrentSelection(options?: { preservePendingRunStyle?: boolean }): void {
+  // Header/footer stories have no body location to mirror a DOM range onto:
+  // their paragraphs carry negative indices on purpose.
+  if (isSectionStory.value) return
   const root = selectionRoot()
   if (!root || !props.controller) return
-  syncDomSelectionToEditor(props.controller, root, undefined, options)
+  syncDomSelectionToEditor(props.controller, root, undefined, {
+    ...options,
+    revisionDisplay: effectiveRevisionDisplay.value,
+  })
 }
 
 function currentSelectionOffsets(textLength: number): { start: number; end: number } {
@@ -308,8 +423,28 @@ function currentSelectionOffsets(textLength: number): { start: number; end: numb
     range.end.location.nodeIndex === props.paragraphIndex
   if (range && startsHere && endsHere) {
     return {
-      start: Math.max(0, Math.min(range.start.offset, textLength)),
-      end: Math.max(0, Math.min(range.end.offset, textLength)),
+      start: Math.max(
+        0,
+        Math.min(
+          paragraphSourceOffsetToDisplayOffset(
+            sourceParagraph.value,
+            effectiveRevisionDisplay.value,
+            range.start.offset
+          ),
+          textLength
+        )
+      ),
+      end: Math.max(
+        0,
+        Math.min(
+          paragraphSourceOffsetToDisplayOffset(
+            sourceParagraph.value,
+            effectiveRevisionDisplay.value,
+            range.end.offset
+          ),
+          textLength
+        )
+      ),
     }
   }
   return { start: textLength, end: textLength }
@@ -321,7 +456,11 @@ function restoreControllerSelection(focus = true): void {
   const range = controller?.activeTextRange
   if (!controller || !root || !range) return
   void nextTick(() => {
-    restoreDomSelectionFromTextRange(root, range, { focus })
+    restoreDomSelectionFromTextRange(root, range, {
+      focus,
+      sourceModel: controller.model,
+      revisionDisplay: effectiveRevisionDisplay.value,
+    })
   })
 }
 
@@ -339,7 +478,11 @@ function deleteExpandedRange(): boolean {
   const offsets = currentSelectionOffsets(currentText.length)
   let range: DocxTextRange | undefined
   if (offsets.start < offsets.end) {
-    range = localTextRange(offsets.start, offsets.end)
+    range = displayTextRangeToSourceTextRange(
+      props.controller.model,
+      effectiveRevisionDisplay.value,
+      localTextRange(offsets.start, offsets.end)
+    )
   } else {
     syncCurrentSelection()
     const activeRange = props.controller.activeTextRange
@@ -386,7 +529,7 @@ function deleteAdjacentParagraph(direction: "backward" | "forward"): boolean {
     : {
         start: {
           location: { kind: "paragraph" as const, nodeIndex: props.paragraphIndex },
-          offset: currentText.length,
+          offset: paragraphText(sourceParagraph.value).length,
         },
         end: {
           location: { kind: "paragraph" as const, nodeIndex: adjacentIndex },
@@ -406,13 +549,19 @@ function onInput(_event: Event): void {
   syncCurrentSelection({ preservePendingRunStyle: true })
 }
 
-function onPointerDown(): void {
-  if (!props.editable || !props.controller) return
+function onPointerDown(event?: Event): void {
+  if (docxBookmarkNameFromClick(event?.target)) {
+    // An internal link is navigation, not a caret move: keep the click from
+    // collapsing the selection onto the table-of-contents entry.
+    event?.preventDefault()
+    return
+  }
+  if (!props.editable || !props.controller || isSectionStory.value) return
   props.controller.beginSelectionSession("pointer", { settleAfterMs: 250 })
 }
 
 function onMouseUp(): void {
-  if (!props.editable || !props.controller) return
+  if (!props.editable || !props.controller || isSectionStory.value) return
   syncCurrentSelection()
   props.controller.clearSelectionSession("pointer")
 }
@@ -420,6 +569,9 @@ function onMouseUp(): void {
 function onKeydown(event: KeyboardEvent): void {
   if (!props.editable || !props.controller) return
   if (isComposing.value || event.isComposing) return
+  // A header/footer paragraph only holds text: Enter/Backspace/Tab structural
+  // commands address body nodes, which this story does not have.
+  if (isSectionStory.value) return
   props.controller.beginSelectionSession("keyboard", { settleAfterMs: 120 })
 
   if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -479,6 +631,13 @@ function onKeyup(_event: KeyboardEvent): void {
 }
 
 function onClick(event: MouseEvent): void {
+  const bookmarkName = docxBookmarkNameFromClick(event.target)
+  if (bookmarkName && props.onInternalLinkClick) {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onInternalLinkClick(bookmarkName)
+    return
+  }
   syncCurrentSelection()
   emit("click", props.paragraphIndex, event)
 }
@@ -501,6 +660,7 @@ function onBlur(): void {
 
 function onCompositionStart(): void {
   isComposing.value = true
+  if (isSectionStory.value) return
   props.controller?.beginSelectionSession("composition")
 }
 
@@ -508,67 +668,61 @@ function onCompositionEnd(_event: Event): void {
   isComposing.value = false
   syncDraftFromDom()
   syncCurrentSelection({ preservePendingRunStyle: true })
+  if (isSectionStory.value) return
   props.controller?.clearSelectionSession("composition")
 }
 
-function clipboardHtmlToText(html: string): string {
-  if (!html) return ""
-  if (typeof DOMParser !== "undefined") {
-    const parsed = new DOMParser().parseFromString(html, "text/html")
-    parsed.querySelectorAll("script,style").forEach((node) => node.remove())
-    parsed.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
-    parsed.querySelectorAll("p,div,li,tr,h1,h2,h3,h4,h5,h6,blockquote").forEach((node) => {
-      node.append("\n")
-    })
-    return parsed.body?.textContent ?? ""
+function clipboardSourcesFromEvent(event: ClipboardEvent): {
+  internal: string
+  html: string
+  rtf: string
+  text: string
+} {
+  const clipboard = event.clipboardData
+  return {
+    internal: clipboard?.getData(DOCX_CLIPBOARD_MIME) ?? "",
+    html: clipboard?.getData("text/html") ?? "",
+    rtf: clipboard?.getData("text/rtf") ?? "",
+    text: clipboard?.getData("text/plain") ?? "",
   }
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
 }
 
 function onPaste(event: ClipboardEvent): void {
   if (!props.editable || !props.controller) return
-  const clipboard = event.clipboardData
-  const html = clipboard?.getData("text/html") ?? ""
-  const plain = clipboard?.getData("text/plain") ?? ""
-  const text = html ? clipboardHtmlToText(html) || plain : plain
-  if (!text) {
+  // A header/footer story has no body paste target: let the browser insert the
+  // text into the content-editable and commit the flattened result on blur.
+  if (isSectionStory.value) return
+  const sources = clipboardSourcesFromEvent(event)
+  if (!sources.internal && !sources.html && !sources.rtf && !sources.text) {
     // Leave file/image clipboards to the browser instead of swallowing them.
     return
   }
 
   event.preventDefault()
-  const currentText = readCurrentDomText()
-  const offsets = currentSelectionOffsets(currentText.length)
   const controller = props.controller
 
-  // Use the model range for cross-paragraph selections; the local paragraph
-  // offsets can only describe a selection contained in this host.
-  const activeRange = controller.activeTextRange
-  if (activeRange && compareTextRangeBoundaries(activeRange.start, activeRange.end) < 0) {
-    syncDraftFromDom()
-    commitDraft(true)
-    const nextRange = controller.replaceExpandedSelection(text, activeRange)
-    if (nextRange) restoreControllerSelection()
-    return
-  }
+  // Flush the live draft first so the model matches the DOM the caret was
+  // measured against, then let the controller paste every flavour it received.
+  syncDraftFromDom()
+  commitDraft(true)
+  const currentText = readCurrentDomText()
+  currentSelectionOffsets(currentText.length)
 
-  const caretOffset = offsets.end + text.length
-  const nextText = `${currentText.slice(0, offsets.end)}${text}${currentText.slice(offsets.end)}`
-  if (nextText === currentText) return
-  clearDraft()
-  controller.commitParagraphText(props.paragraphIndex, nextText)
-  void nextTick(() => {
-    controller.setActiveTextRange(localTextRange(caretOffset, caretOffset))
-    restoreControllerSelection()
-  })
+  void controller
+    .pasteClipboardData({
+      internal: sources.internal || undefined,
+      html: sources.html || undefined,
+      rtf: sources.rtf || undefined,
+      text: sources.text || undefined,
+    })
+    .then((changed) => {
+      if (changed) restoreControllerSelection()
+    })
 }
 
 // ── Watch for model changes (clears draft when paragraph changes externally) ─
 watch(
-  () => paragraphText(props.paragraph),
+  () => paragraphText(displayParagraph.value),
   () => {
     if (!draftDirty.value) clearDraft()
   }
@@ -628,8 +782,8 @@ defineExpose({
   focus() { paragraphEl.value?.focus() },
   restoreDraft(text: string) {
     draftText.value = text
-    draftDirty.value = text !== paragraphText(props.paragraph)
-    draftBaseText = paragraphText(props.paragraph)
+    draftDirty.value = text !== paragraphText(displayParagraph.value)
+    draftBaseText = paragraphText(displayParagraph.value)
     draftDocumentNonce = props.controller?.documentLoadNonce
   },
 })
@@ -652,5 +806,11 @@ defineExpose({
 }
 .docx-paragraph-host--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-paragraph-host--bookmark-target {
+  background: rgba(250, 204, 21, 0.22);
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.55);
+  border-radius: 2px;
+  transition: background-color 120ms ease-out;
 }
 </style>

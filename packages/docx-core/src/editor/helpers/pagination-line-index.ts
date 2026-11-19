@@ -13,6 +13,10 @@ import {
 } from "./pretext-build";
 import { paragraphAvailableTextWidthPx } from "./paragraph-geometry";
 import { estimateParagraphLineHeightPx } from "./line-height";
+import {
+  resolveDefaultTabStopPx,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
 
 /**
  * Wrap line index at which a mid-paragraph `lastRenderedPageBreak` splits the
@@ -26,7 +30,8 @@ export function paragraphLastRenderedPageBreakLineIndex(
   paragraph: ParagraphNode,
   lineCount: number,
   availableWidthPx?: number,
-  numberingDefinitions?: NumberingDefinitionSet
+  numberingDefinitions?: NumberingDefinitionSet,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number | undefined {
   if (!Number.isFinite(lineCount) || lineCount <= 1) {
     return undefined;
@@ -40,6 +45,7 @@ export function paragraphLastRenderedPageBreakLineIndex(
   const source = buildParagraphPretextLayoutSource(paragraph, {
     allowExplicitLineBreakText: true,
     expandTabsForLayout: true,
+    defaultTabStopPx: resolveDefaultTabStopPx(layoutDefaults?.defaultTabStopTwips),
   });
   if (!source || source.text.length === 0) {
     return undefined;

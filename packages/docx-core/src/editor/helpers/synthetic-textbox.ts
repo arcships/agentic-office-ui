@@ -366,18 +366,57 @@ export function syntheticTextBoxTextValue(image: ImageRunNode): string | undefin
     return explicit;
   }
 
-  const paragraphs = image.sourceXml
-    ? syntheticTextBoxParagraphsFromRunXml(image.sourceXml)
-    : [];
-  if (paragraphs.length === 0) {
-    return undefined;
+  const xml = syntheticTextBoxXml(image);
+  const paragraphs = xml ? syntheticTextBoxParagraphsFromRunXml(xml) : [];
+  if (paragraphs.length > 0) {
+    return paragraphs
+      .map((paragraph) =>
+        paragraph.segments.map((segment) => segment.text).join("")
+      )
+      .join("\n");
   }
 
-  return paragraphs
-    .map((paragraph) =>
-      paragraph.segments.map((segment) => segment.text).join("")
-    )
+  // The markup is the primary source: it also resolves PAGE/NUMPAGES fields.
+  // The parsed model content keeps the text when no markup is left.
+  return textBoxContentTextValue(image.textBox);
+}
+
+/**
+ * The markup of a synthetic text box. An edit clears `sourceXml` (the engine has
+ * to rebuild the run) but `textBoxSourceXml` keeps the drawing for export and
+ * for the picture-layer checks.
+ */
+export function syntheticTextBoxXml(image: ImageRunNode): string | undefined {
+  return image.sourceXml ?? image.textBoxSourceXml;
+}
+
+function textBoxContentTextValue(
+  content: ImageRunNode["textBox"]
+): string | undefined {
+  if (!content || content.paragraphs.length === 0) {
+    return undefined;
+  }
+  return content.paragraphs
+    .map((paragraph) => paragraph.segments.map((segment) => segment.text).join(""))
     .join("\n");
+}
+
+/** Converts the model's text box content into render paragraphs. */
+function modelTextBoxParagraphs(
+  image: ImageRunNode
+): SyntheticTextBoxParagraph[] {
+  const content = image.textBox;
+  if (!content || content.paragraphs.length === 0) {
+    return [];
+  }
+  return content.paragraphs.map((paragraph) => ({
+    align: paragraph.align,
+    lineHeightPx: paragraph.lineHeightPx,
+    segments: paragraph.segments.map((segment) => ({
+      text: segment.text,
+      style: segment.style,
+    })),
+  }));
 }
 
 export function resolveSyntheticTextBoxParagraphs(
@@ -387,15 +426,16 @@ export function resolveSyntheticTextBoxParagraphs(
   pageNumberFormat?: string,
   resolveStyleRefFieldValue?: (target: string) => string | undefined
 ): SyntheticTextBoxParagraph[] {
-  const baseParagraphs = image.sourceXml
+  const xml = syntheticTextBoxXml(image);
+  const baseParagraphs = xml
     ? syntheticTextBoxParagraphsFromRunXml(
-        image.sourceXml,
+        xml,
         pageNumber,
         totalPages,
         pageNumberFormat,
         resolveStyleRefFieldValue
       )
-    : [];
+    : modelTextBoxParagraphs(image);
   const explicitText = image.textBoxText;
   if (typeof explicitText !== "string") {
     return baseParagraphs;
@@ -440,7 +480,7 @@ export function syntheticTextBoxSvg(
   pageNumberFormat?: string,
   resolveStyleRefFieldValue?: (target: string) => string | undefined
 ): string | undefined {
-  if (!image.syntheticTextBox || !image.sourceXml) {
+  if (!image.syntheticTextBox || !syntheticTextBoxXml(image)) {
     return undefined;
   }
 
@@ -610,19 +650,20 @@ export function syntheticTextBoxSvg(
 }
 
 export function syntheticTextBoxContainsPictureLayer(image: ImageRunNode): boolean {
-  if (!image.syntheticTextBox || !image.sourceXml) {
+  const xml = syntheticTextBoxXml(image);
+  if (!image.syntheticTextBox || !xml) {
     return false;
   }
 
-  if (/<pic:pic\b|<a:blip\b/i.test(image.sourceXml)) {
+  if (/<pic:pic\b|<a:blip\b/i.test(xml)) {
     return true;
   }
 
-  if (!/<wpg:wgp\b/i.test(image.sourceXml)) {
+  if (!/<wpg:wgp\b/i.test(xml)) {
     return false;
   }
 
-  const groupedShapes = balancedTagXmlBlocks(image.sourceXml, "wps:wsp");
+  const groupedShapes = balancedTagXmlBlocks(xml, "wps:wsp");
   return groupedShapes.some((shapeXml) => {
     const shapePropertiesXml =
       balancedTagXmlBlocks(shapeXml, "wps:spPr")[0] ?? "";
@@ -641,12 +682,11 @@ export function syntheticTextBoxContainsPictureLayer(image: ImageRunNode): boole
 export function syntheticTextBoxActsAsTopAndBottomMasthead(
   image: ImageRunNode
 ): boolean {
-  if (!image.syntheticTextBox || !image.sourceXml) {
+  const xml = syntheticTextBoxXml(image);
+  if (!image.syntheticTextBox || !xml) {
     return false;
   }
 
-  return (
-    /<wpg:wgp\b/i.test(image.sourceXml) && /<wps:wsp\b/i.test(image.sourceXml)
-  );
+  return /<wpg:wgp\b/i.test(xml) && /<wps:wsp\b/i.test(xml);
 }
 

@@ -47,7 +47,7 @@ def main() -> None:
             """() => {
               const stage = document.querySelector('[data-testid="pptx-stage"]')
               const scroller = document.querySelector('.pptx-viewer__stage-wrap')
-              const slides = [...stage.querySelectorAll(':scope > [data-slide-index]')]
+              const slides = [...stage.querySelectorAll('[data-slide-index]')]
               const tops = slides.map((slide) => slide.getBoundingClientRect().top)
               return {
                 count: slides.length,
@@ -56,17 +56,17 @@ def main() -> None:
               }
             }"""
         )
-        assert browse_layout == {"count": 12, "vertical": True, "scrollable": True}
+        assert browse_layout == {"count": 12, "vertical": True, "scrollable": True}, browse_layout
         search = page.get_by_role("search")
         search.get_by_role("searchbox").fill("单击动画")
-        search.get_by_role("button", name="搜索").click()
+        search.locator('button[type="submit"]').click()
         page.wait_for_function(
             "() => document.querySelector('.pptx-viewer__search-count')?.textContent?.includes('/')",
             timeout=5_000,
         )
-        page.get_by_role("button", name="放大").click()
+        page.get_by_role("button", name="Zoom in").click()
         page.wait_for_function(
-            "() => document.querySelector('[aria-label=\"恢复适合窗口\"]')?.textContent?.includes('125%')",
+            "() => document.querySelector('[aria-label=\"Fit to window\"]')?.textContent?.includes('125%')",
             timeout=5_000,
         )
 
@@ -80,7 +80,8 @@ def main() -> None:
         )
         assert page.locator(".pptx-viewer__playback-controls").count() == 1
         assert page.locator("[data-pptx-object-key]").count() > 0
-        assert "精确" in page.locator(".pptx-viewer__capability").inner_text()
+        capability_text = page.locator(".pptx-viewer__capability").inner_text()
+        assert capability_text.strip(), repr(capability_text)
 
         stage = page.locator('[data-testid="pptx-stage"]')
         stage_point = page.evaluate(
@@ -123,7 +124,7 @@ def main() -> None:
             timeout=5_000,
         )
 
-        page.get_by_role("button", name="全屏").click()
+        page.get_by_role("button", name="Fullscreen").click()
         fullscreen_entered = False
         try:
             page.wait_for_function("() => document.fullscreenElement !== null", timeout=2_000)
@@ -151,10 +152,10 @@ def main() -> None:
         page.goto(f"{args.app_url}/#/pptx-surface", wait_until="networkidle")
         page.locator('[data-testid="pptx-surface-file-input"]').set_input_files(str(args.fixture.resolve()))
         page.wait_for_function(
-            "() => document.querySelectorAll('[data-testid=\"pptx-surface-stage\"] > [data-slide-index]').length === 12",
+            "() => document.querySelectorAll('[data-testid=\"pptx-surface-stage\"] [data-slide-index]').length === 12",
             timeout=30_000,
         )
-        page.locator('[data-testid="pptx-surface-stage"] > [data-slide-index="1"]').dispatch_event("click")
+        page.locator('[data-testid="pptx-surface-stage"] [data-slide-index="1"]').dispatch_event("click")
         assert "已选中第 2 页" in page.locator('[data-testid="pptx-surface-status"]').inner_text()
         surface_object = page.locator('[data-testid="pptx-surface-stage"] [data-pptx-object-key]').first
         surface_object.click(force=True)

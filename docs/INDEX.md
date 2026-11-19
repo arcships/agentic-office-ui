@@ -16,6 +16,7 @@
 | [guide/xlsx.md](guide/xlsx.md) | XLSX 查看器、控制器和可选功能 |
 | [guide/pdf.md](guide/pdf.md) | PDF 来源、属性、事件和 Runtime |
 | [guide/pptx.md](guide/pptx.md) | PPTX 纵向浏览、Surface 事件、播放和自定义播放器 |
+| [guide/viewer-keyboard.md](guide/viewer-keyboard.md) | DOCX/PDF/PPTX 共享键盘映射、各组件快捷键和焦点环 |
 | [guide/reference-selection.md](guide/reference-selection.md) | 四种 Surface 的统一选择模式、确认事件、expose 与宿主状态边界 |
 | [guide/surface-migration-guide.md](guide/surface-migration-guide.md) | 接入 0.5.3 最小 Surface 与手势缩放指南 |
 | [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |
@@ -34,6 +35,7 @@
 | [architecture-review-and-target-design.md](architecture-review-and-target-design.md) | 目标架构、包边界、状态所有权和兼容约束 |
 | [docx-viewer-controlled-surface-and-pagination-fix.md](docx-viewer-controlled-surface-and-pagination-fix.md) | DOCX 受控文档面、分页切片、缩放测量、纸面主题和批注布局修复合同 |
 | [docx-floating-images.md](docx-floating-images.md) | DOCX 浮动图片定位基准、层级、旋转占位、绕排与 tight/through 限制 |
+| [xlsx-authoring-surface.md](xlsx-authoring-surface.md) | XLSX 图表/批注/超链接/表格/条件格式/验证/冻结窗格的作者入口、导出与撤销合同 |
 | [surface-search-and-pdf-selection-design.md](surface-search-and-pdf-selection-design.md) | 四种 Surface 的统一搜索会话、Find Bar、精确定位，以及 PDF glyph 选择与交互优化设计 |
 | [pdf-text-layer-issue.md](pdf-text-layer-issue.md) | PDF 透明 text layer 历史复盘，以及 0.6.0 无障碍文本层的恢复边界 |
 | [unified-surface-api-design.md](unified-surface-api-design.md) | 统一 Surface API 设计——四个 surface 组件的边界、样式、事件、expose 合同 |

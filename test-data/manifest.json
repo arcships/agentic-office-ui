@@ -16,9 +16,9 @@
       "type": "xlsx",
       "category": "normal",
       "source": "synthetic-v1",
-      "expected": "parse workbook with charts, images, rich cell visuals, shapes and controls",
-      "bytes": 32070,
-      "sha256": "d012d0bcaf13a461a21e676642403b76a6ec13799b3126f2f5d50203c400694b"
+      "expected": "parse a workbook with charts, an embedded image, merged cells, multi-axis freeze panes, data validation and conditional-format visuals",
+      "bytes": 32255,
+      "sha256": "a92bbb9b840dbe01dfb24a0a158946e8f71a0dd0966bcd30780117726d91d18e"
     },
     {
       "file": "chinese-mixed.docx",
@@ -28,6 +28,15 @@
       "expected": "parse mixed Chinese and Latin text without losing characters",
       "bytes": 35981,
       "sha256": "189b875ed681299e768ef21806a80295b592bc6f237972ca2a8d4e0154f8e91e"
+    },
+    {
+      "file": "cjk-report.pdf",
+      "type": "pdf",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "extract per-page CJK text and search Chinese keywords",
+      "bytes": 3301,
+      "sha256": "ce48dfe7f6a27ba0541ee408c12b3c441f3fd0abb72c43f0d41174091157147e"
     },
     {
       "file": "contract-page.png",
@@ -76,6 +85,15 @@
       "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
     },
     {
+      "file": "encrypted.pdf",
+      "type": "pdf",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "reject without a password and open with the documented password arcships",
+      "bytes": 2710,
+      "sha256": "90bbe4989aee286e7562536b2eec8674f5ee6a0266ef006932bfb449cbac9be1"
+    },
+    {
       "file": "field-citations.json",
       "type": "json",
       "category": "normal",
@@ -116,9 +134,9 @@
       "type": "pdf",
       "category": "large",
       "source": "synthetic-v1",
-      "expected": "open a multi-page PDF fixture without network access",
-      "bytes": 27641,
-      "sha256": "ac4f529551660ef2b2ac5564513d700a0a45aa58f1514ad5c66ef341189980e1"
+      "expected": "open a 240-page contract for first-render and page-turn timing",
+      "bytes": 208838,
+      "sha256": "47d575278e886ba6fd8f745df8a1ce37c258a7b6999dcca562d0164cad761923"
     },
     {
       "file": "large-grid.xlsx",
@@ -148,6 +166,15 @@
       "sha256": "ceadaeae36915496b5903c983674341a80d98c21d2138ce2a97bcaa27f816ac9"
     },
     {
+      "file": "page-sizes.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render an A4 portrait section, an A4 landscape section and a US Letter section with distinct per-section headers and footers",
+      "bytes": 38003,
+      "sha256": "28719a3e26d8e1328c04b2f73204ef82aef0ad0ecce664049ddcf3134ec77d6f"
+    },
+    {
       "file": "report-with-image.docx",
       "type": "docx",
       "category": "normal",
@@ -166,20 +193,38 @@
       "sha256": "9e8d1852f7cde12e83bd91d0452a2941fff5b4b55f901235d1ba5c22f1f60e09"
     },
     {
+      "file": "review-threads.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render comment threads with replies, resolved threads, two comments on one paragraph, a cross-paragraph range, a cell comment, a header comment, row deletion and row-height revisions",
+      "bytes": 38005,
+      "sha256": "28c5029ab40dae32ed8f73a4fe33aaa5ecf0f8d5308e71a9ee5d1c77b228b3b3"
+    },
+    {
       "file": "rotated-pages.pdf",
       "type": "pdf",
       "category": "boundary",
       "source": "synthetic-v1",
-      "expected": "open pages with rotation metadata",
-      "bytes": 2376,
-      "sha256": "7cdd5c1a980e4c40f78bdf88e5c5268adf20c57a507795d4191b74c6a74e65a4"
+      "expected": "open an upright page and a page whose /Rotate 90 metadata viewers must apply",
+      "bytes": 2413,
+      "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6"
+    },
+    {
+      "file": "sales-table-validated.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse multi-axis freeze panes, list validation and two-letter column widths",
+      "bytes": 14290,
+      "sha256": "c9e4a6f24730892495b7c28ef6bc7df3bd314e0798f1ac3d7e603a799375553a"
     },
     {
       "file": "sales-table.xlsx",
       "type": "xlsx",
       "category": "normal",
       "source": "synthetic-v1",
-      "expected": "parse a sales table and preserve formulas during edits",
+      "expected": "parse a sales workbook with tables, formulas and number formats",
       "bytes": 13226,
       "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
     },
@@ -197,9 +242,27 @@
       "type": "pdf",
       "category": "boundary",
       "source": "synthetic-v1",
-      "expected": "open an image-only scanned invoice",
-      "bytes": 39568,
-      "sha256": "3d905e77053715474caa5ef239e6147635fea35b249079b8d52912badad6d437"
+      "expected": "open image-only scanned pages without a native text layer",
+      "bytes": 39398,
+      "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26"
+    },
+    {
+      "file": "sections-columns.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render portrait, landscape and two-column sections with per-section headers, a text box and a behind-text watermark",
+      "bytes": 59524,
+      "sha256": "c4c1b8ad5f7ab70f4b2d8c7e572a1492b2d614149f80ddcff7041b514a9b994a"
+    },
+    {
+      "file": "table-structures.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render vertical merges, grid spans, nested tables, multi-paragraph cells, repeating tblHeader rows and a table inside the page header",
+      "bytes": 37303,
+      "sha256": "1c5453c9e0b16a0fc96a4b88655f14796f061aadca1bcc251281d3b3389a6adf"
     }
   ]
 }

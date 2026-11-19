@@ -1,5 +1,5 @@
 {
-  "console": [],
+  "console": ["willReadFrequently"],
   "pageErrors": [],
   "requestFailures": [],
   "responses": []

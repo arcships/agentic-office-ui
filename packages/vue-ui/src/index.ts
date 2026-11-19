@@ -39,6 +39,38 @@ export type {
   OfficeMenuKeyboardOptions,
 } from "./composables/office-menu-keyboard"
 
+// Shared viewer keyboard map (DOCX / PDF / PPTX)
+export {
+  VIEWER_KEYBOARD_SHORTCUTS,
+  isEditableViewerTarget,
+  isInteractiveViewerTarget,
+  resolveViewerKeyCommand,
+  useViewerKeys,
+} from "./composables/viewer-keys"
+export type {
+  ViewerKeyCommand,
+  ViewerKeyEvent,
+  ViewerKeyboard,
+  ViewerKeyMapOptions,
+  ViewerKeyMode,
+  ViewerKeyOptions,
+  ViewerKeySwitch,
+} from "./composables/viewer-keys"
+
+// Shared drag-and-drop file import (DOCX / XLSX / PDF / PPTX)
+export {
+  FILE_DROP_OUTLINE,
+  fileDropExtension,
+  isSupportedDropFile,
+  useFileDrop,
+} from "./composables/file-drop"
+export type {
+  FileDropAccept,
+  FileDropCandidate,
+  UseFileDropOptions,
+  UseFileDropReturn,
+} from "./composables/file-drop"
+
 // Office selection primitives
 export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"
 export { default as OfficeRegionSelector } from "./components/OfficeRegionSelector.vue"

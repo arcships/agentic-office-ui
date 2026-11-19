@@ -6,7 +6,7 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules (37):
+// Completed modules (38):
 //   constants.ts           — global constants + theme/handle/wrap-mode tables
 //   performance.ts         — import performance tracing
 //   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
@@ -18,6 +18,7 @@
 //   default-model.ts       — defaultStarterModel / createBlankDocumentModel
 //   state.ts               — editor state machine
 //   page-measurement.ts    — page height measurement
+//   body-measurement.ts    — clipped body rects for page height feedback
 //   xml-parsing.ts         — XML parsing (part 1: run-style, tracked tokens, image transforms)
 //   xml-parsing-extra.ts   — XML parsing (part 2: paragraph indent extraction, list indent resolution)
 //   style-to-css.ts        — runStyleToCss (part 1)
@@ -29,9 +30,11 @@
 //   table-utils-extra.ts   — table utilities (part 2)
 //   table-metrics.ts       — shared table/column width metrics for render + pagination
 //   paragraph-toc.ts       — paragraph table-of-contents leaf (cycle-breaker)
+//   bookmarks.ts           — bookmark-name -> body node navigation index
 //   field-helpers.ts       — form-field helpers
 //   synthetic-textbox.ts   — synthetic textbox
 //   paragraph-geometry.ts  — paragraph geometry / wrap calculation
+//   image-layer-order.ts   — Word relativeHeight image layer order commands
 //   drop-cap.ts            — drop-cap layout
 //   letterhead.ts          — letterhead layout
 //   line-height.ts         — estimateParagraphLineHeightPx (part 1)
@@ -42,6 +45,7 @@
 //   paragraph-tracked.ts   — paragraph tracked-change extraction
 //   pretext-build.ts       — buildParagraphPretextLayoutSource
 //   pretext-measure.ts     — pretext measurement integration
+//   paragraph-line-metrics.ts — per-line ascent/descent metrics for pagination
 //   tracked-changes.ts     — tracked changes and comments collection
 //   tracked-changes-inline.ts — XML visible-unit ↔ model-child cursor mapping
 //   tracked-changes-table.ts — table/row/cell revision parsing and anchoring
@@ -50,6 +54,7 @@
 //   tracked-change-table-decisions.ts — accept/reject table rows, cells and properties
 //   tracked-change-markup-loss.ts — report revisions an edit dropped
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
+//   revision-display.ts    — inline/balloons/none display model (deleted runs leave the body)
 //   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
 //   selection-helpers-range.ts — range normalization/cloning/selection resolution
 //   selection-restore.ts   — DOM selection restore heuristics
@@ -72,6 +77,7 @@ export * from "./default-model";
 export * from "./model-validation";
 export * from "./state";
 export * from "./page-measurement";
+export * from "./body-measurement";
 export * from "./xml-parsing";
 export * from "./xml-parsing-extra";
 export * from "./style-to-css";
@@ -85,10 +91,13 @@ export * from "./table-metrics";
 export * from "./table-structure";
 export * from "./list-numbering";
 export * from "./paragraph-toc";
+export * from "./bookmarks";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";
+export * from "./image-layer-order";
 export * from "./drop-cap";
+export * from "./drawing-objects";
 export * from "./letterhead";
 export * from "./line-height";
 export * from "./line-height-wrap";
@@ -105,6 +114,7 @@ export * from "./selection-restore";
 export * from "./section-manipulation";
 export * from "./pretext-build";
 export * from "./pretext-measure";
+export * from "./paragraph-line-metrics";
 export * from "./tracked-changes";
 export {
   resolveTableTrackedMarkup,
@@ -117,6 +127,7 @@ export * from "./tracked-change-decisions";
 export * from "./tracked-change-table-decisions";
 export * from "./tracked-change-markup-loss";
 export * from "./tracked-changes-gutter";
+export * from "./revision-display";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";
 export * from "./pagination-line-index";

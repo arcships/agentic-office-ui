@@ -7,6 +7,7 @@
 import {
   paragraphLocationKey,
   type DocxEditorController,
+  type DocxRevisionDisplay,
   type DocxTextRangeLocation,
   type DocxTrackedChange,
 } from "@arcships/docx-core"
@@ -18,6 +19,8 @@ export interface UseDocxTrackChangesResult {
   showTrackedChanges: boolean
   setShowTrackedChanges: (showTrackedChanges: boolean) => void
   toggleShowTrackedChanges: () => void
+  revisionDisplay: DocxRevisionDisplay
+  setRevisionDisplay: (display: DocxRevisionDisplay) => void
   changesByLocation: Map<string, DocxTrackedChange[]>
   getChangesForLocation: (location: DocxTextRangeLocation) => DocxTrackedChange[]
   acceptTrackedChange: (changeId: string) => boolean
@@ -34,6 +37,8 @@ export function useDocxTrackChanges(
     | "showTrackedChanges"
     | "setShowTrackedChanges"
     | "toggleShowTrackedChanges"
+    | "revisionDisplay"
+    | "setRevisionDisplay"
     | "acceptTrackedChange"
     | "rejectTrackedChange"
     | "acceptAllTrackedChanges"
@@ -56,6 +61,8 @@ export function useDocxTrackChanges(
     get trackedChanges() { return editor.trackedChanges },
     get trackedChangeCount() { return editor.trackedChangeCount },
     get showTrackedChanges() { return editor.showTrackedChanges },
+    get revisionDisplay() { return editor.revisionDisplay },
+    setRevisionDisplay: editor.setRevisionDisplay,
     setShowTrackedChanges: editor.setShowTrackedChanges,
     toggleShowTrackedChanges: editor.toggleShowTrackedChanges,
     changesByLocation,

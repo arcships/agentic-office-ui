@@ -1,4 +1,10 @@
 import type { PptxMorphMatch, PptxSlideTransition } from "../playback/types"
+import {
+  pptxTransitionDirection,
+  pptxTransitionProgress,
+  pptxTransitionSplitMask,
+  pptxTransitionWipeClip,
+} from "../playback/transitions"
 
 interface PptxCapturedObjectGeometry {
   left: number
@@ -24,6 +30,9 @@ interface SavedStyle {
   translate: string
   scale: string
   clipPath: string
+  maskImage: string
+  maskRepeat: string
+  maskSize: string
   willChange: string
   position: string
   zIndex: string
@@ -57,31 +66,6 @@ export function capturePptxTransition(root: HTMLElement): PptxTransitionCapture 
   return { layer, objects }
 }
 
-function directionVector(direction: string | undefined): { x: number; y: number } {
-  switch ((direction ?? "l").toLowerCase()) {
-    case "r":
-    case "right": return { x: -1, y: 0 }
-    case "u":
-    case "up": return { x: 0, y: 1 }
-    case "d":
-    case "down": return { x: 0, y: -1 }
-    default: return { x: 1, y: 0 }
-  }
-}
-
-function wipeClip(direction: string | undefined, progress: number): string {
-  const hidden = (1 - progress) * 100
-  switch ((direction ?? "l").toLowerCase()) {
-    case "r":
-    case "right": return `inset(0 0 0 ${hidden}%)`
-    case "u":
-    case "up": return `inset(${hidden}% 0 0 0)`
-    case "d":
-    case "down": return `inset(0 0 ${hidden}% 0)`
-    default: return `inset(0 ${hidden}% 0 0)`
-  }
-}
-
 function saveStyle(element: HTMLElement): SavedStyle {
   return {
     element,
@@ -89,6 +73,9 @@ function saveStyle(element: HTMLElement): SavedStyle {
     translate: element.style.translate,
     scale: element.style.scale,
     clipPath: element.style.clipPath,
+    maskImage: element.style.maskImage,
+    maskRepeat: element.style.maskRepeat,
+    maskSize: element.style.maskSize,
     willChange: element.style.willChange,
     position: element.style.position,
     zIndex: element.style.zIndex,
@@ -101,6 +88,9 @@ function restoreStyle(saved: SavedStyle): void {
   element.style.translate = saved.translate
   element.style.scale = saved.scale
   element.style.clipPath = saved.clipPath
+  element.style.maskImage = saved.maskImage
+  element.style.maskRepeat = saved.maskRepeat
+  element.style.maskSize = saved.maskSize
   element.style.willChange = saved.willChange
   element.style.position = saved.position
   element.style.zIndex = saved.zIndex
@@ -269,7 +259,7 @@ export function mountPptxTransition(
   transition: PptxSlideTransition | undefined,
   morphMatches: readonly PptxMorphMatch[] = [],
 ): PptxTransitionHandle | null {
-  if (!capture || !transition || transition.kind === "cut" || transition.durationMs <= 0) return null
+  if (!capture || !transition || transition.kind.trim().toLowerCase() === "cut" || transition.durationMs <= 0) return null
   const incoming = root.firstElementChild as HTMLElement | null
   if (!incoming) return null
   const rootStyle = saveStyle(root)
@@ -280,7 +270,7 @@ export function mountPptxTransition(
   if (getComputedStyle(root).position === "static") root.style.position = "relative"
   incoming.style.position = "relative"
   incoming.style.zIndex = "1"
-  incoming.style.willChange = "opacity, translate, clip-path"
+  incoming.style.willChange = "opacity, translate, clip-path, mask-image"
   outgoing.style.position = "absolute"
   outgoing.style.inset = "0"
   outgoing.style.pointerEvents = "none"
@@ -324,17 +314,31 @@ export function mountPptxTransition(
 
   const apply = (positionMs: number) => {
     if (finished) return
-    const progress = Math.max(0, Math.min(1, positionMs / transition.durationMs))
+    const progress = pptxTransitionProgress(positionMs, transition.durationMs)
     const kind = transition.kind.toLowerCase()
-    if (kind === "fade" || kind === "morph") {
+    if (kind === "fade" || kind === "morph" || kind === "dissolve") {
       incoming.style.opacity = String(progress)
       outgoing.style.opacity = String(1 - progress)
     } else if (kind === "push") {
-      const vector = directionVector(transition.direction)
+      const vector = pptxTransitionDirection(transition.direction)
       incoming.style.translate = `${vector.x * rootRect.width * (1 - progress)}px ${vector.y * rootRect.height * (1 - progress)}px`
       outgoing.style.translate = `${-vector.x * rootRect.width * progress}px ${-vector.y * rootRect.height * progress}px`
+    } else if (kind === "cover") {
+      // The new slide slides in over the old one, which stays where it is.
+      const vector = pptxTransitionDirection(transition.direction)
+      incoming.style.translate = `${vector.x * rootRect.width * (1 - progress)}px ${vector.y * rootRect.height * (1 - progress)}px`
+      outgoing.style.translate = "0px 0px"
+    } else if (kind === "uncover") {
+      // The old slide slides away and reveals the new one underneath.
+      const vector = pptxTransitionDirection(transition.direction)
+      incoming.style.translate = "0px 0px"
+      outgoing.style.translate = `${-vector.x * rootRect.width * progress}px ${-vector.y * rootRect.height * progress}px`
     } else if (kind === "wipe") {
-      incoming.style.clipPath = wipeClip(transition.direction, progress)
+      incoming.style.clipPath = pptxTransitionWipeClip(transition.direction, progress)
+    } else if (kind === "split") {
+      incoming.style.maskImage = pptxTransitionSplitMask(transition.orientation, transition.direction, progress)
+      incoming.style.maskRepeat = "no-repeat"
+      incoming.style.maskSize = "100% 100%"
     } else {
       incoming.style.opacity = String(progress)
       outgoing.style.opacity = String(1 - progress)

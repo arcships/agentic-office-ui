@@ -84,6 +84,25 @@ export {
   enrichFormControlsWithHiddenShapes,
 } from "./drawing-parser";
 
+// Preset shape geometry (`a:prstGeom`)
+export {
+  type PresetShapeAdjustments,
+  type PresetShapeGeometry,
+  buildPresetShapePath,
+  isStrokeOnlyShapeGeometry,
+} from "./preset-geometry";
+
+// Clipboard cloning for drawings
+export {
+  type WorkbookDrawingCloneOptions,
+  type WorkbookDrawingCloneResult,
+  type WorkbookDrawingCloneSource,
+  cloneWorkbookDrawing,
+  createDrawingClipboardGroup,
+  createDrawingClipboardItem,
+  removeWorkbookDrawing,
+} from "./drawing-clipboard";
+
 // Color and theme
 export {
   type ThemeState,
@@ -110,6 +129,7 @@ export {
   resolveWorksheetHiddenRows,
   resolveWorksheetHiddenCols,
   resolveWorksheetMergeMetadata,
+  resolveWorksheetMergedRegions,
   resolveSheetColumnWidthPx,
   resolveSheetRowHeightPx,
   createAnchoredRectCache,
@@ -134,9 +154,22 @@ export {
   type WorkbookChartStyleAssets,
   parseSheetState,
   parseWorkbookSheets,
+  parseWorksheetTableMetadata,
+  parseWorksheetFreezePanesDocument,
   parseWorkbookStructureAssetsFromArchive,
   normalizeWorkbookTableMetadata,
+  composeAutoFilterRanges,
 } from "./grid-render";
+
+// Rich text runs
+export {
+  SHARED_STRINGS_PART,
+  parseInlineRichTextCell,
+  parseRichTextRuns,
+  parseSharedStringRichText,
+  resolveRichTextRuns,
+  richTextRunsToPlainText,
+} from "./rich-text";
 
 // Image export / merge
 export {

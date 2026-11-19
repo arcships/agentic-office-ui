@@ -884,6 +884,8 @@ test("DOCX nested tables use a unique runtime key and commit into the inner cell
 
   assert.ok(outerHost);
   assert.ok(nestedHost, "the nested table must expose its runtime key");
+  assert.equal(nestedHost.props["data-docx-table-nesting-path"], "0-0-1");
+  assert.equal(outerHost.props["data-docx-table-nesting-path"], undefined);
   assert.notEqual(
     nestedHost.props["data-docx-table-index"],
     outerHost.props["data-docx-table-index"],

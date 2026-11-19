@@ -26,3 +26,185 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 不要自己复制 `DocxPageSurface`、`DocxParagraphHost` 或 `DocxTableHost` 组成另一套编辑表面。这些低层组件已弃用，而且选区、分页、图片和历史记录必须共享同一个控制器。
 
 只读自定义界面优先使用 `DocxViewer` 的属性和事件。需要从字节得到模型但不显示界面时使用 `useDocxModel()`。
+
+需要保存到服务器或比较两次编辑结果时，不要让宿主拦截浏览器下载：
+
+```ts
+const bytes = await editor.getDocxBytes()          // ArrayBuffer，内容与导出文件相同
+const blob = await editor.getDocxBlob()            // 带当前容器 MIME 类型的 Blob
+await fetch(`/api/documents/${id}`, { method: "PUT", body: bytes })
+```
+
+两者复用 `exportDocx()` 的序列化、`basePackage` 和必填表单校验，文档在序列化期间被替换时会以 `DocxExportError`（`ABORTED`）拒绝；`exportDocx()` 本身也走同一条路径，只是最后多创建一次下载链接，并在更新的导出开始时取消上一次待处理请求。
+
+需要自建查找替换界面时，控制器的两个命令足以完成全部操作：
+
+| 命令 | 说明 |
+|---|---|
+| `replaceMatch(target, text)` | 替换一条搜索结果；`target` 由 `findDocxSearchMatches()` 的命中项经 `docxReplaceTargetFromMatch()` 转换得到（页眉/页脚/注释结果返回 `undefined`）。一条撤销记录。 |
+| `replaceAll(query, text, options?)` | 替换正文中全部命中，`options` 与搜索选项相同（`caseSensitive` / `wholeWord` / `regex`）；返回 `{ replaced, skipped }`，整批一条撤销记录。 |
+
+内置查找栏本身也是普通 Vue 组合（`useDocxFindReplace`）加 `DocxToolbar` 的 `find` 插槽；宿主可以复用 `OfficeFindBar`，也可以只调控制器命令自己绘制界面。
+
+需要自建图片图层菜单时，`bringToFront(location)`、`bringForward(location)`、`sendBackward(location)`、`sendToBack(location)` 分别对应 Word 的四个叠放命令；`resolveDocxImageLayerOrderState(floating)` 和 `resolveDocxImageLayerOrderMenuActions(floating)` 给出与内置菜单相同的可用/禁用状态。每个命令是一条撤销记录，导出时写成 `wp:anchor/@relativeHeight`。
+
+需要自建表格选区界面时，控制器暴露同一套矩形选区 API：
+
+| 命令/属性 | 说明 |
+|---|---|
+| `selectedTableCellRange` | 当前多单元格矩形；`cellRange.gridRange` 给出物理网格列范围，跨 `gridSpan` / `vMerge` 时已展开。 |
+| `selectTableCellRange(tableIndex, range, tableRuntimeKey?)` | 设置锚点/焦点矩形；普通正文表格会按模型网格归一化，嵌套表格用 `tableRuntimeKey` 区分。 |
+| `selectWholeTable(tableIndex?)` | 选中整张表。 |
+| `clearTableSelection()` | 通过 `clearTableCellContents(tableIndex, cells[])` 清空矩形内所有单元格，返回是否执行；整个矩形一条撤销记录。 |
+| `collapseTableCellSelection()` | 把矩形折叠到锚点单元格（内置编辑器里是 `Esc`），返回是否执行。 |
+| `isCellSelected(selection, tableIndex, rowIndex, cellIndex, table?)` | 判断单元格是否在选区中；传入 `table` 时按物理网格处理合并单元格，否则退回模型行列范围。 |
+
+## 复用内置编辑辅助界面
+
+五个编辑辅助能力也单独导出，自定义表面可以只挂其中几个，全部通过同一个 `DocxEditorController` 工作：
+
+```vue
+<script setup lang="ts">
+import {
+  DocxEditor,
+  DocxFormFieldDialog,
+  DocxLinkHoverCard,
+  DocxStylePreviewPopover,
+  resolveFormFieldAt,
+  useDocxEditor,
+  useDocxNodeReorder,
+} from "@arcships/vue-docx"
+
+const editor = useDocxEditor({ initialFileName: "document.docx" })
+</script>
+```
+
+| 组件 / 组合式 | 用途 |
+|---|---|
+| `DocxFormFieldDialog` | 传入 `field`、`location` 和 `controller`，保存时调用 `controller.updateFormField()` |
+| `DocxLinkHoverCard` | 传入链接地址与屏幕坐标；`open`/`edit`/`remove` 事件由宿主转给 `controller.setLink()` |
+| `DocxStylePreviewPopover` | 传入段落样式列表和悬停样式 id，配合 `docxStylePreviewCss()` 渲染 |
+| `useDocxNodeReorder(controller)` | 悬停、拖拽、插入位置和 `moveBodyNode()` 提交；纯函数 `resolveDocxReorderInsertionIndex()`、`resolveDocxReorderTarget()` 可用于自定义手柄 |
+
+`DocxFormFieldDialog`、`DocxLinkHoverCard` 和 `DocxStylePreviewPopover` 与 `DocxEditor` 使用同一份文案库（`provideDocxMessages`），在 `DocxEditor` 内部挂载时自动跟随 `locale`/`messages`。
+
+只要宿主自己渲染手柄，就可以关闭 `DocxEditor` 的对应属性（`show-node-reorder`、`show-style-preview` 等），不会出现两套控件。表格移动手柄属于 `DocxTableHost`，用 `:show-table-move-handle="false"` 关闭；宿主自己实现时同样调用 `controller.setTableFloating()`，并用 `resolveTableFloatingDropPatch()` 把指针位移换算成落下位置。
+
+## 内部书签导航
+
+`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 都用 `revealBookmark(name)` 暴露内部链接导航：滚动到书签所在页和段落、短暂高亮目标，并在可编辑表面上放置光标。`name` 可写成 `Name` 或 `#Name`，查找不区分大小写并接受 URL 转义；返回 `{ status: "revealed", nodeIndex, pageIndex, text }` 或 `{ status: "missing", name }`。
+
+查看器需要挂载新页时向上发出 `requestPageReveal(pageIndex)`；书签不存在时不抛错，而是显示非阻塞提示并发出 `bookmarkMissing(name)`。链接悬浮卡片的“打开”动作对内部链接也调用同一导航，并保留 `link-open` 事件。
+
+自定义菜单或目录可以直接使用 `@arcships/docx-core` 的 `createDocxBookmarkIndex(model)`（`get` / `has` / `targets`）和 `normalizeDocxBookmarkName()`，无需自己解析 `sourceXml`。
+
+## 图形对象与公式覆盖层
+
+宿主若要自己绘制形状、图表、SmartArt、嵌入对象、3D 模型或公式，可以读取段落的 `children`：`type: "drawing"` 的节点带 `kind`、`widthPx` / `heightPx`、`floating`、`zIndex`、`sourceXml` 和可用内容（`chart` / `shape` / `ole` / `textBox` / `src`），`type: "math"` 的节点带 `text` 与 `sourceXml`。内置渲染器输出下列标记供选择器和自定义样式使用：
+
+| 标记 | 含义 |
+|---|---|
+| `data-docx-drawing` / `data-docx-drawing-kind` | 一个绘图占位框及其对象类型 |
+| `data-docx-drawing-placeholder` | 占位框内的标签（形状、SmartArt、嵌入对象名称） |
+| `data-docx-drawing-preview` | 图表预览或 3D 模型海报图 |
+| `data-docx-drawing-textbox` | 文本框绘制的模型段落 |
+| `data-docx-drawing-behind` | 位于文字下方的对象（负 `z-index`） |
+| `data-docx-math` / `data-docx-math-display` | 公式的线性文本；`display` 为块级公式 |
+| `data-docx-drop-cap` | 首字下沉字母 |
+
+`drawingObjectPlaceholderStyle()`、`drawingObjectFrameStyle()`、`drawingObjectSizePx()`、`chartPlaceholderText()` 和 `chartPreviewDataUri()` 与内置渲染器共用同一套位置/尺寸规则；文案来自 `messages.docx.drawing`（`textBox`、`shape`、`wordArt`、`group`、`smartArt`、`chart`、`oleObject`、`model3d`、`equation`、`embeddedObject`、`chartSeries`）。
+
+## 文档块/词高亮覆盖层
+
+`DocxBlockHighlights` 和 `DocxWordHighlights` 是独立覆盖层，可以挂在 `DocxViewer`、`DocxEditor` 或 `DocxDocumentSurface` 的根元素上：
+
+```vue
+<DocxBlockHighlights
+  :root="viewerRoot"
+  :blocks="blocks"
+  :block-ids="blockIds"
+  :page-index="pageIndex"
+  :color-for-block="(block) => block.type === 'table' ? '#0ea5e9' : '#2563eb'"
+  @geometry="(map) => (geometry = map)"
+/>
+<DocxWordHighlights
+  :root="viewerRoot"
+  :words="words"
+  :word="activeWord"
+  :word-ranges="wordRanges"
+/>
+```
+
+| 属性 | 组件 | 说明 |
+|---|---|---|
+| `root` | 两者 | 含 `[data-docx-page-surface]` 的查看器根元素 |
+| `block` / `blocks` / `blockIds` | `DocxBlockHighlights` | 强调块、待绘制块，或只按 source id 选择 |
+| `word` / `words` / `wordRanges` | `DocxWordHighlights` | 强调词、待绘制词，或 `{ blockId, start, end }` 偏移 |
+| `pageIndex` | 两者 | 只绘制指定 0 基页 |
+| `color` / `colorForBlock` | 两者 | 边框与底色；底色用 8 位十六进制透明度 |
+| `onGeometry` | 两者 | 每次测量后回调页内几何 |
+
+盒子通过 Teleport 进入页面表面，因此自动复用页面缩放，不需要宿主换算 zoom。几何在页面挂载、重分页、字体加载、滚动和窗口缩放后自动刷新；`onGeometry` 可以用来保存引用预览或调试。
+
+`DocxDocumentSurface` 的 `getDocumentBlocks()` 返回带 source id 的块树，`confirmBlockReference(block)` 和 `confirmWordReference(block, word)` 会以统一引用契约发出 `reference-confirm`，可直接用于引用条或引用列表。
+
+## 宿主渲染钩子（批注卡、修订卡与右键菜单）
+
+四个渲染函数属性对应上游的同名 render props，未提供时保持内置外观：
+
+| 属性 | 接收组件 | 返回值 |
+|---|---|---|
+| `renderCommentCard` | `DocxEditor`、`DocxViewer`、`DocxDocumentSurface`、`DocxViewerRoot`、`DocxPageSurface` | 批注卡内容 |
+| `renderTrackedChangeCard` | 同上 | 修订卡内容 |
+| `renderContextMenu` | `DocxEditor`、`DocxContextMenu` | 文本 / 图片 / 表格菜单 |
+| `renderTableContextMenu` | 同上 | 表格菜单（优先于 `renderContextMenu`） |
+
+卡片仍由右侧批注栏定位：宿主渲染函数只替换卡片内容，卡片外层的锚定、激活、抽屉模式和高度测量保持不变。`style` 给出该卡片根元素已经应用的定位样式；需要在卡片内再绘制绝对定位元素时可以直接复用。
+
+```vue
+<script setup lang="ts">
+import { h } from "vue"
+import { DocxEditor } from "@arcships/vue-docx"
+import type { DocxCommentCardRenderProps } from "@arcships/vue-docx"
+
+function renderCommentCard(card: DocxCommentCardRenderProps) {
+  return h("div", { class: "my-comment-card" }, [
+    h("strong", card.comment.author ?? ""),
+    h("p", card.snippet),
+    h("button", { onClick: () => card.setResolved(true) }, "标记完成"),
+    h("button", { onClick: () => card.setResolved(false) }, "重新打开"),
+  ])
+}
+</script>
+
+<template>
+  <DocxEditor :editor="editor" :render-comment-card="renderCommentCard" />
+</template>
+```
+
+批注卡回调：`activate()` 选中批注锚定的文字；`setResolved(resolved)` 调用 `controller.resolveComment()` 的同一命令。修订卡回调：`activate()`、`accept()`、`reject()`，分别对应 `controller.acceptTrackedChange()` / `rejectTrackedChange()`。只读表面把 `canModify` / `canDecide` 设为 `false`，此时 `setResolved()` / `accept()` / `reject()` 不产生修改，宿主可据此隐藏按钮。
+
+菜单渲染函数拿到与内置菜单一致的上下文：
+
+| 字段 | 说明 |
+|---|---|
+| `context` | 文本 / 图片 / 表格上下文；表格专用钩子直接拿到 `DocxTableContextMenuContext` |
+| `actions` | 内置动作（已本地化），带有 `id`、`label`、`shortcut`、`disabled`、`checked`、`children` |
+| `runAction(id)` | 执行内置动作并关闭菜单；颜色动作使用 `highlight-yellow`、`text-color-#ef4444` 形式 |
+| `closeMenu()` | 关闭菜单但不执行动作 |
+| `position` | 与内置菜单相同的视口坐标 |
+| `readOnly` | 只读（或修订锁定时）为 `true`，此时 `actions` 只剩 `copy` |
+
+```ts
+const renderContextMenu = (menu: DocxContextMenuRenderProps) =>
+  h("div", { class: "my-menu", style: { position: "fixed", left: `${menu.position.x}px`, top: `${menu.position.y}px` } }, [
+    ...menu.actions.map((action) =>
+      h("button", { disabled: action.disabled, onClick: () => menu.runAction(action.id) }, action.label)
+    ),
+    h("button", { onClick: menu.closeMenu }, "取消"),
+  ])
+```
+
+`DocxEditor` 在 `editable=false` 或修订被展示（编辑锁定）时仍会打开右键菜单，但内置菜单只保留“复制”一项，保证只读文档里的选中文字可以复制；宿主提供 `renderContextMenu` 时可以按 `readOnly` 自行保留复制项。只读时表格专用钩子不会被调用，回退到通用钩子（没提供时就是内置的“复制”菜单），因此只读文档不会通过宿主表格菜单执行编辑命令。
+
+> 未提供任何渲染函数时，卡片和菜单的 DOM、类名与默认行为与之前完全一致。

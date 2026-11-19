@@ -1,10 +1,12 @@
 import type { Workbook, Worksheet } from "@dukelib/sheets-wasm";
-import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./chart-types";
+import type { XlsxChart, XlsxChartElementSelection, XlsxChartFamily, XlsxChartsheet } from "./chart-types";
 import type { XlsxThemePalette } from "./theme-types";
+import type { XlsxSelectionStatsQuery, XlsxSelectionSummary } from "../selection-stats";
 import type {
   XlsxFormControl,
   XlsxFormControlInput,
   XlsxImage,
+  XlsxImageAnchor,
   XlsxImageRect,
   XlsxImageResizeHandlePosition,
   XlsxShape,
@@ -22,6 +24,58 @@ export interface XlsxCellRange {
   start: XlsxCellAddress;
 }
 
+/**
+ * Reason a range is highlighted.
+ *
+ * `category`, `value` and `bubbleSize` are derived from a selected chart
+ * element, so the viewer can paint the chart's data sources with a colour per
+ * role. `seriesName` is reserved for chart name references and `custom` marks
+ * ranges a host highlighted through `XlsxViewerController.highlightRanges`.
+ */
+export type XlsxRangeHighlightRole = "category" | "value" | "bubbleSize" | "seriesName" | "custom";
+
+/**
+ * One range painted by the viewer's range-highlight layer.
+ *
+ * Ranges are always normalized (`start` is the top-left cell) and refer to a
+ * visible worksheet index, matching the `sheetIndex` used by charts and
+ * images. The controller returns a fresh, read-only snapshot from
+ * `highlightedRanges`; calling `highlightRanges` again replaces the ranges a
+ * host supplied, while chart source ranges follow the chart selection.
+ */
+export interface XlsxRangeHighlight {
+  /** CSS colour used for the translucent fill and its outline. */
+  color: string;
+  /** Optional stable identity for host diffing. */
+  id?: string;
+  /** Optional description a host can show next to the highlight. */
+  label?: string;
+  /** Normalized zero-based range inside `sheetIndex`. */
+  range: XlsxCellRange;
+  /** Why the range is highlighted. */
+  role?: XlsxRangeHighlightRole;
+  /** Visible worksheet index the range belongs to. */
+  sheetIndex: number;
+  /** Zero-based chart series index when the range feeds a chart series. */
+  seriesIndex?: number;
+  /** Chart series name, so a highlighted range can be tied to its legend entry. */
+  seriesName?: string;
+}
+
+/** Options for {@link XlsxViewerController.highlightRanges}. */
+export interface XlsxHighlightRangesOptions {
+  /** CSS colour shared by every range in the call; defaults to amber. */
+  color?: string;
+  /** Optional stable id shared by the highlighted ranges. */
+  id?: string;
+  /** Optional description copied to every highlighted range. */
+  label?: string;
+  /** Defaults to `"custom"`. */
+  role?: XlsxRangeHighlightRole;
+  /** Visible worksheet index; defaults to the active sheet. */
+  sheetIndex?: number;
+}
+
 export interface XlsxCellHyperlink {
   cell: XlsxCellAddress;
   target: string;
@@ -32,6 +86,42 @@ export interface XlsxCellComment {
   author?: string;
   cell: XlsxCellAddress;
   text: string;
+}
+
+/**
+ * Formatting of one inline run inside a rich-text cell.
+ *
+ * The fields mirror the OOXML `rPr` element: they are per-run overrides, so a
+ * field that is absent inherits from the cell style.
+ */
+export interface XlsxCellTextRunFont {
+  bold?: boolean;
+  /** Raw spreadsheet color record; resolve with `resolveWorkbookColor`. */
+  color?: Record<string, unknown>;
+  italic?: boolean;
+  /** Font family name from `rFont`/`name`, when the run overrides it. */
+  name?: string;
+  /** Font size in points, when the run overrides the cell size. */
+  sizePt?: number;
+  strikethrough?: boolean;
+  underline?: string;
+  /** OOXML `vertAlign`: `superscript`, `subscript` or `baseline`. */
+  verticalAlign?: string;
+}
+
+/**
+ * One inline run of a rich-text cell.
+ *
+ * A cell that stores several runs with their own fonts (for example a bold
+ * title with a red word and a superscript footnote marker) keeps them here so
+ * renderers can draw each run with its own formatting. The cell's plain
+ * `value` stays the concatenation of every run and remains the text used for
+ * formulas, search and clipboard.
+ */
+export interface XlsxCellTextRun {
+  text: string;
+  /** Per-run formatting; absent means the run uses the cell style as-is. */
+  font?: XlsxCellTextRunFont;
 }
 
 // ── Theme / styles ───────────────────────────────────────────────────────
@@ -45,6 +135,13 @@ export interface XlsxResolvedCellStyle {
   };
   fill?: Record<string, unknown>;
   font?: Record<string, unknown>;
+  /**
+   * Font/fill/border subtrees the cell's `xf` record declares itself, parsed
+   * from `fontId`/`fillId`/`borderId` + `apply*`. Renderers layer a table style
+   * below only these properties so an unstyled table cell keeps the table's
+   * header and banding, while an explicitly formatted cell wins.
+   */
+  tableStyleOverrides?: XlsxResolvedCellStyle;
 }
 
 export interface XlsxTableStyleDefinition {
@@ -183,10 +280,218 @@ export interface XlsxFreezePanes {
 
 export type XlsxSheetVisibility = "hidden" | "veryHidden" | "visible";
 
+// ── Print / page layout ──────────────────────────────────────────────────
+
+export type XlsxPageOrientation = "portrait" | "landscape";
+
+export type XlsxPageOrder = "downThenOver" | "overThenDown";
+
+/**
+ * Worksheet print set-up parsed from `pageSetup`, `sheetPr/pageSetUpPr` and
+ * `pageMargins`.
+ *
+ * Lengths are in inches, matching OOXML. `scale` is a percentage in the
+ * 10–400 range Excel accepts. `fitToPage` mirrors
+ * `sheetPr/pageSetUpPr/@fitToPage`; when it is `true`, `fitToWidth` and
+ * `fitToHeight` drive the effective scale instead of `scale`.
+ */
+export interface XlsxPageSetup {
+  paperSize: number;
+  orientation: XlsxPageOrientation;
+  scale: number;
+  fitToWidth: number;
+  fitToHeight: number;
+  fitToPage: boolean;
+  firstPageNumber: number;
+  useFirstPageNumber: boolean;
+  blackAndWhite: boolean;
+  draft: boolean;
+  cellComments: "none" | "asDisplayed" | "atEnd";
+  errors: "displayed" | "blank" | "dash" | "NA";
+  pageOrder: XlsxPageOrder;
+  horizontalDpi?: number;
+  verticalDpi?: number;
+  copies?: number;
+}
+
+/** Worksheet `printOptions` record. */
+export interface XlsxPrintOptions {
+  horizontalCentered: boolean;
+  verticalCentered: boolean;
+  headings: boolean;
+  gridLines: boolean;
+}
+
+/** Worksheet `pageMargins` record; every length is in inches. */
+export interface XlsxPageMargins {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  header: number;
+  footer: number;
+}
+
+/**
+ * A manual page break from `rowBreaks` / `colBreaks`.
+ *
+ * `id` is the zero-based row or column index before which the next page
+ * starts, matching the OOXML `brk/@id` attribute (a break before Excel row 2
+ * is written as `id="1"`).
+ */
+export interface XlsxPageBreak {
+  id: number;
+  min: number;
+  max: number;
+  manual: boolean;
+}
+
+/** Inclusive zero-based range on one worksheet axis. */
+export interface XlsxAxisRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Repeated rows and columns from `_xlnm.Print_Titles`, applied to every
+ * printed page.
+ */
+export interface XlsxPrintTitles {
+  rows: XlsxAxisRange[];
+  columns: XlsxAxisRange[];
+}
+
+/** A paper size resolved from the OOXML `paperSize` identifier. */
+export interface XlsxPaperSize {
+  id: number;
+  name: string;
+  widthIn: number;
+  heightIn: number;
+}
+
+/** One printed page: a cell range on a sheet plus its paper geometry. */
+export interface XlsxPrintPage {
+  /** Zero-based index in the sheet's flat page list. */
+  index: number;
+  /** One-based page number shown to the user; honours `firstPageNumber`. */
+  pageNumber: number;
+  /** Cell range printed as this page's body, excluding repeated titles. */
+  range: XlsxCellRange;
+  /** Print area this page belongs to. */
+  printArea: XlsxCellRange;
+  paperSize: number;
+  paperSizeName: string;
+  orientation: XlsxPageOrientation;
+  /** Paper width and height in CSS pixels at 96 dpi. */
+  widthPx: number;
+  heightPx: number;
+  /** Printable box after page margins, in CSS pixels. */
+  contentWidthPx: number;
+  contentHeightPx: number;
+  /** Effective print scale as a percentage. */
+  scale: number;
+  /** Zero-based column page index inside the print area. */
+  colPage: number;
+  /** Zero-based row page index inside the print area. */
+  rowPage: number;
+  /** Number of spreadsheet columns/rows in `range`. */
+  colCount: number;
+  rowCount: number;
+}
+
+/** Flat pagination result for one worksheet. */
+export interface XlsxPrintLayout {
+  workbookSheetIndex: number;
+  sheetName: string;
+  pages: XlsxPrintPage[];
+  pageSetup: XlsxPageSetup;
+  printOptions: XlsxPrintOptions;
+  pageMargins: XlsxPageMargins;
+  printAreas: XlsxCellRange[];
+  printTitles: XlsxPrintTitles;
+  paperSize: XlsxPaperSize;
+  /** Effective print scale as a percentage. */
+  scale: number;
+  fitToPage: boolean;
+  /** `true` when a host-provided page cap stopped pagination early. */
+  truncated: boolean;
+}
+
+/** Options accepted by `buildWorksheetPrintLayout`. */
+export interface XlsxPrintLayoutOptions {
+  /** Maximum number of pages to generate. Defaults to 5000. */
+  maxPages?: number;
+}
+
+/** One cell slot rendered by `buildPrintPageGrid`. */
+export interface XlsxPrintPageGridCell {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+  /** `true` when a merge anchored earlier on this page covers the slot. */
+  covered: boolean;
+}
+
+/** Row or column slot on a printed page. */
+export interface XlsxPrintPageGridAxis {
+  index: number;
+  /** Unscaled size in CSS pixels at 100%. */
+  sizePx: number;
+}
+
+/** Cell layout for one printed page, including repeated titles and merges. */
+export interface XlsxPrintPageGrid {
+  rows: XlsxPrintPageGridAxis[];
+  columns: XlsxPrintPageGridAxis[];
+  cells: XlsxPrintPageGridCell[];
+}
+
+/**
+ * Why Excel would reject a worksheet name.
+ *
+ * `empty` means the trimmed name has no characters, `too-long` means it
+ * exceeds 31 code points, `invalid-characters` covers `\ / : * ? [ ]`,
+ * `apostrophe` covers a leading or trailing apostrophe, and `duplicate` means
+ * another worksheet or chartsheet already uses the name (case-insensitively).
+ */
+export type XlsxSheetNameIssue =
+  | "apostrophe"
+  | "duplicate"
+  | "empty"
+  | "invalid-characters"
+  | "too-long";
+
 // ── Sheet data ───────────────────────────────────────────────────────────
 
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
+  /**
+   * Explicit cell style ids keyed by A1 address. The table-style resolver uses
+   * the referenced `styleById` record's declared subtrees to keep explicit
+   * cell formatting above the table style.
+   */
+  cellStyleIds?: Record<string, number>;
+  /**
+   * Rotation and shrink-to-fit alignment of cells whose style overrides the
+   * row/column alignment, keyed by A1 address.
+   *
+   * The values are the raw OOXML alignment flags (`textRotation` 0–180 and
+   * `shrinkToFit`), so both main-thread and Worker-backed renderers can lay
+   * out rotated headers and long values without reading the workbook again.
+   */
+  cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
+  /**
+   * AutoFilter ranges of the sheet, composed from the worksheet's own
+   * `<autoFilter>` and every table part's filter. Empty when the sheet has no
+   * filter or when the viewer skipped XML parsing.
+   */
+  autoFilterRanges?: XlsxAutoFilterRange[];
+  /**
+   * Rich-text runs of every cell that stores more than one formatted run,
+   * keyed by A1 address. Cells without an entry render their plain `value`.
+   */
+  richTextCells?: Record<string, XlsxCellTextRun[]>;
   colWidthOverridesPx: Record<number, number>;
   colStyleIds: Record<number, number>;
   hiddenCols?: number[];
@@ -199,6 +504,20 @@ export interface XlsxSheetData {
   visibility: XlsxSheetVisibility;
   /** Parsed sheet protection; `null` or omitted for unprotected sheets. */
   protection?: XlsxSheetProtection | null;
+  /** Page size, orientation and scaling from `pageSetup`. */
+  pageSetup: XlsxPageSetup;
+  /** Print centering, headings and gridline flags from `printOptions`. */
+  printOptions: XlsxPrintOptions;
+  /** Page margins in inches from `pageMargins`. */
+  pageMargins: XlsxPageMargins;
+  /** Manual row breaks from `rowBreaks`. */
+  rowBreaks: XlsxPageBreak[];
+  /** Manual column breaks from `colBreaks`. */
+  colBreaks: XlsxPageBreak[];
+  /** Areas from `_xlnm.Print_Area`; empty means the whole used range prints. */
+  printAreas: XlsxCellRange[];
+  /** Repeated rows/columns from `_xlnm.Print_Titles`. */
+  printTitles: XlsxPrintTitles;
   columnWidthCharacterWidthPx?: number;
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
@@ -209,6 +528,14 @@ export interface XlsxSheetData {
   maxVerticalMergeEndRow: number;
   /** Exact merged ranges used by Worker-backed viewers. */
   mergedRegions?: XlsxCellRange[];
+  /** Workbook and sheet-scoped defined names visible on this sheet. */
+  definedNames?: XlsxDefinedName[];
+  /** Pivot tables anchored on this sheet, in workbook order. */
+  pivotTables?: XlsxPivotTable[];
+  /** `true` when the sheet has at least one pivot table. */
+  hasPivotTable?: boolean;
+  /** Slicers connected to this sheet's pivot tables. */
+  slicers?: XlsxSlicer[];
   minUsedCol: number;
   minUsedRow: number;
   maxUsedCol: number;
@@ -224,6 +551,12 @@ export interface XlsxSheetData {
   visibleCols: number[];
   colWidths: number[];
   rowHeights: number[];
+  /**
+   * `sheetView/@rightToLeft`: the worksheet reads right-to-left, so the grid
+   * mirrors its columns, headers and frozen panes. Cells keep their A1
+   * addresses and the data model is unchanged.
+   */
+  rightToLeft?: boolean;
   showGridLines: boolean;
   sparklines: XlsxSparkline[];
   themePalette: XlsxThemePalette;
@@ -339,6 +672,31 @@ export interface XlsxCellBorderStyleInput {
   diagonalDirection?: "none" | "down" | "up" | "both";
 }
 
+/**
+ * Border presets the ribbon offers for the current selection.
+ *
+ * `"outside"` draws the perimeter of a multi-cell selection only, so the
+ * inside of the range keeps whatever borders it already had.
+ */
+export type XlsxBorderPreset =
+  | "all"
+  | "outside"
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "none";
+
+/** Selection border command: which edges to draw, with what line and colour. */
+export interface XlsxBorderPresetInput {
+  /** Edges the command draws; defaults to `"all"`. */
+  preset?: XlsxBorderPreset;
+  /** Excel border line style; defaults to `"thin"`. */
+  style?: XlsxCellBorderEdgeInput["style"];
+  /** Border line colour; defaults to the ribbon's grey (`A1A1AA`). */
+  color?: XlsxCellStyleColorInput;
+}
+
 /** Alignment styling to persist on a cell or range. */
 export interface XlsxCellAlignmentInput {
   /** Horizontal alignment. */
@@ -423,12 +781,101 @@ export interface XlsxClipboardData {
   text: string;
 }
 
+/**
+ * A cut waiting for its paste: the source range that still has to be cleared
+ * once the payload lands somewhere else.
+ *
+ * The sheet index is stored alongside the range because a host may switch
+ * sheets between the cut and the paste; the marquee belongs to the source
+ * sheet, and the move clears it there.
+ */
+export interface XlsxClipboardCutState {
+  /** Absolute (zero-based) source range of the pending move. */
+  range: XlsxCellRange;
+  /** Zero-based workbook sheet index of the cut source. */
+  sheetIndex: number;
+}
+
 // ── Tables ───────────────────────────────────────────────────────────────
 
 export interface XlsxTableColumn {
   id: number;
   index: number;
   name: string;
+}
+
+/**
+ * One `<filterColumn>` of an AutoFilter definition.
+ *
+ * `columnIndex` is relative to the filter range's first column, matching the
+ * `colId` attribute in the sheet XML. `values` holds the allowed display
+ * values of a value filter; `includeBlank` keeps empty cells visible.
+ */
+export interface XlsxAutoFilterColumn {
+  columnIndex: number;
+  includeBlank: boolean;
+  showButton: boolean;
+  values: string[];
+}
+
+/**
+ * A parsed `<autoFilter>` definition from a worksheet or a table part.
+ *
+ * Excel stores the filter range next to the criteria that created it; the
+ * viewer turns each definition into a header menu and a view-level filter.
+ */
+export interface XlsxAutoFilterRange {
+  /** Filter columns declared by the definition, keyed by relative column. */
+  columns: XlsxAutoFilterColumn[];
+  /** Last data row, already excluding a table's totals row. */
+  dataEndRow: number;
+  end: XlsxCellAddress;
+  /** Header rows inside the range; worksheet filters always have one. */
+  headerRowCount: number;
+  reference: string;
+  source: "table" | "worksheet";
+  start: XlsxCellAddress;
+  /** Owning table name when `source` is `table`. */
+  tableName?: string;
+}
+
+/** A filter value offered by an AutoFilter header menu. */
+export interface XlsxAutoFilterValueOption {
+  blank: boolean;
+  label: string;
+  value: string;
+}
+
+/** One active column filter of an AutoFilter range. */
+export interface XlsxAutoFilterColumnState {
+  columnIndex: number;
+  includeBlank: boolean;
+  values: string[];
+}
+
+/** Active view-level filter state of one AutoFilter range. */
+export interface XlsxAutoFilterState {
+  columns: XlsxAutoFilterColumnState[];
+  /** Absolute worksheet rows hidden by this range's filters. */
+  hiddenRows: number[];
+  reference: string;
+}
+
+/** One data row of an AutoFilter range, as read by the Worker viewer. */
+export interface XlsxAutoFilterRowData {
+  row: number;
+  values: string[];
+}
+
+/**
+ * Display values of an AutoFilter range.
+ *
+ * Worker-backed (read-only) viewers have no main-thread workbook, so the Worker
+ * returns the formatted values the header menu needs to list and filter.
+ */
+export interface XlsxAutoFilterSnapshot {
+  rows: XlsxAutoFilterRowData[];
+  truncated: boolean;
 }
 
 export interface XlsxTableStyleInfo {
@@ -440,6 +887,8 @@ export interface XlsxTableStyleInfo {
 }
 
 export interface XlsxTable {
+  /** AutoFilter declared by the table part, when it has one. */
+  autoFilter?: XlsxAutoFilterRange;
   columns: XlsxTableColumn[];
   displayName: string;
   end: XlsxCellAddress;
@@ -455,10 +904,185 @@ export interface XlsxTable {
 
 export type XlsxTableSortDirection = "ascending" | "descending";
 
+// ── Pivot tables, slicers and defined names ──────────────────────────────
+
+/** Aggregation a pivot table's data field applies to its source values. */
+export type XlsxPivotAggregation =
+  | "sum"
+  | "count"
+  | "countNums"
+  | "average"
+  | "min"
+  | "max"
+  | "product"
+  | "stdDev"
+  | "stdDevp"
+  | "var"
+  | "varp";
+
+/** "Show Values As" calculation of a pivot data field. */
+export type XlsxPivotShowAs =
+  | "normal"
+  | "percentOfGrandTotal"
+  | "percentOfRowTotal"
+  | "percentOfColumnTotal"
+  | "percentOfParentRowTotal"
+  | "percentOfParentColumnTotal"
+  | "difference"
+  | "percentDifference"
+  | "percent"
+  | "runningTotal"
+  | "percentRunningTotal"
+  | "rankAscending"
+  | "rankDescending"
+  | "index";
+
+/** Which pivot area a cached source field is placed on. */
+export type XlsxPivotFieldAxis = "row" | "column" | "page" | "data" | "hidden";
+
+/** One item of a pivot field's cached item list. */
+export interface XlsxPivotFieldItem {
+  /** Caption Excel renders for the item, from the pivot cache's shared items. */
+  caption: string;
+  /** `pivotField/item/@x` or `@t` key used by the item list. */
+  key: string;
+  /** `item/@h="1"`: Excel hides the item (filtered out or collapsed). */
+  hidden?: boolean;
+}
+
+/** One cached source field of a pivot table, with the area it feeds. */
+export interface XlsxPivotField {
+  /** Zero-based index in the pivot cache's `cacheFields` list. */
+  index: number;
+  /** Source field name from `pivotCacheDefinition/cacheField/@name`. */
+  name: string;
+  axis: XlsxPivotFieldAxis;
+  /** Cached members, in the cache's item order. */
+  items: XlsxPivotFieldItem[];
+}
+
+/** One value field of a pivot table. */
+export interface XlsxPivotDataField {
+  aggregation: XlsxPivotAggregation;
+  /** Zero-based index in the pivot cache's `cacheFields` list. */
+  fieldIndex: number;
+  /** Display caption, for example `Sum of Revenue`. */
+  name: string;
+  /** `dataField/@numFmtId` when the field overrides the workbook number format. */
+  numberFormatId?: number;
+  showAs: XlsxPivotShowAs;
+}
+
+/** Worksheet range or table a pivot cache reads its records from. */
+export interface XlsxPivotSource {
+  /** Source worksheet name. */
+  sheet?: string;
+  /** A1 range when the source is a worksheet range. */
+  range?: string;
+  /** Table name when the source is a table. */
+  table?: string | null;
+}
+
+/**
+ * One pivot table anchored on a worksheet.
+ *
+ * The viewer renders the cached cell output of the pivot (the values Excel
+ * stored in the worksheet part) and exposes the definition so hosts can show
+ * what the static table represents and warn that refreshing it needs Excel.
+ */
+export interface XlsxPivotTable {
+  /** `pivotTableDefinition/@cacheId` the table reads from. */
+  cacheId: number;
+  /** Value fields (`dataFields`) in report order. */
+  dataFields: XlsxPivotDataField[];
+  /** Cached source fields, in cache order. */
+  fields: XlsxPivotField[];
+  /** `pivotTableDefinition/@dataCaption`, usually `Values`. */
+  dataCaption?: string;
+  /** `pivotField/@axis="axisCol"` field indexes in report order. */
+  columnFields: number[];
+  /** Compact, outline or tabular report layout. */
+  layout: "compact" | "outline" | "tabular";
+  /** `pivotTableDefinition/@name`. */
+  name: string;
+  /** `pivotField/@axis="axisPage"` field indexes in report order. */
+  pageFields: number[];
+  /** Where the cached pivot output sits, from `location/@ref`. */
+  range: XlsxCellRange;
+  /** Whether Excel recalculates the pivot when the workbook opens. */
+  refreshOnLoad: boolean;
+  /** `pivotField/@axis="axisRow"` field indexes in report order. */
+  rowFields: number[];
+  /** Source range or table from the pivot cache definition. */
+  source?: XlsxPivotSource;
+  /** `pivotTableStyleInfo`, when the pivot declares a style. */
+  styleInfo?: XlsxTableStyleInfo;
+}
+
+/** One cached member of a slicer. */
+export interface XlsxSlicerItem {
+  caption: string;
+  /** Pivot-cache item key. */
+  key: string;
+  /** `slicerCacheDefinition/data/.../i/@s="1"`: the item is selected. */
+  selected: boolean;
+}
+
+/**
+ * One slicer attached to a worksheet's pivot tables.
+ *
+ * Slicers are drawing objects in Excel; the viewer exposes their definition and
+ * anchor so hosts can render a static card and explain that changing the
+ * selection needs Excel.
+ */
+export interface XlsxSlicer {
+  /** Drawing anchor when the slicer's shape was found in a drawing part. */
+  anchor?: XlsxImageAnchor;
+  /** `slicer/@caption` shown in the slicer header. */
+  caption?: string;
+  /** `slicerCacheDefinition/@name` the slicer reads. */
+  cacheName?: string;
+  /** Number of item columns the slicer lays out (`slicer/@columnCount`). */
+  columnCount?: number;
+  items: XlsxSlicerItem[];
+  /** `slicer/@name`. */
+  name: string;
+  /** Pivot table names the slicer cache is connected to. */
+  pivotTables: string[];
+  /** Source field name (`slicerCacheDefinition/@sourceName`). */
+  sourceName?: string;
+  /** Built-in slicer style name (`slicer/@style`). */
+  style?: string;
+  /** Workbook sheet index of the worksheet that owns the slicer. */
+  workbookSheetIndex: number;
+}
+
+/**
+ * One workbook or sheet-scoped defined name (Excel's Name Manager row).
+ *
+ * `range` keeps Excel's A1 syntax, for example `Sheet1!$A$1:$C$3` or
+ * `SUM(Sheet1!$A$1:$A$3)`; it is the `definedName` element's text. Sheet-scoped
+ * names carry the owning sheet name and `scope: "sheet"`.
+ */
+export interface XlsxDefinedName {
+  /** Optional comment written by Excel's Name Manager. */
+  comment?: string;
+  hidden?: boolean;
+  name: string;
+  /** A1 reference or formula the name points at. */
+  range: string;
+  scope: "workbook" | "sheet";
+  /** Worksheet name for a sheet-scoped name. */
+  sheetName?: string;
+}
+
 export interface XlsxTableSortState {
   columnIndex: number;
   direction: XlsxTableSortDirection;
+  /** Table name, or the AutoFilter range reference for a worksheet filter. */
   tableName: string;
+  /** Set when the sort came from an AutoFilter header menu. */
+  rangeReference?: string;
 }
 
 // ── Workbook tab ─────────────────────────────────────────────────────────
@@ -472,6 +1096,19 @@ export interface XlsxWorkbookTab {
   sheetIndex?: number;
   visibility?: XlsxSheetVisibility;
   workbookSheetIndex?: number;
+}
+
+/**
+ * A worksheet the user can bring back with "Unhide".
+ *
+ * `veryHidden` worksheets are deliberately absent from this list: Excel does
+ * not show them in its Unhide dialog either, so they can only be restored
+ * through `setSheetVisibility`. `getSheetVisibility` still reports them.
+ */
+export interface XlsxHiddenSheet {
+  name: string;
+  visibility: "hidden";
+  workbookSheetIndex: number;
 }
 
 // ── Formula target ───────────────────────────────────────────────────────
@@ -519,14 +1156,28 @@ export interface XlsxTableHeaderMenuRenderProps {
   cell: XlsxCellAddress;
   /** Table column metadata for the active header. */
   column: XlsxTableColumn;
+  /** The AutoFilter range backing this header, when the sheet has one. */
+  autoFilter?: XlsxAutoFilterRange;
+  /** Applies a value filter to this AutoFilter column. */
+  applyFilter?: (values: string[], options?: { includeBlank?: boolean }) => void;
+  /** Removes this range's filter and restores its hidden rows. */
+  clearFilter?: () => void;
   /** Current sort direction for this column, or `null` when unsorted. */
   direction: XlsxTableSortDirection | null;
+  /** Filter values currently selected for this column, if any. */
+  filterValues?: string[];
+  /** Resolves the distinct display values of the column and the blanks flag. */
+  getValueOptions?: () => XlsxAutoFilterValueOption[];
+  /** Whether this range currently hides rows. */
+  hasFilter?: boolean;
+  /** Whether this column has an active value filter. */
+  hasValueFilter?: boolean;
   /** Sorts the table by this column in ascending order. */
   sortAscending: () => void;
   /** Sorts the table by this column in descending order. */
   sortDescending: () => void;
-  /** Table metadata for the active header. */
-  table: XlsxTable;
+  /** Table metadata for the active header; absent for a worksheet filter. */
+  table: XlsxTable | null;
   /** Built-in trigger text/icon. Useful when composing your own trigger button. */
   triggerIcon: string;
   /** Props that must be applied to your menu trigger button so grid selection does not receive the click. */
@@ -701,7 +1352,12 @@ export interface UseXlsxViewerControllerOptions {
    */
   readOnlyAboveBytes?: number;
   /**
-   * Includes hidden and very hidden workbook sheets in the sheet tabs and controller state.
+   * Includes hidden workbook sheets in the sheet tabs and controller state.
+   *
+   * The mode can be changed after load with
+   * `XlsxViewerController.setShowHiddenSheets`. `veryHidden` sheets are never
+   * listed: Excel keeps them out of the tab strip and Unhide dialog, so they
+   * can only be restored through `setSheetVisibility`.
    *
    * @default false
    */
@@ -748,7 +1404,347 @@ export interface UseXlsxViewerControllerOptions {
   workerUrl?: string;
 }
 
-export interface XlsxViewerController {
+
+// ── Authoring inputs ─────────────────────────────────────────────────────
+
+/** Comment text a host wants to store on a cell. */
+export interface XlsxCellCommentInput {
+  /** Optional author name shown in the note. */
+  author?: string;
+  /** Comment body. Leading/trailing whitespace is trimmed. */
+  text: string;
+}
+
+/** Hyperlink a host wants to store on a cell. */
+export interface XlsxCellHyperlinkInput {
+  /** Absolute URL, `mailto:` address or `#Sheet!A1` internal reference. */
+  target: string;
+  /** Optional tooltip shown on hover. */
+  tooltip?: string;
+}
+
+/**
+ * Host-facing description of a conditional-format rule.
+ *
+ * The controller fills in thresholds, colours and priorities, so a host only
+ * describes what the user picked.
+ */
+export interface XlsxConditionalFormatDraft {
+  /** Rule kind to author. */
+  kind: "colorScale" | "dataBar" | "iconSet";
+  /** Colour stops as `RRGGBB`/`AARRGGBB`/`#RRGGBB`; 2–3 for a scale, one for a bar. */
+  colors?: string[];
+  /** Built-in icon set name such as `3TrafficLights1`. */
+  iconSet?: string;
+  /** Target ranges; the current selection is used when omitted. */
+  ranges?: XlsxCellRange[];
+  reverse?: boolean;
+  showValue?: boolean;
+  /** Thresholds for each stop, in order. Defaults to min/percentile/max. */
+  thresholds?: Array<{ type: string; value?: number | string }>;
+}
+
+/** Chart a host wants to insert from a cell range. */
+export interface XlsxChartInsertInput {
+  /** Chart family to generate. Defaults to `"bar"` (clustered column). */
+  family?: XlsxChartFamily;
+  /** First column of the range holds category labels. Defaults to `true`. */
+  hasHeaderColumn?: boolean;
+  /** First row of the range holds series names. Defaults to `true`. */
+  hasHeaderRow?: boolean;
+  /** Source range. Defaults to the current selection, then the used range. */
+  range?: XlsxCellRange;
+  /** Optional chart title. */
+  title?: string;
+}
+
+/** ListObject table a host wants to create from a cell range. */
+export interface XlsxTableCreateInput {
+  /** First row of the range holds the column headers. Defaults to `true`. */
+  hasHeaders?: boolean;
+  /** Table name; Excel requires a unique, identifier-like name. */
+  name?: string;
+  /** Source range. Defaults to the current selection. */
+  range?: XlsxCellRange;
+  /** Built-in table style such as `TableStyleMedium2`. */
+  styleName?: string;
+}
+
+/** Data-validation rule a host wants to apply to the selection. */
+export interface XlsxDataValidationInput {
+  allowBlank?: boolean;
+  errorMessage?: string;
+  inputMessage?: string;
+  /** Inline list (`"a,b,c"`), range reference (`A1:A5`) or formula for list rules. */
+  listSource?: string;
+  operator?: string;
+  /** Target ranges; the current selection is used when omitted. */
+  ranges?: XlsxCellRange[];
+  showDropdown?: boolean;
+  validationType: "list" | "whole" | "decimal" | "date" | "textLength";
+  value1?: string;
+  value2?: string;
+}
+
+/**
+ * A workbook or sheet-scoped defined name (Excel's Name Manager row).
+ *
+ * `refersTo` keeps Excel's A1 syntax, for example `Sheet1!$A$1:$C$3` or
+ * `SUM(Sheet1!$A$1:$A$3)`. Sheet-scoped names set `sheetIndex` to the
+ * zero-based workbook sheet index; workbook-scoped names omit it.
+ */
+export interface XlsxNamedRange {
+  /** Optional comment shown in Excel's Name Manager. */
+  comment?: string;
+  hidden?: boolean;
+  name: string;
+  refersTo: string;
+  /** Zero-based workbook sheet index for a sheet-scoped name. */
+  sheetIndex?: number;
+}
+
+/**
+ * Excel-style paste options for `pasteSpecialFromClipboard` /
+ * `pasteSpecialStructuredData`.
+ *
+ * `all` keeps formulas, values and styles; `values` writes the displayed value
+ * only; `formats` writes only cell styles. `transpose` swaps rows and columns.
+ */
+export interface XlsxPasteSpecialOptions {
+  mode?: "all" | "values" | "formats";
+  transpose?: boolean;
+}
+
+/** Inline-edit request the grid watches; `token` retriggers the same cell. */
+export interface XlsxCellEditRequest {
+  cell: XlsxCellAddress;
+  token: number;
+}
+
+/**
+ * Authoring actions for non-cell workbook objects.
+ *
+ * Implemented by `XlsxViewerController`. Every action mutates the workbook
+ * model, re-renders the viewer, records an undo entry and is written into
+ * exported XLSX bytes.
+ */
+export interface XlsxViewerAuthoring {
+  // ── Structure ──────────────────────────────────────────────────────
+  /**
+   * Inserts blank rows at `startRow`, pushing existing rows down.
+   *
+   * Cell values, formulas, styles, merges, row sizes, hyperlinks, comments,
+   * conditional formats, data validations, tables, defined names, frozen panes
+   * and drawing anchors are shifted together so the workbook stays consistent.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  insertRows: (startRow: number, count?: number) => boolean;
+  /** Deletes rows starting at `startRow`, pulling the rows below up. */
+  deleteRows: (startRow: number, count?: number) => boolean;
+  /** Inserts blank columns at `startColumn`, pushing existing columns right. */
+  insertColumns: (startColumn: number, count?: number) => boolean;
+  /** Deletes columns starting at `startColumn`, pulling the columns right left. */
+  deleteColumns: (startColumn: number, count?: number) => boolean;
+  // ── Selection ──────────────────────────────────────────────────────
+  /** Selects a whole row (every displayed column). */
+  selectRow: (row: number) => void;
+  /** Selects a whole column (every displayed row). */
+  selectColumn: (column: number) => void;
+  /** Selects the whole used range. */
+  selectAll: () => void;
+  // ── Clipboard ──────────────────────────────────────────────────────
+  /**
+   * Cuts the selection: writes the payload and marks the source as a pending
+   * move (`cutState`); the source cells are cleared by the next paste.
+   *
+   * The move is one undo entry: the paste snapshots the workbook before it
+   * writes, then clears the source, so a single undo restores both ranges.
+   *
+   * @returns `true` when a cut is pending.
+   */
+  cutSelection: () => boolean;
+  /**
+   * Cancels a pending cut, dropping the marquee and the internal payload
+   * without touching the workbook (Excel's Escape).
+   *
+   * @returns `true` when there was a pending cut to cancel.
+   */
+  cancelCut: () => boolean;
+  /**
+   * Pastes the last copied or cut payload with Excel-style paste options.
+   *
+   * `values` writes values only, `formats` writes styles only and `transpose`
+   * swaps rows and columns. Falls back to the system clipboard when nothing was
+   * copied inside the viewer.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  pasteSpecialFromClipboard: (options?: XlsxPasteSpecialOptions) => Promise<boolean>;
+  /** Synchronous paste-special entry point for hosts and tests. */
+  pasteSpecialStructuredData: (payload: string, options?: XlsxPasteSpecialOptions) => boolean;
+  // ── Number formats ─────────────────────────────────────────────────
+  /** Applies one number format to the selection as a single undo step. */
+  setSelectionNumberFormat: (format: XlsxCellNumberFormatInput) => boolean;
+  // ── Defined names ──────────────────────────────────────────────────
+  /** Defined names of the workbook, including sheet-scoped names. */
+  getNamedRanges: () => XlsxNamedRange[];
+  /** Adds or replaces a defined name pointing at an A1 reference. */
+  setNamedRange: (name: string, refersTo: string) => boolean;
+  /** Removes a defined name. */
+  deleteNamedRange: (name: string) => boolean;
+  // ── Charts ─────────────────────────────────────────────────────────
+  /**
+   * Inserts a bar, line or pie chart built from a cell range.
+   *
+   * @returns The inserted chart, or `null` when the range is empty, the sheet
+   * part is unavailable, or editing is locked.
+   */
+  insertChart: (input?: XlsxChartInsertInput | null) => XlsxChart | null;
+  /**
+   * Switches an existing chart to another chart type.
+   *
+   * The chart part is rewritten in place: classic families rebuild the plot
+   * area while keeping series names, colours, data labels and axis formatting,
+   * modern families rebuild the part as a chartEx chart (with the style parts
+   * it needs), and migrations between the two also update the drawing
+   * relationship, the `mc:AlternateContent` wrapper and the content type.
+   * The mutation is recorded in undo history and is written into exported XLSX
+   * bytes.
+   *
+   * @param id Chart id, as returned by `getSheetCharts()` or `insertChart()`.
+   * @param type Chart type option id, for example `"Pie3D"` or `"Treemap"`.
+   * @returns `true` when the chart part was rewritten.
+   */
+  changeChartType: (id: string, type: string) => boolean;
+  // ── Freeze panes ───────────────────────────────────────────────────
+  /** Frozen rows/columns of the active sheet. */
+  readonly freezePanes: XlsxFreezePanes | null;
+  /**
+   * Freezes rows/columns above and left of `freeze`, or clears the frozen pane
+   * when both counts are zero or `null` is passed.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setFreezePanes: (freeze: XlsxFreezePanes | null) => boolean;
+  /**
+   * Freezes panes at the active cell, or unfreezes when that cell is already
+   * the freeze origin.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  toggleFreezePanesAtActiveCell: () => boolean;
+  // ── Comments ───────────────────────────────────────────────────────
+  /** Comment on a cell, or `null`. Defaults to the active cell. */
+  getCellComment: (cell?: XlsxCellAddress | null) => XlsxCellComment | null;
+  /**
+   * Creates, edits or deletes the note on a cell. Pass `null` to delete.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setCellComment: (cell: XlsxCellAddress, input: XlsxCellCommentInput | null) => boolean;
+  // ── Hyperlinks ─────────────────────────────────────────────────────
+  /** Hyperlink on a cell, or `null`. Defaults to the active cell. */
+  getCellHyperlink: (cell?: XlsxCellAddress | null) => XlsxCellHyperlink | null;
+  /**
+   * Creates, edits or removes the hyperlink on a cell. Pass `null` to remove.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setCellHyperlink: (cell: XlsxCellAddress, input: XlsxCellHyperlinkInput | null) => boolean;
+  // ── Conditional formatting ─────────────────────────────────────────
+  /** Conditional-format rules of the active sheet, in priority order. */
+  getConditionalFormatRules: () => XlsxConditionalFormatRule[];
+  /**
+   * Adds a conditional-format rule to the active sheet.
+   *
+   * @returns `true` when the rule was written.
+   */
+  addConditionalFormatRule: (draft: XlsxConditionalFormatDraft) => boolean;
+  /** Replaces the rule at `index`; `draft.ranges` default to the rule's ranges. */
+  updateConditionalFormatRule: (index: number, draft: XlsxConditionalFormatDraft) => boolean;
+  /** Deletes the rule at `index`. */
+  deleteConditionalFormatRule: (index: number) => boolean;
+  // ── Tables ─────────────────────────────────────────────────────────
+  /**
+   * Creates a ListObject table from a range (defaults to the selection).
+   *
+   * @returns The created table, or `null` when the range or name is invalid.
+   */
+  createTable: (input?: XlsxTableCreateInput | null) => XlsxTable | null;
+  /** Removes a table definition from the active sheet. */
+  removeTable: (name: string) => boolean;
+  /** Table whose range contains `cell`. Defaults to the active cell. */
+  getTableAtCell: (cell?: XlsxCellAddress | null) => XlsxTable | null;
+  // ── Data validation ────────────────────────────────────────────────
+  /**
+   * Applies a data-validation rule to the selection, replacing rules on the
+   * same cells. Pass `null` to remove validations from the selection.
+   */
+  setSelectionDataValidation: (input: XlsxDataValidationInput | null) => boolean;
+}
+
+/**
+ * Options for {@link XlsxViewerController.replaceInSheet}.
+ *
+ * The defaults mirror Excel's Find and Replace: case-insensitive literal
+ * matching over the whole used range of one sheet, values and formulas.
+ */
+export interface XlsxReplaceInSheetOptions {
+  /** Match case exactly. Defaults to `false`. */
+  matchCase?: boolean;
+  /** Only replace a cell whose entire text equals the query. Defaults to `false`. */
+  wholeCell?: boolean;
+  /**
+   * Replace inside formulas as well. Defaults to `true` so replace covers the
+   * same cells the search session reports. A formula cell is edited through its
+   * formula text, never through the cached value it calculates.
+   */
+  formula?: boolean;
+  /** Visible sheet index (a `sheets` index). Defaults to the active sheet. */
+  sheetIndex?: number;
+  /** Limit the scan to this range. Defaults to the sheet's used range. */
+  range?: XlsxCellRange;
+  /**
+   * Replace only this occurrence instead of every match in each cell.
+   *
+   * Spreadsheet search reports one match per cell plus the offsets of the
+   * matched text, so the Replace button passes the active match here while
+   * Replace All omits it.
+   */
+  occurrence?: {
+    cell: XlsxCellAddress;
+    start: number;
+    end: number;
+  };
+}
+
+/** What {@link XlsxViewerController.replaceInSheet} changed. */
+export interface XlsxReplaceResult {
+  /** Visible sheet index the command ran against. */
+  sheetIndex: number;
+  /** Workbook sheet index of the same sheet, as used by the engine. */
+  workbookSheetIndex: number;
+  /** Number of cells written. */
+  replacedCells: number;
+  /** Number of matched occurrences replaced (a cell can hold several). */
+  replacedOccurrences: number;
+  /** True when the workbook changed and one undo entry was recorded. */
+  changed: boolean;
+}
+
+/**
+ * A local workbook handed to `XlsxViewerController.loadFile`.
+ *
+ * Plain bytes carry no display name; a `File`/`Blob` supplies one through
+ * `arrayBuffer()` and its optional `name`. The object shape stays DOM-free so
+ * the controller type works in a Worker or Node typecheck.
+ */
+export type XlsxLoadFileSource =
+  | ArrayBuffer
+  | { arrayBuffer(): Promise<ArrayBuffer>; name?: string };
+
+export interface XlsxViewerController extends XlsxViewerAuthoring {
   activeCell: XlsxCellAddress | null;
   activeCellAddress: string | null;
   activeSheet: XlsxSheetData | null;
@@ -796,8 +1792,42 @@ export interface XlsxViewerController {
    * @returns `true` when the cell was written.
    */
   commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
+  /**
+   * Writes one entry into every cell of the selection as a single undo step.
+   *
+   * This is Excel's fill: with a multi-cell selection active, an entry
+   * confirmed in the grid's inline editor with `Enter` lands in the whole
+   * range instead of only in the active cell. `Tab`, blurring the editor and
+   * the commit-and-move keys still write only the active cell. Hosts can bind
+   * the same operation to `Ctrl+Enter` for their own chrome.
+   *
+   * Input follows `commitCellInput`'s rules — `=` text is a formula, other
+   * text is a value — and a formula is copied verbatim, so its references do
+   * not shift. Merged continuation cells and cells whose entry fails data
+   * validation are skipped, and the selection stays put.
+   *
+   * @param text Text entered by the user, for example `"=TODAY()"` or `"n/a"`.
+   * @returns How many cells were written; `0` when the sheet is locked, the
+   *   entry was rejected, or the range has no writable cell.
+   */
+  commitSelectionInput: (text: string) => number;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
+  /**
+   * The pending cut (source range and sheet), or `null` when nothing is cut.
+   *
+   * Hosts draw the moving marquee from it and hide it once a paste lands or
+   * `cancelCut()` is called.
+   */
+  cutState: XlsxClipboardCutState | null;
+  /** Pending inline-edit request; the grid starts editing when it changes. */
+  editRequest: XlsxCellEditRequest | null;
+  /**
+   * Requests inline editing of a cell (defaults to the active cell).
+   *
+   * @returns `true` when a request was issued.
+   */
+  editCell: (cell?: XlsxCellAddress | null) => boolean;
   dataValidationFeedback: XlsxDataValidationFeedback | null;
   dismissDataValidationFeedback: () => void;
   defaultZoomScale: number;
@@ -807,6 +1837,30 @@ export interface XlsxViewerController {
   download: () => void;
   charts: XlsxChart[];
   chartsheets: XlsxChartsheet[];
+  /**
+   * Ranges currently painted by the viewer's highlight layer.
+   *
+   * The list merges ranges sourced from the selected chart element with the
+   * ranges supplied through {@link highlightRanges}. It is reactive and
+   * read-only; mutate it through those methods.
+   */
+  highlightedRanges: XlsxRangeHighlight[];
+  /**
+   * Highlights one or more cell ranges in the built-in overlay layer.
+   *
+   * Ranges are normalized (start = top-left). The call replaces the previous
+   * host-supplied ranges, defaults to the active worksheet and to the amber
+   * custom colour, and is read-only: no workbook mutation, undo entry or
+   * exported byte changes. Chart source highlights are derived from the chart
+   * selection and are not replaced. Highlights follow scrolling, zoom and
+   * freeze panes.
+   *
+   * @param ranges Zero-based A1-less ranges on one worksheet.
+   * @param options Colour, worksheet index, role and optional identity.
+   */
+  highlightRanges: (ranges: readonly XlsxCellRange[], options?: XlsxHighlightRangesOptions) => void;
+  /** Removes the ranges supplied through {@link highlightRanges}. */
+  clearHighlightedRanges: () => void;
   exportCsv: () => void;
   exportXlsx: () => void;
   findCells: (query: string) => XlsxCellAddress[];
@@ -829,13 +1883,50 @@ export interface XlsxViewerController {
   getSheetShapes: (sheetIndex?: number) => XlsxShape[];
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
+  /**
+   * Rich-text runs of a cell, or `undefined` when the cell has none.
+   *
+   * The runs concatenate to `getCellDisplayValue(cell)`. They are dropped once
+   * the cell value no longer matches the parsed runs (an edit or recalculation
+   * replaced the rich string), so a host can render them without checking.
+   */
+  getCellRuns: (cell?: XlsxCellAddress | null) => XlsxCellTextRun[] | undefined;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
   getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) => Promise<{
     displayValue: string;
     formula: string;
     /** Resolved number format of the cell, so the viewer can localize it. */
     numberFormat?: XlsxCellNumberFormatInput | null;
+    /** Rich-text runs, so Worker-backed viewers keep per-run formatting. */
+    runs?: XlsxCellTextRun[];
   }>;
+  /** Flat print layout of the active sheet, or `null` when none is loaded. */
+  getPrintLayout: () => XlsxPrintLayout | null;
+  /** Pages of the active sheet's current print layout. */
+  printPages: XlsxPrintPage[];
+  /** Current print layout of the active sheet. */
+  printLayout: XlsxPrintLayout | null;
+  /** Whether the grid shows Excel-style dashed page-break preview lines. */
+  isPageBreakPreview: boolean;
+  /** Enables or disables page-break preview on the active sheet. */
+  setPageBreakPreview: (enabled: boolean) => void;
+  /** Whether the print-preview surface is open. */
+  isPrintPreviewOpen: boolean;
+  /**
+   * Opens the print preview for the active sheet.
+   *
+   * @returns `false` when no worksheet is loaded.
+   */
+  openPrintPreview: () => boolean;
+  /** Closes the print preview without printing. */
+  closePrintPreview: () => void;
+  /**
+   * Opens the print preview and asks the host window to print it.
+   *
+   * @returns `false` when no worksheet is loaded or the environment has no
+   *   `window.print`.
+   */
+  print: () => boolean;
   isLoadDeferred: boolean;
   isLoading: boolean;
   isActiveSheetProtected: boolean;
@@ -848,6 +1939,17 @@ export interface XlsxViewerController {
    * source starts loading.
    */
   lastExportWarning: string | null;
+  /**
+   * Loads a new local workbook through the same pipeline as the `file` option.
+   *
+   * Drag-and-drop import uses this so a dropped file goes through the same
+   * size limits, deferred-load threshold and Worker path as one chosen in the
+   * file dialog. The previous workbook the viewer converted is replaced.
+   *
+   * @param source Local workbook bytes or any `File`/`Blob` with them.
+   * @param fileName Display name; defaults to the `File` name when present.
+   */
+  loadFile: (source: XlsxLoadFileSource, fileName?: string) => Promise<void>;
   /** Locale used for number and date formats that do not name one. */
   locale: string;
   maxConcurrentImageDecodes?: number;
@@ -857,7 +1959,38 @@ export interface XlsxViewerController {
   images: XlsxImage[];
   moveChartBy: (id: string, deltaX: number, deltaY: number) => void;
   shapes: XlsxShape[];
+  /**
+   * Merges the current selection without touching its alignment.
+   *
+   * Hosts that want Excel's default action use `mergeAndCenterSelection`;
+   * this entry stays available for hosts that merge without centring.
+   */
   mergeSelection: () => void;
+  /**
+   * Merges every row of the selection across its columns (Excel's Merge
+   * across), leaving each row's alignment untouched.
+   */
+  mergeAcrossSelection: () => void;
+  /**
+   * Merges the current selection and centres its text both ways.
+   *
+   * A single-cell selection is only centred, because Excel never writes a
+   * one-cell merge region. The merge and the alignment land in one undo step.
+   */
+  mergeAndCenterSelection: () => void;
+  /**
+   * Draws a border preset on the current selection.
+   *
+   * `all` borders every cell of the selection, `outside` only its perimeter and
+   * `left`/`right`/`top`/`bottom` that edge of every cell. The line style and
+   * colour come from the command, so per-edge colour is available without
+   * dropping to `setRangeStyle`. The mutation is recorded in undo history and is
+   * included in exported XLSX bytes.
+   *
+   * @returns `false` when there is no selection, the sheet is locked, or the
+   *   command changed nothing.
+   */
+  setSelectionBorders: (input?: XlsxBorderPresetInput) => boolean;
   maxZoomScale: number;
   minZoomScale: number;
   moveImageBy: (id: string, deltaX: number, deltaY: number) => void;
@@ -892,6 +2025,27 @@ export interface XlsxViewerController {
   resizeColumn: (col: number, widthPx: number) => void;
   resizeRow: (row: number, heightPx: number) => void;
   redo: () => void;
+  /**
+   * Replaces `query` with `replacement` in one worksheet.
+   *
+   * Covers both cell values and formulas (see
+   * {@link XlsxReplaceInSheetOptions}), optionally limited to a range or to one
+   * previously reported search occurrence. Everything the command writes is
+   * recorded as a *single* undo entry, and a sheet other than the active one is
+   * activated first so the history entry and the visible grid agree.
+   *
+   * Read-only viewers, protected sheets and worker-backed (read-only) loads
+   * return an empty result without touching the workbook.
+   *
+   * @param query Literal text to find.
+   * @param replacement Text written in place of every match.
+   * @param options Case/whole-cell/formula switches, sheet and range scoping.
+   */
+  replaceInSheet: (
+    query: string,
+    replacement: string,
+    options?: XlsxReplaceInSheetOptions
+  ) => XlsxReplaceResult;
   pasteFromClipboard: () => Promise<boolean>;
   pasteStructuredClipboardData: (payload: string) => boolean;
   pasteText: (text: string) => boolean;
@@ -965,8 +2119,13 @@ export interface XlsxViewerController {
   moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
   resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
   deleteShape: (id: string) => boolean;
+  deleteSelectedDrawing: () => boolean;
   deleteImage: (id: string) => boolean;
   deleteChart: (id: string) => boolean;
+  copyDrawing: () => XlsxClipboardData | null;
+  cutDrawing: () => XlsxClipboardData | null;
+  pasteDrawing: () => boolean;
+  duplicateDrawing: () => boolean;
   addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
   updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
   removeFormControl: (id: string) => boolean;
@@ -997,12 +2156,73 @@ export interface XlsxViewerController {
   src?: string;
   sortState: XlsxTableSortState | null;
   sortTable: (tableName: string, columnIndex: number, direction: XlsxTableSortDirection) => void;
+  /** AutoFilter ranges of the active sheet, in sheet order. */
+  autoFilterRanges: XlsxAutoFilterRange[];
+  /** Active view-level filters of the active sheet. */
+  autoFilterStates: XlsxAutoFilterState[];
+  /** Absolute rows hidden by the active sheet's AutoFilter menus. */
+  hiddenAutoFilterRows: number[];
+  /**
+   * Distinct display values of one AutoFilter column, blanks included.
+   *
+   * The list is capped (the menu reports the remainder) and never mutates the
+   * workbook.
+   */
+  getAutoFilterColumnValues: (range: XlsxAutoFilterRange, columnIndex: number) => XlsxAutoFilterValueOption[];
+  /**
+   * Applies a value filter to one AutoFilter column.
+   *
+   * Passing `null` or an empty list removes that column's filter. Rows that do
+   * not match every filtered column are hidden; the criterion is view state, so
+   * no cell, merge or frozen pane is modified. Returns `false` when the range
+   * or column does not exist.
+   */
+  applyAutoFilterValues: (
+    reference: string,
+    columnIndex: number,
+    values: string[] | null,
+    options?: { includeBlank?: boolean }
+  ) => boolean;
+  /**
+   * Removes the filters of one range, or every AutoFilter filter of the sheet
+   * when `reference` is omitted, restoring the hidden rows.
+   */
+  clearAutoFilter: (reference?: string) => boolean;
+  /**
+   * Sorts the rows of one AutoFilter range by a column.
+   *
+   * The sort is a normal undoable range edit: one entry restores the previous
+   * row order. It is refused in read-only/protected sheets and when a merged
+   * region intersects the data rows, because moving those rows would corrupt
+   * the merge.
+   */
+  sortAutoFilter: (reference: string, columnIndex: number, direction: XlsxTableSortDirection) => boolean;
   setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;
   selectImage: (id: string | null) => void;
   setChartRect: (id: string, rect: XlsxImageRect) => void;
   setImageRect: (id: string, rect: XlsxImageRect) => void;
   getRowsBatchAsync?: (workbookSheetIndex: number, startRow: number, rowCount: number, signal?: AbortSignal) => Promise<unknown[] | null>;
+  /**
+   * Summarizes a selection inside the Worker for Worker-backed viewers.
+   *
+   * Main-thread viewers read the worksheet directly. Worker-backed viewers
+   * keep the workbook on the Worker thread, so the status bar asks for the
+   * aggregate instead of transferring the selected cells.
+   */
+  getSelectionStatsAsync?: (
+    workbookSheetIndex: number,
+    query: XlsxSelectionStatsQuery,
+    signal?: AbortSignal,
+  ) => Promise<XlsxSelectionSummary | null>;
   tables: XlsxTable[];
+  /** Workbook and sheet-scoped defined names visible on the active sheet. */
+  definedNames: XlsxDefinedName[];
+  /** Pivot tables anchored on the active sheet. */
+  pivotTables: XlsxPivotTable[];
+  /** `true` when the active sheet contains at least one pivot table. */
+  hasPivotTable: boolean;
+  /** Slicers attached to the active sheet's pivot tables. */
+  slicers: XlsxSlicer[];
   tabs: XlsxWorkbookTab[];
   undo: () => void;
   unmergeSelection: () => void;
@@ -1013,6 +2233,128 @@ export interface XlsxViewerController {
   zoomScale: number;
   getActiveWorksheet: () => Worksheet | null;
   addSheet: (name?: string) => void;
+  /**
+   * Moves a sheet tab to another slot in the tab strip.
+   *
+   * `fromIndex` and `toIndex` are tab indices — positions in `tabs`, which
+   * interleave worksheets and chartsheets — not `sheets` or `chartsheets`
+   * indices. The order after the move is `tabs.splice(toIndex, 0,
+   * ...tabs.splice(fromIndex, 1))`: the moved tab becomes active and stays
+   * selected, and dropping a tab on its own slot is a no-op.
+   *
+   * `@dukelib/sheets-wasm` has no reorder setter, so the viewer rewrites the
+   * `<sheets>` order in its saved workbook and parses the result back into the
+   * workbook model. Sheet-scoped names and workbook-view tabs keep pointing at
+   * the same sheet, every per-sheet asset is re-read from the reordered
+   * package (images, charts, shapes, form controls and sheet state follow their
+   * sheet), the move is one undo entry, and exported XLSX bytes keep the new
+   * order.
+   *
+   * @param fromIndex Zero-based tab index being moved.
+   * @param toIndex Zero-based destination tab index in the reordered strip.
+   * @returns `true` when the order changed; `false` for an out-of-range index,
+   *   an unchanged order, a read-only viewer, or a workbook that cannot be
+   *   rewritten. Sheet protection does not block a move, matching Excel.
+   */
+  moveSheet: (fromIndex: number, toIndex: number) => boolean;
+  /**
+   * Renames a worksheet, the way Excel's tab rename does.
+   *
+   * The name is validated first (trimmed, non-empty, at most 31 characters, no
+   * `[ ] : * ? / \\`, no leading or trailing apostrophe, unique across
+   * worksheets and chartsheets ignoring case) and the workbook is left
+   * untouched when a rule fails. A successful rename keeps worksheet order, so
+   * `activeSheetIndex` and `activeTabIndex` do not move; it is one undo entry
+   * and is written into exported XLSX bytes.
+   *
+   * `@dukelib/sheets-wasm` has no rename setter, so the viewer rewrites the
+   * worksheet name and every reference to it in its saved workbook and parses
+   * the result back into the workbook model.
+   *
+   * @param index Zero-based visible sheet index, as used by `sheets`,
+   *   `activeSheetIndex` and `setActiveSheetIndex`.
+   * @param name New worksheet name. Surrounding whitespace is trimmed.
+   * @returns `true` when the sheet was renamed; `false` when the name is
+   *   rejected, the index does not name a worksheet, or the viewer is
+   *   read-only. Sheet protection does not block a rename, matching Excel.
+   */
+  renameSheet: (index: number, name: string) => boolean;
+  /** Renames the active worksheet; see `renameSheet`. */
+  renameActiveSheet: (name: string) => boolean;
+  /**
+   * Reports why Excel would reject a worksheet name before it is committed.
+   *
+   * Inline rename inputs use this for live validation. The sheet at `index` is
+   * left out of the uniqueness check so a case-only rename stays possible.
+   *
+   * @param name Candidate name, as typed.
+   * @param index Visible sheet index being renamed, when known.
+   * @returns The first broken rule, or `null` when the name is acceptable.
+   */
+  getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
+  /**
+   * Hides, unhides or very-hides a worksheet at runtime.
+   *
+   * The sheet is addressed by workbook sheet index — the value every
+   * `XlsxSheetData` and worksheet tab exposes as `workbookSheetIndex` — not by
+   * tab or visible-sheet index. A hidden sheet is absent from `tabs`, so it
+   * has no tab index, while `workbookSheetIndex` identifies both listed and
+   * hidden worksheets.
+   *
+   * Hiding the active worksheet selects the nearest remaining visible tab and
+   * clears the sheet-scoped selection and overlay state; hiding the last
+   * visible worksheet is refused, mirroring `removeActiveSheet`. Unhiding a
+   * worksheet makes it active. `veryHidden` worksheets leave `tabs` and the
+   * `hiddenSheets` unhide list even when hidden tabs are shown, like Excel.
+   *
+   * `@dukelib/sheets-wasm` exposes visibility as read-only, so the viewer
+   * rewrites the `state` attribute of the worksheet in its saved workbook,
+   * reparses the package and commits the result as one undo entry. Visibility
+   * is therefore preserved by `exportXlsx` and by a later reload, and images,
+   * charts, shapes, form controls and sheet state are re-read from the rebuilt
+   * package so their `workbookSheetIndex` keys stay aligned.
+   *
+   * @param workbookSheetIndex Zero-based worksheet index in the workbook.
+   * @param visibility Excel visibility to write.
+   * @returns `true` when visibility changed; `false` for a no-op, an invalid
+   *   index, a read-only viewer, an attempt to hide the last visible sheet, or
+   *   a package that cannot be rewritten.
+   */
+  setSheetVisibility: (
+    workbookSheetIndex: number,
+    visibility: XlsxSheetVisibility
+  ) => boolean;
+  /**
+   * Current visibility of a worksheet, including `veryHidden`.
+   *
+   * Worker-backed read-only viewers only know visibility for sheets present in
+   * their snapshot; `null` means the index is not a worksheet the controller
+   * can see.
+   */
+  getSheetVisibility: (workbookSheetIndex: number) => XlsxSheetVisibility | null;
+  /**
+   * Worksheets the tab context menu offers to unhide, in workbook order.
+   *
+   * `veryHidden` worksheets are omitted, matching Excel's Unhide dialog. The
+   * list comes from the live workbook, so it is populated even when
+   * `showHiddenSheets` is off and hidden tabs are not rendered.
+   */
+  hiddenSheets: XlsxHiddenSheet[];
+  /** Whether hidden worksheet tabs are included in `tabs` and the tab strip. */
+  showHiddenSheets: boolean;
+  /**
+   * Includes or removes hidden worksheet tabs at runtime.
+   *
+   * This is a view option, not a workbook edit: it rebuilds `sheets`, `tabs`
+   * and the visible-index map from the current workbook and records no undo
+   * entry. `veryHidden` worksheets are never listed. Turning it off while a
+   * hidden sheet is active switches to the nearest visible worksheet.
+   *
+   * @returns `true` when the mode changed (or already matched); `false` when
+   *   the viewer has no main-thread workbook to rebuild from, such as a
+   *   Worker-backed read-only viewer.
+   */
+  setShowHiddenSheets: (includeHidden: boolean) => boolean;
 }
 
 // ── Sub-controller interfaces ────────────────────────────────────────────
@@ -1042,6 +2384,27 @@ export interface XlsxViewerZoom {
 
 export interface XlsxViewerEditing {
   addSheet: (name?: string) => void;
+  /** Moves a sheet tab; see `XlsxViewerController.moveSheet`. */
+  moveSheet: (fromIndex: number, toIndex: number) => boolean;
+  /** Renames a worksheet; see `XlsxViewerController.renameSheet`. */
+  renameSheet: (index: number, name: string) => boolean;
+  /** Renames the active worksheet; see `XlsxViewerController.renameSheet`. */
+  renameActiveSheet: (name: string) => boolean;
+  /** Explains why a worksheet name is rejected; `null` when it is acceptable. */
+  getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
+  /** Hides, unhides or very-hides a worksheet; see `XlsxViewerController.setSheetVisibility`. */
+  setSheetVisibility: (
+    workbookSheetIndex: number,
+    visibility: XlsxSheetVisibility
+  ) => boolean;
+  /** Current worksheet visibility; see `XlsxViewerController.getSheetVisibility`. */
+  getSheetVisibility: (workbookSheetIndex: number) => XlsxSheetVisibility | null;
+  /** Worksheets offered by the Unhide menu; see `XlsxViewerController.hiddenSheets`. */
+  hiddenSheets: XlsxHiddenSheet[];
+  /** Includes hidden worksheet tabs; see `XlsxViewerController.showHiddenSheets`. */
+  showHiddenSheets: boolean;
+  /** Includes or removes hidden tabs at runtime; see `XlsxViewerController.setShowHiddenSheets`. */
+  setShowHiddenSheets: (includeHidden: boolean) => boolean;
   canRedo: boolean;
   canUndo: boolean;
   clearSelectedCells: () => void;
@@ -1062,10 +2425,58 @@ export interface XlsxViewerEditing {
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
   fillSelection: (targetRange: XlsxCellRange) => void;
   findCells: (query: string) => XlsxCellAddress[];
+  insertRows: (startRow: number, count?: number) => boolean;
+  deleteRows: (startRow: number, count?: number) => boolean;
+  insertColumns: (startColumn: number, count?: number) => boolean;
+  deleteColumns: (startColumn: number, count?: number) => boolean;
+  selectRow: (row: number) => void;
+  selectColumn: (column: number) => void;
+  selectAll: () => void;
+  cutSelection: () => boolean;
+  cancelCut: () => boolean;
+  /**
+   * Captures the selected chart, image or shape as clipboard data.
+   *
+   * Returns `null` when no drawing is selected. The caller can write the
+   * returned flavours to the system clipboard; the viewer also keeps the
+   * payload so `pasteDrawing()` works where the clipboard is unreadable.
+   */
+  copyDrawing: () => XlsxClipboardData | null;
+  /** Captures the selected drawing for a cut-paste move. */
+  cutDrawing: () => XlsxClipboardData | null;
+  /** Pastes the drawing clipboard onto the active sheet at the active cell. */
+  pasteDrawing: () => boolean;
+  /** Copies the selected drawing in place with a small offset. */
+  duplicateDrawing: () => boolean;
+  /**
+   * The pending cut (source range and sheet), or `null` when nothing is cut.
+   *
+   * Hosts draw the moving marquee from it and hide it once a paste lands or
+   * `cancelCut()` is called.
+   */
+  cutState: XlsxClipboardCutState | null;
+  pasteSpecialFromClipboard: (options?: XlsxPasteSpecialOptions) => Promise<boolean>;
+  pasteSpecialStructuredData: (payload: string, options?: XlsxPasteSpecialOptions) => boolean;
+  setSelectionNumberFormat: (format: XlsxCellNumberFormatInput) => boolean;
+  getNamedRanges: () => XlsxNamedRange[];
+  setNamedRange: (name: string, refersTo: string) => boolean;
+  deleteNamedRange: (name: string) => boolean;
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
+  /** Merges the current selection without touching its alignment. */
   mergeSelection: () => void;
+  /** Merges every row of the selection across its columns. */
+  mergeAcrossSelection: () => void;
+  /** Merges the current selection and centres its text both ways. */
+  mergeAndCenterSelection: () => void;
+  /**
+   * Draws a border preset on the current selection.
+   *
+   * @returns `false` when there is no selection, the sheet is locked, or the
+   *   command changed nothing.
+   */
+  setSelectionBorders: (input?: XlsxBorderPresetInput) => boolean;
   pasteFromClipboard: () => Promise<boolean>;
   pasteStructuredClipboardData: (payload: string) => boolean;
   pasteText: (text: string) => boolean;
@@ -1122,9 +2533,29 @@ export interface XlsxViewerEditing {
 }
 
 export interface XlsxViewerTables {
+  autoFilterRanges: XlsxAutoFilterRange[];
+  autoFilterStates: XlsxAutoFilterState[];
+  applyAutoFilterValues: (
+    reference: string,
+    columnIndex: number,
+    values: string[] | null,
+    options?: { includeBlank?: boolean }
+  ) => boolean;
+  clearAutoFilter: (reference?: string) => boolean;
+  getAutoFilterColumnValues: (range: XlsxAutoFilterRange, columnIndex: number) => XlsxAutoFilterValueOption[];
+  hiddenAutoFilterRows: number[];
+  sortAutoFilter: (reference: string, columnIndex: number, direction: XlsxTableSortDirection) => boolean;
   sortState: XlsxTableSortState | null;
   sortTable: (tableName: string, columnIndex: number, direction: XlsxTableSortDirection) => void;
   tables: XlsxTable[];
+}
+
+/** Static, read-only pivot-table and slicer metadata of the active sheet. */
+export interface XlsxViewerPivot {
+  definedNames: XlsxDefinedName[];
+  hasPivotTable: boolean;
+  pivotTables: XlsxPivotTable[];
+  slicers: XlsxSlicer[];
 }
 
 export interface XlsxViewerImages {
@@ -1171,6 +2602,11 @@ export interface XlsxViewerImages {
   deleteShape: (id: string) => boolean;
   deleteImage: (id: string) => boolean;
   deleteChart: (id: string) => boolean;
+  deleteSelectedDrawing: () => boolean;
+  copyDrawing: () => XlsxClipboardData | null;
+  cutDrawing: () => XlsxClipboardData | null;
+  pasteDrawing: () => boolean;
+  duplicateDrawing: () => boolean;
   addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
   updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
   removeFormControl: (id: string) => boolean;
@@ -1190,6 +2626,7 @@ export interface XlsxViewerCharts {
   activeTabIndex: number;
   charts: XlsxChart[];
   chartsheets: XlsxChartsheet[];
+  changeChartType: (id: string, type: string) => boolean;
   clearSelectedChart: () => void;
   clearSelectedChartElement: () => void;
   getChartById: (id: string) => XlsxChart | null;

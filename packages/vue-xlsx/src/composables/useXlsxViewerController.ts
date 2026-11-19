@@ -12,6 +12,7 @@ import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   UseXlsxViewerControllerOptions,
   XlsxCellAddress,
+  XlsxCellEditRequest,
   XlsxCellRange,
   XlsxChart,
   XlsxChartElementSelection,
@@ -19,12 +20,16 @@ import type {
   XlsxDataValidation,
   XlsxDataValidationFeedback,
   XlsxFormControl,
+  XlsxHighlightRangesOptions,
   XlsxImage,
+  XlsxNamedRange,
+  XlsxRangeHighlight,
   XlsxShape,
   XlsxSheetData,
   XlsxTable,
   XlsxTableSortState,
   XlsxLoadError,
+  XlsxLoadFileSource,
   XlsxSourceState,
   XlsxViewerController,
   XlsxWorkbookTab,
@@ -34,12 +39,16 @@ import type {
 import {
   XlsxWorkerClient,
   XlsxWorkerError,
+  applyWorkbookDefinedNames,
   createXlsxRuntime,
   validateXlsxArchive,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
+  mergeWorkbookSheetAuthoringAssets,
+  normalizeWorkbookDefinedNames,
   revokeWorkbookImageAssets,
   safeCalculate,
+  toDefinedNameSummary,
   trackXlsxWorkbookLifetime,
   type SafeCalculateSkipReason,
   type WorkbookChartAssets,
@@ -80,13 +89,25 @@ import {
   createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
+import { createReplaceDomain } from "./replace";
+import { createSheetOrderDomain } from "./sheet-order";
+import { createSheetVisibilityDomain } from "./sheet-visibility";
+import { createStructureDomain } from "./structure";
+import { createPrintDomain } from "./print";
+import { createAuthoringDomain } from "./authoring";
 import { createClipboardDomain } from "./clipboard";
+import { createAutoFilterDomain } from "./auto-filter";
 import {
   createChartImageDomain,
   loadWorkbookImageAssets,
   shouldSkipXmlParsingForWorkbook
 } from "./chart-controller";
 import { createNavigationDomain } from "./navigation";
+import {
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  collectChartRangeHighlights,
+  normalizeHighlightRange
+} from "./chart-range-highlight";
 import {
   XlsxFileSizeLimitExceededError,
   createWorkbookTooLargeError,
@@ -197,15 +218,25 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const sourceMaxInputBytes = sourceInputLimits.length > 0
     ? Math.min(...sourceInputLimits)
     : undefined;
-  const showHiddenSheets = configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false;
+  const showHiddenSheetsMode = ref(configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false);
   const skipXmlParsing = configuredSkipXmlParsing ?? xlsxRuntime.parseOptions.skipXmlParsing ?? false;
+
+  // The initial source is captured once, but drag-and-drop import replaces it
+  // later. Keeping it in refs lets `loadFile()` reuse the exact load watcher
+  // below instead of growing a second loading path.
+  const sourceFile = shallowRef<ArrayBuffer | undefined>(file);
+  const sourceUrl = ref<string | undefined>(src);
+  const sourceFileName = ref<string | undefined>(fileName);
+  // Bumped when the same bytes are loaded again, so a repeated `loadFile()`
+  // still reloads instead of silently matching the previous shallow ref.
+  const sourceRevision = ref(0);
 
   // ═══════════════════════════════════════════════════════════════════
   // State
   // ═══════════════════════════════════════════════════════════════════
-  const isLoading = ref(Boolean(file ?? src));
+  const isLoading = ref(Boolean(sourceFile.value ?? sourceUrl.value));
   const error = ref<Error | null>(null);
-  const sourceState = ref<XlsxSourceState>(file || src ? "loading" : "idle");
+  const sourceState = ref<XlsxSourceState>(sourceFile.value || sourceUrl.value ? "loading" : "idle");
   const sourceError = ref<XlsxLoadError | null>(null);
   const workbook = ref<Workbook | null>(null);
   const sheets = ref<XlsxSheetData[]>([]);
@@ -224,6 +255,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const selection = ref<XlsxCellRange | null>(null);
   const selectedChartId = ref<string | null>(null);
   const selectedChartElement = ref<XlsxChartElementSelection | null>(null);
+  const manualHighlightedRanges = ref<XlsxRangeHighlight[]>([]);
+  const chartHighlightsSuppressed = ref(false);
   const selectedImageId = ref<string | null>(null);
   const selectedShapeId = ref<string | null>(null);
   const revision = ref(0);
@@ -239,6 +272,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const isWorkerBacked = ref(false);
   const sortState = ref<XlsxTableSortState | null>(null);
   const forcedReadOnly = ref(false);
+  const editRequestRef = ref<XlsxCellEditRequest | null>(null);
+  const definedNameOverridesRef = ref<Record<string, XlsxNamedRange>>({});
+  const removedDefinedNamesRef = ref<string[]>([]);
   const dataValidationFeedback = ref<XlsxDataValidationFeedback | null>(null);
   const lastExportWarning = ref<string | null>(null);
   const deferredBufferRef = shallowRef<ArrayBuffer | null>(null);
@@ -288,7 +324,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "export-warning",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
+      sourceKind: sourceUrl.value ? "url" : "file",
       message,
     });
   }
@@ -297,12 +333,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "image-decode-error",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
+      sourceKind: sourceUrl.value ? "url" : "file",
       imageId,
       error: {
         code: "IMAGE_DECODE_FAILED",
         message,
-        sourceKind: src ? "url" : "file",
+        sourceKind: sourceUrl.value ? "url" : "file",
         phase: "image-decode",
       },
     });
@@ -322,7 +358,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // ═══════════════════════════════════════════════════════════════════
   // Computed
   // ═══════════════════════════════════════════════════════════════════
-  const displayFileName = computed(() => resolveDisplayFileName(src, fileName));
+  const displayFileName = computed(() => resolveDisplayFileName(sourceUrl.value, sourceFileName.value));
   const shouldDeferLoading = deferLoadingAboveBytes > 0;
   // Read through the options object so hosts may provide a reactive getter.
   // Plain boolean options retain the existing one-time configuration behavior.
@@ -337,6 +373,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const tab = activeTab.value;
     return tab?.kind === "sheet" ? sheets.value[tab.sheetIndex ?? -1] ?? null : null;
   });
+  const printDomain = createPrintDomain({ activeSheet, revision });
   const isActiveSheetProtected = computed(() => activeSheet.value?.protection?.enabled === true);
   const isEditingLocked = computed(() => isSheetEditingLocked(
     readOnly.value,
@@ -403,6 +440,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const previousWorkbook = workbook.value;
     if (previousWorkbook === nextWorkbook) return;
     workbook.value = nextWorkbook;
+    // A loaded or restored workbook already carries its own names; the Name
+    // Manager overlay only applies to edits made after the load.
+    definedNameOverridesRef.value = {};
+    removedDefinedNamesRef.value = [];
+    editRequestRef.value = null;
     disposeWorkbook(previousWorkbook);
   }
   function discardWorkbookLoadResult(
@@ -429,6 +471,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     shapesByWorkbookSheetIndex.value = [];
   }
   function clearChartAssets() {
+    manualHighlightedRanges.value = [];
     chartLoadRequestTokenRef.value += 1;
     chartDisplayFallbackCleanupRef.value?.();
     chartDisplayFallbackCleanupRef.value = null;
@@ -465,6 +508,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     );
     setImageAssets({
       archive: {},
+      chartsheetOrigins: [],
       formControlOriginsById: new Map(),
       formControlsByWorkbookSheetIndex: formControls,
       imageOriginsById: new Map(),
@@ -517,14 +561,14 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const currentAssets = chartAssetsRef.value;
     if (currentAssets && (currentAssets.chartOriginsById.size > 0 || !targetWorkbook || !imageAssetsRef.value)) return currentAssets;
     if (!targetWorkbook || !imageAssetsRef.value) return chartAssetsRef.value;
-    const assets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(targetSheets), showHiddenSheets);
+    const assets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(targetSheets), showHiddenSheetsMode.value);
     chartAssetsRef.value = assets;
     return assets;
   }
   function startChartDisplayHydration(buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) {
     const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(new Uint8Array(buffer), skipXmlParsing);
     const visibleMap = buildVisibleSheetIndexMap(targetSheets);
-    const quickAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheets);
+    const quickAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheetsMode.value);
     setChartAssets(quickAssets);
     if (effectiveSkipXmlParsing) return;
     isChartsLoading.value = true;
@@ -549,16 +593,16 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       reportDiagnostic({
         type: "worker-error",
         requestId: latestLoadRequestId,
-        sourceKind: src ? "url" : "file",
-        url: src,
-        error: toXlsxLoadError(error, src ? "url" : "file", src),
+        sourceKind: sourceUrl.value ? "url" : "file",
+        url: sourceUrl.value,
+        error: toXlsxLoadError(error, sourceUrl.value ? "url" : "file", sourceUrl.value),
       });
     };
     const runMainThreadFallback = () => {
       chartDisplayFallbackCleanupRef.value = scheduleLowPriorityTask(() => {
         if (requestToken !== chartLoadRequestTokenRef.value) return;
         try {
-          const hydratedAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheets);
+          const hydratedAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheetsMode.value);
           if (requestToken !== chartLoadRequestTokenRef.value) return;
           setChartAssets(hydratedAssets);
         } catch { if (requestToken !== chartLoadRequestTokenRef.value) return; setChartAssets(quickAssets); }
@@ -566,7 +610,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       });
     };
     if (!workerSupported) { runMainThreadFallback(); return; }
-    void getWorkerClient().parseCharts(buffer, effectiveSkipXmlParsing, showHiddenSheets)
+    void getWorkerClient().parseCharts(buffer, effectiveSkipXmlParsing, showHiddenSheetsMode.value)
       .then((result) => {
         const quickChartCount = quickAssets.chartsByWorkbookSheetIndex.reduce((total, charts) => total + charts.length, 0);
         const workerChartCount = result.chartsByWorkbookSheetIndex.reduce((total, charts) => total + charts.length, 0);
@@ -647,10 +691,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const nextSheets = buildSheetList(
       targetWorkbook, imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex,
       imageAssetsRef.value?.themePalette, imageAssetsRef.value?.styleById,
-      imageAssetsRef.value?.namedCellStyleByName, imageAssetsRef.value?.tableStyleByName, showHiddenSheets
+      imageAssetsRef.value?.namedCellStyleByName, imageAssetsRef.value?.tableStyleByName, showHiddenSheetsMode.value
     );
     sheets.value = nextSheets;
-    setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheets));
+    setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheetsMode.value));
     revision.value = revision.value + 1;
   }
   async function refreshChartData() {
@@ -660,7 +704,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       return true;
     }
     try {
-      const result = await getWorkerClient().refreshCharts(showHiddenSheets);
+      const result = await getWorkerClient().refreshCharts(showHiddenSheetsMode.value);
       chartsByWorkbookSheetIndex.value = result.chartsByWorkbookSheetIndex;
       chartsheets.value = result.chartsheets;
       tabs.value = result.tabs;
@@ -670,9 +714,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       reportDiagnostic({
         type: "worker-error",
         requestId: latestLoadRequestId,
-        sourceKind: src ? "url" : "file",
-        url: src,
-        error: toXlsxLoadError(error, src ? "url" : "file", src),
+        sourceKind: sourceUrl.value ? "url" : "file",
+        url: sourceUrl.value,
+        error: toXlsxLoadError(error, sourceUrl.value ? "url" : "file", sourceUrl.value),
       });
       return false;
     }
@@ -711,6 +755,42 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       });
     }
     activeTabIndex.value = nextTabIndex;
+  }
+  function activateTab(tabIndex: number, options?: { preserveSelection?: boolean }) {
+    if (tabIndex < 0 || tabIndex >= tabs.value.length) return;
+    const tab = tabs.value[tabIndex];
+    if (tab?.kind === "sheet" && typeof tab.sheetIndex === "number") {
+      switchToSheet(tab.sheetIndex, options);
+      return;
+    }
+    if (tabIndex === activeTabIndex.value) return;
+    if (options?.preserveSelection) {
+      preservedTabSwitchIndexRef.value = tabIndex;
+      void nextTick(() => {
+        if (preservedTabSwitchIndexRef.value === tabIndex) preservedTabSwitchIndexRef.value = -1;
+      });
+    }
+    activeTabIndex.value = tabIndex;
+  }
+  function restoreActiveSheetAndTab(visibleSheetIndex: number, tabIndex?: number) {
+    if (visibleSheetIndex < 0 || visibleSheetIndex >= sheets.value.length) return;
+    const resolvedTabIndex = tabIndex !== undefined && tabs.value[tabIndex]
+      ? tabIndex
+      : resolveSheetTabIndex(visibleSheetIndex);
+    if (resolvedTabIndex < 0) {
+      switchToSheet(visibleSheetIndex);
+      return;
+    }
+    if (resolvedTabIndex === activeTabIndex.value) {
+      activeSheetIndex.value = visibleSheetIndex;
+      return;
+    }
+    preservedTabSwitchIndexRef.value = resolvedTabIndex;
+    void nextTick(() => {
+      if (preservedTabSwitchIndexRef.value === resolvedTabIndex) preservedTabSwitchIndexRef.value = -1;
+    });
+    activeSheetIndex.value = visibleSheetIndex;
+    activeTabIndex.value = resolvedTabIndex;
   }
   function getInternalActiveWorksheet() {
     const activeWorkbook = workbook.value;
@@ -887,7 +967,41 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         setExportWarning(officeMessagesEn.xlsx.diagnostics.exportXmlEscapeFailed);
       }
     }
-    return mergeWorkbookImageAssets(sanitized.bytes, imageAssetsRef.value, sheetOriginsRef.value);
+    // Authored objects (freeze pane, comments, hyperlinks, conditional formats,
+    // data validations, tables) live in the source archive; the engine's saved
+    // bytes carry the authoritative cells, so merge the authoring fragments in
+    // before the drawing parts are rebuilt.
+    const authored = mergeWorkbookSheetAuthoringAssets(
+      sanitized.bytes,
+      imageAssetsRef.value?.archive ?? null
+    );
+    const merged = mergeWorkbookImageAssets(authored, imageAssetsRef.value, sheetOriginsRef.value);
+    // The engine cannot delete a defined name, so Name Manager edits (and the
+    // deletions in particular) are written into the saved workbook part.
+    const hasNameEdits = Object.keys(definedNameOverridesRef.value).length > 0
+      || removedDefinedNamesRef.value.length > 0;
+    const named = hasNameEdits
+      ? applyWorkbookDefinedNames(merged, resolveEffectiveNamedRanges(targetWorkbook))
+      : merged;
+    // AutoFilter criteria are view state until export; writing them here is
+    // what keeps an applied or cleared filter on the next reload.
+    return autoFilterDomain.applyToSavedBytes(named);
+  }
+  function resolveEffectiveNamedRanges(targetWorkbook: Workbook | null): XlsxNamedRange[] {
+    if (!targetWorkbook) return [];
+    const base = normalizeWorkbookDefinedNames(targetWorkbook.namedRanges);
+    const removed = new Set(removedDefinedNamesRef.value.map((name) => name.toLowerCase()));
+    const overrides = definedNameOverridesRef.value;
+    const byName = new Map<string, XlsxNamedRange>();
+    for (const entry of base) {
+      const key = entry.name.toLowerCase();
+      if (removed.has(key)) continue;
+      byName.set(key, overrides[key] ?? entry);
+    }
+    for (const [key, entry] of Object.entries(overrides)) {
+      if (!removed.has(key)) byName.set(key, entry);
+    }
+    return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
   }
   function captureCellMutationState(cell: XlsxCellAddress) {
     const worksheet = getInternalActiveWorksheet();
@@ -903,11 +1017,18 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       cellValue.free();
     }
   }
-  function recordHistoryBeforeMutation() {
+  /**
+   * Records the pre-mutation workbook as one undo step.
+   *
+   * `precomputedBytes` lets a mutation that already serialized the workbook
+   * reuse those bytes instead of saving a second identical snapshot.
+   */
+  function recordHistoryBeforeMutation(precomputedBytes?: Uint8Array) {
     if (isApplyingHistoryRef.value || !workbook.value) return;
     pushHistoryEntry(undoStackRef.value, {
       kind: "snapshot", activeCell: activeCell.value, activeSheetIndex: activeSheetIndex.value,
-      bytes: createSavedWorkbookBytes(workbook.value), selection: selection.value
+      activeTabIndex: activeTabIndex.value,
+      bytes: precomputedBytes ?? createSavedWorkbookBytes(workbook.value), selection: selection.value
     }, historyBudget);
     redoStackRef.value = [];
     historyRevision.value = historyRevision.value + 1;
@@ -984,7 +1105,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         const snapshot = await client.loadWorkbook(
           buffer,
           effectiveSkipXmlParsing,
-          showHiddenSheets,
+          showHiddenSheetsMode.value,
           task.signal,
         );
         if (!isCurrentWorkbookLoad(load)) {
@@ -1065,7 +1186,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         nextImageAssets.styleById,
         nextImageAssets.namedCellStyleByName,
         nextImageAssets.tableStyleByName,
-        showHiddenSheets,
+        showHiddenSheetsMode.value,
       );
       if (!isCurrentWorkbookLoad(load)) return;
       setImageAssets(nextImageAssets);
@@ -1234,7 +1355,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // ═══════════════════════════════════════════════════════════════════
   // Loading watcher
   // ═══════════════════════════════════════════════════════════════════
-  watch(() => [file, src], (_value, _oldValue, onCleanup) => {
+  watch([sourceFile, sourceUrl, sourceRevision], (_value, _oldValue, onCleanup) => {
+    const file = sourceFile.value;
+    const src = sourceUrl.value;
+    const fileName = sourceFileName.value;
     if (!file && !src) {
       latestLoadRequestId += 1;
       xlsxLoadCoordinator.cancel();
@@ -1391,7 +1515,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   });
 
   const ctx = {
-    file, src, fileName, maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing, showHiddenSheets,
+    get file() { return sourceFile.value; },
+    get src() { return sourceUrl.value; },
+    get fileName() { return sourceFileName.value; },
+    maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing,
+    get showHiddenSheets() { return showHiddenSheetsMode.value; },
+    setShowHiddenSheetsMode: (includeHidden: boolean) => { showHiddenSheetsMode.value = includeHidden; },
     workerSupported, shouldDeferLoading, canUseWorkerForRequestedReadOnly, requestedReadOnly: initialRequestedReadOnly,
     isLoading, error, sourceState, sourceError, workbook, sheets, chartsByWorkbookSheetIndex, chartsheets, tabs,
     isChartsLoading, workerTablesByWorkbookSheetIndex, formControlsByWorkbookSheetIndex,
@@ -1399,14 +1528,15 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     zoomScaleOverridesByTabId, activeCell, selection, selectedChartId, selectedChartElement,
     selectedImageId, selectedShapeId, revision, selectionAnchorRef, undoStackRef, redoStackRef, historyBudget,
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
-    isWorkerBacked, sortState, forcedReadOnly, dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
+    isWorkerBacked, sortState, forcedReadOnly, editRequestRef, definedNameOverridesRef, removedDefinedNamesRef,
+    dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
     sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef, locale: documentLocale,
     activeTab, activeSheet, deferredMetadataCell, deferredMetadataSheet,
     activeZoomTabKey, defaultZoomScale, zoomScale, canZoomIn, canZoomOut,
     readOnly, isActiveSheetProtected, isEditingLocked, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook,
-    switchToSheet, consumePreservedTabSwitch,
+    switchToSheet, consumePreservedTabSwitch, activateTab, restoreActiveSheetAndTab,
     recalculateWorkbookSafely, resumeAutoCalculate, calculationStatus, noteCalculationResult,
     getActiveWorksheet: getInternalActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
@@ -1429,12 +1559,93 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // Initialize domains (order matters — navigation registers watchers, editing depends on ctx)
   const navigationDomain = createNavigationDomain(ctx);
   const clipboardDomain = createClipboardDomain(ctx);
+  const autoFilterDomain = createAutoFilterDomain(ctx, clipboardDomain.getCellDisplayValue);
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
+  const replaceDomain = createReplaceDomain(ctx);
+  const sheetOrderDomain = createSheetOrderDomain(ctx);
+  const sheetVisibilityDomain = createSheetVisibilityDomain(ctx);
+  const structureDomain = createStructureDomain(ctx);
+  const authoringDomain = createAuthoringDomain(ctx);
 
   // Replace placeholder with actual implementation from chart domain
   _setChartSeriesFormula = chartImageDomain.setChartSeriesFormula;
+
+  /**
+   * Chart source ranges follow the selected chart element. They are kept
+   * separate from host-supplied ranges so a search overlay calling
+   * `highlightRanges()` never overwrites what the chart selection shows, and
+   * deselecting the chart still clears its own ranges.
+   */
+  const chartSourceHighlightRanges = computed<XlsxRangeHighlight[]>(() => {
+    const chart = chartImageDomain.selectedChart.value;
+    if (!chart || chartHighlightsSuppressed.value) return [];
+    return collectChartRangeHighlights(chart, {
+      fallbackSheetIndex: chart.sheetIndex ?? activeSheetIndex.value,
+      resolveNamedRange: (name) => {
+        const override = definedNameOverridesRef.value[name];
+        if (override) return override.refersTo;
+        if (removedDefinedNamesRef.value.some((removed) => removed.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+          return null;
+        }
+        try {
+          const defined = workbook.value?.getNamedRange(name);
+          return typeof defined === "string" && defined.length > 0 ? defined : null;
+        } catch {
+          return null;
+        }
+      },
+      selection: selectedChartElement.value,
+      sheets: sheets.value.map((sheet, index) => ({
+        index,
+        name: sheet.name,
+        workbookSheetIndex: sheet.workbookSheetIndex
+      }))
+    });
+  });
+
+  const highlightedRanges = computed<XlsxRangeHighlight[]>(() => [
+    ...chartSourceHighlightRanges.value,
+    ...manualHighlightedRanges.value
+  ]);
+
+  function highlightRanges(
+    ranges: readonly XlsxCellRange[],
+    options: XlsxHighlightRangesOptions = {}
+  ) {
+    const sheetIndex = options.sheetIndex ?? activeSheetIndex.value;
+    if (!Number.isSafeInteger(sheetIndex) || sheetIndex < 0) {
+      throw new TypeError("XLSX highlight ranges require a non-negative worksheet index");
+    }
+    const color = options.color?.trim() || XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR;
+    const role = options.role ?? "custom";
+    manualHighlightedRanges.value = ranges.map((range, index) => ({
+      color,
+      ...(options.id ? { id: ranges.length > 1 ? `${options.id}:${index}` : options.id } : {}),
+      ...(options.label ? { label: options.label } : {}),
+      range: normalizeHighlightRange(range),
+      role,
+      sheetIndex
+    }));
+  }
+
+  /**
+   * A new chart/series selection restores the source highlights a previous
+   * `clearHighlightedRanges()` hid without changing the selection itself.
+   */
+  watch(
+    () => [selectedChartId.value, selectedChartElement.value],
+    () => { chartHighlightsSuppressed.value = false; }
+  );
+
+  function clearHighlightedRanges() {
+    manualHighlightedRanges.value = [];
+    // `clearHighlightedRanges()` clears *everything* currently painted; the
+    // chart stays selected, and the next selection change re-enables its
+    // source ranges.
+    chartHighlightsSuppressed.value = true;
+  }
 
   function downloadSource() {
     const sourceBuffer = sourceBufferRef.value;
@@ -1443,8 +1654,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "download",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
-      url: src,
+      sourceKind: sourceUrl.value ? "url" : "file",
+      url: sourceUrl.value,
       bytes: sourceBuffer.byteLength,
     });
   }
@@ -1504,6 +1715,27 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const selectedFormula = computed(() => selectedChartFormula.value ?? selectedCellFormula.value);
 
   // ═══════════════════════════════════════════════════════════════════
+  // Replace the source (drag-and-drop import)
+  // ═══════════════════════════════════════════════════════════════════
+  /**
+   * Loads a new local workbook through the same pipeline as the `file` option.
+   *
+   * Drag-and-drop import calls this with the dropped `File`, so the dropped
+   * workbook goes through the same size limits, URL policy, deferred-load
+   * threshold and Worker path as one picked in the file dialog.
+   */
+  async function loadFile(source: XlsxLoadFileSource, name?: string): Promise<void> {
+    const buffer = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
+    const declaredName = source instanceof ArrayBuffer ? undefined : source.name;
+    sourceFileName.value = name ?? (typeof declaredName === "string" ? declaredName : sourceFileName.value);
+    // Dropping a file replaces a URL source; clearing the URL and setting the
+    // bytes in one tick makes the loading watcher run exactly once.
+    sourceUrl.value = undefined;
+    sourceFile.value = buffer;
+    sourceRevision.value += 1;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // Return composed controller
   // ═══════════════════════════════════════════════════════════════════
   return {
@@ -1514,6 +1746,44 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get activeTab() { return activeTab.value; },
     get activeTabIndex() { return activeTabIndex.value; },
     addSheet: editingDomain.addSheet,
+    addConditionalFormatRule: authoringDomain.addConditionalFormatRule,
+    cancelCut: clipboardDomain.cancelCut,
+    copyDrawing: clipboardDomain.copyDrawing,
+    copySelectionToClipboard: clipboardDomain.copySelectionToClipboard,
+    createTable: authoringDomain.createTable,
+    cutDrawing: clipboardDomain.cutDrawing,
+    cutSelection: clipboardDomain.cutSelection,
+    get cutState() { return clipboardDomain.cutState.value; },
+    deleteColumns: structureDomain.deleteColumns,
+    deleteConditionalFormatRule: authoringDomain.deleteConditionalFormatRule,
+    deleteNamedRange: structureDomain.deleteNamedRange,
+    deleteRows: structureDomain.deleteRows,
+    get editRequest() { return editRequestRef.value; },
+    editCell: editingDomain.editCell,
+    get freezePanes() { return authoringDomain.freezePanes.value; },
+    getCellComment: authoringDomain.getCellComment,
+    getCellHyperlink: authoringDomain.getCellHyperlink,
+    getConditionalFormatRules: authoringDomain.getConditionalFormatRules,
+    getNamedRanges: structureDomain.getNamedRanges,
+    getTableAtCell: authoringDomain.getTableAtCell,
+    insertChart: authoringDomain.insertChart,
+    insertColumns: structureDomain.insertColumns,
+    insertRows: structureDomain.insertRows,
+    mergeAcrossSelection: structureDomain.mergeAcrossSelection,
+    pasteSpecialFromClipboard: clipboardDomain.pasteSpecialFromClipboard,
+    pasteSpecialStructuredData: clipboardDomain.pasteSpecialStructuredData,
+    removeTable: authoringDomain.removeTable,
+    selectAll: structureDomain.selectAll,
+    selectColumn: structureDomain.selectColumn,
+    selectRow: structureDomain.selectRow,
+    setCellComment: authoringDomain.setCellComment,
+    setCellHyperlink: authoringDomain.setCellHyperlink,
+    setFreezePanes: authoringDomain.setFreezePanes,
+    setNamedRange: structureDomain.setNamedRange,
+    setSelectionDataValidation: authoringDomain.setSelectionDataValidation,
+    setSelectionNumberFormat: editingDomain.setSelectionNumberFormat,
+    toggleFreezePanesAtActiveCell: authoringDomain.toggleFreezePanesAtActiveCell,
+    updateConditionalFormatRule: authoringDomain.updateConditionalFormatRule,
     get canRedo() { return canRedo.value; },
     get canDownload() { return sourceState.value === "ready" && sourceBufferRef.value !== null; },
     get canExport() {
@@ -1529,14 +1799,17 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get canZoomOut() { return canZoomOut.value; },
     get charts() { return chartImageDomain.charts.value; },
     get chartsheets() { return chartsheets.value; },
+    get highlightedRanges() { return highlightedRanges.value; },
+    highlightRanges,
+    clearHighlightedRanges,
     clearSelectedChart: chartImageDomain.clearSelectedChart,
     clearSelectedChartElement: chartImageDomain.clearSelectedChartElement,
+    changeChartType: chartImageDomain.changeChartType,
     clearSelectedCells: editingDomain.clearSelectedCells,
     clearSelectedImage: chartImageDomain.clearSelectedImage,
     clearSelection: editingDomain.clearSelection,
     continueDeferredLoad: navigationDomain.continueDeferredLoad,
     cancelDeferredLoad: navigationDomain.cancelDeferredLoad,
-    copySelectionToClipboard: clipboardDomain.copySelectionToClipboard,
     get defaultZoomScale() { return defaultZoomScale.value; },
     get deferredLoadFileSize() { return deferredLoadFileSize.value; },
     defineNamedRange: editingDomain.defineNamedRange,
@@ -1561,7 +1834,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     getSheetFormControls: chartImageDomain.getSheetFormControls,
     getSheetImages: chartImageDomain.getSheetImages,
     getSheetShapes: chartImageDomain.getSheetShapes,
-    file,
+    get file() { return sourceFile.value; },
     getClipboardData: clipboardDomain.getClipboardData,
     findCells: (query: string) => {
       const sheet = activeSheet.value
@@ -1585,6 +1858,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     },
     getCellDisplayValue: clipboardDomain.getCellDisplayValue,
     getCellFormula: clipboardDomain.getCellFormula,
+    getCellRuns: clipboardDomain.getCellRuns,
     getCellDataValidation,
     getDataValidationListOptions,
     get getCellSnapshotAsync() { return isWorkerBacked.value ? historyDomain.getCellSnapshotAsync : undefined; },
@@ -1593,31 +1867,55 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       return workbook.value.getSheet(activeSheet.value.workbookSheetIndex);
     },
     get getRowsBatchAsync() { return isWorkerBacked.value ? historyDomain.getRowsBatchAsync : undefined; },
+    get getSelectionStatsAsync() { return isWorkerBacked.value ? historyDomain.getSelectionStatsAsync : undefined; },
     get images() { return chartImageDomain.images.value; },
     get isLoadDeferred() { return isLoadDeferred.value; },
     get isLoading() { return isLoading.value; },
     get isActiveSheetProtected() { return isActiveSheetProtected.value; },
+    get isPageBreakPreview() { return printDomain.isPageBreakPreview.value; },
+    get isPrintPreviewOpen() { return printDomain.isPrintPreviewOpen.value; },
+    setPageBreakPreview: printDomain.setPageBreakPreview,
+    openPrintPreview: printDomain.openPrintPreview,
+    closePrintPreview: printDomain.closePrintPreview,
+    print: printDomain.print,
+    getPrintLayout: printDomain.getPrintLayout,
+    get printLayout() { return printDomain.printLayout.value; },
+    get printPages() { return printDomain.printPages.value; },
     get isEditingLocked() { return isEditingLocked.value; },
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },
     get lastExportWarning() { return lastExportWarning.value; },
+    loadFile,
     get maxConcurrentImageDecodes() { return xlsxRuntime.limits?.maxConcurrentImageDecodes ?? 4; },
     get sourceState() { return sourceState.value; },
     get sourceError() { return sourceError.value; },
     reportImageDecodeError,
     mergeSelection: editingDomain.mergeSelection,
+    mergeAndCenterSelection: editingDomain.mergeAndCenterSelection,
     maxZoomScale: MAX_ZOOM_SCALE,
     minZoomScale: MIN_ZOOM_SCALE,
     moveChartBy: chartImageDomain.moveChartBy,
     moveImageBy: chartImageDomain.moveImageBy,
+    moveSheet: sheetOrderDomain.moveSheet,
     moveShapeBy: chartImageDomain.moveShapeBy,
     deleteChart: chartImageDomain.deleteChart,
     deleteImage: chartImageDomain.deleteImage,
     deleteShape: chartImageDomain.deleteShape,
+    deleteSelectedDrawing: chartImageDomain.deleteSelectedDrawing,
+    duplicateDrawing: clipboardDomain.duplicateDrawing,
+    pasteDrawing: clipboardDomain.pasteDrawing,
     pasteFromClipboard: clipboardDomain.pasteFromClipboard,
     pasteStructuredClipboardData: clipboardDomain.pasteStructuredClipboardData,
     pasteText: clipboardDomain.pasteText,
     removeActiveSheet: editingDomain.removeActiveSheet,
+    renameSheet: editingDomain.renameSheet,
+    renameActiveSheet: editingDomain.renameActiveSheet,
+    getSheetNameError: editingDomain.getSheetNameError,
+    get hiddenSheets() { return sheetVisibilityDomain.hiddenSheets.value; },
+    getSheetVisibility: sheetVisibilityDomain.getSheetVisibility,
+    setSheetVisibility: sheetVisibilityDomain.setSheetVisibility,
+    get showHiddenSheets() { return showHiddenSheetsMode.value; },
+    setShowHiddenSheets: sheetVisibilityDomain.setShowHiddenSheets,
     get readOnly() { return readOnly.value; },
     get locale() { return documentLocale.value; },
     setDocumentLocale,
@@ -1636,8 +1934,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setCellFormula: editingDomain.setCellFormula,
     setCellStyle: editingDomain.setCellStyle,
     setCellValue: editingDomain.setCellValue,
+    replaceInSheet: replaceDomain.replaceInSheet,
     commitCellInput: editingDomain.commitCellInput,
+    commitSelectionInput: editingDomain.commitSelectionInput,
     setRangeStyle: editingDomain.setRangeStyle,
+    setSelectionBorders: editingDomain.setSelectionBorders,
     setSelectedFormula: editingDomain.setSelectedFormula,
     setZoomScale: navigationDomain.setZoomScale,
     setChartRect: chartImageDomain.setChartRect,
@@ -1672,11 +1973,32 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setSelectedCellValue: editingDomain.setSelectedCellValue,
     get sheets() { return sheets.value; },
     get shapes() { return chartImageDomain.shapes.value; },
-    src,
+    get src() { return sourceUrl.value; },
     get sortState() { return sortState.value; },
     sortTable: historyDomain.sortTable,
+    get autoFilterRanges() { return autoFilterDomain.autoFilterRanges.value; },
+    get autoFilterStates() { return autoFilterDomain.autoFilterStates.value; },
+    get hiddenAutoFilterRows() { return autoFilterDomain.hiddenRows.value; },
+    getAutoFilterColumnValues: autoFilterDomain.getAutoFilterColumnValues,
+    applyAutoFilterValues: autoFilterDomain.applyAutoFilterValues,
+    clearAutoFilter: autoFilterDomain.clearAutoFilter,
+    sortAutoFilter: autoFilterDomain.sortAutoFilter,
     get tabs() { return tabs.value; },
     get tables() { return historyDomain.tables.value; },
+    get definedNames() {
+      // Worker-backed loads have no main-thread workbook, so the Name Manager
+      // cannot answer. The Worker's sheet snapshot carries the same defined
+      // names; fall back to it instead of reporting an empty list.
+      if (!workbook.value) {
+        return activeSheet.value?.definedNames ?? [];
+      }
+      return structureDomain.getNamedRanges()
+        .filter((entry) => !entry.name.toLowerCase().startsWith("_xlnm."))
+        .map((entry) => toDefinedNameSummary(entry, sheets.value));
+    },
+    get pivotTables() { return activeSheet.value?.pivotTables ?? []; },
+    get hasPivotTable() { return (activeSheet.value?.pivotTables?.length ?? 0) > 0; },
+    get slicers() { return activeSheet.value?.slicers ?? []; },
     undo: historyDomain.undo,
     unmergeSelection: editingDomain.unmergeSelection,
     updateChart: chartImageDomain.updateChart,

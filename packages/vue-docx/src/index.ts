@@ -70,10 +70,42 @@ export { default as DocxTrackedChangeGutter } from "./components/DocxTrackedChan
 export { default as DocxContextMenu } from "./components/DocxContextMenu.vue"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxToolbar } from "./components/DocxToolbar.vue"
+/** Page-setup dialog: margins, paper size and orientation for a section. */
+export { default as DocxPageSetupDialog } from "./components/DocxPageSetupDialog.vue"
+export type {
+  DocxPageSetupApplyPatch,
+  DocxPageSetupDialogProps,
+  DocxPageSetupSectionOption,
+} from "./components/page-setup-dialog-types"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxThumbnailPanel } from "./components/DocxThumbnailPanel.vue"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxDragOverlay } from "./components/DocxDragOverlay.vue"
+/**
+ * Form-field properties dialog: edits a field's value and configuration
+ * (type, name, placeholder, required, dropdown options, maximum length) through
+ * one `controller.updateFormField()` call, so a save is one undo entry.
+ */
+export { default as DocxFormFieldDialog } from "./components/DocxFormFieldDialog.vue"
+/**
+ * Link hover card: open/edit/remove actions for the link under the pointer.
+ * Edit and remove select the linked characters before calling
+ * `controller.setLink()`. Used by `DocxEditor`; exported for custom surfaces.
+ */
+export { default as DocxLinkHoverCard } from "./components/DocxLinkHoverCard.vue"
+/**
+ * Paragraph-style preview popover: renders a sample paragraph with the hovered
+ * style's own run/paragraph properties.
+ */
+export { default as DocxStylePreviewPopover } from "./components/DocxStylePreviewPopover.vue"
+/** Absolute highlight boxes for document blocks on the mounted pages. */
+export { default as DocxBlockHighlights } from "./components/DocxBlockHighlights.vue"
+/** Absolute highlight boxes for word ranges on the mounted pages. */
+export { default as DocxWordHighlights } from "./components/DocxWordHighlights.vue"
+export type {
+  DocxBlockHighlightsProps,
+  DocxWordHighlightsProps,
+} from "./components/block-highlight-types"
 
 // ---- Render ----
 
@@ -116,6 +148,24 @@ export {
 
 // ---- Composables ----
 
+export {
+  DOCX_FILE_ACCEPT,
+  DOCX_FILE_EXTENSIONS,
+  DOCX_FILE_MIME_TYPES,
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  OPEN_DOCUMENT_FILE_EXTENSIONS,
+  OPEN_DOCUMENT_FILE_MIME_TYPES,
+  OPEN_DOCUMENT_VIEW_ONLY_REASON,
+  SUPPORTED_DOCUMENT_FILE_EXTENSIONS,
+  SUPPORTED_DOCUMENT_FILE_MIME_TYPES,
+  docxExportFileName,
+  docxExportMimeType,
+  docxFileExtension,
+  isOpenDocumentTextFileName,
+  isSupportedDocxFileName,
+  isSupportedDocumentFileName,
+  isWordFileName,
+} from "./composables/docx-file-types"
 export { useDocxEditor } from "./composables/useDocxEditor"
 export {
   useDocxDocumentTheme,
@@ -128,15 +178,97 @@ export {
   useDocxComments,
   useDocxPageLayout,
   useDocxPagination,
+  displayTextRangeToSourceTextRange,
+  effectiveControllerRevisionDisplay,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
+  sourceTextRangeToDisplayTextRange,
 } from "./composables"
 
 export { useDocxModel } from "./composables/useDocxModel"
 export {
+  useDocxNodeReorder,
+  docxReorderNodeIndexFromElement,
+  resolveDocxReorderInsertionIndex,
+  resolveDocxReorderTarget,
+  DOCX_REORDER_NODE_SELECTOR,
+  type DocxReorderFrame,
+  type DocxReorderHover,
+  type DocxReorderRect,
+  type UseDocxNodeReorderOptions,
+  type UseDocxNodeReorderResult,
+} from "./composables/useDocxNodeReorder"
+export {
+  docxStylePreviewCss,
+  type DocxStylePreview,
+} from "./composables/docx-style-preview"
+export {
+  parseDocxFormFieldLocationKey,
+  resolveFormFieldAt,
+} from "./composables/docx-form-fields"
+export {
   findDocxSearchMatches,
+  type DocxNestedTableStep,
+  type DocxSearchBoundary,
+  type DocxSearchLocation,
   type DocxSearchMatch,
+  type DocxSearchOptions,
+  type DocxSearchRange,
+  type DocxSearchRegion,
   type DocxSearchState,
   type DocxSearchStatus,
+  type ParagraphLocationInNestedTableCell,
+  type ParagraphLocationInNoteText,
 } from "./composables/useDocxSearch"
+export { findDocxSearchTargetPage } from "./composables/docx-search-page"
+export type { DocxSearchPageTarget } from "./composables/docx-search-page"
+export type {
+  DocxBookmarkRevealResult,
+  DocxBookmarkTargetHighlight,
+} from "./composables/docx-bookmarks"
+export {
+  canReplaceDocxSearchMatch,
+  docxReplaceTargetFromMatch,
+  type DocxFindReplaceSurface,
+  type DocxReplaceController,
+} from "./composables/editor-search-replace"
+export {
+  useDocxFindReplace,
+  type DocxFindReplaceApi,
+  type DocxFindReplaceUiState,
+  type DocxReplaceFeedback,
+} from "./composables/useDocxFindReplace"
+
+export { useDocxPageSetup } from "./composables/useDocxPageSetup"
+export type {
+  DocxPageSetupPatch,
+  DocxPageSetupSection,
+  UseDocxPageSetupResult,
+} from "./composables/useDocxPageSetup"
+
+/** Page layout modes and their row geometry, shared with custom surfaces. */
+export {
+  DOCX_VIEW_MODES,
+  docxPageAtPoint,
+  docxPageRows,
+  docxRowIndexAtOffset,
+  docxRowIndexForPage,
+  docxRowsInViewport,
+  docxSnapTopForRow,
+  docxSpreadStepPage,
+  isDocxSpreadMode,
+  normalizeDocxFitMode,
+  normalizeDocxViewMode,
+  resolveDocxViewLayout,
+} from "./composables/docx-view-mode"
+export type {
+  DocxFitMode,
+  DocxPageDimension,
+  DocxPageRowLayout,
+  DocxViewLayout,
+  DocxViewLayoutOptions,
+  DocxViewMode,
+} from "./composables/docx-view-mode"
 
 export { useDocxPageThumbnails } from "./composables/useDocxPageThumbnails"
 /**
@@ -170,7 +302,9 @@ export type {
   DocxTextRange,
   DocxTextRangeLocation,
   DocxDocumentTheme,
+  DocxRevisionDisplay,
   DocxFormFieldLocation,
+  DocxFormFieldUpdate,
   DocxSelectedFormField,
   DocxImageLocation,
   DocxImageDropTarget,
@@ -199,6 +333,14 @@ export type {
   DocxBorderPreset,
   DocxBorderPresetState,
   DocxSectionColumnLayout,
+  DocxPageMargins,
+  DocxPageMarginsUpdate,
+  DocxPageOrientation,
+  DocxPageSize,
+  DocxPageSizePreset,
+  DocxPageSizeUpdate,
+  DocxSectionPageSetup,
+  DocxPageSetupCommandOptions,
   DocxListType,
   DocxTrackedChange,
   DocxTrackedChangeKind,

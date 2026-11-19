@@ -3,6 +3,7 @@ import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interact
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
   getSheetsWasmModule,
+  isWorksheetTabListed,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
   normalizeTypedDateCells,
@@ -14,20 +15,34 @@ import {
   resolveWorksheetHiddenCols,
   resolveWorksheetHiddenRows,
   resolveWorksheetMergeMetadata,
+  resolveWorksheetPrintState,
   resolveSheetColumnWidthPixels,
   resolveSheetRowHeightPixels,
   revokeWorkbookImageAssets,
   safeCalculate,
   trackXlsxWorkbookLifetime,
   type SafeCalculateSkipReason,
+  type XlsxAutoFilterRange,
   type XlsxCellRange,
+  type XlsxCellTextRun,
   type XlsxCellHyperlink,
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
+  type XlsxDefinedName,
+  type XlsxFreezePanes,
+  type XlsxPageBreak,
+  type XlsxPageMargins,
+  type XlsxPageSetup,
+  type XlsxPivotTable,
+  type XlsxPrintOptions,
+  type XlsxPrintTitles,
   type XlsxResolvedCellStyle,
+  type XlsxSelectionStatsQuery,
+  type XlsxSelectionSummary,
   type XlsxSheetData,
   type XlsxSheetVisibility,
+  type XlsxSlicer,
   type XlsxSparkline,
   type XlsxTable,
   type XlsxTableSortDirection,
@@ -53,9 +68,7 @@ import {
   createAbortError,
   isAbortError,
   pushHistoryEntry,
-  type CellMutationState,
   type HistoryEntry,
-  type RangeCellMutation,
   type SnapshotHistoryEntry,
   type CellEditHistoryEntry,
   type RangeEditHistoryEntry
@@ -65,13 +78,13 @@ import {
   XlsxFileSizeLimitExceededError,
   cloneBytes,
   createWorkbookTooLargeError,
-  decodeHtmlEntities,
   fileStem,
   pxToSheetRowHeight,
   preflightWorkbookBuffer,
   resolveDisplayFileName
 } from "./formatting";
 import { applyCellMutationState, resolveCellFallbackStyle } from "./internal";
+import { captureSortableRows, sortSortableRows, sortableRowsMoved, writeSortedRows } from "./sorting";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
@@ -169,15 +182,39 @@ export function resolveSheetDisplayUsedRange(
   ];
 }
 
+/**
+ * Runs of a sheet, or `undefined` when no cell is rich.
+ *
+ * Painters ask for the runs of every visible cell, so a plain sheet must not
+ * even allocate an A1 key: `undefined` short-circuits that lookup.
+ */
+function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
+  return runs && Object.keys(runs).length > 0 ? runs : undefined;
+}
+
+/** Per-cell rotation/shrink flags, or `undefined` when every cell inherits. */
+function hasCellTextLayouts(
+  layouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> | undefined,
+) {
+  return layouts && Object.keys(layouts).length > 0 ? layouts : undefined;
+}
+
 export function buildSheetList(
   workbook: Workbook,
   sheetStatesByWorkbookSheetIndex?: Array<{
+    autoFilterRanges?: XlsxAutoFilterRange[];
     cachedFormulaValues?: Record<string, string>;
+    cellStyleIds?: Record<string, number>;
+    cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
     columnWidthCharacterWidthPx?: number;
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
     dataValidations?: XlsxDataValidation[];
+    definedNames?: XlsxDefinedName[];
+    pivotTables?: XlsxPivotTable[];
+    slicers?: XlsxSlicer[];
+    freezePanes?: XlsxFreezePanes | null;
     hyperlinks?: XlsxCellHyperlink[];
     comments?: XlsxCellComment[];
     defaultColWidthPx?: number;
@@ -193,10 +230,19 @@ export function buildSheetList(
     minContentRow?: number;
     hiddenCols?: number[];
     hiddenRows?: number[];
+    richTextCells?: Record<string, XlsxCellTextRun[]>;
     rowHeightOverridesPx?: Record<number, number>;
     rowStyleIds?: Record<number, number>;
+    rightToLeft?: boolean;
     showGridLines: boolean;
     sparklines?: XlsxSparkline[];
+    pageSetup?: XlsxPageSetup;
+    printOptions?: XlsxPrintOptions;
+    pageMargins?: XlsxPageMargins;
+    rowBreaks?: XlsxPageBreak[];
+    colBreaks?: XlsxPageBreak[];
+    printAreas?: XlsxCellRange[];
+    printTitles?: XlsxPrintTitles;
   } | null>,
   themePalette?: XlsxThemePalette | null,
   styleById?: Record<number, XlsxResolvedCellStyle> | null,
@@ -210,6 +256,7 @@ export function buildSheetList(
     const worksheet = workbook.getSheet(index);
     try {
       const sheetState = sheetStatesByWorkbookSheetIndex?.[index] ?? null;
+      const printState = resolveWorksheetPrintState(sheetState, worksheet);
       const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
       const effectiveSheetState = { ...sheetState, ...mergeMetadata };
       const defaultColWidthPx = resolveWorksheetDefaultColumnWidthPixels(
@@ -222,22 +269,31 @@ export function buildSheetList(
         sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
       );
       const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-      if (!showHiddenSheets && visibility !== "visible") continue;
+      if (!isWorksheetTabListed(visibility, showHiddenSheets)) continue;
 
       const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
       if (!usedRange) {
         sheets.push({
+          autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+          definedNames: sheetState?.definedNames ?? [],
+          pivotTables: sheetState?.pivotTables ?? [],
+          hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+          slicers: sheetState?.slicers ?? [],
           cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+          cellStyleIds: sheetState?.cellStyleIds,
+          cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
           columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
+          richTextCells: hasRichTextCells(sheetState?.richTextCells),
           colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
           colStyleIds: sheetState?.colStyleIds ?? {},
           conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
           hyperlinks: sheetState?.hyperlinks ?? [],
           comments: sheetState?.comments ?? [],
           dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+          ...printState,
           defaultColWidthPx,
           defaultRowHeightPx,
-          freezePanes: parseWorksheetFreezePanes(worksheet),
+          freezePanes: resolveSheetFreezePanes(sheetState, worksheet),
           hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
           hasVerticalMerges: mergeMetadata.hasVerticalMerges,
           maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
@@ -257,6 +313,7 @@ export function buildSheetList(
           colCount: 0,
           rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
           rowStyleIds: sheetState?.rowStyleIds ?? {},
+          rightToLeft: sheetState?.rightToLeft ?? false,
           styleById: styleById ?? {},
           sparklines: sheetState?.sparklines ?? [],
           tableStyleByName: tableStyleByName ?? {},
@@ -302,17 +359,26 @@ export function buildSheetList(
       });
 
       sheets.push({
+        autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+        definedNames: sheetState?.definedNames ?? [],
+        pivotTables: sheetState?.pivotTables ?? [],
+        hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+        slicers: sheetState?.slicers ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellStyleIds: sheetState?.cellStyleIds,
+        cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
+        richTextCells: hasRichTextCells(sheetState?.richTextCells),
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colStyleIds: sheetState?.colStyleIds ?? {},
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
         dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+        ...printState,
         defaultColWidthPx,
         defaultRowHeightPx,
-        freezePanes: parseWorksheetFreezePanes(worksheet),
+        freezePanes: resolveSheetFreezePanes(sheetState, worksheet),
         hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
         hasVerticalMerges: mergeMetadata.hasVerticalMerges,
         maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
@@ -332,6 +398,7 @@ export function buildSheetList(
         colCount: visibleCols.length,
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
         rowStyleIds: sheetState?.rowStyleIds ?? {},
+        rightToLeft: sheetState?.rightToLeft ?? false,
         showGridLines: sheetState?.showGridLines ?? true,
         styleById: styleById ?? {},
         sparklines: sheetState?.sparklines ?? [],
@@ -350,6 +417,19 @@ export function buildSheetList(
   }
 
   return sheets;
+}
+
+/**
+ * Frozen panes come from the worksheet XML when it was parsed (authored panes,
+ * XML-authoritative freeze) and from the workbook engine otherwise.
+ */
+function resolveSheetFreezePanes(
+  sheetState: { freezePanes?: XlsxFreezePanes | null } | null | undefined,
+  worksheet: ReturnType<Workbook["getSheet"]>
+) {
+  return sheetState?.freezePanes !== undefined
+    ? sheetState.freezePanes
+    : parseWorksheetFreezePanes(worksheet);
 }
 
 export function buildVisibleSheetIndexMap(sheets: XlsxSheetData[]) {
@@ -676,6 +756,18 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     return ctx.getWorkerClient().getRowsBatch(workbookSheetIndex, startRow, rowCount, signal);
   }
 
+  function getSelectionStatsAsync(
+    workbookSheetIndex: number,
+    query: XlsxSelectionStatsQuery,
+    signal?: AbortSignal
+  ): Promise<XlsxSelectionSummary | null> {
+    if (!ctx.isWorkerBacked.value) {
+      return Promise.resolve(null);
+    }
+
+    return ctx.getWorkerClient().getSelectionStats(workbookSheetIndex, query, signal);
+  }
+
   function createHistoryEntry(): SnapshotHistoryEntry | null {
     if (!ctx.workbook.value) {
       return null;
@@ -685,6 +777,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       kind: "snapshot",
       activeCell: ctx.activeCell.value,
       activeSheetIndex: ctx.activeSheetIndex.value,
+      activeTabIndex: ctx.activeTabIndex.value,
       bytes: ctx.createSavedWorkbookBytes(ctx.workbook.value),
       selection: ctx.selection.value
     };
@@ -752,7 +845,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       ctx.setChartAssets(nextChartAssets);
       // Restore the sheet and its tab together, then reinstate the selection that
       // belongs to it; the tab watcher must not reset what we restore here.
-      ctx.switchToSheet(nextSheetIndex, { preserveSelection: true });
+      ctx.restoreActiveSheetAndTab(nextSheetIndex, entry.activeTabIndex);
       ctx.activeCell.value = entry.activeCell;
       ctx.selection.value = entry.selection;
       ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;
@@ -891,95 +984,28 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const rows: Array<{
-      cells: CellMutationState[];
-      index: number;
-      sortBoolean: boolean | undefined;
-      sortEmpty: boolean;
-      sortNumber: number | undefined;
-      sortText: string;
-    }> = [];
-
-    for (let row = dataStartRow; row <= dataEndRow; row += 1) {
-      const cells: CellMutationState[] = [];
-      for (let col = startCol; col <= endCol; col += 1) {
-        const cellValue = worksheet.getCellAt(row, col);
-        try {
-          cells.push({
-            formula: worksheet.getFormulaAt(row, col) ?? null,
-            style: worksheet.getCellStyleAt(row, col),
-            value: cellValue.toJs()
-          });
-        } finally {
-          cellValue.free();
-        }
-      }
-
-      const calculated = worksheet.getCalculatedValueAt(row, sortCol);
-      const formatted = decodeHtmlEntities(worksheet.getFormattedValueAt(row, sortCol) ?? "");
-      try {
-        rows.push({
-          cells,
-          index: row,
-          sortBoolean: calculated.is_boolean ? calculated.asBoolean() : undefined,
-          sortEmpty: calculated.is_empty || formatted.length === 0,
-          sortNumber: calculated.is_number ? calculated.asNumber() : undefined,
-          sortText: calculated.is_text ? (calculated.asText() ?? formatted) : formatted
-        });
-      } finally {
-        calculated.free();
-      }
-    }
-
-    const sortedRows = [...rows].sort((left, right) => {
-      if (left.sortEmpty !== right.sortEmpty) {
-        return left.sortEmpty ? 1 : -1;
-      }
-
-      if (left.sortNumber !== undefined && right.sortNumber !== undefined) {
-        return direction === "ascending" ? left.sortNumber - right.sortNumber : right.sortNumber - left.sortNumber;
-      }
-
-      if (left.sortBoolean !== undefined && right.sortBoolean !== undefined) {
-        const leftValue = left.sortBoolean ? 1 : 0;
-        const rightValue = right.sortBoolean ? 1 : 0;
-        return direction === "ascending" ? leftValue - rightValue : rightValue - leftValue;
-      }
-
-      const comparedText = left.sortText.localeCompare(right.sortText, undefined, { numeric: true, sensitivity: "base" });
-      return direction === "ascending" ? comparedText : -comparedText;
+    const rows = captureSortableRows(worksheet, {
+      startRow: dataStartRow,
+      endRow: dataEndRow,
+      startCol,
+      endCol,
+      sortCol
     });
+    const sortedRows = sortSortableRows(rows, direction);
 
-    if (sortedRows.every((row, index) => row.index === rows[index]?.index)) {
+    if (!sortableRowsMoved(rows, sortedRows)) {
       ctx.sortState.value = { columnIndex, direction, tableName: targetTable.name };
       return;
     }
 
-    const mutations: RangeCellMutation[] = [];
-    for (let rowOffset = 0; rowOffset < rows.length; rowOffset += 1) {
-      const targetRow = dataStartRow + rowOffset;
-      const sourceRow = sortedRows[rowOffset];
-      const beforeRow = rows[rowOffset];
-      if (!sourceRow || !beforeRow) {
-        continue;
-      }
-
-      for (let colOffset = 0; colOffset <= endCol - startCol; colOffset += 1) {
-        const before = beforeRow.cells[colOffset];
-        const after = sourceRow.cells[colOffset];
-        if (!before || !after) {
-          continue;
-        }
-
-        const cell = { row: targetRow, col: startCol + colOffset };
-        applyCellMutationState(worksheet, cell, after, resolveCellFallbackStyle(ctx.activeSheet.value));
-        mutations.push({
-          after,
-          before,
-          cell
-        });
-      }
-    }
+    const mutations = writeSortedRows(
+      worksheet,
+      rows,
+      sortedRows,
+      { startCol, endCol },
+      dataStartRow,
+      resolveCellFallbackStyle(ctx.activeSheet.value)
+    );
 
     if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
       ctx.refreshWorkbookState(ctx.workbook.value);
@@ -1195,6 +1221,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     tables,
     getCellSnapshotAsync,
     getRowsBatchAsync,
+    getSelectionStatsAsync,
     sortTable,
     download,
     exportXlsx,

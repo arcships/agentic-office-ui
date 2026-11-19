@@ -121,6 +121,53 @@ export function resolveScatterChartType(scatterStyle: string | null | undefined)
   }
 }
 
+function readTypeNodeAttribute(typeNode: Element, localName: string) {
+  return getLocalChildren(typeNode, localName)[0]?.getAttribute("val") ?? null;
+}
+
+/**
+ * Resolve the XlsxChart `chartType` label from a `c:barChart`/`c:lineChart`/…
+ * plot-area node. Used when a chart part is discovered from the package rather
+ * than from the workbook engine, for example a chart the viewer just inserted.
+ */
+export function resolveChartTypeFromTypeNode(typeNode: Element | null) {
+  if (!typeNode) {
+    return null;
+  }
+  const grouping = readTypeNodeAttribute(typeNode, "grouping");
+  switch (typeNode.localName) {
+    case "barChart": {
+      const horizontal = readTypeNodeAttribute(typeNode, "barDir") === "bar";
+      const prefix = horizontal ? "Bar" : "Column";
+      if (grouping === "stacked") return `${prefix}Stacked`;
+      if (grouping === "percentStacked") return `${prefix}PercentStacked`;
+      return `${prefix}Clustered`;
+    }
+    case "lineChart":
+      if (grouping === "stacked") return "LineStacked";
+      if (grouping === "percentStacked") return "LinePercentStacked";
+      return "Line";
+    case "areaChart":
+      if (grouping === "stacked") return "AreaStacked";
+      if (grouping === "percentStacked") return "AreaPercentStacked";
+      return "Area";
+    case "pieChart":
+      return "Pie";
+    case "pie3DChart":
+      return "Pie3D";
+    case "doughnutChart":
+      return "Doughnut";
+    case "radarChart":
+      return "Radar";
+    case "bubbleChart":
+      return "Bubble";
+    case "scatterChart":
+      return resolveScatterChartType(readTypeNodeAttribute(typeNode, "scatterStyle"));
+    default:
+      return null;
+  }
+}
+
 function normalizeChartExLegend(raw: unknown): XlsxChartLegend | null {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -369,6 +416,14 @@ export function buildChartExHistogramSeries(
   rawSeries: unknown,
   sortByFrequency: boolean
 ) {
+  // The chart loader bins the series once; a second pass over an already binned
+  // series would re-bin the counts and destroy the histogram.
+  const existingRaw = series.raw && typeof series.raw === "object"
+    ? series.raw as Record<string, unknown>
+    : null;
+  if (Array.isArray(existingRaw?.chartExHistogramBins)) {
+    return series;
+  }
   const layout = resolveChartExSeriesLayout(rawSeries);
   const rawRecord = rawSeries && typeof rawSeries === "object" ? rawSeries as Record<string, unknown> : null;
   const hasBinning = Boolean(
@@ -786,7 +841,17 @@ export function normalizeChartExChart(
     name: chartTitle,
     overlap: undefined,
     plotVisibleOnly: undefined,
-    raw: chart,
+    raw: {
+      ...chart,
+      // The normalized model collapses point-series layouts (treemap, funnel,
+      // waterfall, …) to the series that is actually plotted. Keep the series
+      // the part declares so a later chart-type switch can restore all of them.
+      // A `paretoLine` series is derived from its histogram column, so it is not
+      // a source series.
+      chartExSourceSeries: normalizedSeries.filter(
+        (_, seriesIndex) => seriesLayouts[seriesIndex] !== "paretoLine"
+      )
+    },
     radarStyle: undefined,
     scatterStyle: undefined,
     roundedCorners: undefined,

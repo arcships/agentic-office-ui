@@ -1849,10 +1849,7 @@ def run_ux_docx_004(
     baseline_image_count = int(baseline.get("imageCount") or 0)
     assert baseline_table_count >= 1
 
-    acceptance = page.locator("details.acceptance-panel")
-    if acceptance.get_attribute("open") is None:
-        acceptance.locator("summary").click()
-    insert_table = page.get_by_test_id("editor-test-insert-table")
+    insert_table = page.get_by_test_id("editor-insert-table")
     insert_table.click()
     inserted = wait_for_model_condition(
         page,
@@ -1910,7 +1907,20 @@ def run_ux_docx_004(
         "the inserted table cell edit to reach the public model snapshot",
     )
 
-    page.get_by_test_id("editor-test-insert-image").click()
+    image_target, _, _ = docx_acceptance_paragraph(page, settings)
+    image_target.click()
+    with page.expect_file_chooser(timeout=settings.timeout_ms) as image_chooser:
+        page.get_by_test_id("editor-insert-image").click()
+    image_chooser.value.set_files(
+        {
+            "name": "ux-acceptance.svg",
+            "mimeType": "image/svg+xml",
+            "buffer": (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">'
+                '<rect width="240" height="160" fill="#2563eb"/></svg>'
+            ).encode("utf-8"),
+        }
+    )
     image_model = wait_for_model_condition(
         page,
         lambda snapshot: (
@@ -3146,10 +3156,12 @@ def run_suite(settings: Settings) -> int:
 
         local_stable = all(result["status"] == "PASS" for result in results)
         stable = local_stable and upstream_status == "PASS"
+        # A local assertion failure is a FAIL even when the optional upstream
+        # checkout is unavailable; only a stable local run may report BLOCKED.
         suite_result = (
             "PASS"
             if stable
-            else "BLOCKED" if upstream_status == "BLOCKED" else "FAIL"
+            else "BLOCKED" if local_stable and upstream_status == "BLOCKED" else "FAIL"
         )
         update_environment(
             settings,

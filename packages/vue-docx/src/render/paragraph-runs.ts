@@ -15,8 +15,10 @@ import type {
   ParagraphNumberingLabel,
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { DocxRevisionDisplay } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 import type { ParagraphCommentTextRange } from "@arcships/docx-core"
+import type { DocxScriptFontSegment } from "@arcships/docx-core"
 import {
   paragraphUsesTabLeaders,
   paragraphAnchoredTabLayout,
@@ -32,6 +34,7 @@ import {
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
   resolveParagraphTrackedMarkup,
+  reviewDisplayParagraph,
   resolveParagraphCommentMarkup,
   trackedDeletedStyle,
   runStyleToCss,
@@ -47,9 +50,21 @@ import {
   attachTextToPreviousCheckbox,
   shouldRenderWrappedFloatingImage,
   isJustifiedAlignment,
+  paragraphDropCap,
+  resolveDropCapFontSizePx,
+  resolveDropCapVisualHeightPx,
+  estimateParagraphLineHeightPx,
+  docxScriptSegmentStyle,
+  segmentTextByDocxScriptFont,
 } from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
+import {
+  type DocxDrawingLabels,
+  dropCapFirstTextChild,
+  renderDrawingRun,
+  renderMathRun,
+} from "./paragraph-runs-drawing"
 import {
   type FieldResolutionContext,
   type FieldResolutionState,
@@ -62,6 +77,11 @@ import { renderParagraphMarkChange } from "./paragraph-runs-annotation"
 export interface ParagraphRunRenderOptions {
   showTrackedChanges?: boolean
   showCommentHighlights?: boolean
+  /**
+   * How revisions are drawn. Omitted keeps the historical inline rendering so
+   * direct renderer callers do not change appearance.
+   */
+  revisionDisplay?: DocxRevisionDisplay
   numberingDefinitions?: NumberingDefinitionSet
   tocLinkColorByLevel?: Partial<Record<number, string | undefined>>
   trackedMarkupMode?: "inline" | "gutter"
@@ -78,6 +98,10 @@ export interface ParagraphRunRenderOptions {
   paragraphOriginTopPx?: number
   imageFilterSuffix?: string
   onImageDecodeError?: ImageRunRenderExtra["onImageDecodeError"]
+  /** Reports an SVG picture that fell back to a placeholder. */
+  onImageUnsupported?: ImageRunRenderExtra["onImageUnsupported"]
+  /** Localized `{feature}` template for an unsupported SVG picture. */
+  imageUnsupportedText?: string
   /** Bounds of the table cell that hosts this paragraph. */
   tableCellLayout?: {
     widthPx?: number
@@ -98,6 +122,29 @@ export interface ParagraphRunRenderOptions {
   /** Localized alt text and missing-source fallback for images. */
   imageAltText?: string
   imageMissingText?: string
+  /**
+   * Document `w:defaultTabStop` in CSS pixels; Word's 48px grid when omitted.
+   * Tabs that run past the last explicit stop keep advancing on this grid.
+   */
+  defaultTabStopPx?: number
+  /**
+   * Emit `data-docx-link-start`/`data-docx-link-end` (paragraph text offsets) on
+   * hyperlink anchors. Editable text hosts use them so the link hover card can
+   * select exactly the linked characters before editing or removing the link.
+   */
+  emitLinkRangeAttributes?: boolean
+  /**
+   * Emit `data-docx-text-start`/`data-docx-text-end` (paragraph text offsets) on
+   * text spans so block/word geometry can map DOM text ranges back to the
+   * document model.
+   */
+  emitTextRangeAttributes?: boolean
+  /** Source id of the owning paragraph; figures inherit it for geometry. */
+  paragraphSourceId?: string
+  /** Localized labels for drawing-object placeholders and equations. */
+  drawingLabels?: DocxDrawingLabels
+  /** Set to false to render a drop-cap paragraph as plain text. */
+  renderDropCaps?: boolean
 }
 
 export interface NoteMarkerLabels {
@@ -130,6 +177,45 @@ export function renderParagraphRuns(
   totalPages?: number,
   options?: ParagraphRunRenderOptions
 ): VNode | VNode[] {
+  const requestedRevisionDisplay: DocxRevisionDisplay =
+    options?.revisionDisplay ??
+    (options?.trackedMarkupMode === "gutter" ? "balloons" : "inline")
+  const showTrackedChanges = options?.showTrackedChanges === true
+  // Hidden revisions render the final text, regardless of the preferred markup
+  // mode; callers that show revisions get the requested display.
+  const revisionDisplay: DocxRevisionDisplay = showTrackedChanges
+    ? requestedRevisionDisplay
+    : "none"
+  // The display model drops deleted model runs in balloons/none mode before
+  // any tab, field or revision layout reads the paragraph's children.
+  paragraph = reviewDisplayParagraph(paragraph, revisionDisplay)
+
+  // Drop caps (`w:framePr/@w:dropCap`) are a layout instruction on the
+  // paragraph: the first letter floats over the following lines, scaled to
+  // `w:lines`. The model already resolves the frame; paint the letter as a
+  // floated span so a drop-cap paragraph is not plain text.
+  const dropCap = options?.renderDropCaps === false ? undefined : paragraphDropCap(paragraph)
+  const dropCapSplit = dropCap ? dropCapFirstTextChild(paragraph) : undefined
+  const dropCapMetrics = (() => {
+    if (!dropCap || !dropCapSplit) return undefined
+    const firstStyle = paragraph.children[dropCapSplit.childIndex]
+    const style = firstStyle?.type === "text" ? firstStyle.style : undefined
+    const lineHeightPx = estimateParagraphLineHeightPx(paragraph)
+    const lines = Math.max(1, Math.round(dropCap.lines ?? 2))
+    const heightPx = resolveDropCapVisualHeightPx(style, lineHeightPx, lines)
+    return {
+      // `resolveDropCapFontSizePx` keeps an explicitly sized run, which a drop
+      // cap usually is not; the letter still has to fill the frame it spans.
+      fontSizePx: Math.max(
+        resolveDropCapFontSizePx(style, lineHeightPx, lines),
+        Math.round(heightPx * 0.85)
+      ),
+      heightPx,
+      lines,
+      style,
+    }
+  })()
+
   const runs: VNode[] = []
   const runsLeft: VNode[] = []
   const runsRight: VNode[] = []
@@ -191,9 +277,10 @@ export function renderParagraphRuns(
   let tabLeaderColor: string | undefined
 
   // Tracked changes & comments
-  const showTrackedChanges = options?.showTrackedChanges === true
   const showTrackedInlineMarkup =
-    showTrackedChanges && options?.trackedMarkupMode !== "gutter"
+    showTrackedChanges && revisionDisplay !== "none"
+  const showDeletionSegments =
+    showTrackedInlineMarkup && revisionDisplay === "inline"
   const trackedMarkup = showTrackedInlineMarkup
     ? resolveParagraphTrackedMarkup(paragraph)
     : undefined
@@ -215,9 +302,39 @@ export function renderParagraphRuns(
     : 0
 
   const checkboxChoiceRow = paragraphLooksLikeCheckboxChoiceRow(paragraph)
+
+  // Character offset of every child in `paragraphText()`. Hyperlink anchors use
+  // it to report the exact range the link covers; text spans use it to expose
+  // the offsets block/word geometry resolves against.
+  const childTextOffsets: number[] = []
+  if (options?.emitLinkRangeAttributes || options?.emitTextRangeAttributes) {
+    let textOffset = 0
+    paragraph.children.forEach((child) => {
+      childTextOffsets.push(textOffset)
+      if (child.type === "text") textOffset += child.text.length
+    })
+  }
+
+  const textRangeAttributes = (
+    start: number | undefined,
+    length: number | undefined
+  ): Record<string, string> =>
+    options?.emitTextRangeAttributes &&
+    start !== undefined &&
+    length !== undefined
+      ? {
+          "data-docx-text-start": String(start),
+          "data-docx-text-end": String(start + length),
+        }
+      : {}
+  const documentTabStopPx =
+    Number.isFinite(options?.defaultTabStopPx) &&
+    (options?.defaultTabStopPx as number) > 0
+      ? Math.max(1, Math.round(options?.defaultTabStopPx as number))
+      : DEFAULT_TAB_STOP_PX
   const fallbackTabWidthPx = checkboxChoiceRow
     ? checkboxChoiceRowTabWidthPx(paragraph)
-    : DEFAULT_TAB_STOP_PX
+    : documentTabStopPx
 
   const tabLeaderLeftTabStopPositionsPx = useTabLeaderLayout
     ? resolveParagraphFirstLineLeftTabStopsPx(paragraph)
@@ -234,7 +351,7 @@ export function renderParagraphRuns(
     keySeed: string,
     fallbackStyle?: TextRunNode["style"] | FormFieldRunNode["style"]
   ): void => {
-    if (!trackedMarkup) return
+    if (!trackedMarkup || !showDeletionSegments) return
     const segments = trackedMarkup.deletedSegmentsByVisibleChildIndex.get(
       trackedVisibleChildCursor
     )
@@ -334,6 +451,29 @@ export function renderParagraphRuns(
     return segments
   }
 
+  /**
+   * Replaces only the font properties of a span style with the ones the
+   * segment's OOXML slot resolves to. Decoration, comment highlight, tracking
+   * colour and transforms from the run style stay intact.
+   */
+  const scriptSegmentTextStyle = (
+    baseStyle: Record<string, string | number | undefined>,
+    runStyle: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+    segment: DocxScriptFontSegment
+  ): Record<string, string | number | undefined> => {
+    const scriptStyle = runStyleToCss(
+      docxScriptSegmentStyle(runStyle, segment),
+      documentTheme
+    )
+    return {
+      ...baseStyle,
+      ...(scriptStyle.fontFamily ? { fontFamily: scriptStyle.fontFamily } : {}),
+      ...(scriptStyle.fontSize ? { fontSize: scriptStyle.fontSize } : {}),
+      fontKerning: scriptStyle.fontKerning,
+      fontFeatureSettings: scriptStyle.fontFeatureSettings,
+    }
+  }
+
   const currentAnnotationAttributes = (
     trackedInlineChange: ParagraphTrackedInlineChange | undefined
   ): Record<string, string> => {
@@ -354,6 +494,9 @@ export function renderParagraphRuns(
   }
 
   const appendParagraphMarkChange = (target: VNode[]): void => {
+    // Balloons/none keep the paragraph-mark revision in the review pane only;
+    // drawing the pilcrow would duplicate it in the final text flow.
+    if (revisionDisplay !== "inline") return
     const marker = renderParagraphMarkChange({
       keyPrefix,
       change: trackedMarkup?.paragraphMarkChange,
@@ -506,10 +649,38 @@ export function renderParagraphRuns(
       return
     }
 
+    // drawing object (shape, chart, SmartArt, OLE object, 3D model)
+    if (child.type === "drawing") {
+      target.push(
+        renderDrawingRun({
+          drawing: child,
+          key,
+          childIndex,
+          labels: options?.drawingLabels,
+          paragraphSourceId: options?.paragraphSourceId,
+          documentTheme,
+        })
+      )
+      return
+    }
+
+    // equation
+    if (child.type === "math") {
+      target.push(
+        renderMathRun({
+          math: child,
+          key,
+          childIndex,
+          paragraphSourceId: options?.paragraphSourceId,
+        })
+      )
+      return
+    }
+
     // text
     renderTextInline(
       target, child, key, textOverride, annotationAttributes,
-      trackedInlineChange
+      trackedInlineChange, childIndex
     )
   }
 
@@ -562,7 +733,7 @@ export function renderParagraphRuns(
 
     const trackedStyle = {
       ...trackedInlineStyle(
-        runStyleToCss(child.style, documentTheme),
+        runStyleToCss(child.style, documentTheme, textValue),
         trackedInlineChange,
         documentTheme
       ),
@@ -601,6 +772,7 @@ export function renderParagraphRuns(
       child,
       key,
       childIndex,
+      paragraphSourceId: options?.paragraphSourceId,
       pageNumber,
       totalPages,
       pageNumberFormat: options?.pageNumberFormat,
@@ -614,7 +786,9 @@ export function renderParagraphRuns(
         imageFilterSuffix: options?.imageFilterSuffix,
         imageAltText: options?.imageAltText,
         imageMissingText: options?.imageMissingText,
+        imageUnsupportedText: options?.imageUnsupportedText,
         onImageDecodeError: options?.onImageDecodeError,
+        onImageUnsupported: options?.onImageUnsupported,
         sectionImageInteraction: options?.sectionImageInteraction as ImageRunRenderExtra["sectionImageInteraction"],
       },
     })
@@ -634,7 +808,8 @@ export function renderParagraphRuns(
     key: string,
     textOverride: string | undefined,
     annotationAttributes: Record<string, string>,
-    trackedInlineChange: ParagraphTrackedInlineChange | undefined
+    trackedInlineChange: ParagraphTrackedInlineChange | undefined,
+    childIndex: number
   ): void => {
     const baseTextStyle = trackedInlineStyle(
       runStyleToCss(child.style, documentTheme),
@@ -669,10 +844,13 @@ export function renderParagraphRuns(
       return
     }
 
+    const startOffset = childTextOffsets[childIndex]
+
     // Tab
     if (effectiveText === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
       target.push(h("span", {
         key, ...annotationAttributes,
+        ...textRangeAttributes(startOffset, child.text.length),
         style: tabTextStyle(child.style, singleUnitTextStyle),
       }, "\u00a0"))
       return
@@ -682,9 +860,80 @@ export function renderParagraphRuns(
     const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
     if (linkHref) {
       const isInternalLink = linkHref.startsWith("#")
+      const linkRange =
+        options?.emitLinkRangeAttributes &&
+        startOffset !== undefined &&
+        effectiveText === child.text
+          ? {
+              "data-docx-link-start": String(startOffset),
+              "data-docx-link-end": String(startOffset + child.text.length),
+            }
+          : undefined
+      const linkTextRange = effectiveText === child.text
+        ? textRangeAttributes(startOffset, child.text.length)
+        : {}
+      const linkStyle = trackedLinkStyle(child.style, trackedInlineChange)
+      const scriptSegments = segmentTextByDocxScriptFont(
+        effectiveText,
+        child.style
+      )
+      let linkChildren: VNode[] | string = effectiveText
+      if (
+        (commentTextRanges && commentTextRanges.length > 0) ||
+        scriptSegments.length > 1
+      ) {
+        const children: VNode[] = []
+        const windows =
+          commentTextRanges && commentTextRanges.length > 0
+            ? commentTextSegments(effectiveText, commentTextRanges)
+            : [{ start: 0, end: effectiveText.length, commentIds: [] as number[] }]
+        for (const window of windows) {
+          const windowText = effectiveText.slice(window.start, window.end)
+          const windowStyle =
+            window.commentIds.length > 0
+              ? { ...linkStyle, ...commentStyleForIds(window.commentIds) }
+              : linkStyle
+          const windowSegments = segmentTextByDocxScriptFont(
+            windowText,
+            child.style
+          )
+          for (const scriptSegment of windowSegments) {
+            children.push(
+              h(
+                "span",
+                {
+                  key: `${key}-comment-${window.start}-script-${scriptSegment.startOffset}`,
+                  ...(window.commentIds.length > 0
+                    ? commentAttributesForIds(window.commentIds)
+                    : {}),
+                  ...(effectiveText === child.text
+                    ? textRangeAttributes(
+                        startOffset === undefined
+                          ? undefined
+                          : startOffset +
+                              window.start +
+                              scriptSegment.startOffset,
+                        scriptSegment.text.length
+                      )
+                    : {}),
+                  style: scriptSegmentTextStyle(
+                    windowStyle,
+                    child.style,
+                    scriptSegment
+                  ),
+                },
+                scriptSegment.text
+              )
+            )
+          }
+        }
+        linkChildren = children
+      }
       target.push(
         h("a", {
           key, ...annotationAttributes,
+          ...linkRange,
+          ...linkTextRange,
           href: linkHref,
           target: isInternalLink ? undefined : "_blank",
           rel: isInternalLink ? undefined : "noreferrer noopener",
@@ -697,21 +946,9 @@ export function renderParagraphRuns(
             event.preventDefault(); event.stopPropagation()
             onInternalLinkClick(linkHref.slice(1))
           },
-          style: trackedLinkStyle(child.style, trackedInlineChange),
+          style: linkStyle,
         },
-        commentTextRanges
-          ? commentTextSegments(effectiveText, commentTextRanges).map((segment) =>
-              h(
-                "span",
-                {
-                  key: `${key}-comment-${segment.start}`,
-                  ...commentAttributesForIds(segment.commentIds),
-                  style: commentStyleForIds(segment.commentIds),
-                },
-                effectiveText.slice(segment.start, segment.end)
-              )
-            )
-          : effectiveText
+        linkChildren
         )
       )
       trackTextAdvance(effectiveText, child.style)
@@ -721,7 +958,8 @@ export function renderParagraphRuns(
     // Plain text with soft-break control
     appendPlainTextWithSoftBreakControl(
       target, key, effectiveText, textStyle,
-      child.style, annotationAttributes, commentTextRanges
+      child.style, annotationAttributes, commentTextRanges,
+      effectiveText === child.text ? startOffset : undefined
     )
   }
 
@@ -733,19 +971,64 @@ export function renderParagraphRuns(
     style: Record<string, string | number | undefined>,
     measureStyle?: TextRunNode["style"] | FormFieldRunNode["style"],
     spanAttributes?: Record<string, string>,
-    commentTextRanges?: readonly ParagraphCommentTextRange[]
+    commentTextRanges?: readonly ParagraphCommentTextRange[],
+    textOffset?: number
   ): void => {
+    // One span per resolved script segment. A single-script run keeps its old
+    // key and offset attributes; mixed Latin/CJK/RTL text splits so each span
+    // carries the same family the layout measured.
+    const appendSegmentedText = (
+      segmentText: string,
+      keyPrefix: string,
+      segmentTextOffset: number | undefined,
+      baseStyle: Record<string, string | number | undefined>,
+      extraAttributes?: Record<string, string>,
+      extraStyle?: Record<string, string | number | undefined>
+    ): void => {
+      const scriptSegments = segmentTextByDocxScriptFont(
+        segmentText,
+        measureStyle
+      )
+      const base = extraStyle ? { ...baseStyle, ...extraStyle } : baseStyle
+      if (scriptSegments.length <= 1) {
+        target.push(h("span", {
+          key: keyPrefix,
+          ...extraAttributes,
+          ...textRangeAttributes(segmentTextOffset, segmentText.length),
+          style: base,
+        }, segmentText))
+        return
+      }
+      for (const scriptSegment of scriptSegments) {
+        target.push(h("span", {
+          key: `${keyPrefix}-s${scriptSegment.startOffset}`,
+          ...extraAttributes,
+          ...textRangeAttributes(
+            segmentTextOffset === undefined
+              ? undefined
+              : segmentTextOffset + scriptSegment.startOffset,
+            scriptSegment.text.length
+          ),
+          style: scriptSegmentTextStyle(base, measureStyle, scriptSegment),
+        }, scriptSegment.text))
+      }
+    }
+
     // Exact comment windows: emit one span per run of identically-commented
     // characters, so a range covering half a run highlights only that half.
     if (commentTextRanges && commentTextRanges.length > 0) {
       for (const segment of commentTextSegments(text, commentTextRanges)) {
-        target.push(
-          h("span", {
-            key: `${keySeed}-comment-${segment.start}`,
+        const segmentStyle = commentStyleForIds(segment.commentIds)
+        appendSegmentedText(
+          text.slice(segment.start, segment.end),
+          `${keySeed}-comment-${segment.start}`,
+          textOffset === undefined ? undefined : textOffset + segment.start,
+          style,
+          {
             ...spanAttributes,
             ...commentAttributesForIds(segment.commentIds),
-            style: { ...style, ...commentStyleForIds(segment.commentIds) },
-          }, text.slice(segment.start, segment.end))
+          },
+          segmentStyle
         )
       }
       trackTextAdvance(text, measureStyle)
@@ -755,28 +1038,37 @@ export function renderParagraphRuns(
     const shouldControlSoftBreakStretch =
       isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {
-      target.push(h("span", { key: keySeed, ...spanAttributes, style }, text))
+      appendSegmentedText(text, keySeed, textOffset, style, spanAttributes)
       trackTextAdvance(text, measureStyle)
       return
     }
 
     const segments = text.split("\n")
+    let segmentOffset = textOffset
     segments.forEach((segment, segmentIndex) => {
       const isLastSegment = segmentIndex === segments.length - 1
       if (segmentIndex > 0) {
         target.push(h("br", { key: `${keySeed}-soft-break-${segmentIndex}` }))
+        segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + 1
       }
       if (segment.length > 0) {
-        target.push(
-          h("span", {
-            key: `${keySeed}-segment-${segmentIndex}`,
-            ...spanAttributes,
-            style: isLastSegment
-              ? { ...style, display: "inline-block", maxWidth: "100%", whiteSpace: "pre-wrap", verticalAlign: "baseline" }
-              : style,
-          }, segment)
+        appendSegmentedText(
+          segment,
+          `${keySeed}-segment-${segmentIndex}`,
+          segmentOffset,
+          style,
+          spanAttributes,
+          isLastSegment
+            ? {
+                display: "inline-block",
+                maxWidth: "100%",
+                whiteSpace: "pre-wrap",
+                verticalAlign: "baseline",
+              }
+            : undefined
         )
       }
+      segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + segment.length
       trackTextAdvance(segment, measureStyle)
       if (!isLastSegment) approximateLineWidthPx = 0
     })
@@ -951,6 +1243,36 @@ export function renderParagraphRuns(
   }
 
   if (!useAnchoredTabLayout) {
+    let dropCapRendered = false
+    const renderDropCap = (target: VNode[]): void => {
+      if (dropCapRendered || !dropCapMetrics || !dropCapSplit) return
+      dropCapRendered = true
+      target.push(
+        h(
+          "span",
+          {
+            key: `${keyPrefix}-drop-cap`,
+            "data-docx-drop-cap": "true",
+            "data-docx-drop-cap-type": dropCap?.type,
+            "data-docx-drop-cap-lines": String(dropCapMetrics.lines),
+            "aria-hidden": true,
+            style: {
+              float: "left",
+              fontSize: `${dropCapMetrics.fontSizePx}px`,
+              lineHeight: `${dropCapMetrics.heightPx}px`,
+              height: `${dropCapMetrics.heightPx}px`,
+              marginRight: 4,
+              marginTop: 2,
+              fontFamily: dropCapMetrics.style?.fontFamily,
+              fontWeight: dropCapMetrics.style?.bold ? 700 : undefined,
+              color: themedRunColor(dropCapMetrics.style?.color, documentTheme),
+            },
+          },
+          dropCapSplit.firstChar
+        )
+      )
+    }
+
     paragraph.children.forEach((child, childIndex) => {
       const key = `${keyPrefix}-run-${childIndex}`
       const target = useTabLeaderLayout
@@ -975,7 +1297,25 @@ export function renderParagraphRuns(
       }
 
       if (child.type === "text") {
-        const resolvedText = resolveFieldText(child.text, fieldCtx, fieldState)
+        const isDropCapChild =
+          dropCapSplit !== undefined && dropCapSplit.childIndex === childIndex
+        if (isDropCapChild) {
+          renderDropCap(target)
+          // The floated letter is painted separately; the remaining text starts
+          // one character later, and the text-range attributes say so.
+          if (dropCapSplit && childTextOffsets[childIndex] !== undefined) {
+            childTextOffsets[childIndex] += dropCapSplit.firstChar.length
+          }
+        }
+        const resolvedText = resolveFieldText(
+          isDropCapChild && dropCapSplit ? dropCapSplit.remainder : child.text,
+          fieldCtx,
+          fieldState
+        )
+        if (isDropCapChild && resolvedText.length === 0) {
+          consumeTrackedVisibleChild(child)
+          return
+        }
         renderRun(
           target, child, key,
           attachTextToPreviousCheckbox(paragraph, childIndex, resolvedText),

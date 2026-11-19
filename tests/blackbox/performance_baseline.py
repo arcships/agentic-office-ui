@@ -49,6 +49,11 @@ FIXTURE_NAMES = (
     "large-grid.xlsx",
     "corrupted.xlsx",
     "sample.pdf",
+    "scanned-invoice.pdf",
+    "rotated-pages.pdf",
+    "cjk-report.pdf",
+    "encrypted.pdf",
+    "large-contract.pdf",
 )
 
 PERFORMANCE_PROBE = r"""
@@ -603,6 +608,111 @@ def run_xlsx_lifecycle_cycles(page: Page, cdp, first_sample: dict[str, Any]) -> 
     return samples
 
 
+def wait_pdf(page: Page, file_name: str, page_number: int = 1) -> None:
+    """Wait until the PDF viewer has rasterized the requested page bitmap."""
+    page.wait_for_function(
+        """expected => {
+          const status = document.querySelector('[data-testid="page-status"]');
+          const loaded = document.querySelector('[data-testid="loaded-file"]');
+          const stage = document.querySelector('[data-testid="pdf-page"]');
+          const image = document.querySelector('[data-testid="pdf-page-image"]');
+          return status?.dataset.state === 'ready' &&
+            loaded?.textContent?.includes(expected.fileName) &&
+            stage?.dataset.pageNumber === String(expected.pageNumber) &&
+            stage?.dataset.renderState === 'rendered' &&
+            image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+        }""",
+        arg={"fileName": file_name, "pageNumber": page_number},
+        timeout=60_000,
+    )
+
+
+def collect_pdf_metrics(page: Page, round_dir: Path) -> dict[str, Any]:
+    """Measure PDF first-render and page-turn latency plus rasterized pixels.
+
+    Runs after the XLSX memory measurements so the PDF workers and object URLs
+    cannot leak into the released-home samples. The measurement still happens
+    inside the same browser context and preview build as the XLSX baseline.
+    """
+    started = float(page.evaluate("performance.now()"))
+    click_demo_route(page, "#/pdf-viewer")
+    wait_pdf(page, "sample.pdf")
+    first_render_ms = float(page.evaluate("start => performance.now() - start", started))
+    sample_image = page.locator('[data-testid="pdf-page-image"]').evaluate(
+        "image => ({ width: image.naturalWidth, height: image.naturalHeight })"
+    )
+    page.screenshot(path=str(round_dir / "PERF-008-pdf-sample.png"), full_page=True)
+
+    started = float(page.evaluate("performance.now()"))
+    page.locator('[data-testid="pdf-sample-select"]').select_option("large-contract.pdf")
+    wait_pdf(page, "large-contract.pdf")
+    large_first_render_ms = float(page.evaluate("start => performance.now() - start", started))
+    large_state = page.locator('[data-testid="pdf-document"]').evaluate(
+        "element => ({ pageCount: Number(element.dataset.pageCount) })"
+    )
+    # Thumbnail rendering shares the PDFium worker queue with page renders.
+    # Completing it first keeps page-turn latency from measuring two jobs at once.
+    page.wait_for_function(
+        """expected => {
+          const images = document.querySelectorAll('[data-testid="pdf-thumbnail-image"]');
+          const ready = [...images].filter((image) => image.complete && image.naturalWidth > 0).length;
+          return images.length === expected && ready === expected;
+        }""",
+        arg=int(large_state["pageCount"]),
+        timeout=180_000,
+    )
+    thumbnail_ready_ms = float(page.evaluate("start => performance.now() - start", started))
+
+    turn_samples: list[float] = []
+    for expected_page in range(2, 7):
+        started = float(page.evaluate("performance.now()"))
+        page.locator('[data-testid="pdf-next-page"]').click()
+        wait_pdf(page, "large-contract.pdf", expected_page)
+        turn_samples.append(float(page.evaluate("start => performance.now() - start", started)))
+    large_image = page.locator('[data-testid="pdf-page-image"]').evaluate(
+        "image => ({ width: image.naturalWidth, height: image.naturalHeight })"
+    )
+    page.screenshot(path=str(round_dir / "PERF-008-pdf-large-page-6.png"), full_page=True)
+
+    metrics = {
+        "browser.pdf.firstRenderMs": first_render_ms,
+        "browser.pdf.largeFirstRenderMs": large_first_render_ms,
+        "browser.pdf.largeThumbnailReadyMs": thumbnail_ready_ms,
+        "browser.pdf.pageTurnMedianMs": float(statistics.median(turn_samples)),
+        "browser.pdf.pageTurnP95Ms": percentile(turn_samples, 0.95),
+        "browser.pdf.sampleRenderPixels": float(sample_image["width"] * sample_image["height"]),
+        "browser.pdf.largeRenderPixels": float(large_image["width"] * large_image["height"]),
+        "browser.pdf.largePageCount": float(large_state["pageCount"]),
+    }
+    findings: list[dict[str, Any]] = []
+    if int(large_state["pageCount"]) < 200:
+        findings.append(
+            {
+                "case": "PERF-008",
+                "severity": "P1",
+                "code": "PDF_LARGE_FIXTURE_TOO_SMALL",
+                "details": {"pageCount": large_state["pageCount"], "minimum": 200},
+            }
+        )
+    return {
+        "metrics": metrics,
+        "findings": findings,
+        "firstRender": {
+            "sampleFile": "sample.pdf",
+            "milliseconds": first_render_ms,
+            "image": sample_image,
+        },
+        "largeFixture": {
+            "file": "large-contract.pdf",
+            "pageCount": large_state["pageCount"],
+            "firstRenderMs": large_first_render_ms,
+            "thumbnailReadyMs": thumbnail_ready_ms,
+            "pageTurnMs": turn_samples,
+            "image": large_image,
+        },
+    }
+
+
 def run_round(browser, round_number: int, scroll_seconds: float) -> dict[str, Any]:
     round_dir = OUTPUT / f"round-{round_number}"
     round_dir.mkdir(parents=True, exist_ok=True)
@@ -769,6 +879,9 @@ def run_round(browser, round_number: int, scroll_seconds: float) -> dict[str, An
         )
         page.screenshot(path=str(round_dir / "PERF-007-home-released.png"), full_page=True)
 
+        pdf = collect_pdf_metrics(page, round_dir)
+        completed_steps.append("PERF-008")
+
         evidence.assert_clean()
         metrics = {
             "browser.home.transferBytes": transfer_total(home_resources),
@@ -804,9 +917,10 @@ def run_round(browser, round_number: int, scroll_seconds: float) -> dict[str, An
             "browser.resources.afterHomeActiveWorkers": float(after_home_state["activeWorkers"]),
             "browser.resources.afterHomeActiveObjectUrls": float(after_home_state["activeObjectUrls"]),
         }
+        metrics.update(pdf["metrics"])
         partial_metrics.update(metrics)
         completed_steps.append("PERF-007")
-        findings = list(sequence_findings)
+        findings = list(sequence_findings) + list(pdf["findings"])
         if float(scroll["maxTop"]) <= 0 or float(scroll["maxLeft"]) <= 0:
             findings.append(
                 {
@@ -894,6 +1008,7 @@ def run_round(browser, round_number: int, scroll_seconds: float) -> dict[str, An
             "scrollLongTasks": scroll_tasks,
             "interaction": interaction,
             "chartNewResources": chart_new_resources,
+            "pdf": pdf,
             "memorySamples": memory_samples,
             "beforeHomeResources": before_home_state,
             "afterHomeResources": after_home_state,
@@ -959,17 +1074,20 @@ def aggregate_metrics(
     return aggregated
 
 
-def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    if config.get("status") != "approved":
-        return []
-    violations = []
+def _budget_violations(
+    approved_metrics: dict[str, Any],
+    aggregate: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+    baseline_name: str,
+) -> list[dict[str, Any]]:
+    violations: list[dict[str, Any]] = []
     regression = float(config.get("maxRegressionPercent", 10))
     absolute_ms = float(config.get("maxRegressionAbsoluteMs", 0))
     css_floor_bytes = float(config.get("cssRelativeBudgetFloorBytes", 0))
-    for key, approved in config.get("metrics", {}).items():
+    for key, approved in approved_metrics.items():
         current = aggregate.get(key)
         if not current:
-            violations.append({"metric": key, "reason": "missing"})
+            violations.append({"baseline": baseline_name, "metric": key, "reason": "missing"})
             continue
         baseline = float(approved["median"])
         direction = approved.get("direction", "max")
@@ -986,6 +1104,7 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
         if violated:
             violations.append(
                 {
+                    "baseline": baseline_name,
                     "metric": key,
                     "direction": direction,
                     "baselineMedian": baseline,
@@ -993,6 +1112,23 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
                     "allowed": allowed,
                 }
             )
+    return violations
+
+
+def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    violations: list[dict[str, Any]] = []
+    if config.get("status") == "approved":
+        violations.extend(
+            _budget_violations(config.get("metrics", {}), aggregate, config, "main")
+        )
+    # PDF first-render and page-turn timings have their own approved capture:
+    # the fixed Chromium used by the PDF suite can differ from the asset
+    # baseline environment, so they are gated from their own recorded medians.
+    pdf_baseline = config.get("pdfBaseline", {})
+    if pdf_baseline.get("status") == "approved":
+        violations.extend(
+            _budget_violations(pdf_baseline.get("metrics", {}), aggregate, config, "pdf")
+        )
     return violations
 
 
@@ -1165,6 +1301,13 @@ def main() -> int:
             "baselineCommit": summary["commit"],
             "capturedBrowser": browser_version,
             "metrics": aggregate,
+            # Keep the latest PDF capture separate so re-approving the PDF
+            # budget does not mix it with the asset baseline environment.
+            "pdfMetrics": {
+                key: value
+                for key, value in aggregate.items()
+                if key.startswith("browser.pdf.")
+            },
         }
         (OUTPUT / "baseline-candidate.json").write_text(
             json.dumps(candidate, ensure_ascii=False, indent=2), encoding="utf-8"

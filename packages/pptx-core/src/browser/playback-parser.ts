@@ -7,18 +7,32 @@ import {
   matchPptxMorphObjects,
   normalizePptxObjectText,
 } from "../playback/identity"
+import {
+  PPTX_CAPABILITY_FEATURES,
+  pptxEffectTargetSupport,
+  pptxTextBody,
+  pptxTextBodyOffset,
+  pptxTextGranularity,
+} from "../playback/targets"
+import { pptxTransitionCapability } from "../playback/transitions"
 import type {
+  PptxChartElementTarget,
+  PptxCharacterRange,
   PptxFeatureDisposition,
   PptxFeatureRecord,
+  PptxGraphicElementTarget,
   PptxMediaItem,
   PptxMorphMatch,
   PptxObjectGeometry,
+  PptxObjectHyperlink,
   PptxObjectIdentity,
   PptxPlaybackDocument,
   PptxPlaybackEffect,
   PptxPlaybackSlide,
   PptxSlideAction,
   PptxSlideTransition,
+  PptxSlideTransitionSound,
+  PptxTableCellTarget,
   PptxTimeCondition,
   PptxTimeContainer,
   PptxTimeNode,
@@ -26,6 +40,7 @@ import type {
 } from "../playback/types"
 import type { PptxApproximationPolicy } from "../browser-types"
 import { withAutoplayMedia } from "../playback/media-command"
+import { collectPptxTextDirectionFeatures } from "../playback/text-direction"
 import { repeatCountNote, repeatCountValue } from "../playback/timing-values"
 
 export interface PptxPlaybackParserOptions {
@@ -34,6 +49,25 @@ export interface PptxPlaybackParserOptions {
 }
 
 const objectNodeNames = new Set(["sp", "pic", "graphicFrame", "grpSp", "cxnSp"])
+
+interface PptxTableLayoutCell extends PptxTableCellTarget {
+  paragraphStart: number
+  paragraphCount: number
+}
+
+interface PptxTextBodyInfo {
+  paragraphs: readonly string[]
+  table?: { cells: readonly PptxTableLayoutCell[] }
+}
+
+interface ParseContext {
+  slideIndex: number
+  objectKeys: ReadonlyMap<string, string>
+  objectsById: ReadonlyMap<string, PptxObjectIdentity>
+  textBodies: ReadonlyMap<string, PptxTextBodyInfo>
+  slideWidth: number
+  slideHeight: number
+}
 
 function elements(root: Document | Element, localName: string): Element[] {
   return Array.from(root.getElementsByTagNameNS("*", localName))
@@ -73,7 +107,77 @@ function objectType(node: Element): string {
   if (node.localName === "grpSp") return "group"
   if (elements(node, "tbl").length) return "table"
   if (elements(node, "chart").length) return "chart"
+  if (elements(node, "relIds").length || /diagram/iu.test(
+    elements(node, "graphicData")[0]?.getAttribute("uri") ?? "",
+  )) return "smartart"
   return "unknown"
+}
+
+function directChildren(root: Element, localName: string): Element[] {
+  return Array.from(root.children).filter((child) => child.localName === localName)
+}
+
+function paragraphTexts(body: Element): string[] {
+  return directChildren(body, "p").map((paragraph) => paragraph.textContent ?? "")
+}
+
+function textBodyParagraphs(node: Element): string[] | undefined {
+  const body = directChild(node, "txBody")
+  if (!body) return undefined
+  return paragraphTexts(body)
+}
+
+/**
+ * Table cells in rendered row-major order. The renderer skips merged
+ * continuation cells, so the parser mirrors that grid walk before it maps a
+ * `pRg` paragraph index onto a cell.
+ */
+function tableTextBody(node: Element): PptxTextBodyInfo | undefined {
+  if (node.localName !== "graphicFrame") return undefined
+  const table = elements(node, "tbl")[0]
+  if (!table) return undefined
+  const cells: PptxTableLayoutCell[] = []
+  const paragraphs: string[] = []
+  const occupied = new Set<string>()
+  let paragraphStart = 0
+  directChildren(table, "tr").forEach((row, rowIndex) => {
+    let column = 0
+    for (const cell of directChildren(row, "tc")) {
+      if (localAttr(cell, "hMerge") === "1") continue
+      const gridSpan = Math.max(1, Math.trunc(Number(localAttr(cell, "gridSpan") ?? 1)) || 1)
+      if (localAttr(cell, "vMerge") === "1") {
+        column += gridSpan
+        continue
+      }
+      while (occupied.has(`${rowIndex}:${column}`)) column += 1
+      const rowSpan = Math.max(1, Math.trunc(Number(localAttr(cell, "rowSpan") ?? 1)) || 1)
+      for (let rowOffset = 0; rowOffset < rowSpan; rowOffset += 1) {
+        for (let columnOffset = 0; columnOffset < gridSpan; columnOffset += 1) {
+          occupied.add(`${rowIndex + rowOffset}:${column + columnOffset}`)
+        }
+      }
+      const body = directChild(cell, "txBody")
+      const cellParagraphs = body ? paragraphTexts(body) : []
+      const effective = cellParagraphs.length ? cellParagraphs : [""]
+      paragraphs.push(...effective)
+      cells.push(Object.freeze({
+        row: rowIndex,
+        column,
+        paragraphStart,
+        paragraphCount: effective.length,
+      }))
+      paragraphStart += effective.length
+      column += gridSpan
+    }
+  })
+  return Object.freeze({ paragraphs: Object.freeze(paragraphs), table: Object.freeze({ cells: Object.freeze(cells) }) })
+}
+
+function textBodyInfo(node: Element): PptxTextBodyInfo | undefined {
+  const table = tableTextBody(node)
+  if (table) return table
+  const paragraphs = textBodyParagraphs(node)
+  return paragraphs ? Object.freeze({ paragraphs: Object.freeze(paragraphs) }) : undefined
 }
 
 function nonVisualProperties(node: Element): Element | undefined {
@@ -92,6 +196,7 @@ function collectObjects(
   slidePath: string,
   groupPath: readonly string[],
   result: PptxObjectIdentity[],
+  textBodies: Map<string, PptxTextBodyInfo>,
 ): void {
   for (const node of Array.from(parent.children)) {
     if (!objectNodeNames.has(node.localName)) continue
@@ -115,7 +220,9 @@ function collectObjects(
       text: objectText(node),
     })
     result.push(identity)
-    if (node.localName === "grpSp") collectObjects(node, slidePath, [...groupPath, shapeId], result)
+    const body = textBodyInfo(node)
+    if (body) textBodies.set(shapeId, body)
+    if (node.localName === "grpSp") collectObjects(node, slidePath, [...groupPath, shapeId], result, textBodies)
   }
 }
 
@@ -139,12 +246,16 @@ function objectText(node: Element): string | undefined {
   return normalizePptxObjectText(elements(node, "t").map((item) => item.textContent ?? "").join(" "))
 }
 
-function parseObjects(document: Document, slidePath: string): readonly PptxObjectIdentity[] {
+function parseObjects(
+  document: Document,
+  slidePath: string,
+): { objects: readonly PptxObjectIdentity[]; textBodies: ReadonlyMap<string, PptxTextBodyInfo> } {
   const tree = elements(document, "spTree")[0]
-  if (!tree) return Object.freeze([])
+  if (!tree) return { objects: Object.freeze([]), textBodies: Object.freeze(new Map()) }
   const result: PptxObjectIdentity[] = []
-  collectObjects(tree, slidePath, [], result)
-  return Object.freeze(result)
+  const textBodies = new Map<string, PptxTextBodyInfo>()
+  collectObjects(tree, slidePath, [], result, textBodies)
+  return { objects: Object.freeze(result), textBodies }
 }
 
 function triggerEvent(value: string | undefined): PptxTriggerEvent {
@@ -261,19 +372,143 @@ function effectKind(presetClass: string, transition: string, filter: string, nod
   return "unknown"
 }
 
-function parseEffect(
-  node: Element,
-  objectKeys: ReadonlyMap<string, string>,
-  slideWidth: number,
-  slideHeight: number,
-): PptxPlaybackEffect {
+function optionalNumber(element: Element | undefined, name: string): number | undefined {
+  if (!element) return undefined
+  const raw = element.getAttribute(name)
+  if (raw === null || raw === "") return undefined
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : undefined
+}
+
+function parseCharacterRange(node: Element | undefined): PptxCharacterRange | undefined {
+  if (!node) return undefined
+  const start = Number(node.getAttribute("st") ?? node.getAttribute("start") ?? 0)
+  const end = Number(node.getAttribute("end") ?? node.getAttribute("st") ?? 0)
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined
+  return Object.freeze({ start: Math.max(0, Math.min(start, end)), end: Math.max(start, end) })
+}
+
+function chartElementTarget(owner: Element): PptxChartElementTarget | undefined {
+  const chart = elements(owner, "oleChartEl")[0]
+  if (!chart) return undefined
+  const raw = (chart.getAttribute("type") ?? "chart").trim().toLowerCase()
+  const type: PptxChartElementTarget["type"] = raw === "ser" || raw === "series"
+    ? "series"
+    : raw === "cat" || raw === "category"
+      ? "category"
+      : raw === "ptinser" || raw === "pointinseries"
+        ? "point-in-series"
+        : raw === "ptincat" || raw === "pointincategory"
+          ? "point-in-category"
+          : "chart"
+  return Object.freeze({
+    type,
+    index: optionalNumber(chart, "idx"),
+    level: optionalNumber(chart, "lvl"),
+  })
+}
+
+function childObjectKey(
+  identity: PptxObjectIdentity | undefined,
+  sourceId: string | undefined,
+): string | undefined {
+  if (!identity || !sourceId || !/^[^|/]+$/u.test(sourceId)) return undefined
+  return createPptxObjectKey({
+    slidePath: identity.slidePath,
+    source: identity.source,
+    shapeId: sourceId,
+    groupPath: [...identity.groupPath, identity.shapeId],
+  })
+}
+
+function graphicElementTarget(
+  owner: Element,
+  identity: PptxObjectIdentity | undefined,
+): PptxGraphicElementTarget | undefined {
+  const subShape = elements(owner, "subSp")[0]
+  if (subShape) {
+    const sourceId = subShape.getAttribute("spid") ?? undefined
+    return Object.freeze({
+      type: "subSp",
+      sourceId,
+      objectKey: childObjectKey(identity, sourceId),
+    })
+  }
+  const graphic = elements(owner, "graphicEl")[0]
+  if (!graphic) return undefined
+  const rawType = (graphic.getAttribute("type") ?? "graphicEl").trim() || "graphicEl"
+  const sourceId = graphic.getAttribute("id")
+    ?? graphic.getAttribute("spid")
+    ?? undefined
+  const index = optionalNumber(graphic, "idx")
+  const level = optionalNumber(graphic, "lvl")
+  // DrawingML diagram child ids are numeric shape ids. A non-numeric token
+  // (for example `dgm`) has no rendered identity, so it stays reported only.
+  const resolvedId = sourceId && /^\d+$/u.test(sourceId) ? sourceId : undefined
+  return Object.freeze({
+    type: rawType,
+    sourceId,
+    index,
+    level,
+    objectKey: childObjectKey(identity, resolvedId),
+  })
+}
+
+function paragraphRangeFromCharacters(
+  paragraphs: readonly string[],
+  range: PptxCharacterRange,
+): { start: number; end: number } | undefined {
+  if (!paragraphs.length) return undefined
+  let start: number | undefined
+  let end: number | undefined
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const offset = pptxTextBodyOffset(paragraphs, index)
+    const last = offset + paragraphs[index].length - 1
+    if (range.end < offset || range.start > last) continue
+    start ??= index
+    end = index
+  }
+  return start === undefined || end === undefined ? undefined : { start, end }
+}
+
+function tableCellForRange(
+  body: PptxTextBodyInfo | undefined,
+  range: { start: number; end: number } | undefined,
+): PptxTableCellTarget | undefined {
+  if (!body?.table || !range) return undefined
+  const matches = body.table.cells.filter((cell) =>
+    cell.paragraphStart <= range.end
+    && cell.paragraphStart + cell.paragraphCount - 1 >= range.start
+  )
+  return matches.length === 1
+    ? Object.freeze({ row: matches[0].row, column: matches[0].column })
+    : undefined
+}
+
+function parseEffect(node: Element, context: ParseContext): PptxPlaybackEffect {
   const owner = effectOwner(node) ?? node
   const animEffect = owner.localName === "animEffect" ? owner : elements(owner, "animEffect")[0]
   const filter = animEffect?.getAttribute("filter") ?? ""
   const transition = animEffect?.getAttribute("transition") ?? ""
   const presetClass = node.getAttribute("presetClass") ?? ""
   const targetId = findShapeTarget(owner)
+  const targetIdentity = targetId ? context.objectsById.get(targetId) : undefined
+  const targetBody = targetId ? context.textBodies.get(targetId) : undefined
   const range = elements(owner, "pRg")[0]
+  const rawParagraphStart = Number(range?.getAttribute("st") ?? range?.getAttribute("start") ?? 0)
+  const rawParagraphEnd = Number(range?.getAttribute("end") ?? range?.getAttribute("st") ?? 0)
+  const paragraphRange = range
+    && Number.isFinite(rawParagraphStart)
+    && Number.isFinite(rawParagraphEnd)
+    ? {
+        start: Math.max(0, Math.min(rawParagraphStart, rawParagraphEnd)),
+        end: Math.max(0, rawParagraphStart, rawParagraphEnd),
+      }
+    : undefined
+  const characterRange = parseCharacterRange(elements(owner, "charRg")[0])
+  const characterParagraphs = characterRange && targetBody
+    ? paragraphRangeFromCharacters(targetBody.paragraphs, characterRange)
+    : undefined
   const motion = owner.localName === "animMotion" ? owner : elements(owner, "animMotion")[0]
   const rotation = owner.localName === "animRot" ? owner : elements(owner, "animRot")[0]
   const scale = owner.localName === "animScale" ? owner : elements(owner, "animScale")[0]
@@ -283,8 +518,8 @@ function parseEffect(
   const path = motion?.getAttribute("path") ?? ""
   if (path) {
     values.motionPath = path
-    values.motionScaleX = slideWidth
-    values.motionScaleY = slideHeight
+    values.motionScaleX = context.slideWidth
+    values.motionScaleY = context.slideHeight
   }
   const rotationBy = Number(rotation?.getAttribute("by"))
   if (Number.isFinite(rotationBy)) values.rotationBy = rotationBy / 60000
@@ -310,14 +545,25 @@ function parseEffect(
     }
   }
   const command = (owner.localName === "cmd" ? owner : elements(owner, "cmd")[0])?.getAttribute("cmd") ?? undefined
+  const cellRange = paragraphRange ?? characterParagraphs
+  const granularity = characterRange && targetBody
+    ? pptxTextGranularity(pptxTextBody(targetBody.paragraphs), characterRange)
+    : undefined
   return Object.freeze({
     id: node.getAttribute("id") ?? "",
     kind: effectKind(presetClass, transition, filter, owner),
-    targetObjectKey: targetId ? objectKeys.get(targetId) : undefined,
-    paragraphRange: range ? {
-      start: Number(range.getAttribute("st") ?? range.getAttribute("start") ?? 0),
-      end: Number(range.getAttribute("end") ?? range.getAttribute("st") ?? 0),
-    } : undefined,
+    targetObjectKey: targetId ? context.objectKeys.get(targetId) : undefined,
+    targetShapeId: targetId,
+    targetNodeType: targetIdentity?.nodeType,
+    paragraphRange,
+    characterRange,
+    characterGranularity: granularity?.granularity,
+    characterRangeUnavailable: (characterRange !== undefined && !targetBody) || undefined,
+    tableCell: targetIdentity?.nodeType === "table" && !characterRange
+      ? tableCellForRange(targetBody, cellRange)
+      : undefined,
+    chartElement: chartElementTarget(owner),
+    graphicElement: graphicElementTarget(owner, targetIdentity),
     presetClass: presetClass || undefined,
     presetId: node.getAttribute("presetID") ?? undefined,
     transition: transition === "in" || transition === "out" ? transition : undefined,
@@ -330,6 +576,8 @@ function parseEffect(
 
 function effectDisposition(effect: PptxPlaybackEffect, targetId: string | undefined): PptxFeatureDisposition {
   if (!effect.targetObjectKey) return effect.kind === "unknown" && !targetId ? "unparsed" : "static"
+  const support = pptxEffectTargetSupport(effect)
+  if (support.disposition === "static") return "static"
   if (["appear", "disappear", "fade-in", "fade-out", "scale", "rotate", "media-command"].includes(effect.kind)) return "strict"
   if (effect.kind === "wipe") return /left|right/i.test(effect.filter ?? "") ? "strict" : "static"
   if (effect.kind === "motion-path") return /^[\s\d.,+\-mlehvz]+$/iu.test(effect.motionPath ?? "") ? "strict" : "static"
@@ -340,14 +588,12 @@ function effectDisposition(effect: PptxPlaybackEffect, targetId: string | undefi
 
 function parseTimeNode(
   node: Element,
-  slideIndex: number,
-  objectKeys: ReadonlyMap<string, string>,
+  context: ParseContext,
   nodes: Record<string, PptxTimeNode>,
   features: PptxFeatureRecord[],
-  slideWidth: number,
-  slideHeight: number,
   parentId?: string,
 ): string {
+  const { slideIndex, objectKeys } = context
   const id = node.getAttribute("id") ?? `generated-${slideIndex}-${Object.keys(nodes).length}`
   const container = ["seq", "par", "excl"].includes(node.parentElement?.localName ?? "")
     ? node.parentElement as Element
@@ -365,16 +611,13 @@ function parseTimeNode(
     conditions.push(Object.freeze({ source: "start", event: fallbackEvent, delayMs: 0 }))
   }
   const effect = node.hasAttribute("presetClass")
-    ? parseEffect(node, objectKeys, slideWidth, slideHeight)
+    ? parseEffect(node, context)
     : undefined
   const childIds = directTimeChildren(node).map((child) => parseTimeNode(
     child,
-    slideIndex,
-    objectKeys,
+    context,
     nodes,
     features,
-    slideWidth,
-    slideHeight,
     id,
   ))
   let rawDuration = timeValue(localAttr(node, "dur"), 0)
@@ -432,9 +675,17 @@ function parseTimeNode(
       || (condition.event === "on-begin" || condition.event === "on-end") && !condition.targetNodeId,
     )
     const baseDisposition = effectDisposition(effect, targetId)
+    const targetSupport = pptxEffectTargetSupport(effect)
     const disposition: PptxFeatureDisposition = unsupportedCondition
       ? unsupportedCondition.event === "unknown" ? "unparsed" : "static"
       : baseDisposition
+    const elementTarget = Boolean(
+      effect.characterRange
+      || effect.characterRangeUnavailable
+      || effect.tableCell
+      || effect.chartElement
+      || effect.graphicElement,
+    )
     features.push(Object.freeze({
       id: `effect:${slideIndex}:${id}`,
       slideIndex,
@@ -445,7 +696,20 @@ function parseTimeNode(
         ? `动画目标 ${targetId} 没有唯一对象身份。`
         : unsupportedCondition
           ? `第一版尚未执行触发条件 ${unsupportedCondition.rawEvent ?? unsupportedCondition.event}。`
-          : disposition === "static" ? "第一版尚未批准该效果参数。" : undefined,
+          : disposition === "static" ? targetSupport.reason ?? "第一版尚未批准该效果参数。" : undefined,
+      sourceNodeId: id,
+    }))
+    if (elementTarget && targetSupport.feature) features.push(Object.freeze({
+      id: `element-target:${slideIndex}:${id}`,
+      slideIndex,
+      objectKey: effect.targetObjectKey,
+      feature: targetSupport.feature,
+      disposition: unsupportedCondition
+        ? unsupportedCondition.event === "unknown" ? "unparsed" : "static"
+        : targetSupport.disposition,
+      reason: unsupportedCondition
+        ? `触发条件 ${unsupportedCondition.rawEvent ?? unsupportedCondition.event} 未执行。`
+        : targetSupport.reason,
       sourceNodeId: id,
     }))
     if (timeNode.repeatCount !== undefined) {
@@ -483,21 +747,65 @@ function parseTimeNode(
   return id
 }
 
-function parseTransition(node: Element | undefined): PptxSlideTransition | undefined {
+function mediaContentType(sourcePath: string | undefined): string | undefined {
+  const path = sourcePath?.toLowerCase() ?? ""
+  if (path.endsWith(".mp4")) return "video/mp4"
+  if (path.endsWith(".webm")) return "video/webm"
+  if (path.endsWith(".mp3")) return "audio/mpeg"
+  if (path.endsWith(".wav")) return "audio/wav"
+  if (path.endsWith(".m4a")) return "audio/mp4"
+  if (path.endsWith(".ogg") || path.endsWith(".oga")) return "audio/ogg"
+  return undefined
+}
+
+function parseTransitionSound(
+  node: Element,
+  slide: SlideData,
+): PptxSlideTransitionSound | undefined {
+  const soundAction = elements(node, "sndAc")[0]
+  const sound = soundAction ? elements(soundAction, "snd")[0] : undefined
+  const relationId = localAttr(sound, "embed") ?? localAttr(sound, "link")
+  if (!relationId) return undefined
+  const relation = slide.rels.get(relationId)
+  const external = relation?.targetMode?.toLowerCase() === "external"
+  const sourcePath = relation
+    ? external ? relation.target : resolveTargetPath(slide.slidePath, relation.target)
+    : undefined
+  const embedded = !external && sourcePath?.startsWith("ppt/") === true
+  return Object.freeze({
+    relationId,
+    sourcePath,
+    contentType: mediaContentType(sourcePath),
+    // External sounds stay reported but unloaded under the media policy.
+    embedded,
+    loop: localAttr(sound, "loop") === "1",
+    volume: 1,
+  })
+}
+
+function parseTransition(
+  node: Element | undefined,
+  slide: SlideData,
+): PptxSlideTransition | undefined {
   if (!node) return undefined
-  const effect = Array.from(node.children).find((child) => !["sndAc", "extLst"].includes(child.localName))
+  const effect = Array.from(node.children).find(
+    (child) => !["sndAc", "endSnd", "extLst"].includes(child.localName),
+  )
   const speed = node.getAttribute("spd")
   const fallback = speed === "fast" ? 500 : speed === "slow" ? 2000 : 1000
   const duration = timeValue(localAttr(node, "dur"), fallback)
   const after = timeValue(node.getAttribute("advTm") ?? undefined, 0)
+  const sound = parseTransitionSound(node, slide)
   return Object.freeze({
     kind: effect?.localName ?? "cut",
     direction: effect?.getAttribute("dir") ?? effect?.getAttribute("orient") ?? undefined,
+    orientation: effect?.getAttribute("orient") ?? undefined,
     option: effect?.getAttribute("option") ?? undefined,
     durationMs: duration === "indefinite" ? fallback : duration,
     advanceOnClick: node.getAttribute("advClick") !== "0",
     advanceAfterMs: node.hasAttribute("advTm") && after !== "indefinite" ? after : undefined,
     soundRelationId: localAttr(elements(node, "snd")[0], "embed"),
+    sound,
   })
 }
 
@@ -542,13 +850,7 @@ function parseMedia(
       objectKey: shapeId ? objectKeys.get(shapeId) : undefined,
       relationId,
       sourcePath,
-      contentType: sourcePath?.toLowerCase().endsWith(".mp4")
-        ? "video/mp4"
-        : sourcePath?.toLowerCase().endsWith(".webm")
-          ? "video/webm"
-          : sourcePath?.toLowerCase().endsWith(".mp3")
-            ? "audio/mpeg"
-            : sourcePath?.toLowerCase().endsWith(".wav") ? "audio/wav" : undefined,
+      contentType: mediaContentType(sourcePath),
       kind: node.localName === "videoFile" ? "video" : "audio",
       embedded: !external && sourcePath?.startsWith("ppt/") === true,
       autoplay: false,
@@ -627,6 +929,10 @@ function parseActions(
     const relationId = localAttr(node, "id")
     const relation = relationId ? slide.rels.get(relationId) : undefined
     const rawAction = node.getAttribute("action") ?? undefined
+    // `tooltip` is the visible affordance PowerPoint shows for the link; it is
+    // kept even when the target itself is unsupported so a tooltip-only link
+    // still reads correctly.
+    const tooltip = node.getAttribute("tooltip")?.trim() || undefined
     let kind: PptxSlideAction["kind"] = "unsupported"
     let targetSlideIndex: number | undefined
     let url: string | undefined
@@ -654,16 +960,37 @@ function parseActions(
       kind,
       targetSlideIndex,
       url,
+      tooltip,
       rawAction,
     }))
   }
   return Object.freeze(actions)
 }
 
-function transitionDisposition(kind: string, approximation: PptxApproximationPolicy): PptxFeatureDisposition {
-  if (["cut", "fade", "push", "wipe"].includes(kind)) return "strict"
-  if (kind === "morph") return approximation === "safe" ? "approximate" : "static"
-  return approximation === "safe" ? "approximate" : "static"
+function withObjectHyperlinks(
+  objects: readonly PptxObjectIdentity[],
+  actions: readonly PptxSlideAction[],
+): readonly PptxObjectIdentity[] {
+  if (actions.length === 0) return objects
+  const byObject = new Map<string, PptxObjectHyperlink[]>()
+  for (const action of actions) {
+    const hyperlink: PptxObjectHyperlink = Object.freeze({
+      trigger: action.trigger,
+      kind: action.kind,
+      ...(action.targetSlideIndex !== undefined ? { targetSlideIndex: action.targetSlideIndex } : {}),
+      ...(action.url !== undefined ? { url: action.url } : {}),
+      ...(action.tooltip !== undefined ? { tooltip: action.tooltip } : {}),
+    })
+    const existing = byObject.get(action.sourceObjectKey)
+    if (existing) existing.push(hyperlink)
+    else byObject.set(action.sourceObjectKey, [hyperlink])
+  }
+  return Object.freeze(objects.map((object) => {
+    const hyperlinks = byObject.get(object.key)
+    return hyperlinks
+      ? Object.freeze({ ...object, hyperlinks: Object.freeze(hyperlinks) })
+      : object
+  }))
 }
 
 function morphMatchDescription(method: PptxMorphMatch["method"]): string {
@@ -684,14 +1011,16 @@ function parseSlide(
   const xml = files.slides.get(slide.slidePath)
   if (!xml) throw new Error(`缺少页面 XML：${slide.slidePath}`)
   const document = parseXml(xml, slide.index)
-  const objects = parseObjects(document, slide.slidePath)
+  const { objects, textBodies } = parseObjects(document, slide.slidePath)
   const objectKeys = new Map<string, string>()
+  const objectsById = new Map<string, PptxObjectIdentity>()
   const duplicateIds = new Set<string>()
   for (const object of objects) {
     if (objectKeys.has(object.shapeId)) {
       objectKeys.delete(object.shapeId)
       duplicateIds.add(object.shapeId)
     } else if (!duplicateIds.has(object.shapeId)) objectKeys.set(object.shapeId, object.key)
+    if (!objectsById.has(object.shapeId)) objectsById.set(object.shapeId, object)
   }
   const features: PptxFeatureRecord[] = []
   for (const id of duplicateIds) features.push(Object.freeze({
@@ -702,28 +1031,52 @@ function parseSlide(
     reason: `对象编号 ${id} 在同一页中不唯一。`,
   }))
   const nodes: Record<string, PptxTimeNode> = {}
+  const context: ParseContext = {
+    slideIndex: slide.index,
+    objectKeys,
+    objectsById,
+    textBodies,
+    slideWidth: presentation.width,
+    slideHeight: presentation.height,
+  }
   const root = elements(document, "cTn").find((node) => node.getAttribute("nodeType") === "tmRoot")
   const rootNodeId = root ? parseTimeNode(
     root,
-    slide.index,
-    objectKeys,
+    context,
     nodes,
     features,
-    presentation.width,
-    presentation.height,
   ) : undefined
   const transitionNodes = elements(document, "transition")
   const transition = parseTransition(
     transitionNodes.find((candidate) => Array.from(candidate.children).some(
-      (child) => !["sndAc", "extLst"].includes(child.localName),
+      (child) => !["sndAc", "endSnd", "extLst"].includes(child.localName),
     )) ?? transitionNodes[0],
+    slide,
   )
-  if (transition) features.push(Object.freeze({
-    id: `transition:${slide.index}`,
-    slideIndex: slide.index,
-    feature: `transition:${transition.kind}`,
-    disposition: transitionDisposition(transition.kind, options.approximation ?? "off"),
-  }))
+  if (transition) {
+    const capability = pptxTransitionCapability(transition.kind, options.approximation ?? "off")
+    features.push(Object.freeze({
+      id: `transition:${slide.index}`,
+      slideIndex: slide.index,
+      feature: capability.feature,
+      disposition: capability.disposition,
+      reason: capability.reason,
+    }))
+  }
+  if (transition?.sound) {
+    const externalAllowed = options.externalMedia === "allowed" && Boolean(transition.sound.sourcePath)
+    features.push(Object.freeze({
+      id: `transition-sound:${slide.index}`,
+      slideIndex: slide.index,
+      feature: PPTX_CAPABILITY_FEATURES.transitionSound,
+      disposition: transition.sound.embedded || externalAllowed ? "strict" : "static",
+      reason: transition.sound.embedded || externalAllowed
+        ? undefined
+        : transition.sound.sourcePath
+          ? "外部切换声音默认禁用。"
+          : "切换声音的关系目标缺失。",
+    }))
+  }
   const media = withAutoplayMedia(parseMedia(document, objectKeys, slide), nodes, rootNodeId)
   for (const item of media) features.push(Object.freeze({
     id: `media:${slide.index}:${item.id}`,
@@ -738,16 +1091,57 @@ function parseSlide(
     slideIndex: slide.index,
     feature: `chart-build:${build.getAttribute("bld") ?? "unknown"}`,
     disposition: "static",
-    reason: "图表内部动画尚未保留语义对象身份。",
+    reason: "图表构建清单只描述分组；元素级目标在渲染器没有系列 DOM 身份时保留静态。",
   }))
   for (const build of elements(document, "bldDgm")) features.push(Object.freeze({
     id: `smartart-build:${slide.index}:${features.length}`,
     slideIndex: slide.index,
     feature: `smartart-build:${build.getAttribute("bld") ?? "unknown"}`,
     disposition: "static",
-    reason: "SmartArt 内部动画尚未保留语义对象身份。",
+    reason: "SmartArt 构建清单只描述分组；逐节点效果按渲染器暴露的子对象身份执行。",
   }))
+  for (const build of elements(document, "bldGraphic")) {
+    const targetType = objectsById.get(build.getAttribute("spid") ?? "")?.nodeType
+    const mode = elements(build, "bldSub")[0]?.getAttribute("bld")
+      ?? build.getAttribute("bld")
+      ?? "unknown"
+    if (targetType === "table") {
+      features.push(Object.freeze({
+        id: `table-build:${slide.index}:${features.length}`,
+        slideIndex: slide.index,
+        feature: `${PPTX_CAPABILITY_FEATURES.tableBuild}:${mode}`,
+        disposition: "static",
+        reason: "表格构建清单只描述分组；逐单元格效果按精确单元格执行。",
+      }))
+    } else if (targetType === "chart") {
+      features.push(Object.freeze({
+        id: `chart-build:${slide.index}:${features.length}`,
+        slideIndex: slide.index,
+        feature: `chart-build:${mode}`,
+        disposition: "static",
+        reason: "图表构建清单只描述分组；元素级目标在渲染器没有系列 DOM 身份时保留静态。",
+      }))
+    } else if (targetType === "smartart") {
+      features.push(Object.freeze({
+        id: `smartart-build:${slide.index}:${features.length}`,
+        slideIndex: slide.index,
+        feature: `smartart-build:${mode}`,
+        disposition: "static",
+        reason: "SmartArt 构建清单只描述分组；逐节点效果按渲染器暴露的子对象身份执行。",
+      }))
+    } else {
+      features.push(Object.freeze({
+        id: `graphic-build:${slide.index}:${features.length}`,
+        slideIndex: slide.index,
+        feature: `graphic-build:${mode}`,
+        disposition: "static",
+        reason: "图形构建清单的目标不是表格、图表或 SmartArt。",
+      }))
+    }
+  }
   const actions = parseActions(document, slide, presentation, objectKeys)
+  const linkedObjects = withObjectHyperlinks(objects, actions)
+  features.push(...collectPptxTextDirectionFeatures(document, slide.index))
   for (const action of actions) features.push(Object.freeze({
     id: action.id,
     slideIndex: slide.index,
@@ -761,7 +1155,7 @@ function parseSlide(
     hidden: slide.hidden === true || ["0", "false", "off"].includes(
       (document.documentElement.getAttribute("show") ?? "").toLowerCase(),
     ),
-    objects,
+    objects: linkedObjects,
     morphFromPrevious: Object.freeze([]),
     transition,
     rootNodeId,

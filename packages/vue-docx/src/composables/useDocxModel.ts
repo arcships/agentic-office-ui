@@ -7,6 +7,7 @@
 import { ref, watchEffect, onScopeDispose } from "vue"
 import { createDocxRuntime } from "@arcships/docx-core"
 import type { DocModel } from "@arcships/docx-core"
+import { prepareDocxDocumentFonts } from "./docx-document-fonts"
 
 export interface UseDocxModelState {
   model?: DocModel
@@ -43,6 +44,9 @@ export function useDocxModel(file?: () => ArrayBuffer | undefined): UseDocxModel
         if (!active) return
         model.value = result.model
         error.value = undefined
+        // Load the document's faces before the first pagination pass so the
+        // measured page count does not change when a web font arrives.
+        void prepareDocxDocumentFonts(result.model, result.package)
       })
       .catch((err: unknown) => {
         if (!active) return

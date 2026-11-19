@@ -33,9 +33,35 @@
       </div>
 
       <div class="docx-toolbar-topbar__actions">
+        <slot name="find" />
+        <button
+          type="button"
+          class="docx-toolbar-btn"
+          data-testid="editor-find-toggle"
+          :class="{ active: findOpen }"
+          :aria-pressed="findOpen"
+          :aria-label="m.docx.editor.find"
+          :title="m.docx.editor.find"
+          @click="emit('toggleFind')"
+        >
+          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
+        </button>
         <label class="docx-toolbar-toggle" :title="m.docx.toolbar.trackedChanges">
           <input type="checkbox" :checked="controller.showTrackedChanges" @change="controller.toggleShowTrackedChanges()" />
           <span>{{ m.docx.editor.edits }}</span>
+        </label>
+        <label class="docx-toolbar-zoom" :title="m.docx.toolbar.revisionDisplay">
+          <select
+            data-testid="editor-revision-display"
+            class="docx-toolbar-select docx-toolbar-select-sm"
+            :value="controller.revisionDisplay"
+            :aria-label="m.docx.toolbar.revisionDisplay"
+            @change="onRevisionDisplayChange"
+          >
+            <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
+            <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
+            <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
+          </select>
         </label>
         <label class="docx-toolbar-toggle" :title="m.docx.toolbar.comments">
           <input type="checkbox" :checked="controller.showComments" @change="controller.toggleShowComments()" />
@@ -85,11 +111,11 @@
             <option v-for="z of zoomSelectOptions" :key="z" :value="z">{{ z }}%</option>
           </select>
         </label>
-        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly" @click="controller.newDocument()">
+        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="controller.newDocument()">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M12.5 8.5v7" /></svg>
           <span>{{ m.docx.editor.new }}</span>
         </button>
-        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly" @click="onImport">
+        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="onImport">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 13v6h14v-6" /></svg>
           <span>{{ m.docx.editor.import }}</span>
         </button>
@@ -374,6 +400,28 @@
 
     <div class="docx-toolbar-separator" />
 
+    <!-- Body columns of the caret's section -->
+    <div class="docx-toolbar-group">
+      <select
+        data-testid="editor-columns"
+        class="docx-toolbar-select docx-toolbar-select-sm"
+        :value="pageSetup.columns.value.count"
+        :title="m.docx.editor.columns"
+        :aria-label="m.docx.editor.columns"
+        @change="onColumnsChange"
+      >
+        <option
+          v-for="option of columnOptions"
+          :key="option.count"
+          :value="option.count"
+        >
+          {{ option.label }}
+        </option>
+      </select>
+    </div>
+
+    <div class="docx-toolbar-separator" />
+
     <!-- Line spacing -->
     <div class="docx-toolbar-group">
       <select
@@ -393,11 +441,20 @@
     </div>
 
     <!-- Heading styles -->
-    <div class="docx-toolbar-group">
+    <div
+      ref="stylePickerEl"
+      class="docx-toolbar-group docx-toolbar-style-picker"
+      data-testid="editor-paragraph-style-picker"
+      @pointerenter="onStylePickerEnter"
+      @pointerleave="onStylePickerLeave"
+    >
       <select
         class="docx-toolbar-select"
+        data-testid="editor-paragraph-style"
         :value="controller.selectedParagraphStyleId ?? ''"
         @change="onStyleChange"
+        @mousedown="closeStylePreview"
+        @focus="closeStylePreview"
         :title="m.docx.editor.paragraphStyle"
       >
         <option value="">{{ m.docx.editor.normal }}</option>
@@ -409,6 +466,20 @@
           {{ style.name }}
         </option>
       </select>
+      <DocxStylePreviewPopover
+        v-if="showStylePreview !== false && stylePreviewOpen"
+        :open="stylePreviewOpen"
+        :styles="controller.availableParagraphStyles"
+        :preview-style-id="stylePreviewStyleId"
+        :document-theme="toolbarTheme"
+        :x="stylePreviewPosition.x"
+        :y="stylePreviewPosition.y"
+        @hover="stylePreviewStyleId = $event"
+        @select="onStylePreviewSelect"
+        @close="closeStylePreview"
+        @pointerenter="cancelStylePreviewClose"
+        @pointerleave="scheduleStylePreviewClose"
+      />
     </div>
 
     <div class="docx-toolbar-separator" />
@@ -430,15 +501,58 @@
 
     <div class="docx-toolbar-separator" />
 
-    <!-- Insert image + Insert table -->
+    <!-- Insert image + Insert table + New comment -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
+      <button data-testid="editor-insert-image" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></svg>
       </button>
-      <button class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
+      <button data-testid="editor-insert-table" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
       </button>
+      <button
+        data-testid="editor-add-comment"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: Boolean(controller.commentComposer) }"
+        :disabled="readOnly || !canAddComment"
+        :title="m.docx.editor.addCommentTitle"
+        :aria-label="m.docx.editor.addComment"
+        @click="onAddComment"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" /><path d="M8 11h8M8 15h5" /></svg>
+      </button>
     </div>
+
+    <div class="docx-toolbar-separator" />
+
+    <!-- Page setup (margins / paper size / orientation) -->
+    <div class="docx-toolbar-group">
+      <button
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: pageSetupOpen }"
+        data-testid="editor-page-setup"
+        :title="m.docx.pageSetup.open"
+        :aria-label="m.docx.pageSetup.open"
+        :aria-expanded="pageSetupOpen"
+        @click="pageSetupOpen = true"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM3 7h3M18 7h3M3 12h3M18 12h3M3 17h3M18 17h3" /></svg>
+      </button>
+    </div>
+
+    <DocxPageSetupDialog
+      v-if="pageSetupOpen"
+      :section-index="pageSetup.activeSectionIndex.value"
+      :sections="pageSetupSectionOptions"
+      :page-size="pageSetup.pageSize.value"
+      :margins="pageSetup.margins.value"
+      :read-only="readOnly"
+      :is-dark="toolbarTheme === 'dark'"
+      @apply="onPageSetupApply"
+      @update:section-index="pageSetup.selectSection($event)"
+      @close="pageSetupOpen = false"
+    />
 
     <!-- Table structure commands for the selected cell/range -->
     <div
@@ -466,6 +580,19 @@
         :disabled="!canSplitSelectedTableCell"
         @click="splitSelectedTableCell()"
       >⧅</button>
+      <button
+        data-testid="editor-table-select-all"
+        class="docx-toolbar-btn"
+        :title="m.docx.contextMenu.selectTable"
+        @click="selectWholeTable()"
+      >▦</button>
+      <button
+        data-testid="editor-table-clear"
+        class="docx-toolbar-btn"
+        :title="m.docx.contextMenu.clearContents"
+        :disabled="!canClearSelectedTableCells"
+        @click="clearSelectedTableCells()"
+      >⌫</button>
       <button data-testid="editor-table-delete" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteTable" @click="deleteSelectedTable()">T×</button>
     </div>
 
@@ -475,35 +602,161 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, onUnmounted, ref, watch } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
 import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useDocxMessages } from "../i18n"
+import DocxPageSetupDialog from "./DocxPageSetupDialog.vue"
+import { useDocxPageSetup } from "../composables/useDocxPageSetup"
+import type { DocxPageSetupApplyPatch } from "./page-setup-dialog-types"
+import DocxStylePreviewPopover from "./DocxStylePreviewPopover.vue"
 
-const props = defineProps<{
-  controller: DocxEditorController
-  zoom?: number
-  readOnly?: boolean
-  showThumbnails?: boolean
-  currentPage?: number
-  totalPages?: number
-  /** Toolbar appearance. Defaults to the controller document theme. */
-  theme?: "light" | "dark"
-}>()
+const props = withDefaults(
+  defineProps<{
+    controller: DocxEditorController
+    zoom?: number
+    readOnly?: boolean
+    showThumbnails?: boolean
+    currentPage?: number
+    totalPages?: number
+    /** Toolbar appearance. Defaults to the controller document theme. */
+    theme?: "light" | "dark"
+    /** Hovering the paragraph-style picker previews each style. */
+    showStylePreview?: boolean
+    /** True while the host renders the find & replace bar in the `find` slot. */
+    findOpen?: boolean
+  }>(),
+  { showStylePreview: true }
+)
 
 const emit = defineEmits<{
   (e: "update:zoom", value: number): void
   (e: "toggleThumbnails"): void
   (e: "selectPage", page: number): void
+  (e: "toggleFind"): void
 }>()
 
 const toolbarTheme = computed(() => props.theme ?? props.controller.documentTheme)
 
+// ── Paragraph style preview ─────────────────────────────────────────
+// A native <select> cannot show what a style looks like: hovering the picker
+// opens a preview list whose sample text follows the hovered style. Clicking the
+// select (or an item) applies it; the select stays the keyboard/simple path.
+const stylePickerEl = ref<HTMLElement | undefined>()
+const stylePreviewOpen = ref(false)
+const stylePreviewStyleId = ref<string | undefined>()
+const stylePreviewPosition = ref({ x: 0, y: 0 })
+let stylePreviewHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function cancelStylePreviewClose(): void {
+  if (stylePreviewHideTimer !== undefined) clearTimeout(stylePreviewHideTimer)
+  stylePreviewHideTimer = undefined
+}
+
+function scheduleStylePreviewClose(): void {
+  cancelStylePreviewClose()
+  stylePreviewHideTimer = setTimeout(() => {
+    stylePreviewOpen.value = false
+    stylePreviewHideTimer = undefined
+  }, 160)
+}
+
+function openStylePreview(): void {
+  cancelStylePreviewClose()
+  if (stylePreviewOpen.value) return
+  stylePreviewStyleId.value = props.controller.selectedParagraphStyleId
+  const rect = stylePickerEl.value?.getBoundingClientRect?.()
+  if (rect) {
+    stylePreviewPosition.value = {
+      x: Math.round(rect.left),
+      y: Math.round(rect.bottom + 6),
+    }
+  } else {
+    stylePreviewPosition.value = { x: 0, y: 0 }
+  }
+  stylePreviewOpen.value = true
+}
+
+function closeStylePreview(): void {
+  cancelStylePreviewClose()
+  stylePreviewOpen.value = false
+  stylePreviewStyleId.value = undefined
+}
+
+function onStylePickerEnter(): void {
+  if (props.showStylePreview === false) return
+  openStylePreview()
+}
+
+function onStylePickerLeave(): void {
+  scheduleStylePreviewClose()
+}
+
+function onStylePreviewSelect(styleId: string | undefined): void {
+  applyParagraphStyleId(styleId)
+  closeStylePreview()
+}
+
+onUnmounted(cancelStylePreviewClose)
+
+// ── Comment authoring ───────────────────────────────────────────────
+// A new comment needs a selection (or a caret) in the document; the composer
+// itself is rendered in the annotation pane beside the anchored page.
+const canAddComment = computed(() => Boolean(props.controller.activeTextRange))
+
+function onAddComment(): void {
+  props.controller.beginComment(props.controller.activeTextRange)
+}
+
 // ── Font sizes ──────────────────────────────────────────────────────
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
 const m = useDocxMessages()
+
+// ── Page setup ─────────────────────────────────────────────────────
+// Margins/paper size/orientation live on the section that holds the caret. The
+// dialog edits that section and offers a picker when the document has more
+// than one.
+const pageSetupOpen = ref(false)
+const pageSetup = useDocxPageSetup(props.controller)
+const pageSetupSectionOptions = computed(() =>
+  pageSetup.sections.value.map((section) => ({
+    index: section.index,
+    sectionNumber: section.sectionNumber,
+  }))
+)
+
+// ── Section columns ─────────────────────────────────────────────────
+// The toolbar offers Word's common 1/2/3-column choices and keeps a larger
+// count visible when the imported section already uses one. Changing the
+// value applies to the section that holds the caret.
+function columnsLabel(count: number): string {
+  if (count === 1) return m.value.docx.editor.columnsOne
+  if (count === 2) return m.value.docx.editor.columnsTwo
+  if (count === 3) return m.value.docx.editor.columnsThree
+  return formatOfficeMessage(m.value.docx.editor.columnsMore, { count })
+}
+
+const columnOptions = computed(() => {
+  const current = Math.max(1, Math.round(pageSetup.columns.value.count))
+  const counts = [1, 2, 3]
+  if (!counts.includes(current)) counts.push(current)
+  return counts
+    .sort((left, right) => left - right)
+    .map((count) => ({ count, label: columnsLabel(count) }))
+})
+
+function onColumnsChange(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement | null)?.value)
+  if (!Number.isFinite(value)) return
+  pageSetup.applyColumns(value)
+}
+
+function onPageSetupApply(patch: DocxPageSetupApplyPatch): void {
+  pageSetup.applyPageSetup(patch)
+  pageSetupOpen.value = false
+}
 
 // ── Zoom ────────────────────────────────────────────────────────────
 const zoomLevels = [50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 175, 200]
@@ -521,6 +774,13 @@ function onZoomChange(event: Event): void {
   const value = Number(target.value)
   zoomPercent.value = value
   emit("update:zoom", value)
+}
+
+function onRevisionDisplayChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === "inline" || value === "balloons" || value === "none") {
+    props.controller.setRevisionDisplay(value)
+  }
 }
 
 function onPageChange(event: Event): void {
@@ -583,6 +843,15 @@ const selectedTableCell = computed(() => {
 const selectedTableRange = computed(() => selectedTableCell.value?.cellRange)
 
 const canMergeSelectedTableCells = computed(() => {
+  const range = selectedTableRange.value
+  return Boolean(
+    range &&
+      (range.anchorRowIndex !== range.focusRowIndex ||
+        range.anchorCellIndex !== range.focusCellIndex)
+  )
+})
+
+const canClearSelectedTableCells = computed(() => {
   const range = selectedTableRange.value
   return Boolean(
     range &&
@@ -669,6 +938,16 @@ function deleteSelectedTable(): void {
   props.controller.deleteTable(selection.tableIndex)
 }
 
+function selectWholeTable(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.selectWholeTable(selection.tableIndex)
+}
+
+function clearSelectedTableCells(): void {
+  props.controller.clearTableSelection()
+}
+
 // ── Border presets ──────────────────────────────────────────────────
 const borderPresets = computed<{ value: DocxBorderPreset; label: string }[]>(() => [
   { value: "bottom", label: m.value.docx.editor.borderPresets.bottom },
@@ -744,9 +1023,7 @@ function onBorderPresetChange(event: Event): void {
   if (target.value) props.controller.applyBorderPreset(target.value as DocxBorderPreset)
 }
 
-function onStyleChange(event: Event): void {
-  const target = event.target as HTMLSelectElement
-  const value = target.value || undefined
+function applyParagraphStyleId(value: string | undefined): void {
   if (value && value.startsWith("Heading")) {
     const level = parseInt(value.replace("Heading ", ""))
     if (level >= 1 && level <= 6) {
@@ -757,6 +1034,11 @@ function onStyleChange(event: Event): void {
   } else {
     props.controller.setParagraphStyle(value)
   }
+}
+
+function onStyleChange(event: Event): void {
+  const target = event.target as HTMLSelectElement
+  applyParagraphStyleId(target.value || undefined)
 }
 
 function onInsertImage(): void {

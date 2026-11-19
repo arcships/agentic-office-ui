@@ -30,6 +30,8 @@ interface ParagraphCommentTarget {
   /** Index among every `<w:p>` in the part, in document order (cells included). */
   paragraphIndex: number;
   ranges: SerializedCommentRange[];
+  /** Ids that need a `w:commentReference` run in the paragraph. */
+  referenceIds: number[];
 }
 
 function paragraphTextOf(paragraph: ParagraphNode): string {
@@ -51,20 +53,25 @@ function collectNodeParagraphs(
     if (node.type === "paragraph") {
       const paragraphIndex = counter.value;
       counter.value += 1;
-      // `sourceXml` is emitted verbatim, markers included.
-      if (node.sourceXml || !node.commentRanges || node.commentRanges.length === 0) {
+      if (!node.commentRanges || node.commentRanges.length === 0) {
         continue;
       }
       const text = paragraphTextOf(node);
-      const ranges = resolveParagraphCommentRanges(text, node.commentRanges)
+      const resolved = resolveParagraphCommentRanges(text, node.commentRanges);
+      const ranges = resolved
         .filter((range) => range.end > range.start)
         .map((range) => ({
           commentId: range.commentId,
           start: range.start,
           end: range.end,
         }));
-      if (ranges.length > 0) {
-        targets.push({ paragraphIndex, ranges });
+      // A paragraph with `sourceXml` already carries the markers of the
+      // comments it had when it was parsed; `applyCommentRangesToDocumentXml`
+      // only inserts the ids it does not find there. A point anchor (start ===
+      // end) still needs its reference run so Word keeps showing the card.
+      const referenceIds = [...new Set(resolved.map((range) => range.commentId))];
+      if (ranges.length > 0 || referenceIds.length > 0) {
+        targets.push({ paragraphIndex, ranges, referenceIds });
       }
       continue;
     }
@@ -86,8 +93,9 @@ function collectTableParagraphs(
 }
 
 /**
- * Paragraphs whose comment ranges only exist in the model (their `sourceXml`
- * was cleared by an edit) and the offsets to re-emit for them.
+ * Paragraphs that store comment ranges on the model and the offsets to
+ * re-emit for them. The caller filters out the markers the paragraph's own
+ * `sourceXml` already contains.
  */
 export function collectUnserializedCommentRanges(
   model: DocModel
@@ -160,19 +168,29 @@ function splitRunAtMarkers(
 
 function insertCommentMarkersIntoParagraphContent(
   content: string,
-  ranges: readonly SerializedCommentRange[]
+  ranges: readonly SerializedCommentRange[],
+  referenceIds: readonly number[]
 ): string {
-  if (ranges.length === 0 || !/<w:t\b/i.test(content)) {
-    return content;
+  const existingIds = new Set<number>();
+  for (const match of content.matchAll(
+    /<w:comment(?:RangeStart|RangeEnd|Reference)\b[^>]*w:id="(-?\d+)"/g
+  )) {
+    const id = Number.parseInt(match[1] ?? "", 10);
+    if (Number.isFinite(id)) {
+      existingIds.add(id);
+    }
   }
 
-  const atoms = collectRunTextAtoms(content);
-  if (atoms.length === 0) {
-    return content;
-  }
+  // `sourceXml` already carries the markers of the comments it was parsed
+  // with; only the ids the model added since then are inserted here.
+  const pendingRanges = ranges.filter(
+    (range) => !existingIds.has(range.commentId)
+  );
+  const missingReferences = referenceIds.filter((id) => !existingIds.has(id));
 
+  const atoms = pendingRanges.length > 0 ? collectRunTextAtoms(content) : [];
   const events: MarkerEvent[] = [];
-  ranges.forEach((range, rangeIndex) => {
+  pendingRanges.forEach((range, rangeIndex) => {
     events.push({
       offset: range.start,
       xml: `<w:commentRangeStart w:id="${range.commentId}"/>`,
@@ -186,6 +204,16 @@ function insertCommentMarkersIntoParagraphContent(
   });
 
   const edits: DocumentXmlEdit[] = [];
+
+  // A paragraph without visible text (an empty paragraph or a point anchor at
+  // its edge) still needs the reference run, but has no runs to split.
+  if (atoms.length === 0) {
+    const references = missingReferences
+      .map((id) => `<w:r><w:commentReference w:id="${id}"/></w:r>`)
+      .join("");
+    return references.length > 0 ? content + references : content;
+  }
+
   const boundaryEvents = new Map<number, MarkerEvent[]>();
 
   for (const event of events) {
@@ -235,11 +263,15 @@ function insertCommentMarkersIntoParagraphContent(
 
   // Word needs a `w:commentReference` run in the paragraph; the end of the
   // paragraph keeps it out of the highlighted text.
-  const references = ranges
-    .map((range) => `<w:r><w:commentReference w:id="${range.commentId}"/></w:r>`)
+  const references = missingReferences
+    .map((id) => `<w:r><w:commentReference w:id="${id}"/></w:r>`)
     .join("");
   if (references.length > 0) {
     edits.push({ start: content.length, end: content.length, replacement: references });
+  }
+
+  if (edits.length === 0) {
+    return content;
   }
 
   let patched = content;
@@ -279,7 +311,8 @@ export function applyCommentRangesToDocumentXml(
     const content = documentXml.slice(span.contentStart, span.contentEnd);
     const patched = insertCommentMarkersIntoParagraphContent(
       content,
-      target.ranges
+      target.ranges,
+      target.referenceIds
     );
     if (patched === content) return;
     edits.push({

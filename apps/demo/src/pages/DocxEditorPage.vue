@@ -3,7 +3,7 @@
     <header class="product-header">
       <div>
         <h2>DOCX 编辑器</h2>
-        <p class="desc">直接选择文字并编辑格式；支持撤销、缩放、缩略图、导入和导出。</p>
+        <p class="desc">直接选择文字并编辑格式；支持撤销、缩放、缩略图、导入和导出。OpenDocument 文本只能只读查看，不能编辑或导出。</p>
       </div>
       <div class="controls control-panel product-actions">
         <label class="toggle-label">
@@ -38,21 +38,24 @@
       </p>
     </div>
 
-    <details class="acceptance-panel" data-testid="editor-acceptance-panel">
-      <summary>自动化验收入口</summary>
+    <details class="acceptance-panel" data-testid="editor-api-fixture-panel">
+      <summary>自动化 API 夹具（不计入验收）</summary>
+      <p class="acceptance-note">
+        表格、图片和格式验收必须通过真实工具栏与指针操作完成。此面板只暴露公开 API 的
+        只读快照和导出字节夹具，不是验收路径。
+      </p>
       <div class="acceptance-actions">
-        <button data-testid="editor-test-format-range" class="btn-secondary" @click="formatAcceptanceRange">格式化中间文字</button>
-        <button data-testid="editor-test-insert-table" class="btn-secondary" @click="insertAcceptanceTable">插入并扩展表格</button>
-        <button data-testid="editor-test-insert-image" class="btn-secondary" @click="insertAcceptanceImage">插入并定位图片</button>
+        <button data-testid="editor-export-bytes-fixture" class="btn-secondary" @click="exportAcceptanceBytes">读取导出字节</button>
       </div>
       <pre data-testid="editor-selection-snapshot" class="acceptance-snapshot">{{ selectionSnapshot }}</pre>
       <pre data-testid="editor-model-snapshot" class="acceptance-snapshot">{{ modelSnapshot }}</pre>
+      <pre data-testid="editor-export-bytes-state" :data-state="exportBytesState" class="acceptance-snapshot">{{ exportBytesSnapshot }}</pre>
     </details>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue"
+import { computed, ref } from "vue"
 import { DocxEditorViewer, useDocxEditor } from "@arcships/vue-docx"
 import { createBlankDocumentModel, type DocModel } from "@arcships/docx-core"
 
@@ -248,87 +251,31 @@ const selectionSnapshot = computed(() => JSON.stringify({
   historyRestoreRequest: editor.historyRestoreRequest ?? null,
 }))
 
-function acceptanceParagraph(): { nodeIndex: number; text: string } | undefined {
-  const nodeIndex = editor.model.nodes.findIndex((node) =>
-    node.type === "paragraph" && textOfParagraph(node).includes("This paragraph is ready for editing"))
-  if (nodeIndex < 0) return undefined
-  return { nodeIndex, text: textOfParagraph(editor.model.nodes[nodeIndex]) }
-}
-
-async function formatAcceptanceRange(): Promise<void> {
-  if (isReadOnly.value) return
-  const target = acceptanceParagraph()
-  if (!target) return
-  const start = target.text.indexOf("editing")
-  if (start < 0) return
-  editor.selectParagraph(target.nodeIndex)
-  await nextTick()
-  editor.setActiveTextRange({
-    start: { location: { kind: "paragraph", nodeIndex: target.nodeIndex }, offset: start },
-    end: { location: { kind: "paragraph", nodeIndex: target.nodeIndex }, offset: start + "editing".length },
-  })
-  await nextTick()
-  editor.toggleBold()
-}
-
-async function insertAcceptanceTable(): Promise<void> {
-  if (isReadOnly.value) return
-  editor.insertTable()
-  await nextTick()
-  let tableIndex = -1
-  editor.model.nodes.forEach((node, nodeIndex) => {
-    if (node.type === "table") tableIndex = nodeIndex
-  })
-  if (tableIndex < 0) return
-  editor.insertTableRow(tableIndex, 0, "below")
-  await nextTick()
-  editor.insertTableColumn(tableIndex, 0, "right")
-  await nextTick()
-  editor.setTableColumnWidths(tableIndex, [96, 132, 144, 156])
-}
-
-async function insertAcceptanceImage(): Promise<void> {
-  if (isReadOnly.value) return
-  const target = acceptanceParagraph()
-  if (!target) return
-  editor.selectParagraph(target.nodeIndex)
-  await nextTick()
-  const imageOffset = 0
-  editor.setActiveTextRange({
-    start: {
-      location: { kind: "paragraph", nodeIndex: target.nodeIndex },
-      offset: imageOffset,
-    },
-    end: {
-      location: { kind: "paragraph", nodeIndex: target.nodeIndex },
-      offset: imageOffset,
-    },
-  })
-  await nextTick()
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#2563eb"/></svg>'
-  await editor.insertImageFile(new File([svg], "acceptance.svg", { type: "image/svg+xml" }))
-  await nextTick()
-  const node = editor.model.nodes[target.nodeIndex]
-  if (!node || node.type !== "paragraph") return
-  const childIndex = node.children.findIndex((child) => child.type === "image")
-  if (childIndex < 0) return
-  const location = { kind: "paragraph" as const, nodeIndex: target.nodeIndex, childIndex }
-  editor.setImageWrapMode(location, "square", {
-    xPx: 12,
-    yPx: 6,
-    wrapType: "square",
-    wrapText: "bothSides",
-    distRPx: 12,
-    distBPx: 8,
-  })
-  await nextTick()
-  editor.moveFloatingImage(location, { xPx: 12, yPx: 6 })
-  await nextTick()
-  editor.resizeImage(location, 160, 90)
-}
-
 // ── UI toggles ───────────────────────────────────────────────────────
 const isReadOnly = ref(false)
+
+const exportBytesState = ref<"idle" | "running" | "ready" | "error">("idle")
+const exportBytesSnapshot = ref("")
+
+async function exportAcceptanceBytes(): Promise<void> {
+  exportBytesState.value = "running"
+  try {
+    const bytes = await editor.getDocxBytes()
+    const blob = await editor.getDocxBlob()
+    exportBytesSnapshot.value = JSON.stringify({
+      bytes: bytes.byteLength,
+      signature: Array.from(new Uint8Array(bytes).slice(0, 4)),
+      blobType: blob.type,
+      blobSize: blob.size,
+    })
+    exportBytesState.value = "ready"
+  } catch (error) {
+    exportBytesState.value = "error"
+    exportBytesSnapshot.value = error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : String(error)
+  }
+}
 </script>
 
 <style scoped>
@@ -352,6 +299,7 @@ h2 { margin-bottom: 4px; }
 .error { color: #b91c1c; margin: 0; }
 .acceptance-panel { margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--muted); }
 .acceptance-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.acceptance-note { margin: 6px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
 .acceptance-snapshot { margin: 8px 0 0; max-height: 96px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; color: var(--muted-foreground); }
 
 .editor-container { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 24px; background: #f3f4f6; }

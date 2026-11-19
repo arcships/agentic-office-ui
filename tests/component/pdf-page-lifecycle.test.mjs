@@ -29,8 +29,8 @@ function deferred() {
   return { promise, reject, resolve };
 }
 
-function createPdfRuntime({ pageCount = 1, onRenderPage } = {}) {
-  const calls = { closeDocument: [], dispose: [], openDocument: [], renderPage: [] };
+function createPdfRuntime({ pageCount = 1, onGetPageTextLayer, onRenderPage, rotations = [] } = {}) {
+  const calls = { closeDocument: [], dispose: [], getPageTextLayer: [], openDocument: [], renderPage: [] };
   const document = {
     id: "pdf-lifecycle-document",
     pageCount,
@@ -38,7 +38,7 @@ function createPdfRuntime({ pageCount = 1, onRenderPage } = {}) {
       index,
       width: 600,
       height: 800,
-      rotation: 0,
+      rotation: rotations[index] ?? 0,
     })),
   };
   const runtime = {
@@ -59,6 +59,14 @@ function createPdfRuntime({ pageCount = 1, onRenderPage } = {}) {
     async getPageTextGeometry() {
       return { runs: [] };
     },
+    ...(onGetPageTextLayer
+      ? {
+          async getPageTextLayer(_currentDocument, pageIndex) {
+            calls.getPageTextLayer.push(pageIndex);
+            return onGetPageTextLayer(pageIndex);
+          },
+        }
+      : {}),
     async getTextSlices(_currentDocument, slices) {
       return slices.map(() => "");
     },
@@ -164,7 +172,7 @@ async function mountSurfaceHarness(props) {
     setup() {
       const surface = vue.ref(null);
       vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
-      return () => vue.h(PdfSurface, { ref: surface, ...props });
+      return () => vue.h(PdfSurface, { ref: surface, showThumbnails: false, ...props });
     },
   });
   const mounted = await mount(Harness);
@@ -386,6 +394,69 @@ test("PdfViewer re-renders the page when the display pixel ratio changes", async
   display.change(3);
   await waitFor(() => fake.calls.renderPage.length === 2, "re-render after the display scale changed");
   assert.equal(fake.calls.renderPage[1].options.dpr, 3);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer exposes intrinsic page rotation separately from the user rotation", async (t) => {
+  stubObjectUrls(t);
+  const fake = createPdfRuntime({ pageCount: 2, rotations: [0, 90] });
+  const mounted = await mount(PdfViewer, { source: PDF_SOURCE, runtime: fake.runtime });
+  await waitFor(() => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready", "first PDF page");
+  assert.equal(findByTestId(mounted.root, "pdf-document")?.props["data-rotation"], 0);
+  assert.equal(findByTestId(mounted.root, "pdf-page")?.props["data-page-rotation"], 0);
+
+  findByTestId(mounted.root, "pdf-next-page").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-page")?.props["data-page-number"] === 2 &&
+      findByTestId(mounted.root, "pdf-page")?.props["data-page-rotation"] === 90,
+    "second page intrinsic /Rotate metadata",
+  );
+  // The user rotation control stays untouched: the 90 degrees come from the
+  // PDF page dictionary, and the runtime receives only the user rotation.
+  assert.equal(findByTestId(mounted.root, "pdf-document")?.props["data-rotation"], 0);
+  await waitFor(() => fake.calls.renderPage.at(-1)?.pageIndex === 1, "second page render");
+  assert.equal(fake.calls.renderPage.at(-1)?.options.rotation, 0);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer and PdfSurface hide the text layer for image-only pages", async (t) => {
+  stubObjectUrls(t);
+  const emptyLayer = (pageIndex) => ({ pageIndex, width: 600, height: 800, glyphs: [] });
+
+  const viewerRuntime = createPdfRuntime({ pageCount: 1, onGetPageTextLayer: emptyLayer });
+  const viewer = await mount(PdfViewer, { source: PDF_SOURCE, runtime: viewerRuntime.runtime });
+  await waitFor(
+    () => findByTestId(viewer.root, "pdf-status")?.props["data-state"] === "ready" &&
+      viewerRuntime.calls.getPageTextLayer.length > 0,
+    "image-only viewer text-layer probe",
+  );
+  await vue.nextTick();
+  assert.equal(
+    findByTestId(viewer.root, "pdf-text-layer"),
+    undefined,
+    "an image-only page must not expose an empty selectable text layer",
+  );
+  assert.ok(
+    findByTestId(viewer.root, "pdf-selection-layer"),
+    "the selection layer still reports that selection is unavailable",
+  );
+  assert.deepEqual(viewer.warnings, []);
+  viewer.app.unmount();
+
+  const surfaceRuntime = createPdfRuntime({ pageCount: 1, onGetPageTextLayer: emptyLayer });
+  const mounted = await mountSurfaceHarness({ source: PDF_SOURCE, runtime: surfaceRuntime.runtime });
+  await waitFor(
+    () => surfacePageImages(mounted.root).length === 1 && surfaceRuntime.calls.getPageTextLayer.length > 0,
+    "image-only surface text-layer probe",
+  );
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0),
+    undefined,
+    "the surface must not mount an empty text layer over an image-only page",
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

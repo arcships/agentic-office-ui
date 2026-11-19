@@ -91,8 +91,10 @@ import type {
   ImageRunNode,
 } from "@arcships/docx-core"
 import {
+  resolveFloatingImageStackingZIndex,
   resolveRenderableImageSource,
   shouldRenderWrappedFloatingImage,
+  unsupportedImageFallbackLabel,
 } from "@arcships/docx-core"
 import { useDocxMessages } from "../i18n"
 
@@ -109,6 +111,8 @@ interface FloatingImageEntry {
   yPx: number
   flowWrapped: boolean
   behindDocument: boolean
+  /** CSS paint order derived from the model's Word `relativeHeight`. */
+  zIndex?: number
   selected: boolean
   lockedAnchor: boolean
   failureKey: string
@@ -203,10 +207,16 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         yPx: run.floating?.yPx ?? 0,
         flowWrapped: shouldRenderWrappedFloatingImage(run),
         behindDocument: run.floating?.behindDocument === true,
+        zIndex: resolveFloatingImageStackingZIndex(run.floating),
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
         lockedAnchor: run.floating?.lockedAnchor === true,
         failureKey: imageSourceFailureKey(src),
-        fallbackLabel: undefined,
+        // A picture the pipeline cannot paint gets the same label as the
+        // in-flow placeholder; a node without any source keeps its alt text.
+        fallbackLabel:
+          !src && run.src
+            ? unsupportedImageFallbackLabel(run, run.widthPx, run.heightPx)
+            : undefined,
       })
     })
   })
@@ -258,7 +268,7 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
   const dragDeltaY = drag ? drag.yPx - image.yPx : 0
   const leftPx = flowBox ? flowBox.left + dragDeltaX : (drag?.xPx ?? image.xPx)
   const topPx = flowBox ? flowBox.top + dragDeltaY : (drag?.yPx ?? image.yPx)
-  return {
+  const style: Record<string, string> = {
     position: "absolute",
     left: `${leftPx}px`,
     top: `${topPx}px`,
@@ -269,6 +279,13 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
     outline: image.selected && !image.behindDocument ? "2px solid #3b82f6" : "none",
     outlineOffset: "2px",
   }
+  // Two overlapping floats must paint in Word's relativeHeight order, not in
+  // model order. The layer root establishes the front/behind stacking context;
+  // this per-image index orders the images inside it.
+  if (image.zIndex !== undefined) {
+    style.zIndex = String(image.zIndex)
+  }
+  return style
 }
 
 /**
@@ -403,6 +420,11 @@ function onImageError(image: FloatingImageEntry, event: Event): void {
 // ── Mouse handlers ─────────────────────────────────────────────────
 function onImageMouseDown(image: FloatingImageEntry, event: MouseEvent): void {
   if (!props.editable || image.behindDocument) return
+  // Right-click opens the image context menu; it must not start a drag.
+  if (typeof event.button === "number" && event.button !== 0) {
+    if (event.button === 2) props.controller.selectParagraph(image.nodeIndex)
+    return
+  }
   event.preventDefault()
   props.controller.selectParagraph(image.nodeIndex)
   if (image.lockedAnchor) return
@@ -535,6 +557,7 @@ const imageGroupsKey = computed(() =>
     image.key,
     image.flowWrapped,
     image.behindDocument,
+    image.zIndex,
     image.xPx,
     image.yPx,
     image.widthPx,

@@ -36,6 +36,8 @@
   --pptx-muted: #b3b3b8;
   background: #050505;
 }
+/* The viewer root is focusable for keyboard navigation; show where focus is. */
+.pptx-viewer:focus-visible { outline: 2px solid var(--pptx-accent); outline-offset: -2px; }
 
 /* The inline height keeps the demo's "calc(100vh - 190px)" box in the page;
    fullscreen must fill the screen instead of leaving black bars. */
@@ -77,9 +79,56 @@
 .pptx-viewer__search { flex: 1 1 280px; justify-content: center; max-width: 520px; }
 .pptx-viewer__search input { flex: 1 1 auto; min-width: 80px; padding: 4px 9px; }
 .pptx-viewer__search-count { color: var(--pptx-muted); font-size: 12px; white-space: nowrap; }
-.pptx-viewer__body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.pptx-viewer__body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: block; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; position: relative; }
+/* Browse layout toggle. */
+.pptx-viewer__view-modes { gap: 1px; padding: 1px; }
+.pptx-viewer__view-mode {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+.pptx-viewer__view-mode:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
+.pptx-viewer__view-mode--active { background: color-mix(in srgb, var(--pptx-accent) 14%, transparent); color: var(--pptx-accent); }
+.pptx-viewer__view-mode:disabled { cursor: default; opacity: .35; }
+.pptx-viewer__view-mode svg { fill: none; height: 14px; stroke: currentColor; stroke-width: 1.6; width: 14px; }
+/* Slide sorter grid: overlays the stage and reuses the sidebar thumbnails. */
+.pptx-viewer__sorter {
+  background: var(--pptx-bg);
+  box-sizing: border-box;
+  inset: 0;
+  overflow: auto;
+  padding: 12px;
+  position: absolute;
+  z-index: 3;
+}
+.pptx-viewer__sorter-grid { display: grid; gap: 12px; }
+.pptx-viewer__sorter-item {
+  block-size: var(--pptx-sorter-item-height, auto);
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+}
+.pptx-viewer__sorter-spacer { pointer-events: none; }
+.pptx-viewer__sorter .pptx-thumbnail {
+  block-size: var(--pptx-sorter-item-height, auto);
+  box-sizing: border-box;
+  margin-block-end: 0;
+  overflow: hidden;
+}
+.pptx-viewer__sorter .pptx-thumbnail--active {
+  border-color: var(--pptx-accent);
+  box-shadow: 0 0 0 2px var(--pptx-accent);
+}
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; min-height: 1px; padding: 24px; }
 .pptx-stage { box-sizing: border-box; min-height: 1px; touch-action: pan-x pan-y; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
@@ -100,6 +149,59 @@
 }
 
 .pptx-viewer__warning { margin: 0; }
+
+.pptx-viewer__drop-error {
+  background: color-mix(in srgb, #dc2626 14%, var(--pptx-panel));
+  border-bottom: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* Built-in link menu. `position: fixed` keeps it at the pointer even though it
+   is rendered inside the viewer's flex column. */
+.pptx-viewer__context-backdrop {
+  inset: 0;
+  position: fixed;
+  z-index: 60;
+}
+
+.pptx-viewer__context-menu {
+  background: var(--pptx-panel);
+  border: 1px solid var(--pptx-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  padding: 4px;
+  position: fixed;
+  z-index: 61;
+}
+
+.pptx-viewer__context-item {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  text-align: start;
+}
+
+.pptx-viewer__context-item:hover,
+.pptx-viewer__context-item:focus-visible {
+  background: color-mix(in srgb, var(--pptx-accent) 14%, transparent);
+  outline: none;
+}
+
+/* Linked shapes are interactive: the renderer paints them, the markers make
+   them focusable and this rule matches the hand cursor PowerPoint uses. */
+.pptx-stage [data-pptx-hyperlink="click"] { cursor: pointer; }
 
 .pptx-viewer__slide-error {
   align-items: center;
@@ -186,6 +288,31 @@
   white-space: nowrap;
 }
 
+/* Presenter rail: speaker notes in browse mode, plus next slide and clock in present mode. */
+.pptx-viewer__presenter {
+  background: var(--pptx-panel);
+  border-left: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  display: flex;
+  flex: 0 0 300px;
+  flex-direction: column;
+  gap: 12px;
+  max-inline-size: 40cqw;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+}
+.pptx-presenter__meta { display: flex; flex-direction: column; gap: 6px; }
+.pptx-presenter__label { color: var(--pptx-muted); font-size: 11px; letter-spacing: 0.04em; margin: 0; text-transform: uppercase; }
+.pptx-presenter__next { pointer-events: none; }
+.pptx-presenter__timer { color: var(--pptx-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pptx-presenter__body { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.pptx-presenter__paragraph { font-size: 14px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pptx-presenter__empty { color: var(--pptx-muted); font-size: 13px; margin: 0; }
+@container pptx-viewer (max-width: 720px) {
+  .pptx-viewer__presenter { flex-basis: 200px; max-inline-size: 50cqw; padding: 8px; }
+}
+
 .pptx-thumbnail {
   background: transparent;
   border: 1px solid transparent;
@@ -233,6 +360,13 @@
   .pptx-viewer__playback-controls { overflow-x: auto; }
 }
 
+/* The renderer writes `direction: rtl` for `a:pPr/@rtl`; `applyPptxParagraphDirection`
+   mirrors it onto `dir` so hosts can style and hit-test mirrored paragraphs. */
+.pptx-stage__content [data-pptx-paragraph-index][dir="rtl"] {
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
 @media print {
   .pptx-viewer {
     background: #fff !important;
@@ -244,6 +378,7 @@
   }
   .pptx-viewer__toolbar,
   .pptx-viewer__sidebar,
+  .pptx-viewer__sorter,
   .pptx-viewer__playback-controls,
   .pptx-viewer__message { display: none !important; }
   .pptx-viewer__body,

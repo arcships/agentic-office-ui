@@ -1,19 +1,57 @@
 <template>
   <div
-    ref="scrollRef"
-    class="pdf-surface"
+    class="pdf-surface-shell"
     :class="{ 'pdf-surface--dark': props.isDark }"
     :style="minHeightStyle"
-    data-testid="pdf-surface"
-    tabindex="0"
-    @scroll.passive="onScroll"
-    @contextmenu.prevent="onContextMenu"
-    @copy="onCopy"
-    @keydown.esc="onSurfaceEscape"
+    data-testid="pdf-surface-shell"
   >
+    <aside
+      v-if="navigationVisible"
+      class="pdf-surface__nav"
+      data-testid="pdf-surface-nav"
+    >
+      <PdfOutlinePanel
+        v-if="showOutline && outlineItems.length > 0"
+        :items="outlineItems"
+        :active-page-index="activePageIndex"
+        :label="m.pdf.surface.outline"
+        @activate="onOutlineActivate"
+      />
+      <PdfThumbnailStrip
+        v-if="showThumbnails && renderDocument"
+        :pageCount="renderDocument.pageCount"
+        :labels="resolvedPageLabels"
+        :urls="thumbnailUrls"
+        :activePage="activePageIndex + 1"
+        :label="m.pdf.viewer.thumbnails"
+        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+        :pageLabel="m.pdf.viewer.pageLabel"
+        :heading="m.pdf.viewer.thumbnails"
+        testId="pdf-surface-thumbnails"
+        itemTestId="pdf-surface-thumbnail"
+        @select="onThumbnailSelect"
+      />
+    </aside>
+    <div
+      ref="scrollRef"
+      class="pdf-surface"
+      :class="{ 'pdf-surface--dark': props.isDark }"
+      data-testid="pdf-surface"
+      :data-page-layout="pageLayoutMode"
+      tabindex="0"
+      @scroll.passive="onScroll"
+      @contextmenu.prevent="onContextMenu"
+      @copy="onCopy"
+      @keydown="onSurfaceKeydown"
+    >
     <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
     <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
-    <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
+    <div
+      v-else-if="loadError"
+      class="pdf-surface__error"
+      data-testid="pdf-surface-load-error"
+      :data-error-code="loadError.code"
+    >
       {{ loadError.code }}: {{ loadErrorMessage }}
     </div>
     <div v-else-if="renderDocument" class="pdf-surface__pages" :style="pageStackStyle">
@@ -22,6 +60,7 @@
         :key="`page-${pageIndex}`"
         class="pdf-surface__page-slot"
         :data-page-index="pageIndex"
+        :data-page-number="pageIndex + 1"
         :style="pageSlotStyle(pageIndex)"
       >
         <div v-if="pageSlots[pageIndex]?.state === 'loading'" class="pdf-surface__page-loading">
@@ -33,7 +72,7 @@
         <img
           v-else-if="pageSlots[pageIndex]?.url"
           :src="pageSlots[pageIndex].url"
-          :alt="formatOfficeMessage(m.pdf.surface.pageAlt, { page: pageIndex + 1 })"
+          :alt="formatOfficeMessage(m.pdf.surface.pageAlt, { page: pageLabelFor(pageIndex) })"
           :style="pageImgStyle(pageIndex)"
           class="pdf-surface__page-img"
           draggable="false"
@@ -144,6 +183,7 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -207,7 +247,6 @@ import {
 } from "../pdf/pdf-page-raster"
 import {
   DEFAULT_PAGE_OVERSCAN,
-  computePageOffsets,
   pageIndexAtPosition,
   pageRangeEquals,
   planPageRenders,
@@ -216,6 +255,14 @@ import {
   type PdfPageRange,
   type PdfPageSlotSnapshot,
 } from "../pdf/pdf-page-viewport"
+import {
+  normalizePdfPageLayout,
+  pdfPageAtPoint,
+  pdfPageIndexAtOffset,
+  pdfSnapTopForRow,
+  resolvePdfPageLayoutMetrics,
+  type PdfPageLayout,
+} from "../pdf/pdf-page-layout"
 import {
   hasUnmappedPdfText,
   joinSelectionTexts,
@@ -250,7 +297,14 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
+import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
+import { resolvePdfLinkUrl } from "../pdf/pdf-annotation"
+import type { PdfOutlineItem } from "../pdf/pdf-outline"
+import PdfOutlinePanel from "./PdfOutlinePanel.vue"
+import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -285,6 +339,12 @@ const props = withDefaults(
     enableGestureZoom?: boolean
     /** When true, zoom auto-fits the widest page to container width. */
     fitWidth?: boolean
+    /**
+     * Page layout: `continuous` scrolling, `single` page at a time, or
+     * two-page `spread`s. Page offsets and the rasterization window follow the
+     * mode, so switching modes keeps the page the reader is on.
+     */
+    pageLayout?: PdfPageLayout
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
@@ -292,6 +352,16 @@ const props = withDefaults(
     minHeight?: string | number
     /** Dark viewer chrome and page surround. Defaults to false. */
     isDark?: boolean
+    /**
+     * Render the bookmark/outline tree when the document has one. Defaults to
+     * true; documents without bookmarks show no outline panel.
+     */
+    showOutline?: boolean
+    /**
+     * Render the page thumbnail strip. Defaults to true; the strip shares the
+     * viewer's bounded thumbnail pipeline.
+     */
+    showThumbnails?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
     /**
@@ -314,10 +384,13 @@ const props = withDefaults(
     emitReferenceCandidates: false,
     minHeight: undefined,
     isDark: false,
+    showOutline: true,
+    showThumbnails: true,
     locale: "en",
     messages: undefined,
     maxBitmapBytes: DEFAULT_PDF_BITMAP_BUDGET_BYTES,
     maxPagePixels: DEFAULT_MAX_PAGE_RASTER_PIXELS,
+    pageLayout: "continuous",
   },
 )
 
@@ -326,6 +399,13 @@ const emit = defineEmits<{
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  /** An outline entry was activated; URL targets are pre-validated. */
+  outlineActivate: [event: {
+    title: string
+    pageIndex?: number
+    url?: string
+    blocked?: boolean
+  }]
   selectionChange: [selection: PdfSelectionState]
   searchStateChange: [state: PdfSearchState]
   diagnostic: [event: PdfDiagnostic]
@@ -405,6 +485,22 @@ const loadErrorMessage = computed(() => loadError.value
   ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
   : "")
 const renderDocument = ref<PdfRenderDocument | null>(null)
+const outlineItems = ref<readonly PdfOutlineItem[]>([])
+const pdfPageLabels = ref<readonly string[]>([])
+/** Zero-based page currently under the viewport; drives both navigation aids. */
+const activePageIndex = ref(0)
+const thumbnailPipeline = usePdfThumbnails()
+const thumbnailUrls = thumbnailPipeline.urls
+/** Page labels in document order, with decimal numbers when the runtime has none. */
+const resolvedPageLabels = computed<readonly string[]>(() => {
+  const doc = renderDocument.value
+  if (!doc) return pdfPageLabels.value
+  return Array.from({ length: doc.pageCount }, (_, index) => pageLabelFor(index))
+})
+const navigationVisible = computed(() => !!renderDocument.value && (
+  (props.showOutline && outlineItems.value.length > 0)
+  || props.showThumbnails
+))
 const printMode = ref(false)
 const verifiedBlob = ref<Blob | null>(null)
 const selectionMode = computed(() => props.selectionMode)
@@ -692,6 +788,7 @@ const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 // stays a correctly sized placeholder until scrolling reaches it, so zoom,
 // rotation and resize re-rasterize the visible window instead of every page.
 const PDF_PAGE_GAP_PX = 8
+const PDF_SPREAD_GAP_PX = 8
 const PDF_PAGES_PADDING_TOP_PX = 16
 const PDF_FALLBACK_PAGE_HEIGHT_PX = 200
 /** Pages kept rasterized above and below the viewport. */
@@ -700,10 +797,8 @@ const PDF_PAGE_OVERSCAN = DEFAULT_PAGE_OVERSCAN
 const PDF_SCROLL_RENDER_DEBOUNCE_MS = 100
 /** Debounce so a resize drag re-measures and re-renders once, not every frame. */
 const PDF_RESIZE_RENDER_DEBOUNCE_MS = 120
-const pageStackStyle = {
-  gap: `${PDF_PAGE_GAP_PX}px`,
-  paddingTop: `${PDF_PAGES_PADDING_TOP_PX}px`,
-}
+/** Ignore sub-pixel drift so single-page snapping cannot fight smooth scrolling. */
+const PDF_SINGLE_PAGE_SNAP_TOLERANCE_PX = 6
 
 const pageSlots = reactive<Record<number, PageSlot>>({})
 const viewportHeightPx = ref(0)
@@ -713,9 +808,10 @@ const viewportHeightPx = ref(0)
  * keeps the object URL and the cache only records its byte footprint.
  */
 let bitmapCache: PdfBitmapCache = createPdfBitmapCache({ maxBytes: props.maxBitmapBytes })
-let pageLayoutCache: { key: string; offsets: number[]; heights: number[] } | undefined
 let renderedRange: PdfPageRange = { first: 0, last: -1 }
 let visiblePageIndex = -1
+/** Last page reached with the keyboard; reset when a scroll changes the page. */
+let keyPageIndex = -1
 let renderTimer: ReturnType<typeof setTimeout> | undefined
 let resizeTimer: ReturnType<typeof setTimeout> | undefined
 let scrollFrame: number | undefined
@@ -747,45 +843,48 @@ function markPageBitmapsStale(): void {
   visiblePageIndex = -1
 }
 
-function invalidatePageLayout(): void {
-  pageLayoutCache = undefined
-}
-
-function pageLayoutKey(): string {
-  const doc = renderDocument.value
-  if (!doc) return "none"
-  return `${doc.id}:${doc.pageCount}:${zoom.value}:${rotation.value}`
-}
-
 /** Bitmaps are only valid for the zoom/rotation/DPR they were rasterized at. */
 function pageRenderKey(): string {
   return `${zoom.value}:${rotation.value}:${renderDpr.value}`
 }
 
+const pageLayoutMode = computed<PdfPageLayout>(() => normalizePdfPageLayout(props.pageLayout))
+
 /**
- * Cached page offsets for the current document / zoom / rotation.
+ * Cached page offsets for the current document / zoom / rotation and mode.
  *
- * Slot widths and heights are inline styles and the stack gap/padding are part
- * of this component's own layout, so offsets are derived arithmetically once
- * per layout change instead of reading one DOM node per page on every scroll.
+ * Slot widths, heights and the grid gap are inline styles of this component,
+ * so offsets are derived arithmetically once per layout change instead of
+ * reading one DOM node per page on every scroll. A spread row gives both of
+ * its pages the same offset, which is what keeps page navigation sticky.
  */
+const pageLayoutMetrics = computed(() => {
+  const doc = renderDocument.value
+  const pageCount = doc?.pageCount ?? 0
+  return resolvePdfPageLayoutMetrics({
+    pageCount,
+    layout: pageLayoutMode.value,
+    pageSize: (pageIndex) => pageDisplaySize(pageIndex) ?? { width: 1, height: PDF_FALLBACK_PAGE_HEIGHT_PX },
+    rowGap: PDF_PAGE_GAP_PX,
+    columnGap: PDF_SPREAD_GAP_PX,
+    paddingTop: PDF_PAGES_PADDING_TOP_PX,
+    print: printMode.value,
+  })
+})
+
+const pageStackStyle = computed<Record<string, string>>(() => {
+  const metrics = pageLayoutMetrics.value
+  return {
+    gridTemplateColumns: metrics.columnWidths.map((width) => `${Math.max(0, width)}px`).join(" "),
+    columnGap: `${metrics.columnGapPx}px`,
+    rowGap: `${metrics.rowGapPx}px`,
+    paddingTop: `${metrics.paddingTopPx}px`,
+  }
+})
+
 function pageLayout(): { offsets: number[]; heights: number[] } {
-  const key = pageLayoutKey()
-  if (pageLayoutCache?.key === key) return pageLayoutCache
-  const pageCount = renderDocument.value?.pageCount ?? 0
-  const heights: number[] = []
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-    heights.push(pageDisplaySize(pageIndex)?.height ?? PDF_FALLBACK_PAGE_HEIGHT_PX)
-  }
-  pageLayoutCache = {
-    key,
-    offsets: computePageOffsets(heights, {
-      gap: PDF_PAGE_GAP_PX,
-      paddingTop: PDF_PAGES_PADDING_TOP_PX,
-    }),
-    heights,
-  }
-  return pageLayoutCache
+  const metrics = pageLayoutMetrics.value
+  return { offsets: metrics.pageOffsets, heights: metrics.pageHeights }
 }
 
 function measureViewportHeight(): void {
@@ -805,11 +904,21 @@ function currentRenderRange(): PdfPageRange {
   // print snapshot, so print mode replaces the lazy viewport window entirely.
   if (printMode.value) return { first: 0, last: doc.pageCount - 1 }
   const { offsets, heights } = pageLayout()
-  return visiblePageRange(offsets, heights, {
+  const range = visiblePageRange(offsets, heights, {
     scrollTop: scrollTopPx(),
     viewportHeight: viewportHeightPx.value,
-    overscanPages: PDF_PAGE_OVERSCAN,
+    overscanPages: pageLayoutMode.value === "single" ? 0 : PDF_PAGE_OVERSCAN,
   })
+  if (pageLayoutMode.value !== "single") return range
+  // Single-page mode keeps exactly one page rasterized: the page the reader
+  // has snapped to, never a neighbour that is only partly visible.
+  const pageIndex = pdfPageIndexAtOffset(
+    pageLayoutMetrics.value.rows,
+    scrollTopPx(),
+    viewportHeightPx.value,
+  )
+  if (pageIndex < 0 || pageIndex >= doc.pageCount) return range
+  return { first: pageIndex, last: pageIndex }
 }
 
 /** Revoke a slot's bitmap and drop it back to a placeholder. */
@@ -1013,6 +1122,10 @@ async function releaseDocument(): Promise<void> {
   cancelRender()
   surfaceSearch.clearSearch()
   clearSelection()
+  outlineItems.value = []
+  pdfPageLabels.value = []
+  activePageIndex.value = 0
+  thumbnailPipeline.clear()
   geometryCache.clear()
   geometryRequests.clear()
   characterTextCache.clear()
@@ -1026,7 +1139,6 @@ async function releaseDocument(): Promise<void> {
   }
   bitmapCache.clear()
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
-  invalidatePageLayout()
   renderedRange = { first: 0, last: -1 }
   visiblePageIndex = -1
   const doc = renderDocument.value
@@ -1128,6 +1240,69 @@ async function renderVisiblePages(): Promise<void> {
   }
 }
 
+// ── Navigation aids (outline, page labels, thumbnails) ───────────────
+async function loadNavigationAids(
+  runtime: PdfRenderRuntime,
+  document: PdfRenderDocument,
+  requestId: number,
+): Promise<void> {
+  const isCurrent = () => (
+    !unmounted
+    && requestId === latestRequestId
+    && renderDocument.value?.id === document.id
+    && runtimeForDocument === runtime
+  )
+  const readLabels = typeof runtime.getPageLabels === "function"
+    ? runtime.getPageLabels.bind(runtime)
+    : undefined
+  const readOutline = typeof runtime.getOutline === "function"
+    ? runtime.getOutline.bind(runtime)
+    : undefined
+  const labels = readLabels
+    ? Promise.resolve().then(() => readLabels(document)).catch(() => undefined)
+    : Promise.resolve(undefined)
+  const outline = readOutline
+    ? Promise.resolve().then(() => readOutline(document)).catch(() => undefined)
+    : Promise.resolve(undefined)
+  const [resolvedLabels, resolvedOutline] = await Promise.all([labels, outline])
+  if (!isCurrent()) return
+  if (resolvedLabels && resolvedLabels.length > 0) pdfPageLabels.value = resolvedLabels
+  if (resolvedOutline) outlineItems.value = resolvedOutline
+}
+
+function loadSurfaceThumbnails(): void {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!props.showThumbnails || !document || !runtime) return
+  void thumbnailPipeline.load(runtime, document)
+}
+
+function pageLabelFor(pageIndex: number): string {
+  const label = pdfPageLabels.value[pageIndex]
+  if (typeof label === "string" && label.trim()) return label.trim()
+  return String(pageIndex + 1)
+}
+
+function onThumbnailSelect(page: number): void {
+  scrollToPage(page - 1)
+}
+
+function onOutlineActivate(item: PdfOutlineItem): void {
+  const event: { title: string; pageIndex?: number; url?: string; blocked?: boolean } = {
+    title: item.title,
+  }
+  if (item.pageIndex !== undefined) {
+    event.pageIndex = item.pageIndex
+    scrollToPage(item.pageIndex)
+  }
+  if (item.url) {
+    const resolution = resolvePdfLinkUrl(item.url)
+    if (resolution.url) event.url = resolution.url
+    event.blocked = resolution.blocked
+  }
+  emit("outlineActivate", event)
+}
+
 // ── Main load flow ───────────────────────────────────────────────────
 async function load(): Promise<void> {
   const source = effectiveSource.value
@@ -1177,14 +1352,16 @@ async function load(): Promise<void> {
     emit("documentRevisionChange", documentRevision.value)
     verifiedBlob.value = verified.blob
     initPageSlots()
+    activePageIndex.value = 0
     emit("document-load-success", openedDocument.pageCount)
     loading.value = false
-    invalidatePageLayout()
-    measureViewportHeight()
+      measureViewportHeight()
     scheduleVisibleRender(0)
     prefetchPageGeometry(0)
     prefetchPageAnnotations(0)
     prefetchPageTextLayer(0)
+    void loadNavigationAids(selectedRuntime, openedDocument, requestId)
+    loadSurfaceThumbnails()
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
@@ -1214,7 +1391,6 @@ watch([zoom, rotation, renderDpr], () => {
   // Bitmaps cached outside the window cannot be reused at the new scale and are
   // released, so the cache never holds pixels from two scales at once.
   markPageBitmapsStale()
-  invalidatePageLayout()
   scheduleVisibleRender(0)
 })
 watch([renderDocument, rotation], syncPrintPageSize, { immediate: true })
@@ -1236,6 +1412,12 @@ watch(() => props.maxBitmapBytes, (next) => {
   if (renderDocument.value) scheduleVisibleRender(0)
 })
 
+// Enabling the strip after load starts the shared pipeline; disabling it keeps
+// already-rasterized thumbnails so toggling back is instant.
+watch(() => props.showThumbnails, (show) => {
+  if (show) loadSurfaceThumbnails()
+})
+
 // ── Page geometry ────────────────────────────────────────────────────
 function pageDisplaySize(pageIndex: number): { width: number; height: number } | undefined {
   const doc = renderDocument.value
@@ -1252,9 +1434,15 @@ function pageDisplaySize(pageIndex: number): { width: number; height: number } |
 function pageSlotStyle(pageIndex: number): Record<string, string> | undefined {
   const size = pageDisplaySize(pageIndex)
   if (!size) return undefined
+  const metrics = pageLayoutMetrics.value
+  const column = metrics.pageGridColumns[pageIndex] ?? 1
+  const row = metrics.pageGridRows[pageIndex] ?? pageIndex + 1
   return {
     width: `${size.width}px`,
     height: `${size.height}px`,
+    gridRow: String(row),
+    // A lone page in a spread spans both columns so it stays centered.
+    gridColumn: column === 0 ? "1 / -1" : String(column),
   }
 }
 
@@ -1355,7 +1543,10 @@ function prefetchPageAnnotations(centerPageIndex: number): void {
 // CJK extraction see the real characters instead of an aria-hidden bitmap.
 
 function textLayerFor(pageIndex: number): PdfPageTextLayer | undefined {
-  return textLayers[pageIndex]
+  const layer = textLayers[pageIndex]
+  // Image-only pages return a layer without glyphs; mounting it would expose an
+  // empty selectable overlay over the bitmap.
+  return layer && layer.glyphs.length > 0 ? layer : undefined
 }
 
 function textLayerTransform(pageIndex: number): string {
@@ -2201,14 +2392,15 @@ function flushScrollFrame(): void {
   // A container without a ResizeObserver keeps its mount-time height; re-read it
   // once there is no cached value instead of on every frame.
   if (viewportHeightPx.value <= 0) measureViewportHeight()
-  const { offsets, heights } = pageLayout()
-  const pageIndex = pageIndexAtPosition(
-    offsets,
-    heights,
-    scrollTopPx() + viewportHeightPx.value / 2,
-  )
+  // The page under the viewport centre is the page single-page mode snaps to,
+  // so it is read before snapping and published even while the browser settles
+  // on the snapped offset.
+  const pageIndex = currentVisiblePageIndex()
+  snapSinglePage()
   if (pageIndex !== visiblePageIndex) {
     visiblePageIndex = pageIndex
+    activePageIndex.value = pageIndex
+    keyPageIndex = -1
     emit("visible-page-change", pageIndex)
     prefetchPageGeometry(pageIndex)
     prefetchPageAnnotations(pageIndex)
@@ -2219,13 +2411,53 @@ function flushScrollFrame(): void {
   }
 }
 
+/** Page (or spread's left page) the reader is looking at. */
+function currentVisiblePageIndex(): number {
+  if (pageLayoutMode.value === "spread") {
+    return pdfPageIndexAtOffset(
+      pageLayoutMetrics.value.rows,
+      scrollTopPx(),
+      viewportHeightPx.value,
+    )
+  }
+  const { offsets, heights } = pageLayout()
+  return pageIndexAtPosition(offsets, heights, scrollTopPx() + viewportHeightPx.value / 2)
+}
+
+/**
+ * Snap the scroll offset to the nearest page in `single` mode.
+ *
+ * Returns true when the offset moved, so the caller can wait for the next
+ * scroll event instead of publishing a page the reader is leaving.
+ */
+function snapSinglePage(): void {
+  if (printMode.value || pageLayoutMode.value !== "single") return
+  const el = scrollRef.value
+  if (!el) return
+  const top = scrollTopPx()
+  const metrics = pageLayoutMetrics.value
+  const target = pdfSnapTopForRow(metrics.rows, top, viewportHeightPx.value)
+  if (target === undefined) return
+  const maxScroll = Math.max(0, metrics.totalHeightPx - viewportHeightPx.value)
+  const clamped = Math.min(Math.max(0, target), maxScroll)
+  if (Math.abs(top - clamped) <= PDF_SINGLE_PAGE_SNAP_TOLERANCE_PX) return
+  if (typeof el.scrollTo === "function") el.scrollTo({ top: clamped, behavior: "auto" })
+  else el.scrollTop = clamped
+}
+
 function emitContextMenuAt(clientX: number, clientY: number): void {
   const el = scrollRef.value
   if (!el || !renderDocument.value) return
   const rect = el.getBoundingClientRect()
   const clickY = clientY - rect.top + el.scrollTop
-  const { offsets, heights } = pageLayout()
-  const pageIndex = pageIndexAtPosition(offsets, heights, clickY)
+  const metrics = pageLayoutMetrics.value
+  // A spread resolves the left/right page by x; the other modes ignore x.
+  const contentWidth = Math.max(el.clientWidth ?? 0, metrics.maxRowWidthPx + PDF_PAGES_PADDING_TOP_PX)
+  const pageIndex = pdfPageAtPoint(metrics.rows, {
+    x: clientX - rect.left + (el.scrollLeft ?? 0),
+    y: clickY,
+    contentWidth,
+  }) ?? 0
   emit("contextMenu", {
     pageIndex,
     clientX,
@@ -2427,14 +2659,30 @@ function onSurfaceResize(): void {
 
 // ── Expose ───────────────────────────────────────────────────────────
 function scrollToPage(pageIndex: number): void {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count > 0) {
+    const target = Math.min(count - 1, Math.max(0, Math.floor(pageIndex)))
+    activePageIndex.value = target
+    keyPageIndex = target
+    pageIndex = target
+  }
   const el = scrollRef.value
   if (!el) return
   const slot = el.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null
-  slot?.scrollIntoView({ behavior: "smooth", block: "start" })
+  slot?.scrollIntoView?.({ behavior: "smooth", block: "start" })
   // Programmatic scrolling may not emit a scroll event (already at the target,
   // reduced motion); rasterize whichever page ends up in the viewport anyway.
   scheduleVisibleRender()
 }
+
+// Switching page layout keeps the reader on the same page. A spread shifts the
+// row offsets, so the scroll position is realigned with the page that was
+// current before the switch instead of keeping the raw offset.
+watch(pageLayoutMode, (next, previous) => {
+  if (next === previous) return
+  const pageIndex = visiblePageIndex >= 0 ? visiblePageIndex : 0
+  void nextTick(() => scrollToPage(pageIndex))
+})
 
 function onSurfaceEscape(event?: KeyboardEvent): void {
   if (event?.defaultPrevented) return
@@ -2442,8 +2690,89 @@ function onSurfaceEscape(event?: KeyboardEvent): void {
   if (selectionMode.value !== "content") emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
 }
 
+/**
+ * PDF Surface keyboard map: PageDown/PageUp move one page, Home/End jump to
+ * the first/last page, Ctrl/Cmd +/−/0 zoom, Escape cancels the active
+ * selection or region. There is no search field in the minimal surface.
+ */
+const surfaceKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  escape: true,
+  onCommand: onSurfaceKeyCommand,
+})
+
+function onSurfaceKeydown(event: KeyboardEvent): void {
+  surfaceKeys.onKeydown(event)
+}
+
+function visibleSurfacePageIndex(): number {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count <= 0) return 0
+  if (visiblePageIndex >= 0) return Math.min(visiblePageIndex, count - 1)
+  const { offsets, heights } = pageLayout()
+  return pageIndexAtPosition(offsets, heights, scrollTopPx() + viewportHeightPx.value / 2)
+}
+
+function surfacePageIndex(): number {
+  return keyPageIndex >= 0 ? keyPageIndex : visibleSurfacePageIndex()
+}
+
+function goToSurfacePage(pageIndex: number): boolean {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count <= 0) return false
+  const target = Math.min(count - 1, Math.max(0, pageIndex))
+  if (target === surfacePageIndex()) return false
+  keyPageIndex = target
+  scrollToPage(target)
+  return true
+}
+
+function stepSurfaceZoom(direction: 1 | -1): boolean {
+  const steps = [0.5, 0.75, 1, 1.25, 1.5, 2]
+  const next = direction > 0
+    ? steps.find((value) => value > zoom.value)
+    : [...steps].reverse().find((value) => value < zoom.value)
+  if (next === undefined) return false
+  zoom.value = next
+  return true
+}
+
+function onSurfaceKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToSurfacePage(surfacePageIndex() + 1)
+    case "page-previous":
+      return goToSurfacePage(surfacePageIndex() - 1)
+    case "page-first":
+      return goToSurfacePage(0)
+    case "page-last":
+      return goToSurfacePage((renderDocument.value?.pageCount ?? 1) - 1)
+    case "zoom-in":
+      return stepSurfaceZoom(1)
+    case "zoom-out":
+      return stepSurfaceZoom(-1)
+    case "zoom-reset":
+      if (zoom.value === 1) return false
+      zoom.value = 1
+      return true
+    case "escape":
+      if (selectionState.value.kind === "none" && selectionMode.value === "content") return false
+      onSurfaceEscape()
+      return true
+    default:
+      return false
+  }
+}
+
 defineExpose({
   scrollToPage,
+  /** Current bookmark/outline tree (empty when the runtime has no bookmarks). */
+  getOutline: (): readonly PdfOutlineItem[] => outlineItems.value,
+  /** Display label of every page; decimal fallback when the runtime has none. */
+  getPageLabels: (): readonly string[] => resolvedPageLabels.value,
+  /** Zero-based page currently under the viewport. */
+  getActivePage: (): number => activePageIndex.value,
   zoom,
   rotation,
   search: (query: string): Promise<PdfSearchState> => surfaceSearch.search(query),
@@ -2509,6 +2838,7 @@ onBeforeUnmount(async () => {
   element?.removeEventListener("pointerup", onTouchPointerUp)
   element?.removeEventListener("pointercancel", onTouchPointerCancel)
   cancelRender()
+  thumbnailPipeline.dispose()
   pdfLoadCoordinator.dispose()
   pdfTaskSequence.dispose()
   surfaceSearch.dispose()
@@ -2518,6 +2848,13 @@ onBeforeUnmount(async () => {
 </script>
 
 <style scoped>
+.pdf-surface-shell {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+}
 .pdf-surface {
   flex: 1;
   overflow-y: auto;
@@ -2529,10 +2866,48 @@ onBeforeUnmount(async () => {
   --pdf-surface-page-filter: none;
   background: var(--pdf-surface-bg);
 }
+/* Outline and thumbnail rail. It lives beside the scroll container so bookmarks
+   and thumbnails stay put while the pages scroll under them. */
+.pdf-surface__nav {
+  display: flex;
+  width: 172px;
+  flex: 0 0 172px;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  border-right: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #111827;
+  padding: 8px;
+}
+.pdf-surface--dark .pdf-surface__nav {
+  border-color: #1e293b;
+  background: #0f172a;
+  color: #e5e7eb;
+  --pdf-fg: #e5e7eb;
+  --pdf-link: #93c5fd;
+  --pdf-muted: #94a3b8;
+  --pdf-border: #334155;
+  --pdf-control-bg: #1e293b;
+  --pdf-control-border: #475569;
+  --pdf-panel-bg: #0f172a;
+  --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
+}
+.pdf-surface__nav .pdf-thumbnails {
+  width: 100%;
+  flex: 1 1 auto;
+  overflow: visible;
+  padding: 4px;
+  border-right: 0;
+  background: transparent;
+}
 .pdf-surface--dark {
   --pdf-surface-bg: #020617;
   --pdf-surface-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
+/* The scroll surface is focusable for keyboard paging; keep the ring visible. */
+.pdf-surface:focus-visible { outline: 2px solid #60a5fa; outline-offset: -2px; }
 .pdf-surface__empty {
   display: flex; align-items: center; justify-content: center;
   min-height: 200px; color: #9ca3af; font-size: 14px;
@@ -2541,9 +2916,12 @@ onBeforeUnmount(async () => {
   padding: 16px; color: #ef4444; font-size: 13px;
 }
 .pdf-surface__pages {
-  display: flex; flex-direction: column; align-items: center;
-  /* Vertical gap and top padding are bound inline from PDF_PAGE_GAP_PX /
-     PDF_PAGES_PADDING_TOP_PX so the cached page offsets cannot drift. */
+  display: grid;
+  justify-content: center;
+  justify-items: center;
+  align-items: start;
+  /* Column template, gap and top padding are bound inline from the page layout
+     metrics so the cached offsets cannot drift from the painted grid. */
   padding: 0 8px 16px;
 }
 .pdf-surface__page-slot {
@@ -2629,6 +3007,8 @@ onBeforeUnmount(async () => {
 .pdf-surface__page-error { color: #ef4444; }
 
 @media print {
+  .pdf-surface-shell { display: block !important; }
+  .pdf-surface__nav { display: none !important; }
   .pdf-surface {
     overflow: visible !important;
     background: #fff !important;

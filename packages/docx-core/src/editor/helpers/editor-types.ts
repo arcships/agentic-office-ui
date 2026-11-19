@@ -16,6 +16,19 @@ import type {
 } from "../../engine/types";
 
 export type DocxDocumentTheme = "light" | "dark";
+/**
+ * How revision markup is drawn on the page.
+ *
+ * - `inline` draws insertions and deletions in the text flow and hides the
+ *   tracked-change gutter.
+ * - `balloons` keeps insertions inline but moves deleted content out of the text
+ *   flow onto gutter cards.
+ * - `none` shows the final text only: no inline markup and no revision cards.
+ *
+ * The editor model is never rewritten by this choice; export still writes every
+ * revision.
+ */
+export type DocxRevisionDisplay = "inline" | "balloons" | "none";
 export type DocxHeadingStyleMap = Partial<
   Record<HeadingLevel, Record<string, string | number | undefined>>
 >;
@@ -54,6 +67,20 @@ export interface DocxTableCellSelectionRange {
   anchorCellIndex: number;
   focusRowIndex: number;
   focusCellIndex: number;
+  /**
+   * Physical table-grid columns covered by the rectangle, after merged cells
+   * and their grid spans are taken into account. 0-based and inclusive.
+   *
+   * Anchor/focus address model cells; this range addresses the drawn grid, so
+   * a cell that spans two columns stays inside a selection that only touches
+   * one of them. Commands, highlighting and clipboard export all use it.
+   */
+  gridRange?: DocxTableCellGridRange;
+}
+
+export interface DocxTableCellGridRange {
+  startColumnIndex: number;
+  endColumnIndex: number;
 }
 
 export interface ParagraphLocationInBody {
@@ -81,6 +108,32 @@ export interface DocxTextRangeBoundary {
 export interface DocxTextRange {
   start: DocxTextRangeBoundary;
   end: DocxTextRangeBoundary;
+}
+
+/**
+ * Clipboard flavours a paste event or the async clipboard API can provide.
+ *
+ * Paste prefers the internal structured payload, then `text/html`, then
+ * `text/rtf`, then `text/plain`.
+ */
+export interface DocxClipboardSources {
+  /** Internal structured DOCX fragment (`DOCX_CLIPBOARD_MIME`). */
+  internal?: string;
+  /** `text/html` flavour, e.g. copied from Word. */
+  html?: string;
+  /** `text/rtf` flavour, for editors that only take RTF. */
+  rtf?: string;
+  /** `text/plain` flavour; always usable as the last resort. */
+  text?: string;
+}
+
+/**
+ * Minimal `DataTransfer` surface the copy path writes into.
+ *
+ * Declared structurally so the editor does not depend on DOM lib types.
+ */
+export interface DocxClipboardDataSink {
+  setData(type: string, value: string): void;
 }
 
 // Range-comparison helpers (upstream editor.tsx:3413-3480). Pure functions
@@ -195,6 +248,51 @@ export interface DocxEditorTransactionPatch {
 
 export type ParagraphLocation = DocxTextRangeLocation;
 
+/** Story that owns a search result. */
+export type DocxReplaceRegion =
+  | "body"
+  | "header"
+  | "footer"
+  | "footnote"
+  | "endnote";
+
+/**
+ * One search result handed to `replaceMatch()`.
+ *
+ * `location` points at the paragraph, `start`/`end` are UTF-16 offsets into
+ * that paragraph's plain text. `region` is advisory: only `body` results can be
+ * replaced, so a header/footer/note result is rejected instead of silently
+ * rewriting a read-only story.
+ */
+export interface DocxReplaceTarget {
+  region: DocxReplaceRegion;
+  location: DocxTextRangeLocation | {
+    kind: "nested-table-cell";
+    tableIndex: number;
+    path: readonly { rowIndex: number; cellIndex: number; contentIndex: number }[];
+    rowIndex: number;
+    cellIndex: number;
+    paragraphIndex: number;
+  };
+  start: number;
+  end: number;
+}
+
+/** Query options shared by replace-all and the search session. */
+export interface DocxReplaceAllOptions {
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
+}
+
+/** What one replace command actually changed. */
+export interface DocxReplaceSummary {
+  /** Number of occurrences replaced. */
+  replaced: number;
+  /** Matches skipped because their story is not editable. */
+  skipped: number;
+}
+
 export type DocxImageLocation = ParagraphLocation & {
   childIndex: number;
 };
@@ -284,6 +382,21 @@ export interface DocxComment {
 
 export type DocxLineSpacingRule = "auto" | "exact" | "atLeast";
 
+/**
+ * State of the inline comment editor: a new comment on a selection, or a reply
+ * to an existing comment. The composer owns no model state until it is
+ * submitted, so cancelling it leaves the document and its history untouched.
+ */
+export interface DocxCommentComposer {
+  mode: "new" | "reply";
+  /** Reply target, set when `mode` is `"reply"`. */
+  commentId?: number;
+  /** Selection to anchor the new comment to, set when `mode` is `"new"`. */
+  range?: DocxTextRange;
+  /** Start location of `range`, used to place the editor beside its page. */
+  anchor?: DocxTextRangeLocation;
+}
+
 export type DocxSelectionSessionKind =
   | "idle"
   | "pointer"
@@ -333,6 +446,10 @@ export interface DocxEditorStatusMessages {
   /** Template with a `{message}` placeholder. */
   importFailed: string;
   unsupportedFile: string;
+  /** OpenDocument text view-only refusal (also used as the banner label). */
+  viewOnly: string;
+  /** Template with a `{name}` placeholder for an OpenDocument import. */
+  loadedViewOnly: string;
   exportCancelledChanged: string;
   exportNotReady: string;
   /** Template with a `{message}` placeholder. */
@@ -349,6 +466,14 @@ export interface DocxEditorStatusMessages {
   /** Template with a `{count}` placeholder. */
   acceptedChanges: string;
   acceptedChange: string;
+  commentAdded: string;
+  commentReplied: string;
+  commentResolved: string;
+  commentReopened: string;
+  commentDeleted: string;
+  /** The selection or comment the command targets is gone. */
+  commentTargetMissing: string;
+  commentTextRequired: string;
   /** Template with a `{count}` placeholder. */
   rejectedChanges: string;
   rejectedChange: string;
@@ -379,6 +504,9 @@ export interface DocxEditorStatusMessages {
   updatedTextBox: string;
   /** Template with a `{mode}` placeholder. */
   imageWrapSet: string;
+  /** The image is not floating, so it has no layer order. */
+  imageLayerOrderRequiresFloating: string;
+  imageLayerOrderChanged: string;
   movedImage: string;
   movedSectionImage: string;
   movedDropCap: string;
@@ -420,6 +548,17 @@ export interface DocxEditorStatusMessages {
   splitTableCell: string;
   movedTable: string;
   movedEmbeddedTable: string;
+  resizedTableRow: string;
+  tableRowHeightPositive: string;
+  tableRowHeightTargetUnavailable: string;
+  floatedTable: string;
+  inlinedTable: string;
+  cannotFloatTableNotFound: string;
+  movedBodyNode: string;
+  cannotMoveBodyNodeNotFound: string;
+  updatedFormField: string;
+  formFieldTargetUnavailable: string;
+  formFieldOptionsRequired: string;
   /** Template with a `{preset}` placeholder. */
   unsupportedDiagonalTableCellBorders: string;
   /** Template with a `{preset}` placeholder. */
@@ -427,6 +566,14 @@ export interface DocxEditorStatusMessages {
   revisionLossOne: string;
   /** Template with a `{count}` placeholder. */
   revisionLossMany: string;
+  pageMarginsUpdated: string;
+  pageSizeUpdated: string;
+  sectionColumnsUpdated: string;
+  headerAdded: string;
+  footerAdded: string;
+  /** Template with a `{count}` placeholder. */
+  replacedMatches: string;
+  replaceTargetUnavailable: string;
 }
 
 export interface UseDocxEditorOptions {
@@ -468,11 +615,33 @@ export interface UseDocxEditorOptions {
    */
   initialShowTrackedChanges?: boolean;
   /**
+   * How revisions render while they are visible.
+   *
+   * `inline` keeps insertions and deletions in the text flow, `balloons` moves
+   * deleted content onto gutter cards, and `none` shows the final text only.
+   *
+   * @defaultValue `"balloons"`
+   */
+  initialRevisionDisplay?: DocxRevisionDisplay;
+  /**
    * Whether document comments are visible when the editor first mounts.
    *
    * @defaultValue `false`
    */
   initialShowComments?: boolean;
+  /**
+   * Author name stored on comments created through the editor commands.
+   *
+   * @defaultValue `"Author"`
+   */
+  commentAuthor?: string;
+  /** Comment initials; derived from `commentAuthor` when omitted. */
+  commentInitials?: string;
+  /**
+   * Clock used for a new comment's `w:date`. Hosts can pin it for
+   * reproducible exports and deterministic tests.
+   */
+  commentClock?: () => Date;
   /**
    * Maximum number of undo and redo snapshots retained by this editor
    * instance.

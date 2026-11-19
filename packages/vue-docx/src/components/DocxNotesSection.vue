@@ -4,6 +4,7 @@
     class="docx-notes-section"
     :class="`docx-notes-section--${kind}`"
     :data-testid="kind === 'footnote' ? 'docx-footnotes' : 'docx-endnotes'"
+    :data-docx-notes-kind="kind"
     :aria-label="kind === 'footnote' ? m.docx.notes.footnote : m.docx.notes.endnote"
   >
     <div class="docx-notes-section__rule" />
@@ -21,28 +22,42 @@
               v-if="node.type === 'paragraph'"
               :paragraph="node"
               :paragraph-index="-(note.id * 1000 + nodeIndex + 1)"
+              :source-id="noteNodeSourceId(note.id, nodeIndex)"
+              :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
+              :default-tab-stop-px="defaultTabStopPx"
+              :on-internal-link-click="onInternalLinkClick"
             />
             <DocxTableHost
               v-else-if="node.type === 'table'"
               :table="node"
               :table-index="-(note.id * 1000 + nodeIndex + 1)"
+              :source-id="noteNodeSourceId(note.id, nodeIndex)"
+              :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
+              :default-tab-stop-px="defaultTabStopPx"
+              :on-internal-link-click="onInternalLinkClick"
             />
           </template>
         </template>
-        <span v-else>{{ note.text }}</span>
+        <span v-else data-docx-note-text="true">{{ note.text }}</span>
       </div>
     </article>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { DocumentNoteDefinition, NumberingDefinitionSet } from "@arcships/docx-core"
+import { computed } from "vue"
+import type { DocModel, DocumentNoteDefinition, NumberingDefinitionSet } from "@arcships/docx-core"
+import {
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  docxNoteNodeSourceId,
+} from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
 import { useDocxMessages } from "../i18n"
@@ -50,6 +65,7 @@ import { useDocxMessages } from "../i18n"
 const props = withDefaults(defineProps<{
   kind: "footnote" | "endnote"
   notes: DocumentNoteDefinition[]
+  model?: DocModel
   numberingDefinitions?: NumberingDefinitionSet
   /**
    * Note id → display label computed from the document's note numbering
@@ -59,10 +75,25 @@ const props = withDefaults(defineProps<{
   labels?: Map<number, string>
   startIndex?: number
   theme?: "light" | "dark"
+  /** Internal `#bookmark` link clicked in a note body. */
+  onInternalLinkClick?: (bookmarkName: string) => void
 }>(), {
   startIndex: 1,
   theme: "light",
 })
+
+// Note bodies render zero-margin paragraphs (see the scoped style below), so
+// only the document tab grid reaches them.
+function noteLayoutDefaults() {
+  return resolveDocumentLayoutDefaults(props.model?.metadata)
+}
+const defaultTabStopPx = computed(() =>
+  resolveDefaultTabStopPx(noteLayoutDefaults().defaultTabStopTwips)
+)
+
+function noteNodeSourceId(noteId: number, nodeIndex: number): string {
+  return docxNoteNodeSourceId(props.kind, noteId, nodeIndex)
+}
 
 function noteLabel(note: DocumentNoteDefinition, noteIndex: number): string {
   const label = props.labels?.get(note.id)

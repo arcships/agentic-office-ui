@@ -11,6 +11,22 @@
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
+        <button data-testid="xlsx-ribbon-cut" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.cut" @click="cutSelection">{{ m.xlsx.ribbon.cut }}</button>
+        <button data-testid="xlsx-ribbon-copy" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.copy" @click="copySelection">{{ m.xlsx.ribbon.copy }}</button>
+        <button data-testid="xlsx-ribbon-paste" class="xlsx-ribbon__action-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.paste" @click="controller.pasteFromClipboard()">{{ m.xlsx.ribbon.paste }}</button>
+        <button data-testid="xlsx-ribbon-paste-special" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.pasteSpecial" @click="emit('authoring', 'pasteSpecial')">{{ m.xlsx.ribbon.pasteSpecial }}</button>
+      </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group">
+        <button data-testid="xlsx-ribbon-insert-row-above" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowAbove" :aria-label="m.xlsx.ribbon.insertRowAbove" @click="insertRow('above')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 8v8M8 12h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-row-below" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowBelow" :aria-label="m.xlsx.ribbon.insertRowBelow" @click="insertRow('below')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 6v8M8 10h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-delete-row" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteRow" :aria-label="m.xlsx.ribbon.deleteRow" @click="deleteRow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M8 12h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-column-left" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnLeft" :aria-label="m.xlsx.ribbon.insertColumnLeft" @click="insertColumn('left')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-column-right" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnRight" :aria-label="m.xlsx.ribbon.insertColumnRight" @click="insertColumn('right')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
+        <button data-testid="xlsx-ribbon-delete-column" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteColumn" :aria-label="m.xlsx.ribbon.deleteColumn" @click="deleteColumn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8" /></svg></button>
+      </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group">
         <select :value="fontFamilyValue" :aria-label="m.xlsx.ribbon.fontFamily" :title="m.xlsx.ribbon.fontFamily" @change="setFontFamily">
           <option value="Calibri">Calibri</option>
           <option value="Aptos">Aptos</option>
@@ -58,12 +74,32 @@
         </select>
         <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.currency" :aria-label="m.xlsx.ribbon.currency" @click="applyStyle(numberFormats.currency)">$</button>
         <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.percent" :aria-label="m.xlsx.ribbon.percent" @click="applyStyle(numberFormats.percent)">%</button>
+        <button data-testid="xlsx-ribbon-number-format" class="xlsx-ribbon__action-button" :title="m.xlsx.ribbon.numberFormatDialog" @click="emit('authoring', 'numberFormat')">{{ m.xlsx.ribbon.numberFormatDialog }}</button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.mergeSelection()">{{ m.xlsx.ribbon.merge }}</button>
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
-        <button class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
+        <button data-testid="xlsx-ribbon-merge-center" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.mergeAndCenter" @click="mergeAndCenter">{{ m.xlsx.ribbon.mergeAndCenter }}</button>
+        <button data-testid="xlsx-ribbon-unmerge" class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
+        <select data-testid="xlsx-ribbon-border-preset" class="xlsx-ribbon__borders" :value="''" :aria-label="m.xlsx.ribbon.borders" :title="m.xlsx.ribbon.borders" @change="applyBorderPreset">
+          <option value="">{{ m.xlsx.ribbon.borders }}</option>
+          <option v-for="preset in borderPresets" :key="preset" :value="preset">{{ borderLabels[preset] }}</option>
+        </select>
+        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.borderColor">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /></svg><i :style="{ backgroundColor: borderColor }" />
+          <input v-model="borderColor" data-testid="xlsx-ribbon-border-color" type="color" :aria-label="m.xlsx.ribbon.borderColor" @change="applyBorderColor" />
+        </label>
+        <button data-testid="xlsx-ribbon-borders-all" class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders('all')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
+      </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group" data-testid="xlsx-ribbon-authoring">
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-chart" :title="m.xlsx.authoring.chart.title" :aria-label="m.xlsx.authoring.chart.title" @click="emit('authoring', 'chart')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-comment" :title="m.xlsx.authoring.comment.title" :aria-label="m.xlsx.authoring.comment.title" :disabled="!hasActiveCell" @click="emit('authoring', 'comment')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-hyperlink" :title="m.xlsx.authoring.hyperlink.title" :aria-label="m.xlsx.authoring.hyperlink.title" :disabled="!hasActiveCell" @click="emit('authoring', 'hyperlink')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 1 0-5l3-3a4 4 0 0 1 5 5l-2 2M14 10a4 4 0 0 1 0 5l-3 3a4 4 0 0 1-5-5l2-2" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-table" :title="m.xlsx.authoring.table.title" :aria-label="m.xlsx.authoring.table.title" :disabled="!hasSelection" @click="emit('authoring', 'table')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><path d="M4 10h16M10 10v9M4 15h16" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-conditional" :title="m.xlsx.authoring.conditional.title" :aria-label="m.xlsx.authoring.conditional.title" :disabled="!hasSelection" @click="emit('authoring', 'conditional')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-validation" :title="m.xlsx.authoring.validation.title" :aria-label="m.xlsx.authoring.validation.title" :disabled="!hasSelection" @click="emit('authoring', 'validation')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: isFrozen }" data-testid="xlsx-ribbon-freeze" :aria-pressed="isFrozen" :title="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :aria-label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :disabled="!hasActiveCell" @click="toggleFreeze"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></button>
+        <button class="xlsx-ribbon__action-button" data-testid="xlsx-ribbon-names" :title="m.xlsx.ribbon.nameManager" @click="emit('authoring', 'names')">{{ m.xlsx.ribbon.nameManager }}</button>
       </div>
     </fieldset>
 
@@ -79,6 +115,7 @@ import { computed, ref, watch } from "vue";
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  type XlsxBorderPreset,
   type XlsxCellAlignmentInput,
   type XlsxCellFontStyleInput,
   type XlsxCellStyleInput,
@@ -86,7 +123,9 @@ import {
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
 import { classifyNumberFormat } from "../composables/cell-input";
+import { DEFAULT_BORDER_COLOR_HEX, XLSX_BORDER_PRESETS } from "../composables/border-presets";
 import { useXlsxMessages } from "../i18n";
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -95,6 +134,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  authoring: [kind: XlsxAuthoringDialogKind];
   "update:readOnly": [value: boolean];
 }>();
 
@@ -102,8 +142,24 @@ const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 const m = useXlsxMessages();
 const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
+const borderColor = ref(`#${DEFAULT_BORDER_COLOR_HEX.toLowerCase()}`);
+// The colour picker re-applies the preset it belongs to, so it follows the
+// last border the user asked for rather than the dropdown's placeholder.
+const lastBorderPreset = ref<XlsxBorderPreset>("all");
+const borderPresets = XLSX_BORDER_PRESETS;
+const borderLabels = computed<Record<XlsxBorderPreset, string>>(() => ({
+  all: m.value.xlsx.ribbon.allBorders,
+  bottom: m.value.xlsx.ribbon.bottomBorder,
+  left: m.value.xlsx.ribbon.leftBorder,
+  none: m.value.xlsx.ribbon.noBorders,
+  outside: m.value.xlsx.ribbon.outsideBorders,
+  right: m.value.xlsx.ribbon.rightBorder,
+  top: m.value.xlsx.ribbon.topBorder
+}));
 const hasWorkbook = computed(() => props.controller.tabs.length > 0);
 const hasSelection = computed(() => Boolean(props.controller.selection));
+const hasActiveCell = computed(() => Boolean(props.controller.activeCell));
+const isFrozen = computed(() => Boolean(props.controller.freezePanes));
 const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -201,6 +257,11 @@ function applyStyle(style: XlsxCellStyleInput): void {
   else props.controller.setSelectedCellStyle(style);
 }
 
+function toggleFreeze(): void {
+  if (isReadOnly.value) return;
+  props.controller.toggleFreezePanesAtActiveCell?.();
+}
+
 function applyFont(font: XlsxCellFontStyleInput): void { applyStyle({ font }); }
 function applyAlignment(alignment: XlsxCellAlignmentInput): void { applyStyle({ alignment }); }
 
@@ -225,9 +286,66 @@ function setNumberFormat(event: Event): void {
   applyStyle(numberFormats[key] ?? numberFormats.general);
 }
 
-function applyBorders(): void {
-  const edge = { style: "thin" as const, color: { colorType: "rgb" as const, hex: "A1A1AA" } };
+function applyBorders(preset: XlsxBorderPreset = "all"): void {
+  if (isReadOnly.value) return;
+  lastBorderPreset.value = preset;
+  const color = { colorType: "rgb" as const, hex: borderColor.value.slice(1).toUpperCase() };
+  if (typeof props.controller.setSelectionBorders === "function") {
+    props.controller.setSelectionBorders({ preset, color });
+    return;
+  }
+  // Controllers proxied from an older host keep the plain All-borders path.
+  if (preset !== "all") return;
+  const edge = { style: "thin" as const, color };
   applyStyle({ border: { top: edge, right: edge, bottom: edge, left: edge } });
+}
+
+function applyBorderPreset(event: Event): void {
+  const select = event.target as HTMLSelectElement | null;
+  const preset = (select?.value ?? "") as XlsxBorderPreset | "";
+  // The first option is the dropdown's placeholder, not a command.
+  if (!preset) return;
+  applyBorders(preset);
+  if (select) select.value = "";
+}
+
+function applyBorderColor(): void {
+  applyBorders(lastBorderPreset.value);
+}
+
+function mergeAndCenter(): void {
+  if (isReadOnly.value) return;
+  props.controller.mergeAndCenterSelection?.();
+}
+
+function copySelection(): void {
+  if (isReadOnly.value) return;
+  void props.controller.copySelectionToClipboard?.();
+}
+
+function cutSelection(): void {
+  if (isReadOnly.value) return;
+  props.controller.cutSelection?.();
+}
+
+function insertRow(position: "above" | "below"): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.insertRows?.(props.controller.activeCell.row + (position === "below" ? 1 : 0));
+}
+
+function deleteRow(): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.deleteRows?.(props.controller.activeCell.row);
+}
+
+function insertColumn(position: "left" | "right"): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.insertColumns?.(props.controller.activeCell.col + (position === "right" ? 1 : 0));
+}
+
+function deleteColumn(): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.deleteColumns?.(props.controller.activeCell.col);
 }
 </script>
 
@@ -253,6 +371,7 @@ function applyBorders(): void {
 .xlsx-ribbon select { background: transparent; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 11px; height: 30px; max-width: 118px; padding: 0 7px; }
 .xlsx-ribbon__size { width: 52px; }
 .xlsx-ribbon__number { width: 86px; }
+.xlsx-ribbon__borders { width: 104px; }
 .xlsx-ribbon__icon-button,
 .xlsx-ribbon__text-button,
 .xlsx-ribbon__action-button,

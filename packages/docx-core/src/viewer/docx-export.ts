@@ -1,18 +1,22 @@
 import type { DocModel } from "../engine/types";
 import type { OoxmlPackage } from "../engine/ooxml-core";
 import { serializeDocx } from "../engine/serializer";
+import { DocxSerializationError } from "../engine/prepare-model";
 import {
   resolveDocxRuntimeLimits,
   type DocxRuntimeLimits,
 } from "../resource-limits";
 import { isUiEnvironment } from "./runtime-environment";
+import { isOpenDocumentModel, OPEN_DOCUMENT_VIEW_ONLY_REASON } from "./open-document";
 import type { WorkerWasmSource } from "./wasm-source";
 
 export type DocxExportErrorCode =
   | "ABORTED"
   | "TIMEOUT"
   | "WORKER_UNAVAILABLE"
-  | "EXPORT_FAILED";
+  | "EXPORT_FAILED"
+  /** The model is not serializable (an illegal collapsed table grid, for example). */
+  | "INVALID_MODEL";
 
 /** A stable, user-visible error shape for DOCX export failures. */
 export class DocxExportError extends Error {
@@ -148,6 +152,17 @@ function createExportError(message: string, cause?: unknown): DocxExportError {
   return error;
 }
 
+/**
+ * A model the serializer refused to write keeps its typed failure: callers can
+ * branch on `code: "INVALID_MODEL"` and show the model error message instead of
+ * a generic export failure.
+ */
+function createModelError(error: DocxSerializationError): DocxExportError {
+  const exportError = new DocxExportError("INVALID_MODEL", error.message);
+  if (error.stack) exportError.stack = error.stack;
+  return exportError;
+}
+
 function performanceNow(): number {
   return typeof performance !== "undefined" &&
     typeof performance.now === "function"
@@ -194,7 +209,13 @@ async function serializeInline(
 ): Promise<ArrayBuffer> {
   const startedAt = performanceNow();
   reportProgress(options, "serializing", 10);
-  const bytes = await serializeDocx(model, basePackage);
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await serializeDocx(model, basePackage);
+  } catch (error) {
+    if (error instanceof DocxSerializationError) throw createModelError(error);
+    throw error;
+  }
   if (options.signal?.aborted) {
     throw createAbortError();
   }
@@ -220,6 +241,9 @@ export async function exportDocxBuffer(
   basePackage?: OoxmlPackage,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  if (isOpenDocumentModel(model)) {
+    throw new DocxExportError("INVALID_MODEL", OPEN_DOCUMENT_VIEW_ONLY_REASON);
+  }
   const limits = resolveDocxRuntimeLimits(options.limits);
   if (options.signal?.aborted) {
     throw createAbortError();

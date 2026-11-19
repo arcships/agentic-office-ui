@@ -6,7 +6,9 @@
 
 import type {
   DocModel,
+  FormFieldOption,
   FormFieldRunNode,
+  FormFieldType,
   HeadingLevel,
   ImageRunNode,
   ParagraphAlignment,
@@ -18,7 +20,10 @@ import type {
   DocxBorderContext,
   DocxBorderPreset,
   DocxBorderPresetState,
+  DocxClipboardDataSink,
+  DocxClipboardSources,
   DocxComment,
+  DocxCommentComposer,
   DocxDocumentTheme,
   DocxEditorSelection,
   DocxFormFieldLocation,
@@ -28,8 +33,13 @@ import type {
   DocxImageLocation,
   DocxLineSpacingInfo,
   DocxListType,
+  DocxReplaceAllOptions,
+  DocxReplaceSummary,
+  DocxReplaceTarget,
+  DocxRevisionDisplay,
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,
+  DocxSectionRegion,
   DocxSelectedFormField,
   DocxSelectionSessionKind,
   DocxTableCellSelectionRange,
@@ -38,6 +48,21 @@ import type {
   DocxTrackedChange,
   ParagraphLocation
 } from "./editor-types";
+import type { DocxPageMarginsUpdate, DocxPageSizeUpdate, DocxSectionColumnsUpdate } from "../../engine/section-properties";
+import type { AddHeaderFooterOptions } from "../page-setup-ops";
+import type { DocxTableFloatingUpdate } from "./table-utils";
+
+/** Undo behaviour shared by the page-setup commands. */
+export interface DocxPageSetupCommandOptions {
+  /**
+   * Set to false to fold the change into the previous undo entry. The page-setup
+   * dialog uses this so "Apply" is one undoable step even when it changes the
+   * paper size and the margins together.
+   *
+   * @defaultValue `true`
+   */
+  pushHistory?: boolean;
+}
 // Re-export the foundational types so consumers can import from one barrel.
 export type {
   DocxDocumentTheme,
@@ -58,12 +83,16 @@ export type {
   DocxTrackedChangeKind,
   DocxTrackedChange,
   DocxComment,
+  DocxCommentComposer,
   DocxLineSpacingRule,
   DocxSelectionSessionKind,
   DocxLineSpacingInfo,
   DocxBorderContext,
   DocxBorderPreset,
   DocxBorderPresetState,
+  DocxReplaceAllOptions,
+  DocxReplaceSummary,
+  DocxReplaceTarget,
   UseDocxEditorOptions
 } from "./editor-types";
 
@@ -81,6 +110,29 @@ export interface DocxImageWrapState {
   mode: DocxImageWrapMode;
   moveWithText: boolean;
   fixedPositionOnPage: boolean;
+}
+
+/**
+ * Property patch accepted by `DocxEditorController.updateFormField()`.
+ *
+ * One call is one undo entry, so a form-field dialog that changes the value, the
+ * option list and the widget settings at once stays a single step.
+ */
+export interface DocxFormFieldUpdate {
+  fieldType?: FormFieldType;
+  title?: string;
+  tag?: string;
+  placeholder?: string;
+  required?: boolean;
+  value?: string;
+  checked?: boolean;
+  checkedSymbol?: string;
+  uncheckedSymbol?: string;
+  options?: FormFieldOption[];
+  /** Merged into the existing widget settings unless `replaceWidget` is set. */
+  widget?: Partial<NonNullable<FormFieldRunNode["widget"]>>;
+  /** Replace `widget` instead of merging the patch into it. */
+  replaceWidget?: boolean;
 }
 
 export interface DocxImageWrapMenuOption {
@@ -105,6 +157,14 @@ export interface DocxEditorController {
   model: DocModel;
   /** True when the model differs from the last loaded/new/exported model. */
   isDirty: boolean;
+  /**
+   * Why this document cannot be edited or exported, if it cannot.
+   *
+   * OpenDocument text opened by the editor has no Word package and no writer,
+   * so every edit command and both export paths refuse it. `undefined` for
+   * ordinary DOCX documents.
+   */
+  viewOnlyReason?: string;
   documentLoadNonce: number;
   fileName: string;
   status: string;
@@ -112,6 +172,8 @@ export interface DocxEditorController {
   isImporting: boolean;
   documentTheme: DocxDocumentTheme;
   selection: DocxEditorSelection;
+  /** Multi-cell rectangle of the active table selection, if any. */
+  selectedTableCellRange?: DocxTableCellSelectionRange;
   activeTextRange?: DocxTextRange;
   historyRestoreRequest?: DocxHistoryRestoreRequest;
   selectedFormField?: DocxSelectedFormField;
@@ -140,8 +202,19 @@ export interface DocxEditorController {
    */
   trackedChangeCount: number | null;
   showTrackedChanges: boolean;
+  /**
+   * How revisions are drawn while `showTrackedChanges` is on.
+   *
+   * `inline` keeps them in the text flow, `balloons` moves deleted content onto
+   * gutter cards, and `none` shows the final text only. Display only: the model
+   * keeps every revision for export.
+   */
+  revisionDisplay: DocxRevisionDisplay;
+  setRevisionDisplay: (display: DocxRevisionDisplay) => void;
   comments: DocxComment[];
   showComments: boolean;
+  /** Open inline comment editor (new comment or reply), if any. */
+  commentComposer?: DocxCommentComposer;
   currentPage: number;
   totalPages: number;
   hasUnorderedList: boolean;
@@ -164,6 +237,27 @@ export interface DocxEditorController {
   setDocumentTheme: (theme: DocxDocumentTheme) => void;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   setShowComments: (showComments: boolean) => void;
+  /**
+   * Opens the inline editor for a comment on `range` (defaults to the live
+   * selection). Returns false when there is no selection to anchor to.
+   */
+  beginComment: (range?: DocxTextRange) => boolean;
+  /** Opens the inline editor for a reply to `commentId`. */
+  beginCommentReply: (commentId: number) => boolean;
+  cancelCommentComposer: () => void;
+  /** Submits the open composer; false keeps it open (for example empty text). */
+  submitCommentComposer: (text: string) => boolean;
+  /** Creates a comment and returns its id, or undefined when it cannot. */
+  addComment: (
+    range: DocxTextRange | undefined,
+    text: string
+  ) => number | undefined;
+  /** Replies to a comment and returns the new id, or undefined. */
+  replyToComment: (commentId: number, text: string) => number | undefined;
+  /** Resolves (or reopens) the thread that owns `commentId`. */
+  resolveComment: (commentId: number, resolved?: boolean) => boolean;
+  /** Deletes a comment and its replies; true when the model changed. */
+  deleteComment: (commentId: number) => boolean;
   syncPaginationInfo: (pagination: DocxPaginationInfo) => void;
   toggleShowTrackedChanges: () => void;
   toggleShowComments: () => void;
@@ -182,6 +276,17 @@ export interface DocxEditorController {
   importDocxFile: (file: File) => Promise<void>;
   newDocument: () => void;
   exportDocx: () => void;
+  /**
+   * Serializes the current document to DOCX bytes without downloading them.
+   *
+   * Uses the same pending-export transformer, base package and required-field
+   * validation as `exportDocx()`. Rejects with a `DocxExportError` (`ABORTED`)
+   * when the document is replaced or the editor is disposed; an `exportDocx()`
+   * request is also aborted when a newer export starts.
+   */
+  getDocxBytes: () => Promise<ArrayBuffer>;
+  /** Serializes the current document to a DOCX `Blob` without downloading. */
+  getDocxBlob: () => Promise<Blob>;
   undo: () => void;
   redo: () => void;
   setHeading: (heading?: HeadingLevel) => void;
@@ -208,6 +313,16 @@ export interface DocxEditorController {
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ) => void;
+  /**
+   * Updates a form field's value and configuration as one undo entry.
+   *
+   * Returns false (and leaves the model untouched) when the location no longer
+   * holds a form field or when the new value violates the field's constraints.
+   */
+  updateFormField: (
+    location: DocxFormFieldLocation,
+    patch: DocxFormFieldUpdate
+  ) => boolean;
   applyBorderPreset: (preset: DocxBorderPreset) => void;
   setAlignment: (align?: ParagraphAlignment) => void;
   toggleList: (listType: DocxListType) => void;
@@ -248,6 +363,26 @@ export interface DocxEditorController {
     mode: DocxImageWrapMode,
     seedFloating?: Partial<NonNullable<ImageRunNode["floating"]>>
   ) => void;
+  /**
+   * Sets the floating image's Word `relativeHeight` to the top of the paint
+   * order (`wp:anchor/@relativeHeight="251658240"`). One undo entry.
+   */
+  bringToFront: (location: DocxImageLocation) => void;
+  /**
+   * Raises the floating image's `relativeHeight` by one Word layer step
+   * (`65536`), clamped at the top. One undo entry.
+   */
+  bringForward: (location: DocxImageLocation) => void;
+  /**
+   * Lowers the floating image's `relativeHeight` by one Word layer step
+   * (`65536`), clamped at the bottom. One undo entry.
+   */
+  sendBackward: (location: DocxImageLocation) => void;
+  /**
+   * Sets the floating image's Word `relativeHeight` to the bottom of the paint
+   * order (`0`). One undo entry.
+   */
+  sendToBack: (location: DocxImageLocation) => void;
   moveFloatingImage: (
     location: DocxImageLocation,
     patch: Partial<NonNullable<ImageRunNode["floating"]>>
@@ -281,6 +416,10 @@ export interface DocxEditorController {
     range: DocxTableCellSelectionRange,
     tableRuntimeKey?: string
   ) => void;
+  /** Selects the whole table as one rectangular range; defaults to the table of the current cell selection. */
+  selectWholeTable: (tableIndex?: number) => void;
+  /** Collapses a multi-cell range to its anchor cell; false when none. */
+  collapseTableCellSelection: () => boolean;
   selectTableCellByRuntimeKey: (
     tableRuntimeKey: string,
     rowIndex: number,
@@ -290,7 +429,42 @@ export interface DocxEditorController {
     tableIndex: number,
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
+  /**
+   * Clears every cell in the active table range through
+   * `clearTableCellContents(tableIndex, cells[])`. Returns false when there is
+   * no table range to clear.
+   */
+  clearTableSelection: () => boolean;
   setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
+  /**
+   * Sets a row's height in CSS pixels ('atLeast' rule) as one undo entry.
+   * A non-positive or unmeasurable height is refused with a status message.
+   */
+  setTableRowHeight: (
+    tableIndex: number,
+    rowIndex: number,
+    heightPx: number
+  ) => void;
+  /**
+   * Floats a body table at a drop position, or puts it back into the text flow.
+   *
+   * `update` is merged into the table's `TableStyle.floating` and written to
+   * `w:tblpPr` on export: `xTwips`/`yTwips` are the drop position measured from
+   * the anchors, and the `*FromTextTwips` fields keep the surrounding text away
+   * from the table. Passing `null` clears the floating style and restores the
+   * inline layout. One undo entry per call; a second drag only moves the table
+   * and keeps the wrap distances.
+   */
+  setTableFloating: (
+    tableIndex: number,
+    update: DocxTableFloatingUpdate | null
+  ) => void;
+  /**
+   * Moves a body node (paragraph or table) to an insertion index as one undo
+   * entry. `targetNodeIndex` addresses the node list *before* the move, so
+   * passing `fromIndex + 1` (or the node count) is a no-op.
+   */
+  moveBodyNode: (fromNodeIndex: number, targetNodeIndex: number) => boolean;
   /**
    * Inserts a row on the requested side of the reference row.
    * `rowIndex` is the index of that reference row, not the insertion index.
@@ -335,6 +509,30 @@ export interface DocxEditorController {
     text: string,
     range?: DocxTextRange
   ) => DocxTextRange | undefined;
+  /**
+   * Replaces one search result with `text`.
+   *
+   * The match's own offsets are used, so text that spans several runs is
+   * replaced as one edit and the surrounding run styles survive. One undo entry
+   * is recorded. Returns false when the target is not editable (header, footer
+   * or note body), no longer exists, or the replacement would not change the
+   * text.
+   */
+  replaceMatch: (target: DocxReplaceTarget, text: string) => boolean;
+  /**
+   * Replaces every occurrence of `query` in the editable body with `text`.
+   *
+   * The query uses the same options as the search session (literal,
+   * case-insensitive by default; `caseSensitive`, `wholeWord` and `regex`
+   * narrow it). Matches in headers, footers and notes are counted in `skipped`
+   * because those stories are read-only here. The whole operation is one undo
+   * entry, even though it may touch many paragraphs.
+   */
+  replaceAll: (
+    query: string,
+    text: string,
+    options?: DocxReplaceAllOptions
+  ) => DocxReplaceSummary;
   deleteExpandedSelection: (range?: DocxTextRange) => DocxTextRange | undefined;
   commitParagraphText: (nodeIndex: number, text: string) => void;
   commitTableCellText: (
@@ -367,6 +565,59 @@ export interface DocxEditorController {
     location: DocxSectionParagraphLocation,
     text: string
   ) => void;
+  /**
+   * Set page margins (twips) on one section. Omitted margins keep their current
+   * value; every other `w:sectPr` child (header/footer references, columns,
+   * page borders) is preserved. One undo entry.
+   */
+  setPageMargins: (
+    sectionIndex: number,
+    margins: DocxPageMarginsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Set the paper size/orientation of one section. A landscape/portrait
+   * contradiction swaps width and height, matching the way Word stores it.
+   */
+  setPageSize: (
+    sectionIndex: number,
+    pageSize: DocxPageSizeUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Set the body columns of one section (`w:cols`, 1–45). The command rewrites
+   * `w:num`/`w:space`, drops stale explicit column widths and leaves every
+   * other `w:sectPr` child intact. One undo entry.
+   */
+  setSectionColumns: (
+    sectionIndex: number,
+    columns: DocxSectionColumnsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Create a header or footer part for one section and reference it from the
+   * section properties. Returns false when the section already has that variant
+   * (the existing part should be edited instead).
+   */
+  addHeaderFooter: (
+    sectionIndex: number,
+    kind: DocxSectionRegion,
+    options?: AddHeaderFooterOptions
+  ) => boolean;
+  /**
+   * Writes the active selection into a copy/cut event's clipboard sink.
+   *
+   * Synchronous by design: a `copy`/`cut` handler must fill
+   * `event.clipboardData` before the event returns. Returns false when the
+   * selection is empty, so the browser's own copy can proceed.
+   */
+  writeSelectionToClipboardData: (data: DocxClipboardDataSink) => boolean;
+  /**
+   * Pastes clipboard flavours captured from a paste event or the async
+   * clipboard API. Prefers the internal payload, then `text/html`, then
+   * `text/rtf`, then `text/plain`; reports whether the model changed.
+   */
+  pasteClipboardData: (sources: DocxClipboardSources) => Promise<boolean>;
   copy: () => Promise<void>;
   paste: () => Promise<void>;
 }
@@ -380,6 +631,8 @@ export type DocxTableContextMenuActionId =
   | "delete-column"
   | "merge-cells"
   | "split-cell"
+  | "select-table"
+  | "clear-table-cells"
   | "delete-table";
 
 export type DocxContextMenuActionId =
@@ -504,6 +757,11 @@ export interface DocxContextMenuRenderProps {
   };
   /** Current document theme, useful for custom menu styling. */
   documentTheme: DocxDocumentTheme;
+  /**
+   * True when the document is read-only. `actions` then only contains
+   * non-mutating commands (Copy), and a custom menu should follow suit.
+   */
+  readOnly?: boolean;
 }
 
 export interface DocxPageVirtualizationOptions {
@@ -708,6 +966,18 @@ export interface DocxTrackedChangeCardRenderProps {
   pageIndex: number;
   /** Positioning style computed by the viewer. Apply this to the card root. */
   style: Record<string, string | number | undefined>;
+  /**
+   * True when the host may accept/reject this revision. Read-only surfaces and
+   * locked editing sessions report `false`, so a custom card can hide (or
+   * disable) its decision buttons without duplicating that rule.
+   */
+  canDecide?: boolean;
+  /** Selects the revision's anchored text, like clicking the card. */
+  activate: () => void;
+  /** Accepts the revision. No-op when the owning surface cannot decide. */
+  accept: () => void;
+  /** Rejects the revision. No-op when the owning surface cannot decide. */
+  reject: () => void;
 }
 
 export interface DocxCommentCardRenderProps {
@@ -725,6 +995,15 @@ export interface DocxCommentCardRenderProps {
   pageIndex: number;
   /** Positioning style computed by the viewer. Apply this to the card root. */
   style: Record<string, string | number | undefined>;
+  /**
+   * True when the host may resolve/reopen the thread. Read-only surfaces and
+   * locked editing sessions report `false`.
+   */
+  canModify?: boolean;
+  /** Selects the comment's anchored text, like clicking the card. */
+  activate: () => void;
+  /** Resolves (`true`) or reopens (`false`) the comment thread. */
+  setResolved: (resolved: boolean) => void;
 }
 
 export type DocxEditorViewerMode = "edit" | "read-only";
@@ -767,6 +1046,11 @@ export interface UseDocxFormFieldsResult {
   updateSelectedFormFieldWidget: (
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ) => void;
+  updateFormField: (
+    location: DocxFormFieldLocation,
+    patch: DocxFormFieldUpdate
+  ) => boolean;
+  updateSelectedFormField: (patch: DocxFormFieldUpdate) => boolean;
 }
 
 export interface UseDocxTrackChangesResult {
@@ -776,6 +1060,8 @@ export interface UseDocxTrackChangesResult {
   showTrackedChanges: boolean;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   toggleShowTrackedChanges: () => void;
+  revisionDisplay: DocxRevisionDisplay;
+  setRevisionDisplay: (display: DocxRevisionDisplay) => void;
   changesByLocation: Map<string, DocxTrackedChange[]>;
   getChangesForLocation: (
     location: DocxTextRangeLocation

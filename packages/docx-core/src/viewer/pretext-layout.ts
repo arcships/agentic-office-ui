@@ -1,4 +1,5 @@
 import {
+  clearCache,
   layoutNextLine,
   measureLineStats,
   prepareWithSegments,
@@ -7,11 +8,40 @@ import {
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 import { textMeasurementGeneration } from "./text-measurement-generation";
+import { registerFontMetricCache } from "./font-metrics";
+import { measureCanvasGlyphAdvance, fontAdvanceWidthPx } from "./font-advances";
+import type { FontKerningMode } from "./font-kerning";
+import { createDocxTextMeasurementContext } from "./font-features";
+import {
+  aggregateLineMetrics,
+  emptyLineMetrics,
+  padLineMetricsToHeight,
+  resolveLineGridHeightPx,
+  textLineMetricElement,
+  withFixedLineBaseline,
+  type LineMetricElement,
+  type LineVerticalMetrics,
+} from "./line-metrics";
 
 const fragmentOffsetAdvancesByFragment = new WeakMap<
   PretextLineFragment,
   { generation: number; advances: number[] }
 >();
+
+// Canvas font strings cannot carry `font-kerning` / `font-feature-settings`, so
+// pretext's own segment widths describe the browser default face, not the run
+// the DOM paints. This cache holds a copy of each prepared text with every
+// advance replaced by the DOCX-metric measurement for its item settings.
+const measuredPreparedByKey = new Map<string, PreparedTextWithSegments>();
+const MEASURED_PREPARED_CACHE_MAX_ENTRIES = 8192;
+
+// Pretext caches measured segment widths itself. A web font that arrives after
+// the first pagination pass changes those widths, so drop its cache (and ours)
+// on the same font-metric revision.
+registerFontMetricCache(() => {
+  clearCache();
+  measuredPreparedByKey.clear();
+});
 
 type PretextWordBreak = "normal" | "keep-all";
 
@@ -22,6 +52,29 @@ export interface PretextLayoutItem {
   endOffset: number;
   break?: "normal" | "never";
   wordBreak?: PretextWordBreak;
+  /** Kerning/OpenType settings used for this item's advance widths. */
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
+  /**
+   * Ascent above the shared line baseline. Set for atomic inline objects
+   * (images) and for runs in a different font size than the paragraph's.
+   */
+  ascentPx?: number;
+  /** Descent below the shared line baseline. */
+  descentPx?: number;
+  /** Descent that must stay below the baseline (glyph ink, object bottom). */
+  unsuppressibleDescentPx?: number;
+  /**
+   * True when the item can make the line box taller than the paragraph line
+   * height: an inline object, or a run in a different font size. A
+   * sub/superscript run only moves its baseline inside the existing line box.
+   */
+  hasCustomVerticalMetrics?: boolean;
+  /**
+   * Distance the run's own baseline sits above the line baseline (negative for
+   * a subscript). Recorded per fragment so runs align by baseline.
+   */
+  baselineShiftPx?: number;
 }
 
 export interface PretextExclusionRect {
@@ -40,11 +93,33 @@ export interface PretextLineFragment {
   startOffset: number;
   endOffset: number;
   font?: string;
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
+  /** Ascent of this fragment above the shared line baseline. */
+  ascentPx?: number;
+  /** Descent of this fragment below the shared line baseline. */
+  descentPx?: number;
+  /** Descent of this fragment that cannot be trimmed at a page break. */
+  unsuppressibleDescentPx?: number;
+  /** Bottom space contributed by this fragment that a page break may trim. */
+  suppressibleBottomSpacePx?: number;
+  /** This fragment's metrics did not come from the font alone. */
+  hasCustomVerticalMetrics?: boolean;
+  /**
+   * Distance this fragment's own baseline sits above the line baseline;
+   * negative for a subscript. `lineBaselineYPx - baselineShiftPx` is where the
+   * fragment's glyphs sit.
+   */
+  baselineShiftPx?: number;
 }
 
 export interface PretextLineLayout {
   y: number;
   fragments: PretextLineFragment[];
+  /** Vertical metrics of the line box (ascent/descent/baseline). */
+  metrics?: LineVerticalMetrics;
+  /** Absolute baseline offset of the line's fragments, from the layout top. */
+  baselineYPx?: number;
 }
 
 export interface PretextVariableWidthLayout {
@@ -56,6 +131,13 @@ export interface PretextVariableWidthLayout {
   containerWidthPx?: number;
   lineHeightPx?: number;
   exclusions?: PretextExclusionRect[];
+  /** Per-line line-box metrics, in visual order. */
+  lineMetrics?: LineVerticalMetrics[];
+  /**
+   * True when at least one line grew past `lineHeightPx` because of an inline
+   * object or a run in another font size.
+   */
+  hasCustomVerticalMetrics?: boolean;
 }
 
 export interface PretextSelectionRect {
@@ -75,12 +157,6 @@ class NonRetainingMap<K, V> extends Map<K, V> {
 // deliberately not retained across calls; a viewer-owned cache can replace it later.
 export const layoutByKey = new NonRetainingMap<string, PretextVariableWidthLayout>();
 
-let measureCanvas: OffscreenCanvas | HTMLCanvasElement | undefined;
-let measureCanvasContext:
-  | OffscreenCanvasRenderingContext2D
-  | CanvasRenderingContext2D
-  | null
-  | undefined;
 let graphemeSegmenter: Intl.Segmenter | undefined;
 
 
@@ -118,27 +194,15 @@ function getMeasureContext():
   if (!canUsePretext()) {
     return undefined;
   }
-
-  if (measureCanvasContext) {
-    return measureCanvasContext ?? undefined;
-  }
-
-  if (typeof OffscreenCanvas !== "undefined") {
-    measureCanvas = new OffscreenCanvas(1, 1);
-    measureCanvasContext = measureCanvas.getContext("2d");
-    return measureCanvasContext ?? undefined;
-  }
-
-  if (typeof document !== "undefined") {
-    measureCanvas = document.createElement("canvas");
-    measureCanvasContext = measureCanvas.getContext("2d");
-    return measureCanvasContext ?? undefined;
-  }
-
-  return undefined;
+  return createDocxTextMeasurementContext();
 }
 
-function measureTextWidthPx(font: string, text: string): number {
+function measureTextWidthPx(
+  font: string,
+  text: string,
+  fontKerning?: FontKerningMode,
+  fontFeatureSettings?: string
+): number {
   if (!text) {
     return 0;
   }
@@ -156,14 +220,30 @@ function measureTextWidthPx(font: string, text: string): number {
     return Math.max(0, Math.round(text.length * safeFontSizePx * 0.5));
   }
 
-  context.font = font;
-  return Math.max(0, Math.round(context.measureText(text).width));
+  try {
+    return Math.max(
+      0,
+      Math.round(
+        measureCanvasGlyphAdvance(
+          context,
+          font,
+          text,
+          fontKerning,
+          fontFeatureSettings
+        )
+      )
+    );
+  } catch {
+    return Math.max(0, Math.round(text.length * 8));
+  }
 }
 
 function measureOffsetWidthPx(
   font: string,
   text: string,
-  offset: number
+  offset: number,
+  fontKerning?: FontKerningMode,
+  fontFeatureSettings?: string
 ): number {
   if (offset <= 0 || !text) {
     return 0;
@@ -171,7 +251,9 @@ function measureOffsetWidthPx(
 
   return measureTextWidthPx(
     font,
-    text.slice(0, Math.max(0, Math.min(offset, text.length)))
+    text.slice(0, Math.max(0, Math.min(offset, text.length))),
+    fontKerning,
+    fontFeatureSettings
   );
 }
 
@@ -284,7 +366,8 @@ export function layoutCacheKey(
   layoutSignature: string,
   containerWidthPx: number,
   lineHeightPx: number,
-  exclusions: PretextExclusionRect[]
+  exclusions: PretextExclusionRect[],
+  docGridLinePitchPx?: number
 ): string {
   const exclusionsKey = exclusions
     .map(
@@ -292,7 +375,127 @@ export function layoutCacheKey(
         `${exclusion.left},${exclusion.right},${exclusion.top},${exclusion.bottom}`
     )
     .join(";");
-  return `${layoutSignature}\u0000${containerWidthPx}\u0000${lineHeightPx}\u0000${exclusionsKey}`;
+  return `${layoutSignature}\u0000${containerWidthPx}\u0000${lineHeightPx}\u0000${docGridLinePitchPx ?? 0}\u0000${exclusionsKey}`;
+}
+
+/**
+ * Vertical metrics contribution of a fragment. Fragments that carry explicit
+ * metrics (inline objects, sub/superscript, mixed font sizes) keep them; plain
+ * text fragments fall back to the metrics of their own font.
+ */
+export function fragmentLineMetricElement(
+  fragment: PretextLineFragment,
+  defaultFont?: string
+): LineMetricElement {
+  const hasExplicitMetrics =
+    fragment.ascentPx !== undefined ||
+    fragment.descentPx !== undefined ||
+    fragment.unsuppressibleDescentPx !== undefined;
+  if (hasExplicitMetrics) {
+    const descentPx = fragment.descentPx ?? 0;
+    return {
+      ascentPx: fragment.ascentPx ?? 0,
+      descentPx,
+      unsuppressibleDescentPx: fragment.unsuppressibleDescentPx ?? descentPx,
+      suppressibleBottomSpacePx: fragment.suppressibleBottomSpacePx,
+    };
+  }
+
+  return textLineMetricElement(fragment.font ?? defaultFont ?? "");
+}
+
+/** Aggregated ascent/descent of every fragment on one line. */
+export function aggregateFragmentLineMetrics(
+  fragments: readonly PretextLineFragment[],
+  defaultFont?: string
+): LineVerticalMetrics {
+  return aggregateLineMetrics(
+    fragments.map((fragment) => fragmentLineMetricElement(fragment, defaultFont))
+  );
+}
+
+export interface PretextLineBoxOptions {
+  /** Paragraph line height: a line box never gets shorter than this. */
+  minimumHeightPx: number;
+  /** Snap the line box up to the document grid line pitch. */
+  docGridLinePitchPx?: number;
+  /**
+   * Let content metrics grow the box past `minimumHeightPx`. Only content whose
+   * metrics a font-only line box cannot express (inline objects, other font
+   * sizes) may grow; everything else keeps the paragraph line height so page
+   * breaks stay where the paragraph model puts them.
+   */
+  allowGrowth?: boolean;
+}
+
+/**
+ * Resolve the line box of one laid-out line: content metrics plus the
+ * paragraph's line height as the floor, snapped to the document grid.
+ */
+export function resolvePretextLineBoxMetrics(
+  metrics: LineVerticalMetrics,
+  options: PretextLineBoxOptions
+): LineVerticalMetrics {
+  const minimumHeightPx = Math.max(
+    1,
+    Math.round(
+      Number.isFinite(options.minimumHeightPx) ? options.minimumHeightPx : 1
+    )
+  );
+  if (!options.allowGrowth) {
+    // The paragraph line height already models Word's single-space line box
+    // (including its wrap compensation); keep it as the box height and let the
+    // baseline sit inside it.
+    return withFixedLineBaseline(metrics, minimumHeightPx);
+  }
+
+  return padLineMetricsToHeight(
+    metrics,
+    resolveLineGridHeightPx(
+      Math.max(minimumHeightPx, Math.ceil(metrics.heightPx)),
+      options.docGridLinePitchPx
+    )
+  );
+}
+
+/** Height of one line box, falling back to the layout line height. */
+export function lineBoxHeightPx(
+  line: PretextLineLayout | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  if (line?.metrics) {
+    return Math.max(0, line.metrics.heightPx);
+  }
+
+  return Math.max(0, Math.round(fallbackLineHeightPx));
+}
+
+/** Absolute baseline offset of one line box, from the layout top. */
+export function lineBaselineYPx(
+  line: PretextLineLayout | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  if (!line) {
+    return 0;
+  }
+
+  const ascentPx = line.metrics
+    ? line.metrics.ascentPx
+    : lineBoxHeightPx(line, fallbackLineHeightPx);
+  return line.y + Math.max(0, ascentPx);
+}
+
+/**
+ * Absolute baseline of one fragment: the line baseline shifted by the
+ * fragment's own sub/superscript offset.
+ */
+export function fragmentBaselineYPx(
+  line: PretextLineLayout | undefined,
+  fragment: PretextLineFragment | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  const shiftPx = fragment?.baselineShiftPx ?? 0;
+  return lineBaselineYPx(line, fallbackLineHeightPx) - shiftPx;
 }
 
 export function cachedFragmentOffsetAdvances(
@@ -314,7 +517,9 @@ export function cachedFragmentOffsetAdvances(
     advances[localOffset] = measureOffsetWidthPx(
       fragment.font ?? defaultFont,
       fragment.text,
-      localOffset
+      localOffset,
+      fragment.fontKerning,
+      fragment.fontFeatureSettings
     );
   }
   fragmentOffsetAdvancesByFragment.set(fragment, {
@@ -343,6 +548,144 @@ export function prepareCached(
   }
 }
 
+export interface PretextMeasurementSettings {
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
+}
+
+function measuredSegmentWidth(
+  font: string,
+  text: string,
+  settings?: PretextMeasurementSettings
+): number {
+  return Math.max(0, fontAdvanceWidthPx(font, text, settings));
+}
+
+function measuredBreakableAdvances(
+  font: string,
+  text: string,
+  previous: number[] | null,
+  settings?: PretextMeasurementSettings
+): number[] | null {
+  if (!previous || !text) {
+    return previous;
+  }
+  const offsets = graphemeCodeUnitOffsets(text);
+  const graphemeCount = Math.max(0, offsets.length - 1);
+  if (graphemeCount <= 1) {
+    return null;
+  }
+
+  const advances: number[] = [];
+  let previousPrefixWidth = 0;
+  for (let index = 1; index < offsets.length; index += 1) {
+    const prefixWidth = measuredSegmentWidth(
+      font,
+      text.slice(0, offsets[index]),
+      settings
+    );
+    advances.push(prefixWidth - previousPrefixWidth);
+    previousPrefixWidth = prefixWidth;
+  }
+  return advances;
+}
+
+/**
+ * Replace pretext's segment advances with the DOCX measurement for one run.
+ * Pretext shapes on a canvas whose font string cannot carry `font-kerning` or
+ * `font-feature-settings`; without this shim a no-kern/no-ligature run breaks
+ * on the browser-default advances while the DOM paints the wider run.
+ */
+function withMeasuredAdvances(
+  prepared: PreparedTextWithSegments,
+  font: string,
+  settings?: PretextMeasurementSettings
+): PreparedTextWithSegments {
+  const widths = prepared.widths.slice();
+  const lineEndFitAdvances = prepared.lineEndFitAdvances.slice();
+  const lineEndPaintAdvances = prepared.lineEndPaintAdvances.slice();
+  const breakableFitAdvances = prepared.breakableFitAdvances.slice();
+  const hyphenWidth = measuredSegmentWidth(font, "-", settings);
+
+  for (let index = 0; index < prepared.segments.length; index += 1) {
+    const segment = prepared.segments[index] ?? "";
+    const kind = prepared.kinds[index];
+
+    if (kind === "soft-hyphen") {
+      widths[index] = 0;
+      lineEndFitAdvances[index] = hyphenWidth;
+      lineEndPaintAdvances[index] = hyphenWidth;
+      breakableFitAdvances[index] = null;
+      continue;
+    }
+    if (kind === "hard-break" || kind === "tab") {
+      widths[index] = 0;
+      lineEndFitAdvances[index] = 0;
+      lineEndPaintAdvances[index] = 0;
+      breakableFitAdvances[index] = null;
+      continue;
+    }
+
+    const width = measuredSegmentWidth(font, segment, settings);
+    widths[index] = width;
+    lineEndFitAdvances[index] =
+      kind === "space" || kind === "preserved-space" || kind === "zero-width-break"
+        ? 0
+        : width;
+    lineEndPaintAdvances[index] =
+      kind === "space" || kind === "zero-width-break" ? 0 : width;
+    breakableFitAdvances[index] = measuredBreakableAdvances(
+      font,
+      segment,
+      breakableFitAdvances[index] ?? null,
+      settings
+    );
+  }
+
+  return {
+    ...prepared,
+    widths,
+    lineEndFitAdvances,
+    lineEndPaintAdvances,
+    breakableFitAdvances,
+    discretionaryHyphenWidth: hyphenWidth,
+    tabStopAdvance: measuredSegmentWidth(font, " ", settings) * 8,
+  };
+}
+
+/**
+ * Pretext segmentation plus DOCX-metric advances. The prepared object can be
+ * laid out repeatedly at any width; the cache is keyed by the font-metric
+ * generation, font, word-break mode, kerning mode, feature string and text.
+ */
+export function prepareMeasuredCached(
+  text: string,
+  font: string,
+  wordBreak: PretextWordBreak = "normal",
+  settings?: PretextMeasurementSettings
+): PreparedTextWithSegments | undefined {
+  if (!canUsePretext()) {
+    return undefined;
+  }
+
+  const cacheKey = `${textMeasurementGeneration()}\u0000${font}\u0000${wordBreak}\u0000${
+    settings?.fontKerning ?? ""
+  }\u0000${settings?.fontFeatureSettings ?? ""}\u0000${text}`;
+  const cached = measuredPreparedByKey.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const prepared = prepareCached(text, font, wordBreak);
+  if (!prepared) {
+    return undefined;
+  }
+  const measured = withMeasuredAdvances(prepared, font, settings);
+  measuredPreparedByKey.set(cacheKey, measured);
+  trimCache(measuredPreparedByKey, MEASURED_PREPARED_CACHE_MAX_ENTRIES);
+  return measured;
+}
+
 /**
  * Fast line-count-only path for plain single-font paragraphs with no
  * exclusions. Uses pretext's `measureLineStats` (added in 0.0.5) so we can
@@ -360,6 +703,8 @@ export function measurePretextPlainTextLineCount(
   containerWidthPx: number,
   options?: {
     wordBreak?: PretextWordBreak;
+    fontKerning?: FontKerningMode;
+    fontFeatureSettings?: string;
   }
 ): number | undefined {
   if (!text) {
@@ -368,7 +713,10 @@ export function measurePretextPlainTextLineCount(
 
   const wordBreak = options?.wordBreak ?? "normal";
   const safeWidth = Math.max(1, Math.round(containerWidthPx));
-  const prepared = prepareCached(text, font, wordBreak);
+  const prepared = prepareMeasuredCached(text, font, wordBreak, {
+    fontKerning: options?.fontKerning,
+    fontFeatureSettings: options?.fontFeatureSettings,
+  });
   if (!prepared) {
     return undefined;
   }
@@ -543,6 +891,8 @@ export function layoutTextWithPretextAroundExclusions(
         top: Math.round(exclusion.top),
         bottom: Math.round(exclusion.bottom),
       })),
+      lineMetrics: [],
+      hasCustomVerticalMetrics: false,
     };
   }
 
@@ -626,16 +976,27 @@ export function layoutTextWithPretextAroundExclusions(
       break;
     }
 
+    // A single-font paragraph has no custom vertical metrics: the line box keeps
+    // the paragraph line height, but it still records the shared baseline and
+    // the suppressible bottom space so page breaks can trim it.
+    const lineBoxMetrics = resolvePretextLineBoxMetrics(
+      aggregateFragmentLineMetrics(fragments, font),
+      { minimumHeightPx: safeLineHeightPx }
+    );
     lines.push({
       y: rowTopPx,
       fragments,
+      metrics: lineBoxMetrics,
+      baselineYPx: rowTopPx + lineBoxMetrics.ascentPx,
     });
-    rowTopPx += safeLineHeightPx;
+    rowTopPx += lineBoxMetrics.heightPx;
   }
 
   const lineCount = lines.length;
-  const contentBottomPx =
-    lines.length > 0 ? (lines[lines.length - 1]?.y ?? 0) + safeLineHeightPx : 0;
+  const lastLine = lines[lines.length - 1];
+  const contentBottomPx = lastLine
+    ? lastLine.y + lineBoxHeightPx(lastLine, safeLineHeightPx)
+    : 0;
   const nextLayout: PretextVariableWidthLayout = {
     lineCount,
     height: Math.max(
@@ -649,6 +1010,8 @@ export function layoutTextWithPretextAroundExclusions(
     containerWidthPx: safeContainerWidthPx,
     lineHeightPx: safeLineHeightPx,
     exclusions: normalizedExclusions,
+    lineMetrics: lines.map((line) => line.metrics ?? emptyLineMetrics()),
+    hasCustomVerticalMetrics: false,
   };
   return nextLayout;
 }

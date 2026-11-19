@@ -8,6 +8,13 @@ export { useDocxEditor } from "./useDocxEditor"
 export { createEditorTransaction } from "./editor-transaction"
 export { createEditorHistory } from "./editor-history"
 export { createEditorSelection } from "./editor-selection"
+export {
+  displayTextRangeToSourceTextRange,
+  effectiveControllerRevisionDisplay,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
+  sourceTextRangeToDisplayTextRange,
+} from "./editor-selection"
 export { createEditorFormat } from "./editor-format"
 export { createEditorTextInput } from "./editor-text-input"
 export { createEditorTable } from "./editor-table"
@@ -31,6 +38,12 @@ export { useDocxTrackChanges } from "./useDocxTrackChanges"
 export { useDocxComments } from "./useDocxComments"
 export { useDocxPageLayout } from "./useDocxPageLayout"
 export { useDocxPagination } from "./useDocxPagination"
+export { useDocxPageSetup, resolveCaretSectionIndex } from "./useDocxPageSetup"
+export type {
+  DocxPageSetupPatch,
+  DocxPageSetupSection,
+  UseDocxPageSetupResult,
+} from "./useDocxPageSetup"
 
 // Page surface registry (shared by viewer and thumbnail consumers)
 export {
@@ -64,4 +77,35 @@ export type {
 export { useDocxModel } from "./useDocxModel"
 export type { UseDocxModelState } from "./useDocxModel"
 export { findDocxSearchMatches } from "./useDocxSearch"
-export type { DocxSearchMatch, DocxSearchState, DocxSearchStatus } from "./useDocxSearch"
+export type {
+  DocxNestedTableStep,
+  DocxSearchBoundary,
+  DocxSearchLocation,
+  DocxSearchMatch,
+  DocxSearchOptions,
+  DocxSearchRange,
+  DocxSearchRegion,
+  DocxSearchState,
+  DocxSearchStatus,
+  ParagraphLocationInNestedTableCell,
+  ParagraphLocationInNoteText,
+} from "./useDocxSearch"
+export {
+  canReplaceDocxSearchMatch,
+  docxReplaceTargetFromMatch,
+  type DocxFindReplaceSurface,
+  type DocxReplaceController,
+} from "./editor-search-replace"
+export {
+  useDocxFindReplace,
+  type DocxFindReplaceApi,
+  type DocxFindReplaceUiState,
+  type DocxReplaceFeedback,
+} from "./useDocxFindReplace"
+export { findDocxSearchTargetPage } from "./docx-search-page"
+export type { DocxSearchPageTarget } from "./docx-search-page"
+export { docxBookmarkNameFromClick } from "./docx-bookmarks"
+export type {
+  DocxBookmarkRevealResult,
+  DocxBookmarkTargetHighlight,
+} from "./docx-bookmarks"

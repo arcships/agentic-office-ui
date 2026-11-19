@@ -4,6 +4,13 @@ export type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  // Range highlights
+  XlsxHighlightRangesOptions,
+  XlsxRangeHighlight,
+  XlsxRangeHighlightRole,
+  // Rich text
+  XlsxCellTextRun,
+  XlsxCellTextRunFont,
   // Theme / styles
   XlsxResolvedCellStyle,
   XlsxTableStyleDefinition,
@@ -22,6 +29,22 @@ export type {
   XlsxSheetProtection,
   XlsxSheetProtectionAction,
   XlsxSheetVisibility,
+  // Print / page layout
+  XlsxPageOrientation,
+  XlsxPageOrder,
+  XlsxPageSetup,
+  XlsxPrintOptions,
+  XlsxPageMargins,
+  XlsxPageBreak,
+  XlsxAxisRange,
+  XlsxPrintTitles,
+  XlsxPaperSize,
+  XlsxPrintPage,
+  XlsxPrintLayout,
+  XlsxPrintLayoutOptions,
+  XlsxPrintPageGridCell,
+  XlsxPrintPageGridAxis,
+  XlsxPrintPageGrid,
   // Sheet data
   XlsxSheetData,
   // Cell style inputs
@@ -31,6 +54,8 @@ export type {
   XlsxCellFillStyleInput,
   XlsxCellBorderEdgeInput,
   XlsxCellBorderStyleInput,
+  XlsxBorderPreset,
+  XlsxBorderPresetInput,
   XlsxCellAlignmentInput,
   XlsxCellNumberFormatInput,
   XlsxCellProtectionInput,
@@ -39,14 +64,48 @@ export type {
   XlsxSparkline,
   // Clipboard
   XlsxClipboardData,
+  XlsxClipboardCutState,
   // Tables
+  XlsxAutoFilterColumn,
+  XlsxAutoFilterColumnState,
+  XlsxAutoFilterRange,
+  XlsxAutoFilterRowData,
+  XlsxAutoFilterSnapshot,
+  XlsxAutoFilterState,
+  XlsxAutoFilterValueOption,
   XlsxTableColumn,
   XlsxTableStyleInfo,
   XlsxTable,
   XlsxTableSortDirection,
   XlsxTableSortState,
+  // Pivot tables, slicers and defined names
+  XlsxPivotAggregation,
+  XlsxPivotShowAs,
+  XlsxPivotFieldAxis,
+  XlsxPivotFieldItem,
+  XlsxPivotField,
+  XlsxPivotDataField,
+  XlsxPivotSource,
+  XlsxPivotTable,
+  XlsxSlicerItem,
+  XlsxSlicer,
+  XlsxDefinedName,
+  // Authoring inputs
+  XlsxCellCommentInput,
+  XlsxCellHyperlinkInput,
+  XlsxConditionalFormatDraft,
+  XlsxChartInsertInput,
+  XlsxTableCreateInput,
+  XlsxDataValidationInput,
+  XlsxNamedRange,
+  XlsxPasteSpecialOptions,
+  XlsxCellEditRequest,
+  XlsxViewerAuthoring,
   // Workbook tab
   XlsxWorkbookTab,
+  XlsxHiddenSheet,
+  // Worksheet name rules
+  XlsxSheetNameIssue,
   // Formula target
   XlsxFormulaTarget,
   // Cell style context
@@ -55,6 +114,7 @@ export type {
   XlsxTableHeaderMenuRenderProps,
   // Viewer controller
   XlsxRuntimeLike,
+  XlsxLoadFileSource,
   UseXlsxViewerControllerOptions,
   XlsxUrlPolicy,
   XlsxSourceKind,
@@ -63,10 +123,13 @@ export type {
   XlsxLoadError,
   XlsxDiagnostic,
   XlsxViewerController,
+  XlsxReplaceInSheetOptions,
+  XlsxReplaceResult,
   XlsxViewerSelection,
   XlsxViewerZoom,
   XlsxViewerEditing,
   XlsxViewerTables,
+  XlsxViewerPivot,
   XlsxViewerImages,
   XlsxViewerCharts,
   // Thumbnails
@@ -80,6 +143,7 @@ export type {
 } from "./worksheet-types";
 
 export type { XlsxThemePalette } from "./theme-types";
+export type { XlsxDrawingClipboardItem, XlsxDrawingClipboardKind } from "./clipboard-types";
 
 export type {
   // Image anchor / marker
@@ -124,10 +188,16 @@ export type {
   XlsxChartElementSelection,
   XlsxChartTypeGroup,
   XlsxChartWall,
+  // Chart-embedded media / user shapes
+  XlsxChartUserShapeFill,
+  XlsxChartUserShapeStroke,
+  XlsxChartUserShape,
+  XlsxChartDrawing,
   // Chart
   XlsxChart,
   // Chart sheet
   XlsxChartsheet,
+  XlsxChartFamily,
   // Render props
   XlsxChartLoadingRenderProps,
 } from "./chart-types";
