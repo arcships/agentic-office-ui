@@ -995,9 +995,33 @@ function main() {
     return;
   }
 
+  // Only rewrite the report when a value changed: `generatedAt` must not turn
+  // every `pnpm ui:parity` run into an unrelated diff of the committed file.
+  const comparable = (value) => {
+    const clone = JSON.parse(JSON.stringify(value));
+    delete clone.generatedAt;
+    if (clone.provenance) delete clone.provenance.upstreamVerification;
+    return JSON.stringify(clone);
+  };
+  let existing = null;
+  try {
+    existing = existsSync(tokenReportPath)
+      ? JSON.parse(readText(tokenReportPath))
+      : null;
+  } catch {
+    existing = null;
+  }
+
   mkdirSync(path.dirname(tokenReportPath), { recursive: true });
-  writeFileSync(tokenReportPath, serialized);
   writeFileSync(sourceManifestPath, `${JSON.stringify(sources, null, 2)}\n`);
+  if (existing && comparable(existing) === comparable(report)) {
+    console.log(
+      `extend tokens: unchanged (${SEMANTIC_COLORS.length} semantic colors, radius ${radius.basePx})`,
+    );
+    return;
+  }
+
+  writeFileSync(tokenReportPath, serialized);
   console.log(
     `extend tokens: wrote ${rootRelative(tokenReportPath)} (${SEMANTIC_COLORS.length} semantic colors, radius ${radius.basePx}, ${motion.durations.length} durations)`,
   );
