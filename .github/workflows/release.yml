@@ -59,6 +59,7 @@ jobs:
 
   publish:
     name: Publish CI candidate
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm-release
