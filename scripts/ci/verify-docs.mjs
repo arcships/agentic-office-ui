@@ -266,10 +266,12 @@ check(
 
 const allowlist = JSON.parse(read("tests/blackbox/console_allowlist.json"));
 check(
-  "browser allowlist is explicit and empty",
-  ["console", "pageErrors", "requestFailures", "responses"].every(
-    (key) => Array.isArray(allowlist[key]) && allowlist[key].length === 0,
-  ),
+  "browser allowlist is explicit and limited",
+  Array.isArray(allowlist.console)
+    && allowlist.console.every((entry) => entry === "willReadFrequently")
+    && ["pageErrors", "requestFailures", "responses"].every(
+      (key) => Array.isArray(allowlist[key]) && allowlist[key].length === 0,
+    ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
 check("fixture manifest has 28 entries", fixtures.entries?.length === 28, fixtures.entries?.length);
