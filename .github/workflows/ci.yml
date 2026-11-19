@@ -253,7 +253,7 @@ jobs:
     # XLSX fixture, export and registration checks.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       CI_PREBUILT: "1"
       # Only the upstream-reference UX parity step is marked blockable; a
@@ -301,8 +301,34 @@ jobs:
       - name: Install the pinned Chromium
         run: python -m playwright install --with-deps chromium
 
+      # The visual matrix forces Liberation Sans with a Noto Sans CJK fallback
+      # so Chinese fixture text is deterministic across runners.
+      - name: Install deterministic visual-matrix fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-liberation fonts-noto-cjk
+
       - name: Build workspace packages and demo apps
         run: pnpm build
+
+      # Full route x viewport x theme x zoom matrix. Structural assertions are
+      # blocking; pixel diffs are reported and uploaded for calibration but do
+      # not fail this job (the blocking gate is owned by #165). The committed
+      # baseline is a small pre-UI-migration subset; see
+      # tests/baseline/visual/README.md for the recapture plan after #159-#164.
+      - name: Capture and compare the product visual matrix
+        env:
+          RUN_PYTHON_MODULES: "playwright,PIL"
+        run: >-
+          node scripts/ci/run-python.mjs scripts/ci/capture-visual-matrix.py
+          --skip-build --check --output output/visual-matrix
+
+      - name: Upload the visual matrix report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-matrix-${{ github.sha }}
+          path: output/visual-matrix/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Run the blackbox suites
         run: node scripts/ci/run-suite.mjs blackbox

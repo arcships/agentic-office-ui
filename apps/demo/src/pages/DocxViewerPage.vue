@@ -168,6 +168,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef } from "vue"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 import {
   bundledDocxWasmUrl,
   createDocxRuntime,
@@ -223,7 +224,7 @@ const showToolbar = ref(true)
 const showUpload = ref(true)
 const showDownload = ref(true)
 const defaultThumbnailsOpen = ref(false)
-const isDark = ref(false)
+const isDark = ref(readDemoTheme() === "dark")
 const defaultZoom = ref(100)
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const diagnostics = ref<VisibleDiagnostic[]>([])
