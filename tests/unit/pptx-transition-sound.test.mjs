@@ -124,6 +124,9 @@ const script = `
 
   // 4. A new slide stops and releases the previous source.
   player.prepare(slide(2, false));
+  // Blob URLs are released after a short delay so an in-flight media load is
+  // not aborted with ERR_FILE_NOT_FOUND.
+  await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.deepEqual(released, ["blob:transition-sound", "blob:transition-sound"]);
   assert.equal(second.paused, true);
   player.dispose();
