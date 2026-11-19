@@ -13,8 +13,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 139,
-        "sha256": "b90abbb93684169484c532752b3ac0daf0a30b2d19f1473e43584a9b91c3e6c2"
+        "count": 154,
+        "sha256": "e1b91bebd7d7544491febdf74ba5d003e399c00433b185fe934de59599f552f9"
       }
     },
     {
@@ -50,8 +50,8 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1634,
-        "sha256": "7604da116bae29156f8724bd0d3a5a6f228d4bd0108f3388f6ca08998b6ca3bd"
+        "count": 1653,
+        "sha256": "5db4e9bfc3be7008d756a993c215dbd8f2f14be8cd7fcb4ede11da85ccd8f8a5"
       }
     },
     {
@@ -89,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 388,
-        "sha256": "7247db9b6e12494a649d09188d0ba7f2c059ec30db177538c205e7bb59b67fc0"
+        "count": 432,
+        "sha256": "ef1bf14a159cee6ff1e8cb0cabf953d272d1aee9154bc52899edbd84566bdaf6"
       }
     },
     {
@@ -199,8 +199,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 97,
-        "sha256": "82bf99b784f27094df3372339bec7f809d848cc3a183616429e9f37a863ff3d2"
+        "count": 131,
+        "sha256": "6774168936645fc6fd6114d5fa5f8ea978827312293dd17b86c2479e1f9105b5"
       }
     },
     {
@@ -240,8 +240,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 76,
-        "sha256": "da87cbf571d413f22a3094c4e46456642f9383b0ffc8f9136838fa4d232bc7e6"
+        "count": 98,
+        "sha256": "2a44a494d93335114467f4a4a0695fc835170b485597f598883800c1d5bce00f"
       }
     },
     {

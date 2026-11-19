@@ -296,6 +296,8 @@ Primitive 层（0.8 起）以 `reka-ui@^2.11` 为运行时依赖，构建时 ext
 
 引用只保存文档修订、语义、格式定位器、内容指纹和规范化区域，不保存 DOM、Vue 实例、Blob URL 或截图位图。`OfficeInteractionValidationError` 的 `code` 固定为 `INVALID_OFFICE_INTERACTION`，详细原因从结构化 `issues` 读取。该包不解析 Office 文件、不渲染界面、不保存引用集合、不调用 Agent，也不修改文件；格式包负责生成定位器，宿主决定如何组织和使用确认后的引用。
 
+根入口还提供对象注册层：`OfficeObjectProvider<TContext>`、`createOfficeObjectRegistry<TContext>()`、`createOfficeObjectDescriptor()`、`createOfficeObjectFingerprint()`、`isOfficeObjectVisible()`、`officeObjectAncestors()` / `officeObjectChildren()`、`rankOfficeObjectCandidates()` 和 `officeObjectCandidatePreview()`。provider 只返回当前修订的 descriptor（含 draft、fingerprint、四维可靠度，可选 `visual` / `facets`），不提交引用；阶段四行为没有 `visual`，因此不会进入画布轮廓。注册层是四个格式包内置对象族的公共扩展点。
+
 根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；`XlsxViewer`/`XlsxSheetSurface` 的 `locale` 同时作为数字和日期格式的默认区域（可用 `documentLocale` 单独覆盖），键入 `1.234,5` 在 `de-DE` 下解析为 1234.5 并显示为 `1.234,50`，`[$-407]` 等格式内置区域始终优先，显式 `@` 文本格式保持原样；用户可见文案、aria-label 和数字/日期显示不再与查看器语言脱节。
 
 ### 3.10 统一 Surface 引用选择
@@ -305,6 +307,8 @@ Primitive 层（0.8 起）以 `reka-ui@^2.11` 为运行时依赖，构建时 ext
 四个 Surface 共同 expose `getDocumentRevision()`、`hitTest()`、`describeReference()`、`resolveReference()`、`scrollToReference()` 和 `captureReferencePreview()`；同时提供可选的 `getCaptureSurface()` 供 `@arcships/vue-ui` 的 `captureRegion()` 使用。`captureReferencePreview()` 的位图采集仍由宿主渲染管线负责，内置实现会发出 `CAPTURE_UNSUPPORTED` 并拒绝 Promise，不会返回伪造截图；需要内建区域位图时使用新的 `captureRegion()` 合同。
 
 统一事件为 `documentRevisionChange`、`referenceCandidateChange`、`referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。既有 `selectionChange`、`objectClick`、`contextMenu` 等格式事件在 `0.x` 中继续保留。每个格式包从根入口重导出共享 Surface 类型，消费端无需深层导入。
+
+阶段二–四的首批对象在 `0.8` 批次接入：DOCX/XLSX/PPTX/PDF 的对象索引与行为 adapter 见各格式包根入口（例如 `createDocxObjectRegistry`、`createXlsxObjectRegistry`、`createPptxObjectRegistry`、`createPdfObjectRegistry`）。`selectionMode="object"` 时的悬停轮廓只依赖候选 `preview.label` 和 DOM/页面几何，宿主无需读取私有对象；PDF 的 `PdfVisualObjectProvider` 由宿主注入，库不内置 OCR。表格单元格、图表元素等内部对象需要宿主提供 `getObjectTable` / `getObjectChart` 证据时才能创建引用，缺失证据返回结构化 `unsupported`，不会猜测。
 
 ### 3.11 统一 Surface 缩放
 

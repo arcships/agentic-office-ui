@@ -53,6 +53,8 @@ export * from "./canvas/layout-diagnostics";
 
 // Stable Office references created from the existing DOCX text-range model.
 export * from "./reference-adapter";
+export * from "./docx-behaviors";
+export * from "./docx-object-index";
 
 // Document blocks/words: addressable content and page geometry.
 export * from "./blocks";

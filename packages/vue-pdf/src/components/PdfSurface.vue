@@ -40,6 +40,7 @@
       :data-page-layout="pageLayoutMode"
       tabindex="0"
       @scroll.passive="onScroll"
+      @pointerleave="onReferencePointerLeave"
       @contextmenu.prevent="onContextMenu"
       @copy="onCopy"
       @keydown="onSurfaceKeydown"
@@ -117,8 +118,16 @@
             :class="`pdf-surface__annotation-hit--${annotation.kind}`"
             :data-annotation-kind="annotation.kind"
             :data-annotation-page="pageIndex"
+            :data-annotation-id="annotation.id"
             :style="displayRectStyle(pageIndex, annotation.rect)"
           />
+          <div
+            v-if="objectOutline && objectOutline.pageIndex === pageIndex"
+            class="pdf-surface__object-outline"
+            :style="displayRectStyle(pageIndex, objectOutline.rect)"
+          >
+            <span class="pdf-surface__object-outline-label">{{ objectOutline.label }}</span>
+          </div>
         </div>
         <div
           class="pdf-surface__interaction"
@@ -149,6 +158,9 @@
               class="pdf-surface__form-control pdf-surface__form-control--select"
               :data-form-field-id="annotation.id"
               :data-form-field-type="annotation.fieldType"
+              :data-annotation-id="annotation.id"
+              :data-annotation-page="pageIndex"
+              :data-annotation-kind="annotation.kind"
               :aria-label="annotation.fieldName || annotation.id"
               :disabled="annotation.readOnly"
               :value="annotation.fieldValue ?? ''"
@@ -169,6 +181,9 @@
               :class="`pdf-surface__form-control--${annotation.fieldType}`"
               :data-form-field-id="annotation.id"
               :data-form-field-type="annotation.fieldType"
+              :data-annotation-id="annotation.id"
+              :data-annotation-page="pageIndex"
+              :data-annotation-kind="annotation.kind"
               :aria-label="annotation.fieldName || annotation.id"
               :type="annotation.fieldType === 'text' ? 'text' : annotation.fieldType === 'radio' ? 'radio' : 'checkbox'"
               :name="annotation.fieldName || annotation.id"
@@ -276,6 +291,7 @@ import {
   wordRangeFromCharacterTexts,
 } from "../pdf/pdf-selection-interaction"
 import {
+  createPdfNativeObjectReferenceDraft,
   createPdfPageReferenceDraft,
   createPdfRegionReferenceDraft,
   createPdfTextReferenceDraft,
@@ -284,6 +300,7 @@ import {
   type PdfOfficeReference,
   type PdfReferenceContext,
 } from "../pdf/pdf-reference-adapter"
+import { createPdfBehaviorLabels, createPdfBehaviorRecords } from "../pdf/pdf-native-objects"
 import {
   confirmOfficeReferenceDraft,
   createOfficeReferenceId,
@@ -582,10 +599,13 @@ function referenceContext(): PdfReferenceContext {
   const document = renderDocument.value
   const runtime = runtimeForDocument
   if (!document || !runtime) throw new Error("PDF reference context is unavailable before the document loads.")
+  const annotations = Object.values(pageAnnotations).flat()
   return {
     revision: documentRevision.value,
     document,
     runtime,
+    annotations,
+    behaviors: createPdfBehaviorRecords({ annotations }, createPdfBehaviorLabels(m.value.common)),
     descriptors: {
       document: descriptor("pdf"),
       page: (pageIndex) => descriptor("page", { number: pageIndex + 1 }),
@@ -642,12 +662,91 @@ function pageCandidate(pageIndex: number): OfficeReferenceCandidatePreview {
   }
 }
 
+const objectOutline = ref<{ pageIndex: number; rect: PdfRenderRect; label: string } | null>(null)
+let candidateElements = new Map<string, Element>()
+
+function annotationCandidateForElement(element: Element | null): OfficeReferenceCandidatePreview[] {
+  const annotationElement = element?.closest?.<HTMLElement>("[data-annotation-id]")
+  const annotationId = annotationElement?.dataset.annotationId
+  const pageIndex = Number(annotationElement?.dataset.annotationPage)
+  if (!annotationElement || !annotationId || !Number.isSafeInteger(pageIndex) || pageIndex < 0) return []
+  const annotation = (pageAnnotations[pageIndex] ?? []).find((candidate) => candidate.id === annotationId)
+  if (!annotation) return []
+  try {
+    const draft = createPdfNativeObjectReferenceDraft(referenceContext(), annotation)
+    const label = annotation.kind === "link"
+      ? descriptor("link")
+      : annotation.kind === "widget"
+        ? annotation.fieldName ? `${descriptor("formField")}: ${annotation.fieldName}` : descriptor("formField")
+        : annotation.contents?.trim()
+          ? `${descriptor("annotation")}: ${annotation.contents.replace(/\s+/gu, " ").trim().slice(0, 80)}`
+          : descriptor("annotation")
+    const candidateId = `pdf:native:${pageIndex}:${annotation.kind}:${annotationId}`
+    candidateElements.set(candidateId, annotationElement)
+    return [{
+      candidateId,
+      draft,
+      preview: {
+        label,
+        path: [
+          { kind: "document", label: descriptor("pdf") },
+          { kind: "page", label: descriptor("page", { number: pageIndex + 1 }) },
+          { kind: draft.kind, label },
+        ],
+      },
+      hit: "direct",
+      depth: 3,
+    }]
+  } catch {
+    return []
+  }
+}
+
+function clearObjectOutline(): void {
+  objectOutline.value = null
+  candidateElements = new Map()
+}
+
+function updateObjectOutline(candidates: readonly OfficeReferenceCandidatePreview[]): void {
+  const active = candidates[0]
+  const element = active ? candidateElements.get(active.candidateId) as HTMLElement | undefined : undefined
+  const pageIndex = Number(element?.dataset?.annotationPage)
+  const annotationId = element?.dataset?.annotationId
+  const annotation = Number.isSafeInteger(pageIndex) && pageIndex >= 0 && annotationId
+    ? (pageAnnotations[pageIndex] ?? []).find((candidate) => candidate.id === annotationId)
+    : undefined
+  if (!active || !annotation) {
+    objectOutline.value = null
+    return
+  }
+  objectOutline.value = {
+    pageIndex,
+    rect: annotation.rect,
+    label: active.preview?.label ?? "",
+  }
+}
+
+function onReferencePointerLeave(): void {
+  clearObjectOutline()
+  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  emit("referenceCandidateChange", { candidates: [] })
+}
+
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try {
     const element = scrollRef.value?.ownerDocument?.elementFromPoint?.(point.clientX, point.clientY)
     const page = element?.closest<HTMLElement>("[data-page-index]")
     const pageIndex = Number(page?.dataset.pageIndex)
-    return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? [pageCandidate(pageIndex)] : []
+    candidateElements = new Map()
+    const annotationCandidates = annotationCandidateForElement(element ?? null)
+    if (annotationCandidates.length > 0) return annotationCandidates
+    const pageCandidates: OfficeReferenceCandidatePreview[] = []
+    if (Number.isSafeInteger(pageIndex) && pageIndex >= 0) {
+      const candidate = pageCandidate(pageIndex)
+      if (page) candidateElements.set(candidate.candidateId, page)
+      pageCandidates.push(candidate)
+    }
+    return pageCandidates
   } catch (reason) {
     emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "PDF" }))
     return []
@@ -724,9 +823,12 @@ function onSurfacePointerDown(event: PointerEvent, pageIndex: number): void {
 function onSurfacePointerMove(event: PointerEvent, pageIndex: number): void {
   if (selectionMode.value === "content") onSelectionPointerMove(event, pageIndex)
   else if (selectionMode.value === "region") updateRegion(event)
-  else if (props.emitReferenceCandidates) {
-    const candidates = [pageCandidate(pageIndex)]
-    emit("referenceCandidateChange", { candidates, activeCandidateId: candidates[0].candidateId })
+  else {
+    const candidates = hitTest({ clientX: event.clientX, clientY: event.clientY })
+    updateObjectOutline(candidates)
+    if (props.emitReferenceCandidates && candidates[0]) {
+      emit("referenceCandidateChange", { candidates, activeCandidateId: candidates[0].candidateId })
+    }
   }
 }
 function onSurfacePointerUp(event: PointerEvent, pageIndex: number): void {
@@ -743,14 +845,17 @@ function onSurfaceClick(event: MouseEvent, pageIndex: number): void {
     const context = referenceContext()
     const trigger = event.detail === 0 ? "keyboard" : "pointer"
     const additive = event.shiftKey
-    const confirmPage = () => {
+    const candidate = hitTest({ clientX: event.clientX, clientY: event.clientY })[0]
+    if (!candidate) return
+    // A native link/form/annotation confirms directly; a page keeps the
+    // content-hash step so its cross-revision signature is complete.
+    const pending = candidate.draft.kind === "page" ? ensurePageContentHash(pageIndex) : undefined
+    const confirmCandidate = () => {
       if (renderDocument.value?.id !== context.document.id) return
-      const candidate = pageCandidate(pageIndex)
       confirmDraft(candidate.draft, trigger, candidate.preview, additive)
     }
-    const pending = ensurePageContentHash(pageIndex)
-    if (pending) void pending.then(confirmPage)
-    else confirmPage()
+    if (pending) void pending.then(confirmCandidate)
+    else confirmCandidate()
   }
 }
 function onRegionKeyboardCancel(event?: KeyboardEvent): void {
@@ -3064,5 +3169,29 @@ onBeforeUnmount(async () => {
     max-width: 100% !important;
     width: 100% !important;
   }
+}
+
+.pdf-surface__object-outline {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+  z-index: 6;
+}
+
+.pdf-surface__object-outline-label {
+  background: #2563eb;
+  border-radius: 2px;
+  color: #fff;
+  font-size: 11px;
+  left: -2px;
+  max-width: 280px;
+  overflow: hidden;
+  padding: 1px 4px;
+  position: absolute;
+  text-overflow: ellipsis;
+  top: -20px;
+  white-space: nowrap;
 }
 </style>

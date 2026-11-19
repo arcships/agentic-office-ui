@@ -130,7 +130,9 @@
   box-shadow: 0 0 0 2px var(--pptx-accent);
 }
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; min-height: 1px; padding: 24px; }
-.pptx-stage { box-sizing: border-box; min-height: 1px; touch-action: pan-x pan-y; }
+.pptx-stage { box-sizing: border-box; min-height: 1px; position: relative; touch-action: pan-x pan-y; }
+.pptx-stage__object-outline { border: 2px solid #2563eb; box-sizing: border-box; pointer-events: none; position: absolute; z-index: 12; }
+.pptx-stage__object-outline-label { background: #2563eb; border-radius: 2px; color: #fff; font-size: 11px; left: -2px; max-width: 280px; overflow: hidden; padding: 1px 4px; position: absolute; text-overflow: ellipsis; top: -20px; white-space: nowrap; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
 .pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
 .pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }

@@ -18,6 +18,8 @@
         :key="item.chart.id"
         class="xlsx-chart-overlay__item"
         data-testid="xlsx-chart-item"
+        :data-chart-id="item.chart.id"
+        :data-chart-name="item.chart.name || undefined"
         tabindex="0"
         :class="{
           'xlsx-chart-overlay__item--selected': item.chart.id === selectedChartId,

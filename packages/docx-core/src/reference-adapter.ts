@@ -1,4 +1,5 @@
 import type {
+  DocxBehaviorLocator,
   DocxObjectLocator,
   DocxPartLocator,
   DocxPathSegment,
@@ -37,6 +38,11 @@ import {
 } from "./editor/helpers/selection-helpers";
 import { lastParagraphLocationInDocument } from "./editor/helpers/selection-helpers-range";
 import { paragraphText } from "./editor/helpers/paragraph-inspect";
+import {
+  DOCX_BEHAVIOR_REFERENCE_KIND,
+  findDocxBehavior,
+  type DocxBehaviorRecord,
+} from "./docx-behaviors";
 
 export type DocxOfficeReference = Extract<
   OfficeObjectReference,
@@ -113,6 +119,26 @@ const DOCX_COMMENT_RELIABILITY: OfficeObjectReliability = {
   relocation: { level: "uncertain", reasonCodes: ["docx.comment-anchor"] },
 };
 
+const DOCX_NATIVE_BEHAVIOR_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["docx.native-behavior"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["docx.behavior-scope"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["docx.behavior-owner"] },
+  relocation: { level: "likely", reasonCodes: ["docx.behavior-instance-id"] },
+};
+
+const DOCX_INFERRED_BEHAVIOR_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "likely", reasonCodes: ["docx.structural-behavior"] },
+  boundary: { level: "likely", reasonCodes: ["docx.behavior-owner-path"] },
+  hierarchy: { level: "likely", reasonCodes: ["docx.behavior-owner"] },
+  relocation: { level: "uncertain", reasonCodes: ["docx.behavior-source-xml"] },
+};
+
+const DOCX_INFERRED_BEHAVIORS = new Set<DocxBehaviorLocator["behavior"]>([
+  "field",
+  "tracked-change-state",
+  "cross-reference",
+]);
+
 function copyReliability(value: OfficeObjectReliability): OfficeObjectReliability {
   return {
     semantic: { ...value.semantic, reasonCodes: [...value.semantic.reasonCodes] },
@@ -153,6 +179,34 @@ function hasMatchingTextFingerprint(text: string, fingerprint?: OfficeObjectFing
 
 function hasVerifiableTextFingerprint(fingerprint?: OfficeObjectFingerprint): boolean {
   return fingerprint?.exactText !== undefined || fingerprint?.contentHash?.startsWith("fnv1a32:") === true;
+}
+
+function structureAncestorKeys(path: readonly DocxPathSegment[]): readonly string[] {
+  return [
+    "docx.part:body",
+    ...path.map((segment) => `docx.${segment.kind}:${segment.index}`),
+  ];
+}
+
+function structureFingerprint(
+  path: readonly DocxPathSegment[],
+  text: string | undefined,
+): OfficeObjectFingerprint {
+  return {
+    ...(text ? { contentHash: textContentHash(text) } : {}),
+    ancestorKeys: structureAncestorKeys(path),
+  };
+}
+
+function tableModelText(table: TableNode): string {
+  return table.rows
+    .map((row) => row.cells
+      .map((cell) => cell.nodes
+        .map((node) => (node.type === "paragraph" ? paragraphText(node) : ""))
+        .filter(Boolean)
+        .join("\n"))
+      .join("\t"))
+    .join("\n");
 }
 
 function assertDocxContext(context: DocxReferenceContext): void {
@@ -415,6 +469,13 @@ export function createDocxImageReferenceDraft(
         childIndex: target.childIndex,
       },
     },
+    fingerprint: {
+      ...(child.alt?.trim() ? { objectName: child.alt.trim() } : {}),
+      ancestorKeys: [
+        ...structureAncestorKeys(pathFromLocation(target.paragraph)),
+        `docx.image-child:${target.childIndex}`,
+      ],
+    },
     reliability: copyReliability(DOCX_IMAGE_RELIABILITY),
   };
 }
@@ -427,7 +488,8 @@ export function createDocxTableReferenceDraft(
   if (!Number.isSafeInteger(tableIndex) || tableIndex < 0) {
     throw new TypeError("DOCX tableIndex must be a non-negative safe integer");
   }
-  if (context.model.nodes[tableIndex]?.type !== "table") {
+  const table = context.model.nodes[tableIndex];
+  if (table?.type !== "table") {
     throw new RangeError(`DOCX table ${tableIndex} is not present in the current model`);
   }
   return {
@@ -444,6 +506,7 @@ export function createDocxTableReferenceDraft(
         path: [{ kind: "table", index: tableIndex }],
       },
     },
+    fingerprint: structureFingerprint([{ kind: "table", index: tableIndex }], tableModelText(table)),
     reliability: copyReliability(DOCX_TABLE_RELIABILITY),
   };
 }
@@ -514,7 +577,21 @@ function blockModelPath(block: DocumentBlock): readonly DocxPathSegment[] {
   return (path ?? []) as readonly DocxPathSegment[];
 }
 
-function blockReferenceKind(block: DocumentBlock): DocxReferenceKind {
+function blockFingerprint(block: DocumentBlock, container: boolean): OfficeObjectFingerprint {
+  const path = blockModelPath(block);
+  return {
+    ...(block.content ? { contentHash: textContentHash(block.content) } : {}),
+    ...(block.details.alt?.trim() ? { objectName: block.details.alt.trim() } : {}),
+    ancestorKeys: [
+      `docx.part:${blockPart(block).kind}`,
+      ...(container ? [`docx.container:${block.type}`] : path.map((segment) => `docx.${segment.kind}:${segment.index}`)),
+      `docx.block:${block.id}`,
+    ],
+  };
+}
+
+/** Map a document block to the public reference kind it confirms as. */
+export function docxBlockReferenceKind(block: DocumentBlock): DocxReferenceKind {
   if (block.type === "table") return "table";
   if (block.type === "table_head") return "table-row";
   if (block.type === "table_cell") return "table-cell";
@@ -595,7 +672,7 @@ export function createDocxBlockReferenceDraft(
     locator = blockStructureLocator(block);
   }
 
-  const kind = blockReferenceKind(block);
+  const kind = docxBlockReferenceKind(block);
   const container = block.type === "header" || block.type === "footer";
   return {
     schemaVersion: 1,
@@ -603,6 +680,7 @@ export function createDocxBlockReferenceDraft(
     kind,
     source: "native",
     locator: { type: "format", format: "docx", value: locator },
+    fingerprint: blockFingerprint(block, container),
     ...(options.fallbackRegion ? { fallbackRegion: options.fallbackRegion } : {}),
     reliability: copyReliability(
       container ? DOCX_BLOCK_CONTAINER_RELIABILITY : DOCX_BLOCK_RELIABILITY,
@@ -679,6 +757,114 @@ export function createDocxWordReferenceDraft(
     ...(options.fallbackRegion ? { fallbackRegion: options.fallbackRegion } : {}),
     reliability: docxTextReliability(selected),
   } as DocxOfficeReferenceDraft;
+}
+
+export interface DocxBehaviorReferenceTarget {
+  behavior: DocxBehaviorLocator["behavior"];
+  /** Deterministic id produced by `enumerateDocxBehaviors()`. */
+  instanceId: string;
+}
+
+/**
+ * Create an invisible-behavior reference draft (stage 4).
+ *
+ * The locator carries the behavior identity and its owner scope; the reference
+ * has no geometry, so hosts select it from a structure tree, property panel or
+ * timeline instead of a canvas outline.
+ */
+export function createDocxBehaviorReferenceDraft(
+  context: DocxReferenceContext,
+  target: DocxBehaviorReferenceTarget,
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  const record = findDocxBehavior(context.model, target.instanceId);
+  if (!record) {
+    throw new RangeError(`DOCX behavior ${target.instanceId} is not present in the current model`);
+  }
+  if (record.behavior !== target.behavior) {
+    throw new RangeError(
+      `DOCX behavior ${target.instanceId} is ${record.behavior}, not ${target.behavior}`,
+    );
+  }
+  return createDocxBehaviorDraftFromRecord(context, record);
+}
+
+/** Create the draft for an already-enumerated behavior record. */
+export function createDocxBehaviorDraftFromRecord(
+  context: DocxReferenceContext,
+  record: DocxBehaviorRecord,
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: DOCX_BEHAVIOR_REFERENCE_KIND[record.behavior],
+    source: DOCX_INFERRED_BEHAVIORS.has(record.behavior) ? "structural" : "native",
+    locator: {
+      type: "format",
+      format: "docx",
+      value: {
+        kind: "behavior",
+        behavior: record.behavior,
+        owner: record.owner,
+        instanceId: record.instanceId,
+      },
+    },
+    fingerprint: {
+      ancestorKeys: [
+        `docx.behavior:${record.behavior}`,
+        `docx.behavior-instance:${record.instanceId}`,
+      ],
+    },
+    reliability: copyReliability(
+      DOCX_INFERRED_BEHAVIORS.has(record.behavior)
+        ? DOCX_INFERRED_BEHAVIOR_RELIABILITY
+        : DOCX_NATIVE_BEHAVIOR_RELIABILITY,
+    ),
+  } as DocxOfficeReferenceDraft;
+}
+
+function behaviorDescriptor(
+  reference: DocxOfficeReference,
+  record: DocxBehaviorRecord,
+): OfficeObjectDescriptor {
+  return {
+    objectId: `docx:behavior:${record.instanceId}`,
+    draft: draftFromReference(reference),
+    label: record.label,
+    path: record.path.map((entry) => ({ ...entry })),
+    childrenState: "none",
+    ...(record.content === undefined ? {} : { content: { ...record.content } }),
+    facets: { ...record.facets, behavior: record.behavior, instanceId: record.instanceId },
+  };
+}
+
+function resolveDocxBehaviorReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+): ResolveReferenceResult {
+  if (reference.locator.type !== "format" || reference.locator.value.kind !== "behavior") {
+    return { status: "unsupported", reasonCode: "docx.behavior-locator-unsupported" };
+  }
+  const locator = reference.locator.value;
+  const record = findDocxBehavior(context.model, locator.instanceId);
+  if (!record || record.behavior !== locator.behavior) {
+    return { status: "not-found", reasonCode: "docx.behavior-not-found" };
+  }
+  if (sameRevision(reference.document, context.revision)) {
+    return { status: "exact", reference, descriptor: behaviorDescriptor(reference, record) };
+  }
+  const relocated = currentReference(
+    context,
+    reference,
+    { kind: "behavior", behavior: record.behavior, owner: record.owner, instanceId: record.instanceId },
+  );
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: behaviorDescriptor(relocated, record),
+    reasonCodes: ["docx.revision-changed", "docx.behavior-instance-id"],
+  };
 }
 
 function draftFromReference(reference: DocxOfficeReference): DocxOfficeReferenceDraft {
@@ -876,7 +1062,7 @@ function textCandidates(
 
 function docxReferenceKind(
   reference: DocxOfficeReference,
-): "text" | "page" | "region" | "image" | "structure" | "comment" | "other" {
+): "text" | "page" | "region" | "image" | "structure" | "comment" | "behavior" | "other" {
   if (reference.locator.type === "manual-region") return "region";
   const value = reference.locator.value;
   if (value.kind === "text-range") return "text";
@@ -884,6 +1070,7 @@ function docxReferenceKind(
   if (value.kind === "image") return "image";
   if (value.kind === "comment") return "comment";
   if (value.kind === "structure") return "structure";
+  if (value.kind === "behavior") return "behavior";
   return "other";
 }
 
@@ -1322,6 +1509,7 @@ export function resolveDocxReference(
   if (kind === "image") return resolveDocxImageReference(context, docxReference);
   if (kind === "structure") return resolveDocxStructureReference(context, docxReference);
   if (kind === "comment") return resolveDocxCommentReference(context, docxReference);
+  if (kind === "behavior") return resolveDocxBehaviorReference(context, docxReference);
 
   if (kind === "page" || kind === "region") {
     const pageIndex = docxReference.locator.type === "manual-region"

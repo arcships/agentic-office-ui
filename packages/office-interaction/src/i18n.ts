@@ -140,6 +140,65 @@ export interface OfficeCommonMessages {
     imageText: string
     /** Template with a `{text}` placeholder. */
     textLabel: string
+    heading: string
+    listItem: string
+    textBlock: string
+    link: string
+    formField: string
+    /** Template with a `{name}` placeholder. */
+    formFieldName: string
+    annotation: string
+    /** Template with a `{text}` placeholder. */
+    annotationText: string
+    /** Template with a `{id}` placeholder. */
+    annotationById: string
+    /** Template with a `{target}` placeholder. */
+    actionTarget: string
+    /** Template with a `{name}` placeholder. */
+    tableByName: string
+    /** Template with a `{name}` placeholder. */
+    chartSeries: string
+    /** Template with a `{number}` placeholder. */
+    chartPoint: string
+    /** Template with a `{number}` placeholder. */
+    legendEntry: string
+    /** Template with a `{name}` placeholder. */
+    styleName: string
+    /** Template with a `{name}` placeholder. */
+    bookmarkName: string
+    /** Template with a `{name}` placeholder. */
+    fieldName: string
+    /** Template with a `{number}` placeholder. */
+    section: string
+    /** Template with a `{author}` placeholder. */
+    trackedChange: string
+    /** Template with a `{state}` placeholder. */
+    commentState: string
+    /** Template with a `{name}` placeholder. */
+    crossReference: string
+    /** Template with a `{formula}` placeholder. */
+    formulaLabel: string
+    /** Template with a `{number}` placeholder. */
+    conditionalFormat: string
+    /** Template with a `{number}` placeholder. */
+    dataValidation: string
+    /** Template with a `{name}` placeholder. */
+    namedRange: string
+    protection: string
+    /** Template with a `{number}` placeholder. */
+    animation: string
+    transition: string
+    action: string
+    master: string
+    layout: string
+    note: string
+    /** Template with a `{name}` placeholder. */
+    attachment: string
+    /** Template with a `{name}` placeholder. */
+    layer: string
+    /** Template with a `{name}` placeholder. */
+    signature: string
+    permission: string
   }
 }
 
@@ -1507,6 +1566,42 @@ export const officeMessagesEn: OfficeMessages = {
       imageId: "Image {id}",
       imageText: "Image: {text}",
       textLabel: "Text: {text}",
+      heading: "Heading",
+      listItem: "List item",
+      textBlock: "Text block",
+      link: "Link",
+      formField: "Form field",
+      formFieldName: "Form field: {name}",
+      annotation: "Annotation",
+      annotationText: "Annotation: {text}",
+      annotationById: "Annotation {id}",
+      actionTarget: "Action: {target}",
+      tableByName: "Table {name}",
+      chartSeries: "Series: {name}",
+      chartPoint: "Point {number}",
+      legendEntry: "Legend entry {number}",
+      styleName: "Style: {name}",
+      bookmarkName: "Bookmark: {name}",
+      fieldName: "Field: {name}",
+      section: "Section {number}",
+      trackedChange: "Revision by {author}",
+      commentState: "Comment state: {state}",
+      crossReference: "Cross-reference: {name}",
+      formulaLabel: "Formula: {formula}",
+      conditionalFormat: "Conditional format {number}",
+      dataValidation: "Data validation {number}",
+      namedRange: "Named range: {name}",
+      protection: "Sheet protection",
+      animation: "Animation {number}",
+      transition: "Slide transition",
+      action: "Action",
+      master: "Slide master",
+      layout: "Slide layout",
+      note: "Speaker notes",
+      attachment: "Attachment: {name}",
+      layer: "Optional content: {name}",
+      signature: "Signature: {name}",
+      permission: "Permissions",
     },
   },
   docx: {
@@ -2738,6 +2833,42 @@ export const officeMessagesZhCN: OfficeMessages = {
       imageId: "图片 {id}",
       imageText: "图片：{text}",
       textLabel: "文本：{text}",
+      heading: "标题",
+      listItem: "列表项",
+      textBlock: "文本块",
+      link: "链接",
+      formField: "表单控件",
+      formFieldName: "表单控件：{name}",
+      annotation: "批注标记",
+      annotationText: "批注标记：{text}",
+      annotationById: "批注标记 {id}",
+      actionTarget: "动作：{target}",
+      tableByName: "表格 {name}",
+      chartSeries: "系列：{name}",
+      chartPoint: "数据点 {number}",
+      legendEntry: "图例项 {number}",
+      styleName: "样式：{name}",
+      bookmarkName: "书签：{name}",
+      fieldName: "域：{name}",
+      section: "第 {number} 节",
+      trackedChange: "{author} 的修订",
+      commentState: "批注状态：{state}",
+      crossReference: "交叉引用：{name}",
+      formulaLabel: "公式：{formula}",
+      conditionalFormat: "条件格式 {number}",
+      dataValidation: "数据验证 {number}",
+      namedRange: "命名区域：{name}",
+      protection: "工作表保护",
+      animation: "动画 {number}",
+      transition: "幻灯片切换",
+      action: "动作",
+      master: "幻灯片母版",
+      layout: "幻灯片版式",
+      note: "演讲者备注",
+      attachment: "附件：{name}",
+      layer: "可选内容组：{name}",
+      signature: "签名：{name}",
+      permission: "权限",
     },
   },
   docx: {
