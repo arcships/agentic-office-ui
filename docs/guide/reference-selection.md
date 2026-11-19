@@ -91,8 +91,9 @@ function onReferenceConfirm(event: OfficeReferenceConfirmEvent) {
 - `resolveReference()`
 - `scrollToReference()`
 - `captureReferencePreview()`
+- `getCaptureSurface()`（可选，供 `captureRegion()` 使用）
 
-当前 Surface 不负责截图位图采集；`captureReferencePreview()` 会用 `CAPTURE_UNSUPPORTED` 明确拒绝。需要截图或标注时，宿主可沿用引用中的页面、幻灯片、工作表和规范化区域，接入自己的渲染与标注管线。
+`captureReferencePreview()` 仍由宿主的渲染管线负责，内置实现会用 `CAPTURE_UNSUPPORTED` 明确拒绝。需要内建区域位图时，使用 `@arcships/vue-ui` 的 `captureRegion()`：把 Surface 组件实例作为 `surface`、区域作为 `region`，即可得到带来源元数据的位图；再交给可选的 `OfficeRegionAnnotator` 添加箭头、矩形、文字或高亮。详见[区域截图与标注](../api/region-capture-and-annotation.md)。
 
 ## 自定义选择界面
 

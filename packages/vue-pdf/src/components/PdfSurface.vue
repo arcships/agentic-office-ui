@@ -298,7 +298,11 @@ import {
 } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useViewerKeys } from "@arcships/vue-ui"
-import type { ViewerKeyCommand } from "@arcships/vue-ui"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+  ViewerKeyCommand,
+} from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
 import { resolvePdfLinkUrl } from "../pdf/pdf-annotation"
@@ -2787,6 +2791,31 @@ defineExpose({
   setFormFieldValue,
   updateAnnotationAppearance,
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /** Region-capture hook for `captureRegion()` in `@arcships/vue-ui`. */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; pageIndex?: number }
+    const count = renderDocument.value?.pageCount ?? 0
+    const requested = request.target?.pageIndex
+      ?? (locator.space === "page" ? locator.pageIndex : activePageIndex.value)
+      ?? 0
+    const pageIndex = Math.max(0, Math.min(Math.max(0, count - 1), requested))
+    const slot = scrollRef.value?.querySelector<HTMLElement>(`[data-page-index="${pageIndex}"]`)
+    const element = slot?.querySelector<HTMLElement>(".pdf-surface__interaction") ?? slot
+    if (!element) return null
+    const image = slot?.querySelector<HTMLImageElement>(".pdf-surface__page-img")
+    const raster = image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0
+      ? { source: image, width: image.naturalWidth, height: image.naturalHeight }
+      : null
+    return {
+      element,
+      raster,
+      format: "pdf",
+      space: "page",
+      pageIndex,
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
     const descriptor = await describePdfReference(referenceContext(), reference, signal)

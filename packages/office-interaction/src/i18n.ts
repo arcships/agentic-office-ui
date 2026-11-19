@@ -1379,6 +1379,25 @@ export interface OfficeMessages {
       /** Template with `{label}`, `{kind}` and `{reliability}` placeholders. */
       itemDescription: string
     }
+    regionAnnotator: {
+      defaultAriaLabel: string
+      toolbarLabel: string
+      arrow: string
+      rectangle: string
+      text: string
+      highlight: string
+      color: string
+      remove: string
+      clear: string
+      empty: string
+      imageAlt: string
+      textPlaceholder: string
+      textSave: string
+      textCancel: string
+      hint: string
+      /** Template with a `{count}` placeholder. */
+      count: string
+    }
     boundingBox: {
       noFields: string
       imageAlt: string
@@ -2602,6 +2621,24 @@ export const officeMessagesEn: OfficeMessages = {
       noCandidates: "No candidate objects",
       itemDescription: "{label}, type {kind}, reliability {reliability}",
     },
+    regionAnnotator: {
+      defaultAriaLabel: "Region annotation editor",
+      toolbarLabel: "Annotation tools",
+      arrow: "Arrow",
+      rectangle: "Rectangle",
+      text: "Text",
+      highlight: "Highlight",
+      color: "Annotation color",
+      remove: "Remove selected annotation",
+      clear: "Clear annotations",
+      empty: "Capture a region to annotate it.",
+      imageAlt: "Captured region preview",
+      textPlaceholder: "Annotation text",
+      textSave: "Add text",
+      textCancel: "Cancel text",
+      hint: "Drag on the image to draw. Select an annotation and press Delete to remove it.",
+      count: "{count} annotations",
+    },
     boundingBox: {
       noFields: "No fields to display",
       imageAlt: "Citation source preview",
@@ -3813,6 +3850,24 @@ export const officeMessagesZhCN: OfficeMessages = {
       noObjects: "没有可用对象",
       noCandidates: "没有候选对象",
       itemDescription: "{label}，类型 {kind}，识别可靠度 {reliability}",
+    },
+    regionAnnotator: {
+      defaultAriaLabel: "区域标注编辑器",
+      toolbarLabel: "标注工具",
+      arrow: "箭头",
+      rectangle: "矩形",
+      text: "文字",
+      highlight: "高亮",
+      color: "标注颜色",
+      remove: "删除选中的标注",
+      clear: "清除所有标注",
+      empty: "先框选并截图，然后在此添加标注。",
+      imageAlt: "区域截图预览",
+      textPlaceholder: "标注文字",
+      textSave: "添加文字",
+      textCancel: "取消文字",
+      hint: "在图片上拖动即可绘制。选中标注后按 Delete 删除。",
+      count: "{count} 条标注",
     },
     boundingBox: {
       noFields: "没有可显示的字段",

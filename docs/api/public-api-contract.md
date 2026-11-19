@@ -244,11 +244,12 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`OfficeThemeProvider`、`OfficeIcon`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension`、`FILE_DROP_OUTLINE`、`resolveOfficeTheme`、`officeSystemPrefersDark`、`provideOfficeTheme`、`useOfficeTheme`、`OFFICE_ICONS`、`OFFICE_ICON_NAMES`、`normalizeOfficeIconName`、`resolveOfficeIcon`、`provideOfficeIcons`、`useOfficeIcons` 和主题/图标相关常量，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css` 和 `@arcships/vue-ui/theme.css`；只使用浅色 token 契约时可以改用 `@arcships/vue-ui/tokens.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`OfficeRegionAnnotator`、`captureRegion`、`releaseRegionCapture`、`computeRegionCaptureGeometry`、`computeRegionRasterCrop`、`createOfficeRegionAnnotationDocument`、`parseOfficeRegionAnnotationDocument`、`stringifyOfficeRegionAnnotationDocument`、`officeRegionAnnotationBounds`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`OfficeThemeProvider`、`OfficeIcon`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension`、`FILE_DROP_OUTLINE`、`resolveOfficeTheme`、`officeSystemPrefersDark`、`provideOfficeTheme`、`useOfficeTheme`、`OFFICE_ICONS`、`OFFICE_ICON_NAMES`、`normalizeOfficeIconName`、`resolveOfficeIcon`、`provideOfficeIcons`、`useOfficeIcons` 和主题/图标相关常量，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css` 和 `@arcships/vue-ui/theme.css`；只使用浅色 token 契约时可以改用 `@arcships/vue-ui/tokens.css`。
 
 主题与 token 层（0.8 起）是所有 Office 组件唯一的视觉来源。`theme.css` 把 `@arcships/vue-ui/tokens.css` 内联进发布产物，并在 `[data-office-theme="light"]`、`[data-office-theme="dark"]`、`[data-office-theme="system"]` 下提供浅色、深色和 `prefers-color-scheme` 切换；所有声明都限定在 `data-office-theme` 子树内，不修改 `:root`、`html`、`body`，也不依赖全局 `.dark` 类。`OfficeThemeProvider` 写入 `data-office-theme`、`data-office-theme-resolved`、`data-office-density` 和可选的 `lang`，提供 `theme`（默认 `system`）、`locale`、`density`（`comfortable`/`compact`）、`messages`、`as` 五个可选 props，并通过 `useOfficeTheme()` 暴露只读上下文；`system` 在客户端监听 `matchMedia`，无 `window` 的 SSR 环境回退为浅色且不崩溃。字体 token `--office-font-sans` / `--office-font-mono` 默认 Geist / Geist Mono，但包内不打包字体（无 `@font-face`、无 `url()`），宿主自行加载并可通过 `[data-office-theme]` 覆盖。
 
 `OfficeIcon` 以 `@lucide/vue` 为运行时依赖（构建时 external），props 为 `name`、`icon`、`size`、`strokeWidth`、`label`；默认尺寸来自 `--office-icon-size`（16px），默认线宽为 `2`，省略 `label` 时输出 `aria-hidden="true"`。内置注册表只命名导入常用图标，未使用的 Lucide 图标不进入消费者 bundle；`provideOfficeIcons()` 可以在子树内扩展或覆盖，`resolveOfficeIcon()` 支持 `chevron-down`、`ChevronDown` 等写法。token 数值与 Extend 参考 commit `70fe70c6f1e1eee53954c6923f3d9f583557a57e` 对齐：`--office-radius: 0.625rem`、8% alpha 边框、4% alpha muted/secondary/accent、中性 primary、2px 焦点环、`shadow-xs`/`shadow-sm`。
+
 
 `OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
@@ -259,6 +260,12 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 各查看器在根元素绑定该组合函数，并在命中时抛出 `fileDrop(file)` 事件；拖入时根元素带 `data-file-drop-active="true"`。不支持的类型不会进入加载管线：DOCX 通过 `controller.setStatus()` 提示，XLSX/PDF/PPTX 在查看器上方渲染 `role="alert"` 条（文案来自 `xlsx.viewer.unsupportedDrop`、`pdf.viewer.unsupportedDrop`、`pptx.viewer.unsupportedDrop`）。`@arcships/vue-xlsx` 还导出 `XLSX_FILE_EXTENSIONS`、`XLSX_FILE_MIME_TYPES`、`XLSX_FILE_ACCEPT` 和 `isSupportedXlsxFileName`，`@arcships/vue-pdf`/`@arcships/vue-pptx` 提供同名的 `PDF_*`/`PPTX_*` 常量与判断函数。
 
 两个 Office 选择原语依赖 `@arcships/office-interaction` 的公开类型。它们只消费规范化几何和受控临时状态：不解析 Office 文件，不从 DOM 猜测格式对象，也不保存引用集合。轮廓层负责候选可视化和键盘事件；区域框负责 `0..1` 坐标中的拖选与键盘调整。确认后的工具栏、引用列表和 Agent 工作流由宿主实现。
+
+区域截图与标注是可选能力，headless 宿主不引入任何 DOM 依赖即可继续只使用引用事件。`captureRegion({ surface, region, scale })` 接受元素、宿主自建的 capture provider 或内置 Surface 组件实例（四个 Surface 都实现可选的 `getCaptureSurface()`）；`region` 可以是规范化矩形，也可以是 `ManualRegionLocator`，后者由有能力解析的 Surface 返回 `region` 覆盖值。默认 `scale` 为 `devicePixelRatio`，输出像素尺寸先经过 `maxPixels`、`maxDimension`、`maxBytes` 与 `MAX_REGION_CAPTURE_SCALE` 检查；返回对象持有 `blob`、`url`、`source` 元数据和 `release()`，宿主必须在替换或卸载时调用 `release()`/`releaseRegionCapture()` 以撤销 object URL。Canvas/图片 Surface 应提供 intrinsic `raster`，通过 `drawImage` 精确裁剪；纯 DOM Surface 使用 SVG `foreignObject` 尽力栅格化。
+
+`OfficeRegionAnnotator` 是同一能力的可选 Vue 组件：它在截图上提供箭头、矩形、文字和高亮工具，坐标始终相对截图自身归一化到 `[0,1]`，样式中的 `strokeWidth`/`fontSize` 相对短边归一化，因此 1x 与 2x 位图渲染一致。`OfficeRegionAnnotationDocument` 可经 `stringifyOfficeRegionAnnotationDocument()`/`parseOfficeRegionAnnotationDocument()` 往返 JSON；文档不属于 `OfficeObjectReference`，也不会上传或写入引用。组件只在 `image` 是 `Blob` 时创建 object URL，并在 prop 变化和卸载时撤销。
+
+完整字段、限制与示例见[区域截图与标注](region-capture-and-annotation.md)。
 
 ### 3.7 `@arcships/pptx-core`
 
@@ -292,7 +299,7 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 `DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受 `documentId?: string`、`selectionMode?: "content" | "object" | "region"` 和 `emitReferenceCandidates?: boolean`。`selectionMode` 是受控输入，只解释下一次选择手势；Surface 不保存确认后的引用。
 
-四个 Surface 共同 expose `getDocumentRevision()`、`hitTest()`、`describeReference()`、`resolveReference()`、`scrollToReference()` 和 `captureReferencePreview()`。当前预览位图采集由宿主渲染管线负责，内置实现会发出 `CAPTURE_UNSUPPORTED` 并拒绝 Promise，不会返回伪造截图。
+四个 Surface 共同 expose `getDocumentRevision()`、`hitTest()`、`describeReference()`、`resolveReference()`、`scrollToReference()` 和 `captureReferencePreview()`；同时提供可选的 `getCaptureSurface()` 供 `@arcships/vue-ui` 的 `captureRegion()` 使用。`captureReferencePreview()` 的位图采集仍由宿主渲染管线负责，内置实现会发出 `CAPTURE_UNSUPPORTED` 并拒绝 Promise，不会返回伪造截图；需要内建区域位图时使用新的 `captureRegion()` 合同。
 
 统一事件为 `documentRevisionChange`、`referenceCandidateChange`、`referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。既有 `selectionChange`、`objectClick`、`contextMenu` 等格式事件在 `0.x` 中继续保留。每个格式包从根入口重导出共享 Surface 类型，消费端无需深层导入。
 
@@ -376,6 +383,7 @@ XLSX 表格样式与透视/切片合同：`BUILTIN_TABLE_STYLES`、`resolveBuilt
 | `LayoutBlocks` | `block-click` | `LayoutBlock` |
 | `OfficeObjectOutlineLayer` | `activate`、`confirm`、`dismiss`、`navigate-hierarchy` | 候选轮廓；`confirm` 另含 `additiveRequested` 与 `penetrateRequested` |
 | `OfficeRegionSelector` | `update:modelValue`、`selection-start`、`selection-change`、`selection-commit`、`selection-cancel` | 规范化点或矩形；取消可返回原区域或 `null` |
+| `OfficeRegionAnnotator` | `update:modelValue`、`update:mode`、`update:color`、`annotation-add`、`annotation-remove`、`annotation-select`、`annotation-change`、`annotation-error`、`image-load` | 标注文档、单条标注、模式/颜色或错误；坐标归一化到截图 |
 
 `FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。`OfficeThemeProvider` 只写主题属性并暴露上下文，`OfficeIcon` 只渲染图标，两者不发出业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。选择控件只表达候选、确认或取消，宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行管理状态。
 

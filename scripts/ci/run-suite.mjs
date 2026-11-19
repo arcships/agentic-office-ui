@@ -192,6 +192,8 @@ command("core-behavior-5", process.execPath, [
       "tests/unit/pptx-hyperlinks.test.mjs",
       "tests/unit/pptx-speaker-notes.test.mjs",
       "tests/unit/pptx-transitions.test.mjs",
+      "tests/unit/region-capture.test.mjs",
+      "tests/unit/region-annotations.test.mjs",
       "tests/unit/core-purity.test.mjs",
       "tests/unit/attribution-contract.test.mjs",
 
@@ -262,6 +264,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/i18n-source.test.mjs",
       "tests/component/i18n-runtime.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
+      "tests/component/region-annotator.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",

@@ -427,6 +427,7 @@ import {
 } from "../composables/useFormulaReferenceEditing";
 import { cellAddressToA1, rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
+import type { ManualRegionLocator, NormalizedRect } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
 import XlsxAutoFilterMenu from "./XlsxAutoFilterMenu.vue";
@@ -5641,6 +5642,50 @@ const editMirrorStyle = computed<CSSProperties>(() => {
   };
 });
 
+function sheetRegionViewportRect(
+  region: Extract<ManualRegionLocator, { space: "sheet" }>,
+): NormalizedRect | null {
+  const viewport = bodyViewportSize();
+  if (!(viewport.width > 0) || !(viewport.height > 0)) return null;
+  const startDisplay = getDisplayCell({ row: region.start.row, col: region.start.col });
+  const endDisplay = getDisplayCell({ row: region.end.row, col: region.end.col });
+  if (!startDisplay || !endDisplay) return null;
+  const startWidth = effectiveColWidths.value[startDisplay.col] || DEFAULT_COL_WIDTH;
+  const startHeight = effectiveRowHeights.value[startDisplay.row] || DEFAULT_ROW_HEIGHT;
+  const endWidth = effectiveColWidths.value[endDisplay.col] || DEFAULT_COL_WIDTH;
+  const endHeight = effectiveRowHeights.value[endDisplay.row] || DEFAULT_ROW_HEIGHT;
+  const start = paneOverlayRect(
+    { row: region.start.row, col: region.start.col },
+    {
+      contentX: getColOffsetSum(startDisplay.col) + region.start.xOffset * startWidth,
+      contentY: getRowOffsetSum(startDisplay.row) + region.start.yOffset * startHeight,
+      width: 0,
+      height: 0,
+    },
+  );
+  const end = paneOverlayRect(
+    { row: region.end.row, col: region.end.col },
+    {
+      contentX: getColOffsetSum(endDisplay.col) + region.end.xOffset * endWidth,
+      contentY: getRowOffsetSum(endDisplay.row) + region.end.yOffset * endHeight,
+      width: 0,
+      height: 0,
+    },
+  );
+  if (!start || !end) return null;
+  const left = Math.max(0, Math.min(start.left, end.left));
+  const top = Math.max(0, Math.min(start.top, end.top));
+  const right = Math.min(viewport.width, Math.max(start.left, end.left));
+  const bottom = Math.min(viewport.height, Math.max(start.top, end.top));
+  if (!(right > left) || !(bottom > top)) return null;
+  return {
+    x: left / viewport.width,
+    y: top / viewport.height,
+    width: (right - left) / viewport.width,
+    height: (bottom - top) / viewport.height,
+  };
+}
+
 defineExpose({
   captureZoomAnchor,
   restoreZoomAnchor,
@@ -5648,6 +5693,7 @@ defineExpose({
   hitTestCell,
   hitTestAxis,
   hitTestSheetPoint,
+  sheetRegionViewportRect,
   isEditingCell,
   get scrollContainer() {
     return containerRef.value;

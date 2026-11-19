@@ -109,5 +109,10 @@ export type {
 // Office selection primitives
 export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"
 export { default as OfficeRegionSelector } from "./components/OfficeRegionSelector.vue"
+export { default as OfficeRegionAnnotator } from "./components/OfficeRegionAnnotator.vue"
+
+// Region capture and annotation documents
+export * from "./region-capture"
+export * from "./region-annotations"
 
 export type * from "./types"
