@@ -216,8 +216,8 @@
       "category": "normal",
       "source": "synthetic-v1",
       "expected": "parse multi-axis freeze panes, list validation and two-letter column widths",
-      "bytes": 14265,
-      "sha256": "9f14239c8cb11cf4f191693dcb4686e9fc2c3a1c036e4e27166ab4881f6c1dbb"
+      "bytes": 14290,
+      "sha256": "c9e4a6f24730892495b7c28ef6bc7df3bd314e0798f1ac3d7e603a799375553a"
     },
     {
       "file": "sales-table.xlsx",

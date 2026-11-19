@@ -1384,7 +1384,40 @@ def make_financial_model(path: Path):
     wb.save(path)
 
 
-def make_sales_table(path: Path):
+def make_sales_table_legacy(path: Path):
+    random.seed(42)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales Data"
+    headers = ["Region", "Rep", "Product", "Month", "Units", "Unit Price", "Revenue", "Notes"]
+    ws.append(headers)
+    regions = ["North", "South", "East", "West", "APAC", "EMEA"]
+    products = ["Doc Extract", "PDF Viewer", "XLSX Engine", "Workflow Bot"]
+    for i in range(1, 181):
+        units = random.randint(5, 180)
+        price = random.choice([49, 89, 129, 249])
+        ws.append([random.choice(regions), f"Rep {i%17+1}", random.choice(products), f"2026-{(i%12)+1:02d}", units, price, f"=E{i+1}*F{i+1}", "Long note validating overflow and cell text truncation behavior in the grid viewer."])
+    style_header(ws)
+    ws.freeze_panes = "A2"
+    widths = [14, 12, 18, 12, 10, 12, 14, 58]
+    for idx, width in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    for cell in ws[1]:
+        cell.border = Border(bottom=Side(style="medium", color="1C3A5E"))
+    sales_table = XlsxTable(displayName="SalesRecords", ref=f"A1:H{ws.max_row}")
+    sales_table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    )
+    ws.add_table(sales_table)
+    wb.save(path)
+
+
+def make_sales_table_validated(path: Path):
+    random.seed(4242)
     wb = Workbook()
     ws = wb.active
     ws.title = "Sales Data"
@@ -1638,7 +1671,8 @@ def fixture_builders() -> dict[str, Callable[[], None]]:
         "large-contract.pdf": lambda: make_pdf_large(SAMPLES / "large-contract.pdf"),
         "corrupted.pdf": lambda: make_corrupted(SAMPLES / "corrupted.pdf", "%PDF corrupted fixture\n"),
         "financial-model.xlsx": lambda: make_financial_model(SAMPLES / "financial-model.xlsx"),
-        "sales-table.xlsx": lambda: make_sales_table(SAMPLES / "sales-table.xlsx"),
+        "sales-table.xlsx": lambda: make_sales_table_legacy(SAMPLES / "sales-table.xlsx"),
+        "sales-table-validated.xlsx": lambda: make_sales_table_validated(SAMPLES / "sales-table-validated.xlsx"),
         "charts-images.xlsx": lambda: make_charts_images(SAMPLES / "charts-images.xlsx", invoice_png),
         "large-grid.xlsx": lambda: make_large_grid(SAMPLES / "large-grid.xlsx"),
         "corrupted.xlsx": lambda: make_corrupted(SAMPLES / "corrupted.xlsx", "This is not a valid XLSX package. "),

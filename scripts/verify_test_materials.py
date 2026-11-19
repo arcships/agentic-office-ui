@@ -446,6 +446,16 @@ xlsx_expectations: dict[str, dict[str, object]] = {
         "freeze": None,
         "validations": 0,
     },
+    "sales-table.xlsx": {
+        "sheets": ["Sales Data"],
+        "charts": 0,
+        "merged": [],
+        "freeze": "A2",
+        "validations": 0,
+        "tables": ["SalesRecords"],
+        "maxRow": 181,
+        "maxColumn": 8,
+    },
     "sales-table-validated.xlsx": {
         "sheets": ["Sales Data"],
         "charts": 0,

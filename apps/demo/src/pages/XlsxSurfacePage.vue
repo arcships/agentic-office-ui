@@ -1,5 +1,6 @@
 <template>
   <div class="page" data-testid="xlsx-surface-page">
+    <span data-testid="page-status" :data-state="surfaceState" hidden></span>
     <header class="page-header">
       <div>
         <h2>Excel/CSV Surface — 最小嵌入组件</h2>
