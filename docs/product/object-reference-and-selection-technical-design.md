@@ -1,8 +1,8 @@
 # Office 对象引用与选择技术设计
 
-> 状态：T1–T6 已完成；四格式阶段一统一引用、Surface 事件、demo 闭环与发布验收均已通过
+> 状态：T1–T6 已完成；四格式阶段一统一引用、Surface 事件、demo 闭环与发布验收均已通过。`0.8` 批次已实现阶段二–四的首批对象注册、父子层级与不可见行为（见 §12.1），未覆盖项显式延期
 >
-> 代码基线：`0.6.0` 源码候选（npm 稳定版为 `0.5.4`）
+> 代码基线：`0.8` 源码分支（npm 稳定版为 `0.7.1`）
 >
 > 产品范围：见[《Office 对象语义与意图选择》](./object-semantics-and-selection.md)
 >
@@ -934,6 +934,55 @@ provider 只返回检测结果，不生成 `referenceId`；PDF 适配器把 `pro
 - 增加行为与设置的 descriptor/reference 适配器；
 - 行为引用同时包含行为身份和作用对象/范围；
 - 完成产品矩阵列出的公式、规则、动画、翻页、动作和其他不可见对象；宿主负责时间线、属性面板或结构树界面。
+
+### 12.1 阶段二–四首批实现（0.8 批次）
+
+新增的公共表面都向后兼容：只增加可选类型、provider 入口和可选 props/事件载荷；已有引用、Surface 事件和 `objectClick` 不变。
+
+#### 12.1.1 通用可扩展对象注册
+
+`@arcships/office-interaction` 新增 `objects.ts`：
+
+| 导出 | 作用 |
+|---|---|
+| `OfficeObjectProvider<TContext>` | 每格式可注册的对象族：`id`、`format`、`kinds`、同步 `list(context, options)`；返回当前修订的 `OfficeObjectDescriptor` |
+| `createOfficeObjectRegistry<TContext>(initial?)` | `register` / `unregister` / `get` / `providers` / `list`；`list` 支持 `kinds`、`visibleOnly`、`maxObjects`（上限 `MAX_OFFICE_OBJECT_CANDIDATES`），并校验 provider 返回的格式与自身声明一致 |
+| `createOfficeObjectDescriptor(init)` | 防御性复制 `path` / `visual.fragments` / `facets`，拒绝空 `objectId` / `label` 和自引用父级 |
+| `createOfficeObjectFingerprint(init)` | 复制并冻结 `ancestorKeys` |
+| `isOfficeObjectVisible(descriptor)` | 有渲染几何的 descriptor 为可见；阶段四行为没有 `visual`，不产生画布轮廓 |
+| `officeObjectAncestors` / `officeObjectChildren` | 基于 `parentObjectId` 的父子查询；检测层级环 |
+| `rankOfficeObjectCandidates` / `officeObjectCandidatePreview` | 复用现有命中排序（direct → inside → inferred → ancestor，再按深度、面积、z 序、语义可靠度、来源、id）并转换为 Surface 候选载荷 |
+
+每种格式各有一个 `create*ObjectRegistry()` 提供内置对象族，宿主可注册额外 provider（例如 PDF 视觉识别、宿主自定义形状）。对象 descriptor 的 `objectId` 只在当前修订内稳定，不能替代 `referenceId`。
+
+#### 12.1.2 分格式接入
+
+| 格式 | 新增入口（包根导出） | 阶段 |
+|---|---|---|
+| DOCX | `createDocxObjectIndex`、`createDocxObjectRegistry`、`enumerateDocxBehaviors`、`createDocxBehaviorReferenceDraft`、`docxBlockReferenceKind`；`createDocxTableReferenceDraft` / `createDocxBlockReferenceDraft` / `createDocxImageReferenceDraft` 增加 fingerprint | 2 / 3 / 4 |
+| XLSX | `createXlsxTableReferenceDraft`、`createXlsxDrawingReferenceDraft`、`createXlsxCommentReferenceDraft`、`createXlsxChartElementReferenceDraft`、`createXlsxBehaviorReferenceDraft`、`createXlsxBehaviorRecords`、`createXlsxObjectRegistry`、`describeXlsx*` | 2 / 3 / 4 |
+| PPTX | `createPptxSubObjectReferenceDraft`、`createPptxBehaviorReferenceDraft`、`createPptxBehaviorDraftFromRecord`、`enumeratePptxBehaviors`、`createPptxObjectIndex`、`createPptxObjectRegistry`；`PptxReferenceContext` 增加可选 `getObjectTable` / `getObjectChart` | 2 / 3 / 4 |
+| PDF | `createPdfNativeObjectReferenceDraft`、`createPdfVisualObjectReferenceDraft`、`createPdfBehaviorReferenceDraft`、`createPdfBehaviorRecords`、`createPdfObjectRegistry`、`PdfVisualObjectProvider` / `PdfVisualObjectDetection`；`PdfReferenceContext` 增加可选 `annotations` / `visualObjects` / `behaviors` | 2 / 3 / 4 |
+
+行为 locator 的 `instanceId` / `nativeId` 全部由原生 id、规范路径、规则索引和内容哈希确定性生成；重新解析同一字节得到同一身份。PPTX 与 PDF 的表格/图表内部证据由宿主提供时才能建立子对象引用；缺少证据返回 `unsupported` 或拒绝创建，而不是猜测。
+
+#### 12.1.3 Surface 轮廓与候选
+
+- 四种 Surface 在 `selectionMode="object"` 时用对象索引/原生注释层构建候选；`emitReferenceCandidates` 继续控制 `referenceCandidateChange`。
+- 悬停时渲染一个弱样式的轮廓层（DOCX/PPTX/XLSX 为绝对定位或表格单元格矩形；PDF 使用页面归一化矩形），标签来自候选 `preview.label`；指针离开或切换模式时清除。
+- 阶段四行为只从 `describeReference`/对象索引返回，用于宿主结构树、时间线或属性面板，不进入轮廓层。
+- XLSX 图表元素依赖渲染 SVG 的 `data-xlsx-chart-series-index` / `data-xlsx-chart-point-index`；图表项、图片、形状、表单控件新增 `data-chart-id` / `data-drawing-id` / `data-drawing-kind` 标记，均不影响既有 DOM 契约。
+- PPTX 表格单元格从宿主提供的渲染表格网格生成 `getObjectTable` 证据；PDF 注释命中层新增 `data-annotation-id`。
+- `objectClick` 在四种 Surface 中保持发送，阶段二验收完成后另行发布替换说明。
+
+#### 12.1.4 延期项
+
+- DOCX：嵌套表格独立层级、页眉/脚注中的字段与修订扫描。
+- XLSX：表格行/单元格对象、Worker 工作簿的公式枚举、图表内部重叠候选的专门排序。
+- PPTX：图表内部元素在默认 Surface 的几何来源（渲染器不暴露系列几何），表格行对象。
+- PDF：内置视觉识别（按设计不进入包体）、视觉表格行列层级、附件/OCG/签名/权限的 PDF 解析（库只接受宿主提供的记录）。
+
+延期项不影响阶段一–四现有引用合同的兼容性，也不改变产品矩阵的阶段完成口径。
 
 ## 13. 测试与发布门禁
 
