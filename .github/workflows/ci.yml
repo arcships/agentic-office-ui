@@ -16,6 +16,9 @@ permissions:
 
 env:
   NODE_VERSION: "22.13.0"
+  # Corepack otherwise fetches the latest pnpm metadata; a rotated signature
+  # key on the runner makes that fail. Use the pinned packageManager version.
+  COREPACK_DEFAULT_TO_LATEST: "0"
 
 jobs:
   check:
