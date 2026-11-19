@@ -88,8 +88,12 @@
     "bytes": 2413
   },
   {
-    "name": "sales-table.xlsx",
+    "name": "sales-table-validated.xlsx",
     "bytes": 14265
+  },
+  {
+    "name": "sales-table.xlsx",
+    "bytes": 13226
   },
   {
     "name": "sample.pdf",

@@ -211,13 +211,22 @@
       "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6"
     },
     {
+      "file": "sales-table-validated.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse multi-axis freeze panes, list validation and two-letter column widths",
+      "bytes": 14265,
+      "sha256": "9f14239c8cb11cf4f191693dcb4686e9fc2c3a1c036e4e27166ab4881f6c1dbb"
+    },
+    {
       "file": "sales-table.xlsx",
       "type": "xlsx",
       "category": "normal",
       "source": "synthetic-v1",
-      "expected": "parse a sales table with multi-axis freeze panes, a list-validated status column and widths for two-letter columns",
-      "bytes": 14265,
-      "sha256": "9f14239c8cb11cf4f191693dcb4686e9fc2c3a1c036e4e27166ab4881f6c1dbb"
+      "expected": "parse a sales workbook with tables, formulas and number formats",
+      "bytes": 13226,
+      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
     },
     {
       "file": "sample.pdf",
