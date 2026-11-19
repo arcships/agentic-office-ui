@@ -26,6 +26,12 @@ export default defineConfig({
         ),
       },
       {
+        find: "@arcships/vue-ui/style.css",
+        replacement: fileURLToPath(
+          new URL("../../packages/vue-ui/src/styles/ui.css", import.meta.url),
+        ),
+      },
+      {
         find: "@arcships/vue-ui",
         replacement: fileURLToPath(new URL("./src/shims/vue-ui.ts", import.meta.url)),
       },

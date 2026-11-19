@@ -52,7 +52,7 @@
       "subjectComponent": "packages/vue-ui/src/components/FileUpload.vue",
       "subjectStatus": "available",
       "cellWidth": 520,
-      "notes": "Extend renders the icon cluster, drop-target chip and an in-component file list; the Vue FileUpload is a host-rendered dropzone that only emits accepted/rejected files.",
+      "notes": "Extend's icon cluster, drop-target chip and in-component file list are reproduced by the Vue FileUpload (opt-in file list, same geometry/colors).",
       "states": [
         { "id": "default", "label": "default (empty)", "matrixState": "empty", "interaction": { "type": "none" } },
         { "id": "hover", "label": "hover", "matrixState": "hover", "interaction": { "type": "hover", "selector": "[role='button']" } },
@@ -69,7 +69,7 @@
       "subjectComponent": "packages/vue-ui/src/components/FileThumbnail.vue",
       "subjectStatus": "available",
       "cellWidth": 220,
-      "notes": "Extend renders a square preview tile with loading/error/fallback layers; the Vue FileThumbnail renders an inline file row with a type badge and file name.",
+      "notes": "Extend's square preview card, blur-in reveal, loading overlay, error fallback and muted empty tile are reproduced by the Vue FileThumbnail.",
       "states": [
         { "id": "default", "label": "empty fallback", "matrixState": "empty", "interaction": { "type": "none" } },
         { "id": "loading", "label": "loading", "matrixState": "loading", "interaction": { "type": "none" } },
@@ -100,9 +100,9 @@
       "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
       "subjectComponent": null,
       "subjectStatus": "missing",
-      "pendingIssue": "#163",
+      "pendingIssue": "#158",
       "cellWidth": 220,
-      "notes": "Reference baseline only: the thumbnail sidebar lands with the FileUpload/FileThumbnail/DocumentViewerSidebar work in #163.",
+      "notes": "Reference baseline only: the canonical DocumentViewerSidebar is being implemented by #158 (packages/vue-ui/src/components/chrome/). #163 documents the integration seam and does not duplicate it.",
       "states": [
         { "id": "open", "label": "open (inline)", "matrixState": "default", "interaction": { "type": "none" } },
         { "id": "closed", "label": "closed (inline)", "matrixState": "default", "interaction": { "type": "none" } },

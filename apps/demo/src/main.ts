@@ -28,6 +28,7 @@ const router = createRouter({
     { path: "/pdf-surface", component: () => import("./pages/PdfSurfacePage.vue") },
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
     { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
+    { path: "/file-components", component: () => import("./pages/FileComponentsPage.vue") },
     { path: "/primitives", component: () => import("./pages/PrimitivesPage.vue") },
     { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },
     { path: "/docx-parity", component: () => import("./pages/DocxParityPage.vue") },
