@@ -373,7 +373,7 @@ h2 { margin-bottom: 4px; }
 .error { color: #dc2626; font-size: 13px; margin: 0 0 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
 .worker-note { grid-column: 1 / -1; color: #b45309; }
-.viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; background: white; position: relative; transition: border-color 0.2s, background 0.2s; }
+.viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; background: white; position: relative; height: clamp(420px, 70vh, 760px); transition: border-color 0.2s, background 0.2s; }
 .viewer-container--drag-active { border-color: #3b82f6; border-width: 2px; background: rgba(59, 130, 246, 0.04); }
 .drag-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.08); z-index: 100; pointer-events: none; }
 .drag-overlay span { color: #3b82f6; font-size: 18px; font-weight: 600; }

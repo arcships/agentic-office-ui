@@ -917,7 +917,7 @@ defineExpose({
 .xlsx-viewer__body {
   display: flex;
   flex: 1;
-  min-height: 0;
+  min-height: 360px;
   min-width: 0;
   position: relative;
   touch-action: pan-x pan-y;
