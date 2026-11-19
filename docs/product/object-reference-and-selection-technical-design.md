@@ -406,7 +406,7 @@ export type RegionAnnotation =
 
 页面和幻灯片区域使用 `[0, 1]` 规范化坐标；工作表区域使用单元格地址加单元格内部偏移，避免滚动和缩放改变引用。`RegionAnnotation` 只是供宿主复用的可选几何数据类型，不进入 `OfficeObjectReference`，也不是选择器必须保存的状态。宿主可以自行实现箭头、矩形、文字或其他标注界面，并决定如何保存和传输。所有 annotation 点和矩形都相对“已选区域自身”的左上角与宽高归一化，工作表标注也先映射到所选 sheet region，再解释 `[0, 1]` 坐标。
 
-截图只是同一区域在某个修订、缩放和像素密度下的预览附件。公共引用只保存区域，不保存标注、截图或 Blob URL。宿主如需预览位图，应通过显式 `captureReferencePreview()` 得到临时 Blob，并自行决定是否标注、上传、保留或脱敏。
+截图只是同一区域在某个修订、缩放和像素密度下的预览附件。公共引用只保存区域，不保存标注、截图或 Blob URL。宿主如需预览位图，应通过显式 `captureReferencePreview()` 得到临时 Blob，并自行决定是否标注、上传、保留或脱敏。0.8.0 在不改变该边界的前提下提供可选的 `@arcships/vue-ui` `captureRegion()` 与 `OfficeRegionAnnotator`；`captureReferencePreview()` 自身仍不内建位图采集。
 
 ### 5.6 引用、描述和确认事件
 

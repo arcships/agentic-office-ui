@@ -62,6 +62,10 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult, localizeOfficeDescriptorLabel } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
 
@@ -699,6 +703,24 @@ defineExpose({
     return props.scrollContainer
   },
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /** Region-capture hook for `captureRegion()` in `@arcships/vue-ui`. */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; slideIndex?: number }
+    const requested = request.target?.slideIndex
+      ?? (locator.space === "slide" ? locator.slideIndex : undefined)
+    const slides = slideElements()
+    const slide = slides.find((element) => Number(element.dataset.slideIndex) === requested) ?? slides[0]
+    if (!slide) return null
+    const slideIndex = Number(slide.dataset.slideIndex)
+    return {
+      element: slide,
+      format: "pptx",
+      space: "slide",
+      slideIndex: Number.isSafeInteger(slideIndex) ? slideIndex : requested ?? 0,
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
     if (signal?.aborted) throw new DOMException("PPTX reference description aborted.", "AbortError")

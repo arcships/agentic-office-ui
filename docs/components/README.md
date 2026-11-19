@@ -32,16 +32,25 @@
 
 ### Office 对象选择控件
 
-`@arcships/vue-ui` 提供两个与格式无关的受控选择原语：
+`@arcships/vue-ui` 提供与格式无关的受控选择与标注原语：
 
 | 组件 | 输入 | 输出 |
 |---|---|---|
 | `OfficeObjectOutlineLayer` | 当前容器内的 `OfficeObjectOutline[]` 和活动候选 id | `activate`、`confirm`、`dismiss`、`navigate-hierarchy` |
 | `OfficeRegionSelector` | 规范化 `modelValue` 区域 | `update:modelValue`、`selection-start/change/commit/cancel` |
+| `OfficeRegionAnnotator` | 截图 URL/`Blob` 与 `OfficeRegionAnnotationDocument` | `update:modelValue`、`annotation-add/remove/select/change/error` |
 
 轮廓和区域坐标均为当前页面、幻灯片或工作表容器内的 `0..1` 规范坐标。组件不读取 Office 文件、不生成格式定位器、不保存引用集合，也不决定确认后的界面或动作；宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行处理事件。四种格式 Surface 已直接提供同合同的候选、确认和区域事件；这两个原语用于宿主需要自定义轮廓或区域交互时按需组合，不要求 Surface 固定挂载某种产品 UI。
 
 轮廓层支持 `Tab`、`Shift+Tab`、上下方向键、`Enter`、`Escape` 和左右层级导航事件；点击时 `Shift` 会在 `confirm` 参数中设置 `additiveRequested`，`Alt/Option` 设置 `penetrateRequested`。区域框支持拖选、方向键移动、`Shift + 方向键` 调整大小、`Enter` 确认和 `Escape` 取消。
+
+### `OfficeRegionAnnotator`
+
+在 `captureRegion()` 返回的位图上提供箭头、矩形、文字和高亮工具。`modelValue` 是 `OfficeRegionAnnotationDocument`，坐标相对截图归一化；`toJSON()`/`loadJSON()` 可与 `stringifyOfficeRegionAnnotationDocument()`/`parseOfficeRegionAnnotationDocument()` 往返。`image` 传 `Blob` 时组件会创建并在替换/卸载时撤销 object URL。详细属性、限制和示例见[区域截图与标注](../api/region-capture-and-annotation.md)。
+
+### 区域截图
+
+`captureRegion({ surface, region, scale })` 接受元素、capture provider 或内置 Surface 组件实例。Canvas/图片 Surface 提供 intrinsic `raster` 时按像素精确裁剪；纯 DOM Surface 使用 `foreignObject` 尽力栅格化。返回对象包含 `blob`、`url`、`source` 元数据和幂等 `release()`，宿主必须在替换或卸载时撤销 URL。完整合同见[区域截图与标注](../api/region-capture-and-annotation.md)。
 
 ### `FileUpload`
 

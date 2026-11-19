@@ -117,6 +117,10 @@ import {
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 import {
   findDocxSearchMatches,
   type DocxSearchMatch,
@@ -1391,6 +1395,29 @@ defineExpose({
     return viewerRootRef.value?.scrollContainer
   },
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /**
+   * Optional region-capture hook consumed by `captureRegion()` in
+   * `@arcships/vue-ui`. Returns the currently rendered page wrapper so the
+   * host can crop the page from the same scroll position the user saw.
+   */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; pageIndex?: number }
+    const requestedPage = request.target?.pageIndex
+      ?? (locator.space === "page" ? locator.pageIndex : undefined)
+    const root = surfaceRef.value
+    const pages = Array.from(root?.querySelectorAll<HTMLElement>("[data-docx-page-wrapper]") ?? [])
+    const page = pages.find((element) => Number(element.dataset.docxPageIndex) === requestedPage) ?? pages[0]
+    if (!page) return null
+    const pageIndex = Number(page.dataset.docxPageIndex)
+    return {
+      element: page,
+      format: "docx",
+      space: "page",
+      pageIndex: Number.isSafeInteger(pageIndex) ? pageIndex : requestedPage ?? 0,
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
   /** Extracts the document block tree (body, headers/footers, notes). */
   getDocumentBlocks(
     options: Omit<ExtractDocumentBlocksOptions, "documentId"> = {},

@@ -5,6 +5,10 @@ import type {
   OfficeObjectKind,
   ReliabilityLevel,
 } from "@arcships/office-interaction"
+import type {
+  OfficeRegionAnnotationDocument,
+  OfficeRegionAnnotationKind,
+} from "./region-annotations"
 
 export interface SignaturePadProps {
   width?: number
@@ -126,6 +130,32 @@ export interface OfficeRegionSelectorProps {
   disabled?: boolean
   minSize?: number
   keyboardStep?: number
+  ariaLabel?: string
+  className?: string
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
+}
+
+export interface OfficeRegionAnnotatorProps {
+  /** Controlled annotation document. */
+  modelValue?: OfficeRegionAnnotationDocument | null
+  /** Captured bitmap URL, or a Blob that the component owns and revokes. */
+  image?: string | Blob | null
+  /** Intrinsic bitmap width; falls back to the decoded image size. */
+  width?: number
+  /** Intrinsic bitmap height; falls back to the decoded image size. */
+  height?: number
+  /** Active drawing tool. */
+  mode?: OfficeRegionAnnotationKind
+  color?: string
+  /** Normalized stroke width (fraction of the shorter image edge). */
+  strokeWidth?: number
+  /** Normalized font size (fraction of the shorter image edge). */
+  fontSize?: number
+  disabled?: boolean
+  readOnly?: boolean
+  maxAnnotations?: number
+  alt?: string
   ariaLabel?: string
   className?: string
   locale?: OfficeLocale

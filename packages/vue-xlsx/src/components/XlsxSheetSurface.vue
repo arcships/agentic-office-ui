@@ -137,6 +137,7 @@ import {
   type OfficeSelectionMode,
   type SheetRegionPoint,
   type ResolveReferenceResult,
+  type ManualRegionLocator,
 } from "@arcships/office-interaction"
 import XlsxGrid from "./XlsxGrid.vue"
 import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue"
@@ -152,6 +153,10 @@ import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
 import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 
 const props = withDefaults(
   defineProps<{
@@ -730,6 +735,42 @@ defineExpose({
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
     emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "XLSX" }), reference.referenceId)
     throw new Error("XLSX reference preview capture is unsupported")
+  },
+  /** Region-capture hook for `captureRegion()` in `@arcships/vue-ui`. */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; sheetId?: string }
+    const sheetId = request.target?.sheetId
+      ?? (locator.space === "sheet" ? locator.sheetId : undefined)
+      ?? props.controller.activeTab?.id
+      ?? props.controller.activeSheet?.name
+    const root = surfaceRef.value
+    const body = root?.querySelector<HTMLCanvasElement>(".xlsx-grid__body")
+    const resolved = locator.space === "sheet"
+      ? gridRef.value?.sheetRegionViewportRect(request.region as Extract<ManualRegionLocator, { space: "sheet" }>) ?? undefined
+      : undefined
+    if (body) {
+      return {
+        element: body,
+        raster: { source: body, width: body.width, height: body.height },
+        ...(resolved ? { region: resolved } : {}),
+        format: "xlsx",
+        space: "sheet",
+        ...(sheetId ? { sheetId } : {}),
+        documentId: documentRevision.value.documentId,
+        revision: documentRevision.value.revision,
+      }
+    }
+    const grid = root?.querySelector<HTMLElement>(".xlsx-grid") ?? root
+    if (!grid) return null
+    return {
+      element: grid,
+      ...(resolved ? { region: resolved } : {}),
+      format: "xlsx",
+      space: "sheet",
+      ...(sheetId ? { sheetId } : {}),
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
   },
 })
 </script>
