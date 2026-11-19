@@ -92,6 +92,7 @@
         :model="model"
         :show-tracked-changes="showTrackedChanges"
         :show-comments="showComments"
+        :theme="isDark ? 'dark' : 'light'"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
         document-id="demo-docx-document"
@@ -210,6 +211,7 @@ import {
   type OfficeRegionCaptureRegion,
 } from "@arcships/vue-ui"
 import { createLatestRequestGate } from "../lib/latest-request"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 // ── Samples ──────────────────────────────────────────────────────────
 const samples = [
@@ -240,6 +242,7 @@ const loadGate = createLatestRequestGate()
 
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
+const isDark = readDemoTheme() === "dark"
 const zoom = ref(1)
 const fitWidth = ref(false)
 const searchQuery = ref("")

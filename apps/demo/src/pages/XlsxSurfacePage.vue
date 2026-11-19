@@ -69,6 +69,7 @@
         :file="fileBuffer"
         :file-name="displayName"
         :read-only="readOnly"
+        :is-dark="isDark"
         :zoom="zoom"
         @cellDoubleClick="onCellDoubleClick"
         @contextMenu="onContextMenu"
@@ -109,6 +110,7 @@ import {
   type XlsxSearchState,
 } from "@arcships/vue-xlsx"
 import { OfficeFindBar } from "@arcships/vue-ui"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 // ── Inline host component — creates a fresh controller per mount,
 // enabling file-switching via reactive key on the parent. ─────────────
@@ -117,6 +119,7 @@ const XlsxSurfaceHost = defineComponent({
     file: { type: Object as PropType<ArrayBuffer | null> },
     fileName: { type: String, default: "" },
     readOnly: { type: Boolean, default: false },
+    isDark: { type: Boolean, default: false },
     zoom: { type: Number, default: 1 },
   },
   emits: [
@@ -162,6 +165,7 @@ const XlsxSurfaceHost = defineComponent({
             ref: surface,
             controller,
             "read-only": props.readOnly,
+            "is-dark": props.isDark,
             zoom: props.zoom,
             style: { flex: "1" },
             onCellDoubleClick: (cell: any) => emit("cellDoubleClick", cell),
@@ -186,6 +190,7 @@ const samples = [
 
 // ── State ────────────────────────────────────────────────────────────
 const readOnly = ref(false)
+const isDark = readDemoTheme() === "dark"
 const selectedSample = ref(samples[0].file)
 const fileBuffer = ref<ArrayBuffer | null>(null)
 const displayName = ref("")

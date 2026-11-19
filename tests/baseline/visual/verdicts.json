@@ -1,0 +1,107 @@
+[
+  {
+    "issue": 13,
+    "title": "XLSX grid per-paint conditional-format stats, worksheet handles and sheet thumbnails",
+    "verdict": "needs-another-fixture",
+    "evidence": ["evidence/xlsx-viewer-databar-icons.webp", "evidence/xlsx-viewer-charts.webp"],
+    "observed": "The data-bar/icon workbook and chart workbook render without visible layout or paint failures; conditional-format output is present.",
+    "gap": "This is a per-frame performance finding and cannot be confirmed or refuted from screenshots. It needs a CDP trace or the component perf suite."
+  },
+  {
+    "issue": 14,
+    "title": "XLSX frozen panes ignore the freeze offset in headers, hit-testing, repaint and the editor",
+    "verdict": "refuted",
+    "evidence": ["evidence/xlsx-viewer-freeze-merge.webp", "evidence/xlsx-surface-freeze-merge.webp"],
+    "observed": "charts-images.xlsx reports freezeRow=2/freezeColumn=2. After scrolling to column K / row 13, A–B and rows 1–2 stay pinned and painted; the grid host and surface agree.",
+    "gap": "Pointer hit-testing, column-header resize and the inline editor position were not exercised by a screenshot scenario."
+  },
+  {
+    "issue": 15,
+    "title": "XLSX merged regions, anchored objects, text overflow, icon sets, DPR and canvas limits",
+    "verdict": "refuted",
+    "evidence": [
+      "evidence/xlsx-viewer-freeze-merge.webp",
+      "evidence/xlsx-viewer-databar-icons.webp",
+      "evidence/xlsx-viewer-iconsets.webp",
+      "evidence/xlsx-viewer-dpr2.webp"
+    ],
+    "observed": "The merged region is still drawn after its anchor is scrolled away; negative data bars and 4/5-bucket icon glyphs render; at DPR 2 every visible grid canvas backing store follows the 2× ratio.",
+    "gap": "Hidden-row/column anchor drift and text overflow into empty neighbours need a dedicated fixture. Canvas pixel limits need an oversized-worksheet fixture."
+  },
+  {
+    "issue": 27,
+    "title": "DOCX multi-page shell page-height cache, thumbnails, gutter inflation, fit-width and drag outline",
+    "verdict": "refuted",
+    "evidence": ["evidence/docx-viewer-page-sizes.webp", "evidence/docx-viewer-thumbnails.webp"],
+    "observed": "page-sizes.docx renders five page surfaces and five thumbnails with distinct heights (198/99/181 px at a fixed 140 px width), so portrait/landscape pages are not forced into one aspect ratio. thumbnails render text and images.",
+    "gap": "The stale per-index measured-height cache and thumbnail cache thrash require a scripted document switch; this snapshot only verifies the visible shell."
+  },
+  {
+    "issue": 28,
+    "title": "DOCX editor global keydown scope, tracked-changes toolbar, dead context menu, fake paste, dirty tracking",
+    "verdict": "needs-another-fixture",
+    "evidence": ["evidence/docx-editor-default.webp"],
+    "observed": "The editor route mounts the toolbar, editable page surface and status line (status ready, editable state, undo/redo indicators).",
+    "gap": "Global Ctrl+B/Ctrl+S scope, context-menu actions, paste insertion and dirty tracking are interaction behaviours. They need a keyboard/pointer fixture and are already covered by the behavioural suite rather than a screenshot."
+  },
+  {
+    "issue": 29,
+    "title": "DOCX comment cards are not anchored to text and scale with page zoom",
+    "verdict": "refuted",
+    "evidence": [
+      "evidence/docx-viewer-comments.webp",
+      "evidence/docx-viewer-comments-zoom50.webp",
+      "evidence/docx-viewer-comments-zoom200.webp"
+    ],
+    "observed": "review-threads.docx renders 11 cards, 9 inline markers and 9 comment highlights. Cards are ordered by anchor and the 100% layout matches anchor + 4 px collision stacking to 0 px error. At 50% and 200% viewer zoom the card heights stay 71/57 px (no pane scaling).",
+    "gap": "Card click → anchor reveal and highlight click → card focus were not scripted. The 50/200% screenshots put the gutter outside the narrow viewport, so the height evidence comes from the DOM snapshot."
+  },
+  {
+    "issue": 30,
+    "title": "DOCX comment collection loses replies, header/footer comments, edited comments and repeats table anchors",
+    "verdict": "refuted",
+    "evidence": ["evidence/docx-viewer-comments.webp", "evidence/docx-viewer-tables.webp"],
+    "observed": "The review-threads fixture yields a header comment, a thread with two replies (Alex/Morgan), a table-cell comment, a cross-paragraph comment and unique card ids. table-structures.docx renders merged, nested and repeating-header tables without duplicate cards.",
+    "gap": "Editing a commented paragraph and a table that spans pages were not exercised; those need scripted edits."
+  },
+  {
+    "issue": 36,
+    "title": "DOCX floating images page origin, behind-text z-order, rotation, wrap and stale drag hit box",
+    "verdict": "needs-another-fixture",
+    "evidence": ["evidence/docx-viewer-embedded.webp"],
+    "observed": "docx-embedded-objects.docx loads and renders its text box, shape and SmartArt through the file input. The snapshot reports 0 floating-image layers.",
+    "gap": "None of the committed fixtures contains a floating image with wrap/exclusion settings, so the reported floating-image defects cannot be observed. A floating-image fixture is required."
+  },
+  {
+    "issue": 44,
+    "title": "DOCX thumbnail signature, resolution cache, stale unavailable paint and O(N²) invalidation",
+    "verdict": "refuted",
+    "evidence": ["evidence/docx-viewer-thumbnails.webp", "evidence/docx-viewer-page-sizes.webp"],
+    "observed": "The thumbnail panel renders real page content, keeps images and headers, and gives mixed-size pages distinct aspect ratios. No blank or 'unavailable' thumbnail is visible after load.",
+    "gap": "Style-table signature coverage and cache hits after a DPR/resolution change need a scripted edit/DPR fixture; this snapshot only proves the rendered output."
+  },
+  {
+    "issue": 48,
+    "title": "DOCX thumbnails lose scoped CSS, bake in editor chrome and have no image-decode timeout",
+    "verdict": "refuted",
+    "evidence": ["evidence/docx-viewer-thumbnails.webp"],
+    "observed": "The report-with-image thumbnails show the styled heading, table borders and embedded image; no active-paragraph tint or editor handles are baked into the thumbnail.",
+    "gap": "A stalled image decoder needs a fault-injection fixture to exercise the timeout path; that cannot be observed from a normal screenshot."
+  },
+  {
+    "issue": 67,
+    "title": "XLSX charts: data labels, signed 100% denominator, log axis, smooth/markers, combo axes, date axis",
+    "verdict": "needs-another-fixture",
+    "evidence": ["evidence/xlsx-viewer-charts.webp"],
+    "observed": "xlsx-chart-families.xlsx renders two visible chart items with a column chart, a negative bar, value ticks -10…30, Q1–Q4 category labels and a Revenue legend. No rendering crash or clearly wrong geometry is visible.",
+    "gap": "Data labels, log axes, smooth/marker options, 100% stacking with mixed signs, date axes and the one-axis/two-axis combo distinction need dedicated fixtures. The current fixture only covers basic families and combo sheets."
+  },
+  {
+    "issue": 70,
+    "title": "XLSX chart axes and layout: gridlines, label position/skip, tick number formats, legend wrap, plot insets, pie angles",
+    "verdict": "needs-another-fixture",
+    "evidence": ["evidence/xlsx-viewer-charts.webp"],
+    "observed": "Basic value ticks, category labels and the legend are drawn as SVG text; the first two chart families are not clipped or overlapping at 1440 px.",
+    "gap": "Percent/currency/date tick formats, 12 long category labels, legend wrapping, gridline/label-skip configuration and BarOfPie angles are not present in the committed fixture. They need another workbook."
+  }
+]

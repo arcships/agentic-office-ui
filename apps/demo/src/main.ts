@@ -1,12 +1,17 @@
 import { createApp } from "vue"
 import { createRouter, createWebHashHistory } from "vue-router"
 import App from "./App.vue"
+import { applyDemoTheme } from "./lib/demo-visual-settings"
 import "@arcships/vue-docx/style.css"
 import "@arcships/vue-xlsx/style.css"
 import "@arcships/vue-pptx/style.css"
 import "@arcships/vue-pdf/style.css"
 import "@arcships/vue-ui/style.css"
 import "@arcships/vue-ui/theme.css"
+
+// Apply `?theme=dark` before the app mounts so the first paint matches the
+// captured state and no light flash can leak into a screenshot.
+applyDemoTheme()
 
 const router = createRouter({
   history: createWebHashHistory(),

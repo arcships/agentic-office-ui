@@ -72,6 +72,7 @@
         :url-policy="urlPolicy"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
+        :is-dark="isDark"
         locale="zh-CN"
         class="pdf-surface-embed"
         @document-load-success="onLoadSuccess"
@@ -115,6 +116,7 @@ import { computed, ref, shallowRef } from "vue"
 import type { PdfLoadError, PdfSearchState, PdfSelectionState, PdfSource, PdfUrlPolicy } from "@arcships/vue-pdf"
 import { PdfSurface } from "@arcships/vue-pdf"
 import { OfficeFindBar } from "@arcships/vue-ui"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 const source = ref<PdfSource>()
 const numPages = ref(0)
@@ -131,6 +133,7 @@ const urlPolicy: PdfUrlPolicy = {
   allowHttpOnLocalhost: true,
 }
 const zoom = ref(1)
+const isDark = readDemoTheme() === "dark"
 const fitWidth = ref(false)
 const loadCounter = ref(0)
 const fileInputRef = ref<HTMLInputElement>()
