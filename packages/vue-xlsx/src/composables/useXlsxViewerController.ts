@@ -1986,6 +1986,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get tabs() { return tabs.value; },
     get tables() { return historyDomain.tables.value; },
     get definedNames() {
+      // Worker-backed loads have no main-thread workbook, so the Name Manager
+      // cannot answer. The Worker's sheet snapshot carries the same defined
+      // names; fall back to it instead of reporting an empty list.
+      if (!workbook.value) {
+        return activeSheet.value?.definedNames ?? [];
+      }
       return structureDomain.getNamedRanges()
         .filter((entry) => !entry.name.toLowerCase().startsWith("_xlnm."))
         .map((entry) => toDefinedNameSummary(entry, sheets.value));

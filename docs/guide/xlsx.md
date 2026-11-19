@@ -134,7 +134,7 @@ const controller = useXlsxViewerController({
 
 切片器不再消失：工作表的 `xl/slicers/*.xml`、`xl/slicerCaches/*.xml` 和绘图锚点会被解析成 `controller.slicers`（`XlsxSlicer`：`name`、`caption`、`cacheName`、`sourceName`、`pivotTables`、`style`、`columnCount`、`items`（含选中状态）和 `anchor`）。有锚点的切片器以 `xlsx-slicer` 卡片挂到绘图层，显示标题、成员列表和当前选中项，滚动/缩放/冻结时跟随单元格；没有锚点的切片器仍出现在 `controller.slicers` 中，但不会被绘制。卡片是只读预览，悬停提示说明需要在 Excel 中更改选择。
 
-`controller.definedNames`（以及 `XlsxSheetData.definedNames`）列出工作簿级和工作表级的定义名称，形状为 `{ name, scope: "workbook" | "sheet", sheetName?, range, comment?, hidden? }`；`_xlnm.*` 内置名称（打印区域、筛选区域等）由打印/筛选代码自己消费，不会混进名称列表。公式栏左侧的名称框现在可以输入名称或 A1 区域：聚焦时列出 `controller.definedNames`（`xlsx-name-box-list` / `[data-name-box-option]`，工作表级名称带所属表名），选择或回车后跳到对应区域；也接受直接输入的 `B2:D3`，`Escape` 恢复当前单元格地址。导出时透视表、切片器、缓存定义、绘图和定义名称都会随工作簿保留，重新打开后元数据一致。
+`controller.definedNames`（以及 `XlsxSheetData.definedNames`）列出工作簿级和工作表级的定义名称，形状为 `{ name, scope: "workbook" | "sheet", sheetName?, range, comment?, hidden? }`；`_xlnm.*` 内置名称（打印区域、筛选区域等）由打印/筛选代码自己消费，不会混进名称列表。Worker 只读加载不保留主线程 workbook，此时 `controller.definedNames` 直接回退到 Worker 快照的 `activeSheet.definedNames`，名称框同样可用。公式栏左侧的名称框现在可以输入名称或 A1 区域：聚焦时列出 `controller.definedNames`（`xlsx-name-box-list` / `[data-name-box-option]`，工作表级名称带所属表名），选择或回车后跳到对应区域；也接受直接输入的 `B2:D3`，`Escape` 恢复当前单元格地址。名称框聚焦时显示的当前地址（例如 `B2`）不会被当成过滤词：草稿是 A1 地址/区域时列出全部名称，只有输入非地址文本时才缩小列表。导出时透视表、切片器、缓存定义、绘图和定义名称都会随工作簿保留，重新打开后元数据一致。
 
 ## 公式引用高亮
 
