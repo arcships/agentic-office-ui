@@ -251,6 +251,12 @@ Use [GitHub Issues](https://github.com/arcships/agentic-office-ui/issues) for bu
 
 The DOCX and XLSX work was informed by the public Extend UI / Extend AI React packages. Upstream ownership, fixed comparison commits, and attribution are documented in [docs/upstream-extend-ui.md](docs/upstream-extend-ui.md). This project is an independent Vue 3 implementation and preserves applicable license notices in each package.
 
+## Open-source attribution
+
+This project is licensed under Apache-2.0 and includes or references third-party work. Extend UI (`extend-hq/ui`, MIT) is the visual, token, and interaction baseline for the 0.8 Office UI work, pinned at commit `70fe70c6f1e1eee53954c6923f3d9f583557a57e`. The planned Vue primitive layer uses reka-ui (MIT), icons use Lucide (ISC), and the default fonts use Geist (SIL OFL 1.1).
+
+Full license texts, copyright holders, usage scope, and the per-file upstream index are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/upstream/extend-ui.md](docs/upstream/extend-ui.md). Files adapted or copied from Extend UI carry a file-level MIT header that names the pinned commit and the CrowdView Inc / shadcn copyright; `node scripts/ci/verify-attribution.mjs` enforces that.
+
 ## License
 
 [Apache License 2.0](LICENSE)

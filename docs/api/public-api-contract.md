@@ -48,6 +48,8 @@
 |  | `./style.css` | 不适用 | `./dist/style.css` |
 | `@arcships/vue-ui` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./style.css` | 不适用 | `./dist/style.css` |
+|  | `./tokens.css` | 不适用 | `./dist/tokens.css` |
+|  | `./theme.css` | 不适用 | `./dist/theme.css` |
 | `@arcships/pptx-core` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./browser` | `./dist/browser.d.ts` | `./dist/browser.js` |
 |  | `./package.json` | 不适用 | `./package.json` |
@@ -242,7 +244,11 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension` 和 `FILE_DROP_OUTLINE`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`OfficeThemeProvider`、`OfficeIcon`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension`、`FILE_DROP_OUTLINE`、`resolveOfficeTheme`、`officeSystemPrefersDark`、`provideOfficeTheme`、`useOfficeTheme`、`OFFICE_ICONS`、`OFFICE_ICON_NAMES`、`normalizeOfficeIconName`、`resolveOfficeIcon`、`provideOfficeIcons`、`useOfficeIcons` 和主题/图标相关常量，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css` 和 `@arcships/vue-ui/theme.css`；只使用浅色 token 契约时可以改用 `@arcships/vue-ui/tokens.css`。
+
+主题与 token 层（0.8 起）是所有 Office 组件唯一的视觉来源。`theme.css` 把 `@arcships/vue-ui/tokens.css` 内联进发布产物，并在 `[data-office-theme="light"]`、`[data-office-theme="dark"]`、`[data-office-theme="system"]` 下提供浅色、深色和 `prefers-color-scheme` 切换；所有声明都限定在 `data-office-theme` 子树内，不修改 `:root`、`html`、`body`，也不依赖全局 `.dark` 类。`OfficeThemeProvider` 写入 `data-office-theme`、`data-office-theme-resolved`、`data-office-density` 和可选的 `lang`，提供 `theme`（默认 `system`）、`locale`、`density`（`comfortable`/`compact`）、`messages`、`as` 五个可选 props，并通过 `useOfficeTheme()` 暴露只读上下文；`system` 在客户端监听 `matchMedia`，无 `window` 的 SSR 环境回退为浅色且不崩溃。字体 token `--office-font-sans` / `--office-font-mono` 默认 Geist / Geist Mono，但包内不打包字体（无 `@font-face`、无 `url()`），宿主自行加载并可通过 `[data-office-theme]` 覆盖。
+
+`OfficeIcon` 以 `@lucide/vue` 为运行时依赖（构建时 external），props 为 `name`、`icon`、`size`、`strokeWidth`、`label`；默认尺寸来自 `--office-icon-size`（16px），默认线宽为 `2`，省略 `label` 时输出 `aria-hidden="true"`。内置注册表只命名导入常用图标，未使用的 Lucide 图标不进入消费者 bundle；`provideOfficeIcons()` 可以在子树内扩展或覆盖，`resolveOfficeIcon()` 支持 `chevron-down`、`ChevronDown` 等写法。token 数值与 Extend 参考 commit `70fe70c6f1e1eee53954c6923f3d9f583557a57e` 对齐：`--office-radius: 0.625rem`、8% alpha 边框、4% alpha muted/secondary/accent、中性 primary、2px 焦点环、`shadow-xs`/`shadow-sm`。
 
 `OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
@@ -371,7 +377,7 @@ XLSX 表格样式与透视/切片合同：`BUILTIN_TABLE_STYLES`、`resolveBuilt
 | `OfficeObjectOutlineLayer` | `activate`、`confirm`、`dismiss`、`navigate-hierarchy` | 候选轮廓；`confirm` 另含 `additiveRequested` 与 `penetrateRequested` |
 | `OfficeRegionSelector` | `update:modelValue`、`selection-start`、`selection-change`、`selection-commit`、`selection-cancel` | 规范化点或矩形；取消可返回原区域或 `null` |
 
-`FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。选择控件只表达候选、确认或取消，宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行管理状态。
+`FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。`OfficeThemeProvider` 只写主题属性并暴露上下文，`OfficeIcon` 只渲染图标，两者不发出业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。选择控件只表达候选、确认或取消，宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行管理状态。
 
 ### 4.5 `vue-pptx`
 

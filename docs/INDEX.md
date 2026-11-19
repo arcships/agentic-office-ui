@@ -7,6 +7,12 @@
 | [product/object-semantics-and-selection.md](product/object-semantics-and-selection.md) | Office 对象语义、识别可信度、四级选择交互与不可见行为选择 |
 | [product/object-reference-and-selection-technical-design.md](product/object-reference-and-selection-technical-design.md) | 统一对象引用、格式定位器、命中与解析、Surface API 和技术实施顺序 |
 
+## 设计系统
+
+| 文档 | 用途 |
+|---|---|
+| [design/office-theme.md](design/office-theme.md) | Office 设计 token、light/dark/system 主题、Geist 字体与 Lucide 图标适配（0.8） |
+
 ## 使用者文档
 
 | 文档 | 用途 |
@@ -43,6 +49,7 @@
 | [plan/stabilization-roadmap.md](plan/stabilization-roadmap.md) | 唯一任务顺序、依赖、状态和执行证据来源 |
 | [end-to-end-blackbox-test-plan.md](end-to-end-blackbox-test-plan.md) | 用户侧黑盒用例、通过标准和发布暂停条件 |
 | [upstream-parity-gap-audit.md](upstream-parity-gap-audit.md) | DOCX/XLSX 与官方 Extend UI React 的固定基准、差异和收口状态 |
+| [upstream/extend-ui.md](upstream/extend-ui.md) | Extend UI 固定 commit 上游索引、许可证副本与文件级归属状态（0.8，CI 校验） |
 | [testing/agent-execution-runbook.md](testing/agent-execution-runbook.md) | 正式构建、浏览器、真实压缩包和证据的执行步骤 |
 | [api/public-api-contract.md](api/public-api-contract.md) | 九个公开包的入口、类型、事件、错误、弃用和删除期限 |
 

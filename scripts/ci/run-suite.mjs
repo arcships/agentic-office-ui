@@ -64,6 +64,7 @@ const suites = {
 
       "tests/unit/office-runtime.test.mjs",
       "tests/unit/viewer-keys.test.mjs",
+      "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
       "tests/unit/i18n.test.mjs",
@@ -192,6 +193,7 @@ command("core-behavior-5", process.execPath, [
       "tests/unit/pptx-speaker-notes.test.mjs",
       "tests/unit/pptx-transitions.test.mjs",
       "tests/unit/core-purity.test.mjs",
+      "tests/unit/attribution-contract.test.mjs",
 
     ]),
     command("core-boundary", process.execPath, [
@@ -285,6 +287,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/docx-command-wiring.test.mjs",
       "tests/component/docx-edit-model-preservation.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
+      "tests/component/vue-ui-theme-icon.test.mjs",
 
     ]),
 command("vue-component-behavior-2", process.execPath, [
@@ -659,6 +662,13 @@ command("vue-component-behavior-5", process.execPath, [
     ], {
       env: {
         DOCS_EVIDENCE_DIR: path.join(suiteDir, "documentation-contract"),
+      },
+    }),
+    command("open-source-attribution", process.execPath, [
+      "scripts/ci/verify-attribution.mjs",
+    ], {
+      env: {
+        ATTRIBUTION_EVIDENCE_DIR: path.join(suiteDir, "open-source-attribution"),
       },
     }),
   ],
