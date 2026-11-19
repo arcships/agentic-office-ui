@@ -119,4 +119,7 @@ jobs:
           RELEASE_EXPECTED_TAG: ${{ github.ref_name }}
           RELEASE_STAGING_TAG: candidate-${{ github.run_id }}
           RELEASE_TARGET_TAG: latest
+          # A tag rerun may find the immutable version already published from
+          # an earlier candidate; keep it and only promote the dist-tag.
+          RELEASE_ALLOW_EXISTING: "1"
         run: node candidate/prepare-release-artifact.mjs publish candidate

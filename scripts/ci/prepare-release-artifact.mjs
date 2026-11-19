@@ -492,7 +492,10 @@ function waitForPublishedArchives(archives) {
       if (existing === null) {
         next.push(archive);
       } else if (existing !== archive.integrity) {
-        fail(`${archive.package}@${archive.version} exists with different integrity`);
+        if (process.env.RELEASE_ALLOW_EXISTING !== "1") {
+          fail(`${archive.package}@${archive.version} exists with different integrity`);
+        }
+        console.warn(`EXISTS: ${archive.package}@${archive.version} has different integrity; keeping the published version`);
       }
     }
     if (!next.length) return;
@@ -530,7 +533,11 @@ function publish(candidateDir) {
       if (useProvenance) publishArgs.push("--provenance");
       publishArchive(publishArgs);
     } else if (existing !== archive.integrity) {
-      fail(`${archive.package}@${archive.version} already exists with different integrity`);
+      if (process.env.RELEASE_ALLOW_EXISTING !== "1") {
+        fail(`${archive.package}@${archive.version} already exists with different integrity`);
+      }
+      console.warn(`EXISTS: ${archive.package}@${archive.version} has different integrity; promoting the published version`);
+      runNpm(["dist-tag", "add", `${archive.package}@${archive.version}`, stagingTag]);
     } else {
       console.log(`SKIP: ${archive.package}@${archive.version} already has the candidate integrity`);
       runNpm(["dist-tag", "add", `${archive.package}@${archive.version}`, stagingTag]);
