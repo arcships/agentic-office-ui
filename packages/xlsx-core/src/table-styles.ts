@@ -171,7 +171,9 @@ export function resolveTableCellStyle(
     return null;
   }
 
-  const headerRowCount = Math.max(table.headerRowCount, 1);
+  // A table may declare `headerRowCount="0"` (headerless table). The first
+  // row is then body data and must get the first row stripe, not header style.
+  const headerRowCount = Math.max(table.headerRowCount, 0);
   const totalsRowCount = Math.max(table.totalsRowCount, 0);
   const headerEndRow = table.start.row + headerRowCount - 1;
   const totalsStartRow = table.end.row - totalsRowCount + 1;
@@ -179,7 +181,7 @@ export function resolveTableCellStyle(
   const bodyEndRow = totalsStartRow - 1;
   const row = cell.row;
   const col = cell.col;
-  const isHeaderRow = row >= table.start.row && row <= headerEndRow;
+  const isHeaderRow = headerRowCount > 0 && row >= table.start.row && row <= headerEndRow;
   const isTotalsRow = totalsRowCount > 0 && row >= totalsStartRow && row <= table.end.row;
   const isBodyRow = row >= bodyStartRow && row <= bodyEndRow;
   const isFirstColumn = col === table.start.col;

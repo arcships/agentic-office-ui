@@ -91,7 +91,7 @@ async function mountNameBox(t, options = {}) {
 }
 
 function keydown(target, key) {
-  target.props.onKeydown({
+  return target.props.onKeydown({
     key,
     preventDefault() {},
     target: { blur() {} },
@@ -170,6 +170,54 @@ test("focusing after selecting a cell does not filter names by the address", asy
   input.props.onInput({ target: { value: "Sale" } });
   await vue.nextTick();
   assert.deepEqual(options().map((node) => node.props["data-name"]), ["SalesData"]);
+});
+
+test("a cross-sheet defined name selects its range after the sheet switch settles", async (t) => {
+  const { controller, input, root } = await mountNameBox(t);
+  controller.addSheet("Summary");
+  await waitFor(
+    () => controller.sheets.some((sheet) => sheet.name === "Summary"),
+    "Summary sheet added",
+  );
+  await vue.nextTick();
+  controller.setNamedRange("SalesData", "Summary!$D$4:$E$5");
+  controller.setActiveSheetIndex(0);
+  await vue.nextTick();
+  assert.equal(controller.activeSheet.name, "Data");
+
+  input.props.onFocus();
+  await vue.nextTick();
+  const list = findByTestId(root, "xlsx-name-box-list");
+  const options = walk(list)
+    .filter((node) => node.props?.["data-name-box-option"] !== undefined);
+  const entry = options.find((node) => node.props["data-name"] === "SalesData");
+  assert.ok(entry, "SalesData is listed");
+  await entry.props.onClick();
+  await waitFor(
+    () => controller.activeSheet?.name === "Summary",
+    "name box switched to Summary",
+  );
+  await vue.nextTick();
+  assert.equal(controller.activeSheet.name, "Summary");
+  assert.equal(controller.selectedRangeAddress, "D4:E5");
+});
+
+test("an open name list sees a defined name added later", async (t) => {
+  const { controller, input, root } = await mountNameBox(t);
+  input.props.onFocus();
+  await vue.nextTick();
+  const list = findByTestId(root, "xlsx-name-box-list");
+  const names = () => walk(list)
+    .filter((node) => node.props?.["data-name-box-option"] !== undefined)
+    .map((node) => node.props["data-name"]);
+  assert.deepEqual(names(), ["CurrentProduct", "RevenueTotal", "SalesData"]);
+
+  controller.defineNamedRange("NewName", {
+    start: { col: 0, row: 0 },
+    end: { col: 0, row: 0 },
+  });
+  await vue.nextTick();
+  assert.deepEqual(names(), ["CurrentProduct", "NewName", "RevenueTotal", "SalesData"]);
 });
 
 test("Escape restores the active-cell address", async (t) => {

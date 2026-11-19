@@ -124,9 +124,9 @@ const controller = useXlsxViewerController({
 
 ## 表格样式
 
-带 `<tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/>` 的表不再渲染成普通单元格。`xlsx-core` 内置 Excel 的 60 个表格样式（`TableStyleLight1–21`、`TableStyleMedium1–28`、`TableStyleDark1–11`，来自 ECMA-376 / Apache POI 的预设定义），`xl/styles.xml` 中的自定义 `<tableStyles>` 优先于同名内置样式。`withTableCellStyle()` 按 Excel 的层叠顺序把表样式套到每个单元格：整表 → 行列条纹 → 首末列 → 表头行 → 总计行 → 表头/总计首末单元格；表头、条纹和总计行的字体、填充与边框使用与普通单元格相同的 `resolveWorkbookFillStyle()` / `resolveWorkbookColor()`，所以主题色和 tint 在 canvas、DOM、打印预览里一致。
+带 `<tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/>` 的表不再渲染成普通单元格。`xlsx-core` 内置 Excel 的 60 个表格样式（`TableStyleLight1–21`、`TableStyleMedium1–28`、`TableStyleDark1–11`，来自 ECMA-376 / Apache POI 的预设定义），`xl/styles.xml` 中的自定义 `<tableStyles>` 优先于同名内置样式。`withTableCellStyle()` 按 Excel 的层叠顺序把表样式套到每个单元格：整表 → 行列条纹 → 首末列 → 表头行 → 总计行 → 表头/总计首末单元格；表头、条纹和总计行的字体、填充与边框使用与普通单元格相同的 `resolveWorkbookFillStyle()` / `resolveWorkbookColor()`，所以主题色和 tint 在 canvas、DOM、打印预览里一致。`headerRowCount="0"` 的表按无表头处理，第一行是数据行并得到首行条纹，而不是表头强调。
 
-单元格自己的显式格式仍然优先：`cellStyleIds` 找到单元格的 `xf`，只把其中声明的 `font`/`fill`/`border` 覆盖到表样式上，未声明的属性（例如默认字体）不会抹掉表头的加粗白字。只给表格部分加样式、单元格不写 `s` 属性时，表样式完全生效；`sales-table.xlsx` 的 `TableStyleMedium2` 行条纹即可用 `renderMode="dom"` 在 DOM 中直接验证。`resolveBuiltinTableStyle()`、`resolveTableCellStyle()`、`withTableCellStyle()`、`findTableAtCell()` 和 `BUILTIN_TABLE_STYLES` 从 `@arcships/xlsx-core` 根入口导出，宿主可复用同一套解析。
+单元格自己的显式格式仍然优先：`cellStyleIds` 找到单元格的 `xf`，只把其中声明的 `font`/`fill`/`border` 覆盖到表样式上，未声明的属性（例如默认字体）不会抹掉表头的加粗白字。只给表格部分加样式、单元格不写 `s` 属性时，表样式完全生效；`sales-table.xlsx` 的 `TableStyleMedium2` 行条纹即可用 `renderMode="dom"` 在 DOM 中直接验证。导出时 `mergeWorkbookSheetAuthoringAssets()` 把源工作簿的 `<dxfs>` 与自定义 `<tableStyles>`（含 `dxfId` 索引）写回引擎保存的 `xl/styles.xml`，所以自定义表格样式和条件格式的 dxf 不会在导出/重载后丢失并退回内置样式。`resolveBuiltinTableStyle()`、`resolveTableCellStyle()`、`withTableCellStyle()`、`findTableAtCell()` 和 `BUILTIN_TABLE_STYLES` 从 `@arcships/xlsx-core` 根入口导出，宿主可复用同一套解析。
 
 ## 透视表、切片器与定义名称
 
@@ -134,7 +134,7 @@ const controller = useXlsxViewerController({
 
 切片器不再消失：工作表的 `xl/slicers/*.xml`、`xl/slicerCaches/*.xml` 和绘图锚点会被解析成 `controller.slicers`（`XlsxSlicer`：`name`、`caption`、`cacheName`、`sourceName`、`pivotTables`、`style`、`columnCount`、`items`（含选中状态）和 `anchor`）。有锚点的切片器以 `xlsx-slicer` 卡片挂到绘图层，显示标题、成员列表和当前选中项，滚动/缩放/冻结时跟随单元格；没有锚点的切片器仍出现在 `controller.slicers` 中，但不会被绘制。卡片是只读预览，悬停提示说明需要在 Excel 中更改选择。
 
-`controller.definedNames`（以及 `XlsxSheetData.definedNames`）列出工作簿级和工作表级的定义名称，形状为 `{ name, scope: "workbook" | "sheet", sheetName?, range, comment?, hidden? }`；`_xlnm.*` 内置名称（打印区域、筛选区域等）由打印/筛选代码自己消费，不会混进名称列表。Worker 只读加载不保留主线程 workbook，此时 `controller.definedNames` 直接回退到 Worker 快照的 `activeSheet.definedNames`，名称框同样可用。公式栏左侧的名称框现在可以输入名称或 A1 区域：聚焦时列出 `controller.definedNames`（`xlsx-name-box-list` / `[data-name-box-option]`，工作表级名称带所属表名），选择或回车后跳到对应区域；也接受直接输入的 `B2:D3`，`Escape` 恢复当前单元格地址。名称框聚焦时显示的当前地址（例如 `B2`）不会被当成过滤词：草稿是 A1 地址/区域时列出全部名称，只有输入非地址文本时才缩小列表。导出时透视表、切片器、缓存定义、绘图和定义名称都会随工作簿保留，重新打开后元数据一致。
+`controller.definedNames`（以及 `XlsxSheetData.definedNames`）列出工作簿级和工作表级的定义名称，形状为 `{ name, scope: "workbook" | "sheet", sheetName?, range, comment?, hidden? }`；`_xlnm.*` 内置名称（打印区域、筛选区域等）由打印/筛选代码自己消费，不会混进名称列表。Worker 只读加载不保留主线程 workbook，此时 `controller.definedNames` 直接回退到 Worker 快照的 `activeSheet.definedNames`，名称框同样可用。公式栏左侧的名称框现在可以输入名称或 A1 区域：聚焦时列出 `controller.definedNames`（`xlsx-name-box-list` / `[data-name-box-option]`，工作表级名称带所属表名），选择或回车后跳到对应区域；跨工作表名称会先切换标签并在 `nextTick()`（`activeTabIndex` 观察器清空选区之后）再选区，所以不会被观察器清掉；列表还依赖 `controller.revision`，已打开时新定义的名称会立即出现。也接受直接输入的 `B2:D3`，`Escape` 恢复当前单元格地址。名称框聚焦时显示的当前地址（例如 `B2`）不会被当成过滤词：草稿是 A1 地址/区域时列出全部名称，只有输入非地址文本时才缩小列表。导出时透视表、切片器、缓存定义、绘图和定义名称都会随工作簿保留，重新打开后元数据一致。
 
 ## 公式引用高亮
 
