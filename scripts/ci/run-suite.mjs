@@ -67,6 +67,7 @@ const suites = {
       "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/extend-parity-harness.test.mjs",
       "tests/unit/vue-ui-primitives-contract.test.mjs",
+      "tests/unit/vue-ui-chrome-contract.test.mjs",
 
       "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
@@ -301,6 +302,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/docx-selection-input.test.mjs",
       "tests/component/vue-ui-theme-icon.test.mjs",
       "tests/component/vue-ui-primitives.test.mjs",
+      "tests/component/vue-ui-chrome.test.mjs",
 
     ]),
 command("vue-component-behavior-2", process.execPath, [

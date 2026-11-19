@@ -15,6 +15,7 @@
 | [design/extend-parity-harness.md](design/extend-parity-harness.md) | Extend UI 对照 harness：矩阵、阈值、DOM 协议、产物与各 issue 的 delta（#155） |
 | [design/extend-tokens.md](design/extend-tokens.md) | `docs/design/extend-tokens.json` 的生成方式、解析规则与 `--office-*` 映射差异（#155） |
 | [components/ui-primitives.md](components/ui-primitives.md) | reka-ui primitive 层：Button/Input/Select/Menu/Dialog/Sheet/Tooltip/Tabs/Toast 的 props、键盘/ARIA 与 token 规则（0.8） |
+| [components/office-chrome.md](components/office-chrome.md) | 共享 Office chrome：toolbar、page/zoom/search、status、empty/error/loading 状态与 160px document sidebar（#158） |
 
 
 ## 使用者文档

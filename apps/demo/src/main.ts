@@ -24,6 +24,7 @@ const router = createRouter({
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
     { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
     { path: "/primitives", component: () => import("./pages/PrimitivesPage.vue") },
+    { path: "/chrome", component: () => import("./pages/ChromePage.vue") },
     { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },
     { path: "/docx-parity", component: () => import("./pages/DocxParityPage.vue") },
     { path: "/runtime-limits", component: () => import("./pages/RuntimeLimitsPage.vue") },

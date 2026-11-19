@@ -1,0 +1,552 @@
+/**
+ * @arcships/vue-ui — shared Office chrome styles (issue #158)
+ *
+ * Every rule is scoped to an `.office-*` class and resolves colours, type,
+ * radii, control heights and spacing from the `--office-*` token layer. There
+ * is no reset, no preflight and no Tailwind.
+ *
+ * Structure is aligned with the pinned Extend UI toolbar
+ * (`min-h-12`, `px-3`, `py-2`, `gap-2`, `border-b`, `bg-background`) and
+ * document sidebar (`w-40` = 160px, inline/overlay, 200ms ease-out).
+ */
+
+/* ── Shared box model ───────────────────────────────────────────────────── */
+
+/*
+ * The package ships no reset/preflight. Declare the component-internal
+ * border-box boundary here so control heights, the 48px toolbar and the 160px
+ * sidebar keep their documented outer sizes in any host, including one that
+ * leaves the browser default `content-box` on.
+ */
+.office-toolbar,
+.office-toolbar *,
+.office-page-control,
+.office-page-control *,
+.office-zoom-control,
+.office-zoom-control *,
+.office-search-popover,
+.office-search-popover *,
+.office-status-bar,
+.office-status-bar *,
+.office-state,
+.office-state *,
+.office-document-sidebar,
+.office-document-sidebar * {
+  box-sizing: border-box;
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
+
+.office-toolbar {
+  --office-ui-toolbar-min-height: 3rem;
+  --office-ui-toolbar-padding-block: var(--office-ui-space-2);
+  --office-ui-toolbar-padding-inline: var(--office-ui-space-3);
+  --office-ui-toolbar-gap: var(--office-ui-space-2);
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--office-ui-toolbar-gap);
+  min-block-size: var(--office-ui-toolbar-min-height);
+  min-inline-size: 0;
+  padding: var(--office-ui-toolbar-padding-block)
+    var(--office-ui-toolbar-padding-inline);
+  border-block-end: var(--office-border-width) solid var(--office-border);
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font-family: inherit;
+  font-size: var(--office-text-sm);
+}
+
+.office-toolbar--nowrap {
+  flex-wrap: nowrap;
+}
+
+.office-toolbar--sticky {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: calc(var(--office-ui-z) - 2);
+}
+
+.office-toolbar__leading,
+.office-toolbar__center,
+.office-toolbar__trailing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  min-inline-size: 0;
+}
+
+.office-toolbar__leading {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+}
+
+.office-toolbar__center {
+  flex: 0 1 auto;
+  justify-content: center;
+}
+
+.office-toolbar__trailing {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.office-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.office-toolbar__group--gap-sm {
+  gap: var(--office-ui-space-1);
+}
+
+.office-toolbar__group--gap-md {
+  gap: var(--office-ui-space-2);
+}
+
+.office-toolbar__group--align-start {
+  align-items: flex-start;
+}
+
+.office-toolbar__group--align-center {
+  align-items: center;
+}
+
+.office-toolbar__group--align-end {
+  align-items: flex-end;
+}
+
+.office-toolbar__group--grow {
+  flex: 1 1 auto;
+}
+
+.office-toolbar__group--nowrap {
+  flex-wrap: nowrap;
+}
+
+.office-separator.office-toolbar__separator {
+  flex-shrink: 0;
+  align-self: center;
+  block-size: var(--office-ui-space-4);
+  inline-size: var(--office-border-width);
+  margin-inline: var(--office-ui-space-1);
+}
+
+/*
+ * Narrow viewports: the trailing cluster takes its own row instead of
+ * shrinking controls below their hit area or overlapping the leading group.
+ * The Extend toolbar relies on the same `flex-wrap` behaviour.
+ */
+@media (max-width: 30rem) {
+  .office-toolbar__trailing {
+    flex: 1 1 100%;
+  }
+}
+
+/* ── Page control ───────────────────────────────────────────────────────── */
+
+.office-page-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
+  white-space: nowrap;
+}
+
+.office-page-control__label {
+  color: var(--office-muted-foreground);
+}
+
+.office-page-control__input {
+  inline-size: calc(var(--office-ui-space-12) + var(--office-ui-space-1));
+  min-inline-size: 0;
+  height: var(--office-ui-height-sm);
+  padding-inline: var(--office-ui-space-1);
+  border-radius: var(--office-radius-md);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.office-page-control__total {
+  color: var(--office-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Zoom control ───────────────────────────────────────────────────────── */
+
+.office-zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  min-inline-size: 0;
+}
+
+.office-zoom-control__select {
+  display: inline-flex;
+  flex: 0 0 auto;
+  inline-size: 6.5rem;
+  min-inline-size: 6.5rem;
+}
+
+.office-zoom-control__select .office-select__trigger {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+/* ── Search popover ─────────────────────────────────────────────────────── */
+
+.office-search-popover__content {
+  inline-size: 18rem;
+  max-inline-size: calc(100vw - var(--office-ui-space-6));
+}
+
+.office-search-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-3);
+  min-inline-size: 0;
+}
+
+.office-search-popover__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+
+.office-search-popover__status {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-search-popover__navigation {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+}
+
+.office-search-popover__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+}
+
+.office-search-popover .office-search-popover__option {
+  position: relative;
+  inline-size: auto;
+  min-inline-size: var(--office-ui-height-xs);
+  padding-inline: var(--office-ui-space-1);
+  font-size: var(--office-text-xs);
+  font-weight: 600;
+}
+
+/* ── Status bar ─────────────────────────────────────────────────────────── */
+
+.office-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--office-ui-space-1) var(--office-ui-space-2);
+  min-block-size: var(--office-ui-space-8);
+  min-inline-size: 0;
+  padding: var(--office-ui-space-1) var(--office-ui-space-3);
+  border-block-start: var(--office-border-width) solid var(--office-border);
+  background: var(--office-background);
+  color: var(--office-muted-foreground);
+  font-family: inherit;
+  font-size: var(--office-text-xs);
+}
+
+.office-status-bar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--office-ui-space-1) var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+
+.office-status-bar__start {
+  flex: 1 1 auto;
+}
+
+.office-status-bar__end {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.office-status-bar__page {
+  color: var(--office-foreground);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.office-status-bar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  min-inline-size: 0;
+  white-space: nowrap;
+}
+
+.office-status-bar__message {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  min-inline-size: 0;
+}
+
+.office-status-bar__message svg {
+  flex-shrink: 0;
+  inline-size: var(--office-icon-size);
+  block-size: var(--office-icon-size);
+}
+
+.office-status-bar__message-label {
+  font-weight: 600;
+}
+
+.office-status-bar__message--warning {
+  color: var(--office-warning-foreground);
+}
+
+.office-status-bar__message--error {
+  color: var(--office-destructive-foreground);
+}
+
+.office-status-bar__file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.office-status-bar__file-label {
+  flex-shrink: 0;
+  color: var(--office-muted-foreground);
+}
+
+.office-status-bar__file-name {
+  overflow: hidden;
+  color: var(--office-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Empty / error / loading states ─────────────────────────────────────── */
+
+.office-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--office-ui-space-3);
+  min-block-size: 12rem;
+  padding: var(--office-ui-space-8) var(--office-ui-space-6);
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font-family: inherit;
+  text-align: center;
+}
+
+.office-state--compact {
+  gap: var(--office-ui-space-2);
+  min-block-size: 0;
+  padding: var(--office-ui-space-4);
+}
+
+.office-state__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--office-ui-space-8);
+  block-size: var(--office-ui-space-8);
+  border-radius: var(--office-radius-lg);
+  background: var(--office-muted);
+  color: var(--office-muted-foreground);
+}
+
+.office-state__icon svg {
+  inline-size: var(--office-icon-size);
+  block-size: var(--office-icon-size);
+}
+
+.office-state--error .office-state__icon {
+  background: color-mix(in oklab, var(--office-destructive) 12%, transparent);
+  color: var(--office-destructive-foreground);
+}
+
+.office-state--loading .office-state__icon {
+  background: transparent;
+  color: var(--office-muted-foreground);
+}
+
+.office-state__title {
+  margin: 0;
+  color: var(--office-foreground);
+  font-size: var(--office-text-base);
+  font-weight: 600;
+  line-height: var(--office-leading-base);
+}
+
+.office-state__description {
+  max-inline-size: 26rem;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+}
+
+.office-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--office-ui-space-2);
+}
+
+.office-state__progress {
+  inline-size: min(16rem, 100%);
+  block-size: var(--office-ui-space-1);
+  overflow: hidden;
+  border-radius: var(--office-radius-sm);
+  background: var(--office-muted);
+}
+
+.office-state__progress-bar {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--office-primary);
+  transition: inline-size var(--office-ui-duration) ease-out;
+}
+
+/* ── Document sidebar ───────────────────────────────────────────────────── */
+
+.office-document-sidebar {
+  --office-ui-sidebar-width: 10rem;
+  --office-ui-sidebar-duration: 200ms;
+
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  inline-size: var(--office-ui-sidebar-width);
+  block-size: 100%;
+  min-block-size: 0;
+  overflow: hidden;
+  border-inline-end: var(--office-border-width) solid var(--office-sidebar-border);
+  background: var(--office-sidebar);
+  color: var(--office-sidebar-foreground);
+  font-family: inherit;
+  transition:
+    margin-inline-start var(--office-ui-sidebar-duration) ease-out,
+    translate var(--office-ui-sidebar-duration) ease-out,
+    border-color var(--office-ui-sidebar-duration) ease-out,
+    box-shadow var(--office-ui-sidebar-duration) ease-out;
+}
+
+.office-document-sidebar[data-transitions-ready="false"] {
+  transition: none;
+}
+
+.office-document-sidebar--overlay {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: calc(var(--office-ui-z) - 10);
+  box-shadow: var(--office-shadow-sm);
+}
+
+.office-document-sidebar[data-sidebar-open="false"] {
+  border-inline-end-color: transparent;
+}
+
+.office-document-sidebar--inline[data-sidebar-open="false"] {
+  margin-inline-start: calc(-1 * var(--office-ui-sidebar-width));
+}
+
+.office-document-sidebar--overlay[data-sidebar-open="false"] {
+  pointer-events: none;
+  translate: -100% 0;
+}
+
+.office-document-sidebar__header,
+.office-document-sidebar__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+  padding: var(--office-ui-space-2);
+  border-color: var(--office-sidebar-border);
+}
+
+.office-document-sidebar__header {
+  border-block-end: var(--office-border-width) solid var(--office-sidebar-border);
+}
+
+.office-document-sidebar__footer {
+  border-block-start: var(--office-border-width) solid var(--office-sidebar-border);
+}
+
+.office-document-sidebar__body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: auto;
+  padding: var(--office-ui-space-2);
+}
+
+.office-document-sidebar__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-3);
+  padding: var(--office-ui-space-2);
+}
+
+.office-document-sidebar__skeleton-label {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  text-align: center;
+}
+
+.office-document-sidebar__skeleton-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+}
+
+.office-document-sidebar__skeleton-thumb {
+  inline-size: 5rem;
+  block-size: 7rem;
+  border-radius: var(--office-radius-md);
+}
+
+.office-document-sidebar__skeleton-caption {
+  inline-size: var(--office-ui-space-8);
+  block-size: var(--office-ui-space-2);
+  border-radius: var(--office-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .office-document-sidebar,
+  .office-state__progress-bar {
+    transition: none;
+  }
+}

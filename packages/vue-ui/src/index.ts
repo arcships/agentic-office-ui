@@ -6,6 +6,7 @@
 
 import "./print.css"
 import "./styles/ui.css"
+import "./styles/chrome.css"
 
 // Signature pad
 export { default as SignaturePad } from "./components/SignaturePad.vue"
@@ -30,6 +31,11 @@ export { default as OfficeLiveStatus } from "./components/OfficeLiveStatus.vue"
 
 // Primitive layer (issue #157): token-driven Reka UI components
 export * from "./components/ui"
+
+// Shared Office chrome (issue #158): toolbar, status, states and sidebar
+export * from "./components/chrome"
+export { useElementWidth } from "./composables/element-width"
+export type { UseElementWidthOptions } from "./composables/element-width"
 
 // Theme provider and icon adapter
 export { default as OfficeThemeProvider } from "./components/OfficeThemeProvider.vue"
