@@ -387,6 +387,13 @@
     color-mix(in oklab, var(--office-destructive) 16%, transparent);
 }
 
+@media (pointer: coarse) {
+  .office-input,
+  .office-textarea {
+    min-block-size: var(--office-ui-touch-target);
+  }
+}
+
 .office-input--xs {
   height: var(--office-ui-height-xs);
   padding-inline: var(--office-control-padding-inline-sm);

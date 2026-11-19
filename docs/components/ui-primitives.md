@@ -357,9 +357,9 @@ node --test --test-concurrency=1 tests/unit/vue-ui-primitives-contract.test.mjs
 | 文件 | 构建后 | gzip |
 |---|---|---|
 | `dist/index.js` | 104,152 B | 22,554 B |
-| `dist/style.css` | 47,450 B | 7,547 B |
-| 合计 | | 30,101 B |
-| 相对基线新增 | | 10,961 B |
+| `dist/style.css` | 47,550 B | 7,557 B |
+| 合计 | | 30,111 B |
+| 相对基线新增 | | 10,971 B |
 
 `reka-ui`、`@lucide/vue`、`vue` 在库构建中保持 external；图标不进入本包产物，仍由
 `OfficeIcon` 的内置注册表或宿主按需提供。预算测试同时断言 `dist/index.js` 不内联
