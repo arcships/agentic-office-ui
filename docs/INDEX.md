@@ -7,6 +7,12 @@
 | [product/object-semantics-and-selection.md](product/object-semantics-and-selection.md) | Office 对象语义、识别可信度、四级选择交互与不可见行为选择 |
 | [product/object-reference-and-selection-technical-design.md](product/object-reference-and-selection-technical-design.md) | 统一对象引用、格式定位器、命中与解析、Surface API 和技术实施顺序 |
 
+## 设计系统
+
+| 文档 | 用途 |
+|---|---|
+| [design/office-theme.md](design/office-theme.md) | Office 设计 token、light/dark/system 主题、Geist 字体与 Lucide 图标适配（0.8） |
+
 ## 使用者文档
 
 | 文档 | 用途 |
