@@ -77,11 +77,18 @@
   --office-control-gap: 0.5rem;
 
   /* ── Semantic colours, light baseline ────────────────────────────────── */
+  /* Upstream declares background as oklch(1 0 0); keep the same
+   * representation so the page surface matches the reference exactly. */
   --office-background: oklch(1 0 0);
   --office-foreground: oklch(26.9% 0 0);
-  --office-card: oklch(1 0 0);
+  /* Extend paints card / popover with `var(--color-white)` (#fff). Keep them
+   * literal white instead of `oklch(1 0 0)`: Chromium serialises that as
+   * color(srgb 0.999871 1.00005 1.00007), and the next compositing step
+   * (border, focus ring, shadow) rounds surface pixels 1/255 away from the
+   * reference. The same drift broke the #157 input focus captures. */
+  --office-card: white;
   --office-card-foreground: oklch(26.9% 0 0);
-  --office-popover: oklch(1 0 0);
+  --office-popover: white;
   --office-popover-foreground: oklch(26.9% 0 0);
 
   --office-primary: oklch(26.9% 0 0);
@@ -120,6 +127,10 @@
 
   --office-surface: oklch(98% 0 0);
   --office-surface-foreground: var(--office-foreground);
+  --office-code: var(--office-surface);
+  --office-code-foreground: var(--office-surface-foreground);
+  --office-code-highlight: oklch(96% 0 0);
+  --office-code-number: oklch(56% 0 0);
   --office-selection: oklch(14.5% 0 0);
   --office-selection-foreground: oklch(1 0 0);
 

@@ -85,9 +85,9 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 |---|---|---|---|
 | `--office-background` | `oklch(1 0 0)` | `oklch(14.5% 0 0)` | `--background` |
 | `--office-foreground` | `oklch(26.9% 0 0)` | `oklch(97% 0 0)` | `--foreground`（neutral-800 / neutral-100） |
-| `--office-card` | `oklch(1 0 0)` | background 98% + white | `--card` |
+| `--office-card` | `white` | background 98% + white | `--card`（`var(--color-white)`） |
 | `--office-card-foreground` | `oklch(26.9% 0 0)` | `oklch(97% 0 0)` | `--card-foreground` |
-| `--office-popover` | `oklch(1 0 0)` | background 98% + white | `--popover` |
+| `--office-popover` | `white` | background 98% + white | `--popover`（`var(--color-white)`） |
 | `--office-popover-foreground` | `oklch(26.9% 0 0)` | `oklch(97% 0 0)` | `--popover-foreground` |
 | `--office-primary` | `oklch(26.9% 0 0)` | `oklch(97% 0 0)` | `--primary`（中性色，不是蓝色） |
 | `--office-primary-foreground` | `oklch(98.5% 0 0)` | `oklch(26.9% 0 0)` | `--primary-foreground` |
@@ -116,12 +116,22 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 | `--office-warning-foreground` | amber-700 | amber-400 | `--warning-foreground` |
 | `--office-info` | blue-500 | blue-500 | `--info` |
 | `--office-info-foreground` | blue-700 | blue-400 | `--info-foreground` |
+| `--office-surface` | `oklch(98% 0 0)` | `oklch(20% 0 0)` | `--surface` |
+| `--office-surface-foreground` | `var(--office-foreground)` | `oklch(70.8% 0 0)` | `--surface-foreground` |
+| `--office-code` | `var(--office-surface)` | `var(--office-surface)` | `--code` |
+| `--office-code-foreground` | `var(--office-surface-foreground)` | `var(--office-surface-foreground)` | `--code-foreground` |
+| `--office-code-highlight` | `oklch(96% 0 0)` | `oklch(27% 0 0)` | `--code-highlight` |
+| `--office-code-number` | `oklch(56% 0 0)` | `oklch(72% 0 0)` | `--code-number` |
+| `--office-selection` | `oklch(14.5% 0 0)` | `oklch(92.2% 0 0)` | `--selection` |
+| `--office-selection-foreground` | `oklch(1 0 0)` | `oklch(20.5% 0 0)` | `--selection-foreground` |
 
 附加 token：`--office-chart-1`、`--office-chart-2`、`--office-chart-3`、`--office-chart-4`、
-`--office-chart-5`（blue-300/500/600/700/800）、`--office-surface`、
-`--office-surface-foreground`、`--office-selection`、`--office-selection-foreground`。
-参考色值使用 Tailwind v4 的 OKLCH 表示；`--alpha(x / n%)` 统一展开为
-`color-mix(in oklab, x n%, transparent)`，不依赖 Tailwind 运行时。
+`--office-chart-5`（blue-300/500/600/700/800）。参考色值使用 Tailwind v4 的 OKLCH 表示；
+`--alpha(x / n%)` 统一展开为 `color-mix(in oklab, x n%, transparent)`，不依赖 Tailwind 运行时。
+Extend 用 `var(--color-white)` 声明 card / popover；这两项必须写成 `white`，不能用
+`oklch(1 0 0)`（Chromium 会序列化为 `color(srgb 0.999871 1.00005 1.00007)`，在描边、焦点环
+或阴影合成后偏 1/255；#157 的 input 焦点对照即由此产生）。`--office-background` 仍与上游一样
+使用 `oklch(1 0 0)`，保持与参考页同一表示。
 
 ### 3.2 圆角、描边与阴影
 
@@ -167,6 +177,12 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 
 `--office-icon-size` 默认 `1rem`（16px），`OfficeIcon` 的默认线宽为 `2`。`--office-font-mono`
 用于代码、公式和需要等宽对齐的 Office 数值区域。
+
+`--office-control-padding-inline` 的语义是**完整内缩**（Extend 的 `px-[calc(--spacing(3)-1px)]`
+= 11px padding + 1px border = 12px）：需要自己画 1px 描边的控件使用
+`calc(var(--office-control-padding-inline) - var(--office-border-width))`，渲染值才与参考的
+11px padding 一致（`ui.css` 中的 Button / Select / Input 均如此）。`-sm` 后缀同理。
+不要把 token 直接当作 1px 描边控件的 `padding-inline`，否则会比参考宽 1px。
 
 ## 4. 字体：默认 Geist，宿主覆盖
 
