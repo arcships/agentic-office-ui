@@ -1,6 +1,6 @@
+// Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn.
 // Shipped defaults for FileUpload, mirroring extend-hq/ui
-// apps/v4/components/extend/file-upload.tsx at
-// 70fe70c6f1e1eee53954c6923f3d9f583557a57e.
+// apps/v4/components/extend/file-upload.tsx at that commit.
 //
 // The values live outside the SFC because `defineProps()` defaults are hoisted
 // outside `setup()` and cannot reference locally declared variables.
@@ -25,9 +25,10 @@ export const FILE_UPLOAD_DEFAULT_ACCEPT = [
   "image/jpeg",
 ].join(",")
 
-/** Extend's default icon cluster: Image / PDF / Sheet. */
+/** Extend's default icon cluster: Image / PDF / Sheet. Labels stay optional
+ * and are not rendered, so the shipped defaults carry no translatable copy. */
 export const FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES: FileUploadAcceptedType[] = [
-  { label: "Image", icon: "image" },
-  { label: "PDF", icon: "pdf" },
-  { label: "Sheet", icon: "sheet" },
+  { icon: "image" },
+  { icon: "pdf" },
+  { icon: "sheet" },
 ]

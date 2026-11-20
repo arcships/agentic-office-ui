@@ -174,6 +174,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/pdf-editor-shared.tsx` | 共享 context、feature flag、颜色预设 | `packages/vue-pdf/src/components/PdfEditor.vue` | reference-only | #162 |
 | `apps/v4/components/extend/document-viewer-sidebar.tsx` | inline/overlay 文档侧栏、skeleton、动画 | `packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue` | reference-only | 规范组件由 #158 在 `components/chrome/` 实现；#163 只记录缩略图条集成 seam，不重复实现 |
 | `apps/v4/components/extend/file-upload.tsx` | 拖拽区、accept chips、文件列表、ready/error | `packages/vue-ui/src/components/FileUpload.vue` | adapted | #163 用 scoped CSS + `--office-*` token 重写；Hugeicons 提供与参考一致的 glyph 数据 |
+| `apps/v4/components/extend/file-upload.tsx` | FileUpload 默认 accept 列表与图标定义 | `packages/vue-ui/src/components/file-upload-defaults.ts` | adapted | #163 抽到模块级，供 `defineProps()` 默认值引用；不渲染标记 |
 | `apps/v4/components/extend/file-thumbnail.tsx` | 方形/可配置预览卡、blur-in、错误回退 | `packages/vue-ui/src/components/FileThumbnail.vue` | adapted | #163 重写 preview 卡、reveal、loading 与 error fallback |
 | `apps/v4/components/extend/docx-viewer.tsx` | DOCX viewer chrome 与翻页 | `packages/vue-docx/src/components/DocxViewer.vue` | reference-only | #159 |
 | `apps/v4/components/extend/docx-editor.tsx` | DOCX editor chrome 与格式控件 | `packages/vue-docx/src/components/DocxEditor.vue` | reference-only | #159 |

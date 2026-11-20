@@ -113,7 +113,7 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity -- \
 最大差异：`diffPixelRatio` 0.000008（0.0008%）、单通道 1/255、连续差异 1px、几何 delta 0px；
 全部低于 manifest 的 0.1% / 2/255 / 2×2 门限。`FileUpload` 和 `FileThumbnail` 的 Vue/参考
 surface 都不再传 `show-file-list` 等 opt-in prop，直接测量组件默认值。报告：
-`output/ui-parity-defaults/report.json`（`output/` 为本地产物，不入库）。通过标准来自
+`output/ui-parity-final/report.json`（`output/` 为本地产物，不入库）。通过标准来自
 `tools/parity-fixtures/manifest.json`：几何 0px；单通道 ≤2/255、差异像素 ≤0.1%、连续差异 ≤2×2。
 
 反证：把 `FileThumbnail.showTypeGlyph` 临时改成默认 `true`，同一参考在 `default`/`error` 两个
@@ -167,6 +167,10 @@ node --test --test-concurrency=1 tests/unit/extend-parity-harness.test.mjs
 拖拽深度、选择/拖放/多文件、拒绝、maxSize、disabled、长文件名、
 coarse-pointer 命中区、loading/error/fallback/type glyph、图片 reveal 与失败恢复、可配置 aspect ratio。
 `file-drop-import.test.mjs` 与 `touch-interactions.test.mjs` 仍覆盖四个 viewer 的共享拖放/触控合同。
+本轮回归结果（fresh build）：
+
+- `file-drop-import`：`useFileDrop` 3 例、XLSX 1 例、PDF 1 例通过；PPTX 复合挂载 1 例跳过——#161 的 Reka chrome 需要真实 DOM 全局，DOM-free renderer 会在 teleport/remove 路径上 OOM；拖放合同本身已由 `useFileDrop` 用例覆盖，浏览器侧由 #161 套件覆盖。
+- `touch-interactions`：7/9 通过；`context menus close on outside pointer down` 与 `touch hit targets reach 44px` 在 base `6b1c8367` 上同样失败（#160b/#161 Reka 迁移遗留），不是 #163 引入。
 
 ## 9. 已知边界
 

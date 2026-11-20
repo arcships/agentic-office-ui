@@ -560,6 +560,14 @@
       "notes": "Vue scoped-CSS rewrite of the icon cluster, dropzone, browse chip and file list using --office-* tokens; Hugeicons supply the same glyph data as the reference."
     },
     {
+      "upstreamFile": "apps/v4/components/extend/file-upload.tsx",
+      "purpose": "Default accept list and icon-cluster definitions for FileUpload.",
+      "target": "packages/vue-ui/src/components/file-upload-defaults.ts",
+      "status": "adapted",
+      "issues": ["#163"],
+      "notes": "Extracted into a module so defineProps() defaults can reference the Extend values from module scope; no rendered markup."
+    },
+    {
       "upstreamFile": "apps/v4/components/extend/file-thumbnail.tsx",
       "purpose": "Square and configurable preview card with blur-in and error fallback.",
       "target": "packages/vue-ui/src/components/FileThumbnail.vue",
