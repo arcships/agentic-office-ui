@@ -110,8 +110,10 @@
 
 ```bash
 pnpm --filter demo build
-PYTHON=/tmp/bb-venv/bin/python RUN_PYTHON_MODULES=playwright \
-  node scripts/ci/run-python.mjs scripts/ci/capture-pdf-chrome.py --serve apps/demo/dist
+pnpm test:pdf:chrome
+# 等价于：
+# PYTHON=/tmp/bb-venv/bin/python RUN_PYTHON_MODULES=playwright \
+#   node scripts/ci/run-python.mjs scripts/ci/capture-pdf-chrome.py --serve apps/demo/dist
 ```
 
 最近一次结果：6/6 通过，0 console error；产物在 `output/pdf-chrome/`。

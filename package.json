@@ -31,6 +31,7 @@
     "test:acceptance": "node scripts/ci/run-acceptance-shard.mjs all",
     "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
     "test:pdf": "node scripts/ci/run-suite.mjs pdf",
+    "test:pdf:chrome": "node scripts/ci/run-python.mjs scripts/ci/capture-pdf-chrome.py --serve apps/demo/dist",
     "test:stress": "node scripts/ci/run-suite.mjs stress",
     "test:performance": "node scripts/ci/run-suite.mjs performance",
     "test:matrix": "node scripts/ci/run-suite.mjs matrix",
