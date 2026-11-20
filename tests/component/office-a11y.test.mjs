@@ -416,56 +416,33 @@ test("shared menu keyboard resolves Escape, Tab and arrow navigation the same wa
 });
 
 test("DOCX and XLSX context menus share focus entry, arrow keys, Escape and focus return", () => {
-  for (const [name, filePath] of [["DOCX", DOCX_MENU_PATH], ["XLSX", XLSX_MENU_PATH]]) {
-    const menu = read(filePath);
-    assert.match(
-      menu,
-      /from "@arcships\/vue-ui"/,
-      `${name} menu must consume the shared Office menu keyboard`,
-    );
-    assert.match(menu, /role="menu"/, `${name} menu needs role=menu`);
-    assert.match(menu, /aria-label="/, `${name} menu needs an accessible name`);
-    assert.match(menu, /role="menuitem"/, `${name} items need role=menuitem`);
-    assert.match(menu, /role="separator"/, `${name} separators need role=separator`);
-    assert.match(menu, /@keydown="onMenuKeydown"/);
-    assert.match(menu, /function onMenuKeydown\(event: KeyboardEvent\): void/);
-    assert.match(menu, /captureInvoker\(\)/, `${name} menu must remember the invoking element`);
-    assert.doesNotMatch(
-      menu,
-      /window\.addEventListener\(["']keydown/,
-      `${name} menu must not own a private Escape listener that diverges from the shared semantics`,
-    );
-  }
+  const menu = read(DOCX_MENU_PATH);
+  assert.match(menu, /from "@arcships\/vue-ui"/);
+  assert.match(menu, /role="menu"/);
+  assert.match(menu, /aria-label="/);
+  assert.match(menu, /role="menuitem"/);
+  assert.match(menu, /role="separator"/);
+  assert.match(menu, /@keydown="onMenuKeydown"/);
+  assert.match(menu, /function onMenuKeydown\(event: KeyboardEvent\): void/);
+  assert.match(menu, /captureInvoker\(\)/);
+  assert.doesNotMatch(menu, /window\.addEventListener\(["']keydown/);
+  assert.match(menu, /import \{ resolveOfficeMenuKeyCommand \} from "@arcships\/vue-ui"/);
+  assert.match(menu, /resolveOfficeMenuKeyCommand\(\s*event\.key,\s*collectMenuItems\(\)\.length,\s*activeItemIndex\.value,?\s*\)/);
+  assert.match(menu, /if \(command\.type === "focus"\) \{\s*focusMenuItem\(command\.index\)/);
+  assert.match(menu, /function focusMenuItem\(index: number\): void/);
+  assert.match(menu, /item\.setAttribute\?\.\("tabindex"/);
+  assert.match(menu, /function restoreInvokerFocus\(\): void/);
+  assert.match(menu, /function close\(\): void \{\s*restoreInvokerFocus\(\)\s*emit\("close"\)/);
+  assert.match(menu, /captureInvoker\(\)\n\s*await nextTick\(\)\n\s*measureMenu\(\)\n\s*focusMenuItem\(0\)/);
 
-  // The XLSX menu has no non-DOM test-renderer contract, so it hands the whole
-  // gesture set to the shared composable.
+  // XLSX delegates the whole gesture set to the shared Reka menu primitive.
   const xlsxMenu = read(XLSX_MENU_PATH);
-  assert.match(xlsxMenu, /import \{ useOfficeMenuKeyboard \} from "@arcships\/vue-ui"/);
-  assert.match(xlsxMenu, /menuKeyboard\.onKeydown\(event\)/);
-  assert.match(xlsxMenu, /menu: \(\) => menuRef\.value/);
-  assert.match(xlsxMenu, /focusFirst\(\)/);
-  const invokerIndex = xlsxMenu.indexOf("menuKeyboard.captureInvoker()");
-  const visibleIndex = xlsxMenu.indexOf("visible.value = true");
-  assert.ok(invokerIndex > 0, "XLSX menu must capture the invoker");
-  assert.ok(invokerIndex < visibleIndex, "the invoker must be captured before the menu becomes visible");
-  assert.match(xlsxMenu, /void nextTick\(\(\) => menuKeyboard\.focusFirst\(\)\)/);
-  assert.match(
-    xlsxMenu,
-    /restoreTarget: \(\) => props\.targetElement \?\? null/,
-    "XLSX menu must return focus to the grid that opened it",
-  );
-
-  // The DOCX menu keeps its node-agnostic item walk (the component test renderer
-  // has no DOM), but the key semantics come from the same shared resolver.
-  const docxMenu = read(DOCX_MENU_PATH);
-  assert.match(docxMenu, /import \{ resolveOfficeMenuKeyCommand \} from "@arcships\/vue-ui"/);
-  assert.match(docxMenu, /resolveOfficeMenuKeyCommand\(\s*event\.key,\s*collectMenuItems\(\)\.length,\s*activeItemIndex\.value,?\s*\)/);
-  assert.match(docxMenu, /if \(command\.type === "focus"\) \{\s*focusMenuItem\(command\.index\)/);
-  assert.match(docxMenu, /function focusMenuItem\(index: number\): void/);
-  assert.match(docxMenu, /item\.setAttribute\?\.\("tabindex"/, "DOCX keeps its roving tabindex");
-  assert.match(docxMenu, /function restoreInvokerFocus\(\): void/);
-  assert.match(docxMenu, /function close\(\): void \{\s*restoreInvokerFocus\(\)\s*emit\("close"\)/);
-  assert.match(docxMenu, /captureInvoker\(\)\n\s*await nextTick\(\)\n\s*measureMenu\(\)\n\s*focusMenuItem\(0\)/);
+  assert.match(xlsxMenu, /OfficeDropdownMenu/);
+  assert.match(xlsxMenu, /:menu-label="m\.xlsx\.contextMenu\.label"/);
+  assert.match(xlsxMenu, /content-test-id="'xlsx-context-menu'"/);
+  assert.match(xlsxMenu, /:restore-focus="restoreFocusTarget"/);
+  assert.match(xlsxMenu, /@update:open="onMenuOpenChange"/);
+  assert.doesNotMatch(xlsxMenu, /window\.addEventListener\(["']keydown/);
 });
 
 test("the shared menu keyboard keeps Escape working when focus never enters the menu", () => {

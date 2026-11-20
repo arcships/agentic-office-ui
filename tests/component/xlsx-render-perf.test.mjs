@@ -610,9 +610,12 @@ test("XLSX grid allocates and frees one worksheet handle per paint", () => {
 
 test("XLSX sheet tabs paint previews on hover instead of preloading every sheet", () => {
   const source = readFileSync(SHEET_TABS_PATH, "utf8");
-  assert.equal(
-    /onMounted\s*\(/u.test(source),
-    false,
+  const mountStart = source.indexOf("onMounted(");
+  assert.ok(mountStart > 0, "XlsxSheetTabs should only use onMounted for measurement");
+  const mountBody = source.slice(mountStart, source.indexOf("});", mountStart));
+  assert.doesNotMatch(
+    mountBody,
+    /prefetchThumbnails/u,
     "XlsxSheetTabs must not preload every thumbnail on mount",
   );
   assert.equal(
