@@ -310,11 +310,9 @@ test("switching slides closes a stale menu", async () => {
   rightClickObject(mounted.container, EXTERNAL_KEY)
   await waitForDom(() => menuElement() !== null, "link menu")
 
-  const viewer = mounted.container.querySelector('[data-testid="pptx-stage"]')
-  const slide = document.createElement("div")
-  slide.dataset.slideIndex = "1"
-  viewer.append(slide)
-  slide.dispatchEvent(new window.MouseEvent("click", { bubbles: true }))
+  // Toolbar navigation changes the active slide; a menu that outlived its
+  // target must not act on the new slide.
+  mounted.container.querySelector('[data-testid="pptx-next-slide"]').click()
   await waitForDom(() => menuElement() === null, "menu closes on slide change")
 
   mounted.unmount()

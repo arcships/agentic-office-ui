@@ -383,6 +383,7 @@
       :y="linkMenuPosition.y"
       :items="linkMenuItems"
       :label="m.pptx.viewer.link.menu"
+      :restore-focus="focusViewerRoot"
       @update:open="onLinkMenuOpenChange"
       @select="run(() => onLinkMenuSelect($event))"
     />
@@ -1281,16 +1282,16 @@ function closeContextMenu(): void {
   contextMenu.value = null
 }
 
+function focusViewerRoot(): HTMLElement | null {
+  return viewerRef.value
+}
+
 function onLinkMenuOpenChange(open: boolean): void {
   if (open) {
     linkMenuOpen.value = true
     return
   }
-  const wasOpen = linkMenuOpen.value
   closeContextMenu()
-  // The Reka trigger is the zero-size pointer anchor; hand focus back to the
-  // viewer instead of leaving it on a hidden helper.
-  if (wasOpen) void nextTick(() => viewerRef.value?.focus())
 }
 
 async function onLinkMenuSelect(id: string): Promise<void> {

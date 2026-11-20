@@ -2,10 +2,10 @@
   <OfficeDropdownMenu
     :open="open"
     :items="items"
-    side="bottom"
-    align="start"
+    :content-test-id="'pptx-context-menu'"
+    :menu-label="label"
+    :restore-focus="restoreFocus"
     :side-offset="4"
-    :content-label="label"
     content-class="pptx-viewer__link-menu"
     @update:open="emit('update:open', $event)"
     @select="onSelect"
@@ -18,15 +18,17 @@
       -->
       <span
         class="pptx-viewer__link-menu-anchor"
-        :style="{ left: `${x}px`, top: `${y}px` }"
+        :style="anchorStyle"
         data-testid="pptx-context-menu-anchor"
         aria-hidden="true"
+        tabindex="-1"
       />
     </template>
   </OfficeDropdownMenu>
 </template>
 
 <script setup lang="ts">
+import { computed, type CSSProperties } from "vue"
 import { OfficeDropdownMenu } from "@arcships/vue-ui"
 import type { OfficeMenuEntry } from "@arcships/vue-ui"
 
@@ -40,9 +42,12 @@ const props = withDefaults(defineProps<{
   items: OfficeMenuEntry[]
   /** Accessible name of the menu surface. */
   label: string
+  /** Element that receives focus when the menu closes (the viewer root). */
+  restoreFocus?: (() => HTMLElement | null | undefined) | undefined
 }>(), {
   x: 0,
   y: 0,
+  restoreFocus: undefined,
 })
 
 const emit = defineEmits<{
@@ -50,6 +55,11 @@ const emit = defineEmits<{
   /** The stable `id` of the chosen entry. */
   select: [id: string]
 }>()
+
+const anchorStyle = computed<CSSProperties>(() => ({
+  insetBlockStart: `${props.y}px`,
+  insetInlineStart: `${props.x}px`,
+}))
 
 function onSelect(entry: OfficeMenuEntry): void {
   const id = (entry as { id?: string }).id
