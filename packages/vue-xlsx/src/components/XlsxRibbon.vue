@@ -128,7 +128,7 @@
 
         <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
           <select
-            class="xlsx-ribbon__select xlsx-ribbon__font"
+            class="office-ui xlsx-ribbon__select xlsx-ribbon__font"
             :value="fontFamilyValue"
             :aria-label="m.xlsx.ribbon.fontFamily"
             :title="m.xlsx.ribbon.fontFamily"
@@ -143,7 +143,7 @@
             <option value="Courier New">Courier New</option>
           </select>
           <select
-            class="xlsx-ribbon__select xlsx-ribbon__size"
+            class="office-ui xlsx-ribbon__select xlsx-ribbon__size"
             :value="fontSizeValue"
             :aria-label="m.xlsx.ribbon.fontSize"
             :title="m.xlsx.ribbon.fontSize"
@@ -274,7 +274,7 @@
 
         <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
           <select
-            class="xlsx-ribbon__select xlsx-ribbon__number"
+            class="office-ui xlsx-ribbon__select xlsx-ribbon__number"
             :value="numberFormatValue"
             :aria-label="m.xlsx.ribbon.numberFormat"
             :title="m.xlsx.ribbon.numberFormat"
@@ -335,7 +335,7 @@
           >{{ m.xlsx.ribbon.unmerge }}</OfficeButton>
           <select
             data-testid="xlsx-ribbon-border-preset"
-            class="xlsx-ribbon__select xlsx-ribbon__borders"
+            class="office-ui xlsx-ribbon__select xlsx-ribbon__borders"
             :value="''"
             :aria-label="m.xlsx.ribbon.borders"
             :title="m.xlsx.ribbon.borders"
@@ -705,6 +705,7 @@ function deleteColumn(): void {
  */
 .xlsx-ribbon {
   --office-ui-toolbar-min-height: 3rem;
+  flex: 0 0 auto;
   --office-ui-toolbar-padding-block: 6px;
   border-block-start: var(--office-border-width) solid var(--office-border);
 }
@@ -831,7 +832,7 @@ function deleteColumn(): void {
   accent-color: var(--office-primary);
 }
 
-.xlsx-ribbon :deep(.office-icon-button svg) {
+.xlsx-ribbon :deep(.office-button svg:not(.office-icon)) {
   block-size: 16px;
   fill: none;
   stroke: currentColor;

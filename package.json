@@ -20,6 +20,7 @@
     "test:pptx:headless": "python3 scripts/ci/verify-pptx-headless-browser.py",
     "test:pptx:baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py --check",
     "test:pptx:blackbox": "node scripts/ci/verify-pptx-playback-browser.mjs",
+    "test:xlsx:chrome": "node scripts/ci/run-python.mjs scripts/ci/verify-xlsx-chrome-interaction.py",
     "capture:pptx-baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py",
     "test:visual": "RUN_PYTHON_MODULES=playwright,PIL node scripts/ci/run-python.mjs scripts/ci/capture-visual-matrix.py --check",
     "baseline:visual": "RUN_PYTHON_MODULES=playwright,PIL node scripts/ci/run-python.mjs scripts/ci/capture-visual-matrix.py --update-baseline",
