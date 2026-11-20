@@ -20,6 +20,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const workspaceDependencies = [
   { filter: "@arcships/office-runtime", probe: "packages/office-runtime/dist/index.js" },
   { filter: "@arcships/docx-core...", probe: "packages/docx-core/dist/index.js" },
+  { filter: "@arcships/xlsx-core", probe: "packages/xlsx-core/dist/index.js" },
 ];
 
 function runBuild(filter) {

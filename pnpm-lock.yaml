@@ -358,6 +358,9 @@ importers:
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
         version: 0.1.17
+      '@hugeicons/core-free-icons':
+        specifier: 4.4.0
+        version: 4.4.0
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1

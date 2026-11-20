@@ -457,10 +457,8 @@
       "A1:C10",
       "Count: 3",
       "Sum: 42",
-      "Average: 14",
-      "Min: 1",
-      "Max: 99",
       "Selected"
-    ]
+    ],
+    "note": "kept short so the strip stays inside a 390px viewport; overflowing segments are clipped by the reference strip and are not part of the compared surface"
   }
 }

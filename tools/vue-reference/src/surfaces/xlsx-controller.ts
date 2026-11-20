@@ -52,19 +52,20 @@ export function xlsxChromeController(
 ): XlsxViewerController {
   const toolbar = fixtures.xlsxToolbar;
   const tabFixture = fixtures.xlsxSheetTabs;
-  const { disabled = false, activeTabIndex = tabFixture.activeIndex } = options;
-  const sheets = tabFixture.sheets.map(sheet);
-  const workbookTabs = tabs(tabFixture.sheets);
+  const { disabled = false } = options;
+  const activeTabIndex = options.activeTabIndex ?? tabFixture.activeIndex;
+  const sheets = disabled ? [] : tabFixture.sheets.map(sheet);
+  const workbookTabs = disabled ? [] : tabs(tabFixture.sheets);
   const selection = {
     end: { col: 2, row: 9 } as XlsxCellAddress,
     start: { col: 0, row: 0 } as XlsxCellAddress,
   };
   const summary = {
-    average: 14,
+    average: null,
     cellCount: 30,
     count: 3,
-    max: 99,
-    min: 1,
+    max: null,
+    min: null,
     numberFormat: null,
     numericCount: 3,
     sum: 42,
@@ -112,9 +113,7 @@ export function xlsxChromeController(
     selectedRangeAddress: "A1:C10",
     selection,
     setActiveSheetIndex: noop,
-    setActiveTabIndex: (index: number) => {
-      activeTabIndex = index;
-    },
+    setActiveTabIndex: noop,
     setPageBreakPreview: noop,
     setSheetVisibility: () => true,
     setZoomScale: noop,

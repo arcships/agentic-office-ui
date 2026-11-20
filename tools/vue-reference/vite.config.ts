@@ -41,10 +41,6 @@ export default defineConfig({
           new URL("../../packages/office-interaction/src/index.ts", import.meta.url),
         ),
       },
-      {
-        find: "@arcships/xlsx-core",
-        replacement: fileURLToPath(new URL("./src/shims/xlsx-core.ts", import.meta.url)),
-      },
     ],
   },
   build: {
@@ -55,6 +51,11 @@ export default defineConfig({
     // compares computed colours with the reference page; colour minification
     // rewrites them to 8-bit hex and adds a channel delta on large fills.
     cssMinify: false,
+  },
+  // `@arcships/xlsx-core` ships a worker entry; ES is the only worker format
+  // that supports the code-split build this harness produces.
+  worker: {
+    format: "es",
   },
   server: {
     fs: {

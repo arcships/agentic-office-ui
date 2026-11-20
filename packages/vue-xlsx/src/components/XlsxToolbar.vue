@@ -72,6 +72,7 @@
             data-testid="xlsx-search-toggle"
             :active="searchOpen"
             :aria-expanded="searchOpen"
+            :disabled="controlsDisabled"
             @click="toggleSearch"
           >
             <HugeIcon :icon="Search01Icon" class="xlsx-toolbar__icon" />
@@ -316,6 +317,13 @@ async function replaceAllMatches(): Promise<void> {
 
 const displayFileName = computed(() => props.controller.displayFileName);
 const zoomPercent = computed(() => Math.round(props.controller.zoomScale));
+/** Upstream disables search while the workbook is loading, failed or empty. */
+const controlsDisabled = computed(
+  () =>
+    Boolean(props.controller.isLoading)
+    || Boolean(props.controller.error)
+    || (props.controller.sheets?.length ?? 0) === 0,
+);
 function onZoomChange(event: Event): void {
   const value = Number((event.target as HTMLSelectElement).value);
   if (Number.isFinite(value)) props.controller.setZoomScale(value);
@@ -544,6 +552,32 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   flex: 0 0 auto;
 }
 
+/*
+ * Upstream's row inherits the page type scale (16px / 24px) while the shared
+ * `OfficeToolbar` sets `text-sm`; keep the row's own metrics at the reference
+ * values so the computed style and the wrapped-line height match.
+ */
+.xlsx-toolbar.office-toolbar {
+  font-size: var(--office-text-base);
+  line-height: var(--office-leading-base);
+}
+
+/*
+ * The toolbar has no leading cluster, and an empty flex item still takes a
+ * wrapped line of its own (plus the row gap) on a narrow host. Hide it while it
+ * is empty so the row is one line, exactly like the reference's single
+ * `ml-auto` cluster.
+ */
+.xlsx-toolbar :deep(.office-toolbar__leading:empty) {
+  display: none;
+}
+
+/* Upstream's cluster is `ml-auto`: the row is right-aligned even when the
+ * leading cluster is not rendered. */
+.xlsx-toolbar :deep(.office-toolbar__trailing) {
+  margin-inline-start: auto;
+}
+
 .xlsx-toolbar__icon {
   display: block;
   flex-shrink: 0;
@@ -584,6 +618,8 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
     var(--office-background),
     color-mix(in oklab, var(--office-input) 32%, transparent)
   );
+  /* Upstream is `not-dark:bg-clip-padding`: in light the translucent border
+   * paints over the row, in dark over the trigger's own fill. */
   background-clip: padding-box;
   color: var(--office-foreground);
   font: inherit;
@@ -608,6 +644,17 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   pointer-events: none;
 }
 
+/* Upstream swaps the light 1px bottom inset for a 1px top inset in dark. */
+[data-office-theme="dark"] .xlsx-toolbar__zoom-trigger {
+  background-clip: border-box;
+}
+
+[data-office-theme="dark"] .xlsx-toolbar__zoom-trigger::before {
+  /* `oklab` keeps the same rounding as the reference's
+   * `--alpha(var(--color-white) / 6%)` inset line; `srgb` lands 1/255 lower. */
+  box-shadow: 0 -1px 0 0 color-mix(in oklab, white 6%, transparent);
+}
+
 .xlsx-toolbar__zoom-value {
   flex: 1 1 0%;
   min-inline-size: 0;
@@ -620,6 +667,24 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   flex: none;
   margin-inline-end: -4px;
   opacity: 0.8;
+}
+
+/* Below the `sm` breakpoint the upstream trigger is `min-h-8 text-base` with the
+ * `size-4.5` chevron, and only shrinks to `sm:min-h-7 text-sm size-4` at >=640px. */
+@media (max-width: 639.98px) {
+  .xlsx-toolbar__zoom-select-wrap {
+    block-size: 2rem;
+  }
+
+  .xlsx-toolbar__zoom-trigger {
+    font-size: var(--office-text-base);
+    line-height: var(--office-leading-base);
+  }
+
+  .xlsx-toolbar__zoom-icon {
+    inline-size: 1.125rem;
+    block-size: 1.125rem;
+  }
 }
 
 /* The native listbox covers the painted trigger so the platform control keeps

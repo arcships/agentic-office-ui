@@ -328,7 +328,18 @@ const hoveredTabIndex = ref<number | null>(null);
 const thumbnailCanvasRefs = ref<Map<number, HTMLCanvasElement | null>>(new Map());
 const popupX = ref(0);
 const popupY = ref(0);
+// Upstream opens the preview after a 500ms hover and closes it 80ms after the
+// pointer leaves the strip, so a pointer sweeping across the tabs never flashes
+// a card.
+const PREVIEW_OPEN_DELAY_MS = 500;
+const PREVIEW_CLOSE_DELAY_MS = 80;
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
+let previewOpenTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPreviewOpenTimer(): void {
+  if (previewOpenTimer) clearTimeout(previewOpenTimer);
+  previewOpenTimer = null;
+}
 
 // Inline rename state. The tab id, not the index, identifies the editor so a
 // sheet added or removed underneath the input cannot retarget the commit.
@@ -436,17 +447,31 @@ function onTabHover(index: number, event: MouseEvent) {
   if (popupTimer) clearTimeout(popupTimer);
   scheduleHoverPrefetch(index);
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  popupX.value = rect.left + rect.width / 2;
-  popupY.value = rect.top;
-  hoveredTabIndex.value = index;
 
-  nextTick(() => {
-    const canvas = thumbnailCanvasRefs.value.get(index);
-    const thumb = thumbnailComputed.value[index];
-    if (canvas && thumb) {
-      thumb.paint(canvas as HTMLCanvasElement);
-    }
-  });
+  const reveal = () => {
+    popupX.value = rect.left + rect.width / 2;
+    popupY.value = rect.top;
+    hoveredTabIndex.value = index;
+
+    nextTick(() => {
+      const canvas = thumbnailCanvasRefs.value.get(index);
+      const thumb = thumbnailComputed.value[index];
+      if (canvas && thumb) {
+        thumb.paint(canvas as HTMLCanvasElement);
+      }
+    });
+  };
+
+  // An open preview follows the pointer from tab to tab immediately; the delay
+  // only guards against opening one while the pointer is just passing through.
+  if (hoveredTabIndex.value !== null) {
+    clearPreviewOpenTimer();
+    reveal();
+    return;
+  }
+
+  clearPreviewOpenTimer();
+  previewOpenTimer = setTimeout(reveal, PREVIEW_OPEN_DELAY_MS);
 }
 
 function setTabButtonRef(index: number, el: unknown) {
@@ -515,9 +540,10 @@ function onTabFocusOut(index: number) {
 
 function onTabLeave() {
   cancelScheduledPrefetch();
+  clearPreviewOpenTimer();
   popupTimer = setTimeout(() => {
     hoveredTabIndex.value = null;
-  }, 150);
+  }, PREVIEW_CLOSE_DELAY_MS);
 }
 
 function onTabClick(index: number) {
@@ -1011,6 +1037,7 @@ watch(canRenameSheets, (allowed) => {
 onUnmounted(() => {
   cancelScheduledPrefetch();
   cancelDrag();
+  clearPreviewOpenTimer();
   if (popupTimer) clearTimeout(popupTimer);
   scrollObserver?.disconnect();
   scrollObserver = null;
@@ -1172,9 +1199,8 @@ onUnmounted(() => {
 }
 
 .xlsx-sheettabs__tab:focus-visible {
-  box-shadow:
-    0 0 0 1px var(--office-background),
-    0 0 0 3px color-mix(in oklab, var(--office-ring) 50%, transparent);
+  /* Upstream `focus-visible:ring-2 ring-ring`: a 2px ring outside the trigger. */
+  box-shadow: 0 0 0 2px var(--office-ring);
 }
 
 .xlsx-sheettabs__tab-name {

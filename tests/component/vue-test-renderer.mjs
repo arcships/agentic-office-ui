@@ -17,6 +17,8 @@ function createHostNode(type, text = "") {
     type,
     text,
     props: {},
+    /** Mirrors `HTMLElement.style` so `v-show` (display toggling) works. */
+    style: {},
     children: [],
     parent: null,
     get options() {

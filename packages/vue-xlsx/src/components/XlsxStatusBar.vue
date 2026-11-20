@@ -135,9 +135,11 @@ const note = computed(() => {
  * supplies the slots, `role` and aria wiring, and these rules map its shell
  * onto that strip (`h-7 px-3 justify-center gap-1 text-xs`).
  */
-.xlsx-status-bar {
+.xlsx-status-bar.office-status-bar {
   flex: 0 0 auto;
   justify-content: center;
+  gap: var(--office-ui-space-1, 0.25rem);
+  block-size: 1.75rem;
   min-block-size: 1.75rem;
   padding: 0 12px;
   border-block-start: var(--office-border-width, 1px) solid var(--office-border);
@@ -154,7 +156,6 @@ const note = computed(() => {
   flex-wrap: nowrap;
   justify-content: center;
   gap: 0 var(--office-ui-space-1, 0.25rem);
-  overflow: hidden;
 }
 
 .xlsx-status-bar :deep(.office-status-bar__end) {
@@ -167,36 +168,17 @@ const note = computed(() => {
   content: "· ";
 }
 
-.xlsx-status-bar__address,
-.xlsx-status-bar__stat,
-.xlsx-status-bar__note {
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.xlsx-status-bar__address {
-  max-inline-size: 40%;
-}
-
+/* The segments keep the reference's box model (default flex item, normal white
+ * space) so they shrink the same way when the strip is narrower than the text. */
 .xlsx-status-bar__address--empty {
   color: var(--office-muted-foreground);
 }
 
 .xlsx-status-bar__note {
-  font-weight: 600;
+  color: inherit;
 }
 
 .xlsx-status-bar__truncated {
   cursor: help;
-}
-
-@container xlsx-viewer (max-width: 620px) {
-  .xlsx-status-bar :deep(.office-status-bar__start) {
-    justify-content: flex-start;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
 }
 </style>

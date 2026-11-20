@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import type { ParityTheme } from "../fixtures";
 import ParityCell from "../parity/ParityCell.vue";
 import XlsxStatusBar from "../../../../packages/vue-xlsx/src/components/XlsxStatusBar.vue";
 import { xlsxChromeController } from "./xlsx-controller";
 
-defineProps<{ cellWidth: number }>();
+defineProps<{ cellWidth: number; theme: ParityTheme }>();
 
 const states = [{ state: "default", matrixState: "default" }];
 </script>
@@ -16,6 +17,6 @@ const states = [{ state: "default", matrixState: "default" }];
     :matrix-state="entry.matrixState"
     :width="cellWidth"
   >
-    <XlsxStatusBar :controller="xlsxChromeController()" />
+    <XlsxStatusBar :controller="xlsxChromeController()" :is-dark="theme === 'dark'" />
   </ParityCell>
 </template>

@@ -120,14 +120,17 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     <XlsxToolbarSurface
       v-else-if="surface.id === 'xlsx-toolbar'"
       :cell-width="surface.cellWidth"
+      :theme="theme"
     />
     <XlsxSheetTabsSurface
       v-else-if="surface.id === 'xlsx-sheet-tabs'"
       :cell-width="surface.cellWidth"
+      :theme="theme"
     />
     <XlsxStatusBarSurface
       v-else-if="surface.id === 'xlsx-status-bar'"
       :cell-width="surface.cellWidth"
+      :theme="theme"
     />
     <p v-else>No Vue renderer for {{ surface.id }}.</p>
   </ParitySurface>
