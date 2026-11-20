@@ -239,7 +239,7 @@
       :controller="controller"
       :kind="authoringKind"
       :is-dark="isDark ?? false"
-      @close="authoringKind = null"
+      @close="closeAuthoring"
     />
     <XlsxSheetTabs
       v-if="showSheetTabs && controller.tabs.length > 0"
@@ -610,8 +610,25 @@ watch(
   },
 );
 
+/**
+ * Element that opened the authoring dialog. Closing returns focus to it so the
+ * spreadsheet keeps the keyboard after an Escape/backdrop dismissal.
+ */
+let authoringInvoker: HTMLElement | null = null;
+
 function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringInvoker = typeof document === "undefined"
+    ? null
+    : (document.activeElement as HTMLElement | null);
   authoringKind.value = kind;
+}
+
+async function closeAuthoring(): Promise<void> {
+  authoringKind.value = null;
+  const target = authoringInvoker ?? viewerRef.value;
+  authoringInvoker = null;
+  await nextTick();
+  target?.focus?.();
 }
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(

@@ -12,13 +12,23 @@ import test from "node:test";
 import {
   findByTestId,
   importFromDemo,
+  keydownEvent,
   mount,
+  teleportTarget,
   textContent,
+  vue,
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { XlsxRibbon, XlsxStatusBar, XlsxToolbar, XlsxViewer } =
-  await importFromDemo("@arcships/vue-xlsx");
+const {
+  XlsxAuthoringDialog,
+  XlsxContextMenu,
+  XlsxRibbon,
+  XlsxSheetTabs,
+  XlsxStatusBar,
+  XlsxToolbar,
+  XlsxViewer,
+} = await importFromDemo("@arcships/vue-xlsx");
 
 function readComponent(name) {
   return readFileSync(
@@ -293,5 +303,267 @@ test("XLSX chrome resolves its palette from Office tokens, not local hex values"
       );
     }
     assert.match(styles, /var\(--office-/, `${name} resolves shared tokens`);
+  }
+});
+
+function sheetTabsController(overrides = {}) {
+  const calls = [];
+  return {
+    calls,
+    controller: {
+      activeSheet: { name: "Sheet1", colStyleIds: [], rowStyleIds: [], styleById: {} },
+      activeTabIndex: 0,
+      isEditingLocked: false,
+      readOnly: false,
+      sheets: [{ hidden: false, index: 0, name: "Sheet1" }, { hidden: false, index: 1, name: "Sheet2" }],
+      tabs: [
+        { hidden: false, index: 0, kind: "worksheet", name: "Sheet1" },
+        { hidden: false, index: 1, kind: "worksheet", name: "Sheet2" },
+      ],
+      setActiveTabIndex: (index) => calls.push(["tab", index]),
+      ...overrides,
+    },
+  };
+}
+
+/** Cell-menu controller: enough sheet geometry for `openAt` to hit a cell. */
+function cellMenuController(overrides = {}) {
+  const calls = [];
+  const sheet = {
+    colStyleIds: [],
+    colWidths: [],
+    defaultColWidthPx: 80,
+    defaultRowHeightPx: 24,
+    maxUsedCol: 4,
+    maxUsedRow: 6,
+    name: "Sheet1",
+    rightToLeft: false,
+    rowHeights: [],
+    rowStyleIds: [],
+    styleById: {},
+    visibleCols: [0, 1, 2, 3],
+    visibleRows: [0, 1, 2, 3],
+  };
+  return {
+    calls,
+    controller: {
+      activeCell: { row: 0, col: 0 },
+      activeCellAddress: "A1",
+      activeSheet: sheet,
+      clearSelectedCells: () => calls.push("clear"),
+      cutSelection: () => calls.push("cut"),
+      duplicateDrawing: () => calls.push("duplicate"),
+      deleteSelectedDrawing: () => calls.push("delete"),
+      freezePanes: null,
+      getCellComment: () => null,
+      getCellHyperlink: () => null,
+      getTableAtCell: () => null,
+      insertColumns: () => {},
+      insertRows: () => {},
+      isEditingLocked: false,
+      pasteFromClipboard: async () => {},
+      readOnly: false,
+      redo: () => calls.push("redo"),
+      revision: 0,
+      selectAll: () => calls.push("selectAll"),
+      selectCell: (cell) => calls.push(["cell", cell.row, cell.col]),
+      selectColumn: () => calls.push("selectColumn"),
+      selectRow: () => calls.push("selectRow"),
+      selection: { end: { row: 0, col: 0 }, start: { row: 0, col: 0 } },
+      sortTable: () => {},
+      tables: [],
+      undo: () => calls.push("undo"),
+      zoomScale: 100,
+      ...overrides,
+    },
+  };
+}
+
+const targetElement = {
+  addEventListener: () => {},
+  getBoundingClientRect: () => ({ height: 600, left: 0, top: 0, width: 800 }),
+  removeEventListener: () => {},
+  scrollLeft: 0,
+  scrollTop: 0,
+};
+
+async function mountCellMenu(controller) {
+  let menu;
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(XlsxContextMenu, {
+        controller,
+        ref: (value) => { menu = value; },
+        targetElement,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const body = teleportTarget("body");
+  return {
+    ...mounted,
+    body,
+    findInBody: (testId) => walk(body).find((node) => node.props?.["data-testid"] === testId),
+    menu: () => menu,
+  };
+}
+
+test("sheet tabs resolve their palette from the shared theme and tokens", async () => {
+  const { calls, controller } = sheetTabsController();
+  const mounted = await mount(XlsxSheetTabs, { controller, isDark: true });
+  try {
+    const theme = walk(mounted.root).find((node) => node.props?.["data-office-theme"] === "dark");
+    assert.ok(theme, "the strip provides the dark Office theme to its popups");
+    assert.ok(
+      nodesWithClass(mounted.root, "office-theme").length === 1,
+      "the provider host uses the display:contents shell",
+    );
+    const strip = nodesWithClass(mounted.root, "xlsx-sheettabs")[0];
+    assert.ok(strip, "the strip keeps its public class");
+    assert.match(
+      String(strip.props.style.backgroundColor),
+      /var\(--office-muted/,
+      "the strip background is a token, not a hardcoded zinc value",
+    );
+    const tabs = nodesWithClass(mounted.root, "xlsx-sheettabs__tab");
+    assert.ok(tabs.length >= 2, "tabs still render");
+    assert.match(String(tabs[0].props.style.color), /inherit/);
+    assert.match(
+      String(tabs.at(-1).props.style.color),
+      /var\(--office-muted-foreground/,
+      "inactive tabs use the muted token",
+    );
+    tabs.at(-1).props.onClick();
+    await vue.nextTick();
+    assert.deepEqual(calls, [["tab", 1]], "tab switching still goes through the controller");
+  } finally {
+    mounted.app.unmount();
+  }
+
+  const source = readComponent("XlsxSheetTabs");
+  assert.equal(
+    /props\.isDark \?/.test(source),
+    false,
+    "the strip no longer branches its palette on isDark",
+  );
+  assert.match(source, /var\(--office-/, "the strip resolves shared tokens");
+});
+
+test("the cell context menu closes on Escape and Tab through the shared keyboard layer", async () => {
+  const { controller } = cellMenuController();
+  const mounted = await mountCellMenu(controller);
+  try {
+    assert.equal(mounted.menu().openAt(100, 60), true, "the menu opens on a cell");
+    await vue.nextTick();
+    const menu = () => mounted.findInBody("xlsx-context-menu");
+    assert.ok(menu(), "the shared menu surface is rendered");
+    assert.match(
+      String(menu().props.class),
+      /office-menu__content/,
+      "the menu keeps the shared surface class",
+    );
+
+    const escape = keydownEvent("Escape");
+    menu().props.onKeydown(escape.event);
+    assert.equal(escape.preventedCount(), 1, "Escape is consumed by the shared keyboard helper");
+    await vue.nextTick();
+    assert.equal(menu(), undefined, "Escape closes the menu");
+
+    mounted.menu().openAt(120, 80);
+    await vue.nextTick();
+    assert.ok(menu(), "the menu reopens");
+    const tab = keydownEvent("Tab");
+    menu().props.onKeydown(tab.event);
+    assert.equal(tab.preventedCount(), 1, "Tab closes the menu instead of leaving it open");
+    await vue.nextTick();
+    assert.equal(menu(), undefined);
+
+    mounted.menu().openAt(120, 80);
+    await vue.nextTick();
+    // A key the menu does not own must not be swallowed.
+    const arrowDown = keydownEvent("ArrowDown");
+    menu().props.onKeydown(arrowDown.event);
+    assert.equal(arrowDown.preventedCount(), 0, "unowned keys keep their default");
+    assert.ok(menu(), "the menu stays open on an unowned key");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("a read-only cell menu disables editing commands and keeps the read-only offer", async () => {
+  const { controller } = cellMenuController({ isEditingLocked: true, readOnly: true });
+  const mounted = await mountCellMenu(controller);
+  try {
+    mounted.menu().openAt(100, 60);
+    await vue.nextTick();
+    const cut = mounted.findInBody("xlsx-context-cut");
+    assert.ok(cut, "cut stays visible so the shortcut is discoverable");
+    assert.equal(cut.props.disabled, true, "cut is disabled in a read-only workbook");
+    assert.equal(mounted.findInBody("xlsx-context-copy").props.disabled, undefined, "copy stays available");
+    assert.equal(mounted.findInBody("xlsx-context-paste"), undefined, "paste is not offered");
+    assert.equal(mounted.findInBody("xlsx-context-insert-row-above"), undefined, "row edits are not offered");
+    assert.ok(mounted.findInBody("xlsx-context-select-row"), "selection commands stay available");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("the authoring dialog uses the shared dialog shell and keeps its close paths", async () => {
+  const applied = [];
+  const controller = {
+    activeCell: { row: 0, col: 0 },
+    activeCellAddress: "A1",
+    revision: 0,
+    selectedRangeAddress: "A1",
+    selection: null,
+    setSelectionNumberFormat: (format) => {
+      applied.push(format);
+      return true;
+    },
+  };
+  const closes = [];
+  const mounted = await mount(XlsxAuthoringDialog, {
+    controller,
+    kind: "numberFormat",
+    onClose: () => closes.push("close"),
+  });
+  const body = teleportTarget("body");
+  try {
+    const dialog = walk(body).find((node) => node.props?.["data-testid"] === "xlsx-authoring-dialog");
+    assert.ok(dialog, "the dialog renders");
+    const classes = String(dialog.props.class);
+    assert.match(classes, /office-ui/, "shared primitive scope");
+    assert.match(classes, /office-dialog__content/, "shared dialog surface");
+    assert.match(classes, /office-dialog__content--lg/, "authoring uses the wide surface");
+    assert.ok(
+      walk(body).some((node) => String(node.props?.class ?? "").includes("office-dialog__body")),
+      "the form lives in the shared scroll body",
+    );
+    assert.ok(
+      walk(body).some((node) => String(node.props?.class ?? "").includes("office-overlay__backdrop")),
+      "the backdrop is the shared overlay",
+    );
+
+    const section = walk(body).find((node) => node.props?.["data-testid"] === "xlsx-number-format-section");
+    assert.ok(section, "the number-format form still renders inside the shared shell");
+
+    const escape = keydownEvent("Escape");
+    dialog.props.onKeydown(escape.event);
+    assert.equal(closes.length, 1, "Escape closes the dialog");
+
+    const backdrop = walk(body).find((node) => node.props?.["data-testid"] === "xlsx-authoring-backdrop");
+    backdrop.props.onPointerdown();
+    assert.deepEqual(closes, ["close", "close"], "the backdrop closes the dialog");
+
+    const close = walk(body).find((node) => node.props?.["data-testid"] === "xlsx-authoring-close");
+    close.props.onClick();
+    assert.deepEqual(closes, ["close", "close", "close"], "the header button closes the dialog");
+
+    const apply = walk(body).find((node) => node.props?.["data-testid"] === "xlsx-number-format-apply");
+    apply.props.onClick();
+    await vue.nextTick();
+    assert.equal(applied.length, 1, "applying the format still reaches the controller");
+  } finally {
+    mounted.app.unmount();
   }
 });

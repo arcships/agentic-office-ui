@@ -42,7 +42,7 @@
               @click="controller.zoomOut()"
             />
             <select
-              class="xlsx-toolbar__zoom-select"
+              class="office-ui xlsx-toolbar__zoom-select"
               :aria-label="m.common.zoom.level"
               :value="zoomPercent"
               @change="onZoomChange"
@@ -360,12 +360,27 @@ defineExpose({ openSearch });
  * provider instead of a local `.xlsx-toolbar--dark` override.
  */
 .xlsx-toolbar {
+  /* A chrome row never shrinks: the viewer is a flex column and a squeezed
+   * toolbar would clip its wrapped second row instead of growing. */
+  flex: 0 0 auto;
   gap: var(--office-ui-space-3, 0.75rem);
 }
 
 .xlsx-toolbar__identity {
   min-inline-size: 0;
   font: inherit;
+}
+
+/* Inline SVG glyphs keep the shared outline treatment (Lucide icons bring
+ * their own and are excluded through .office-icon). */
+.xlsx-toolbar :deep(.office-button svg:not(.office-icon)) {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  block-size: 16px;
+  inline-size: 16px;
 }
 
 .xlsx-toolbar__file-icon {

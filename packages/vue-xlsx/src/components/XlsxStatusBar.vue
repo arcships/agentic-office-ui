@@ -129,6 +129,7 @@ const note = computed(() => {
 /* Geometry comes from `OfficeStatusBar`; these rules keep the spreadsheet
  * address/stats typography and the shared token palette. */
 .xlsx-status-bar {
+  flex: 0 0 auto;
   gap: var(--office-ui-space-3, 0.75rem);
 }
 
