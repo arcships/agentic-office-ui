@@ -9,6 +9,11 @@
  *
  * - A new violation (a new file, or more occurrences than the baseline holds)
  *   fails the run and is printed with `file:line:column`.
+ * - Baseline counts are per file + rule. When a file already freezes N
+ *   occurrences of a rule, the N reported lines are treated as frozen, so a
+ *   new occurrence of that same rule in the same file fails the run but may be
+ *   printed on top of an existing line. Files without a baseline entry are
+ *   always reported exactly.
  * - Fixing violations never fails; the summary reports the baseline entries
  *   that can shrink.
  * - Growing the baseline is an approval, not a `--update`:
