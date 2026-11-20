@@ -337,7 +337,7 @@ Tailwind、variant/size 完整性和 bundle 预算。
 | 禁用 | 原生 `disabled`（表单/按钮）或 `data-disabled`（Reka 项）；`pointer-events: none` + `opacity` |
 | 加载 | `loading` 保留标签宽度、显示 spinner、写 `aria-busy` 并阻止重复提交 |
 | 触控 | `(pointer: coarse)` 下 44px 命中区；Dialog 在窄屏底部吸附 |
-| 本地化 | 关闭、加载、通知、对话框等通用标签按 Office locale 返回中/英；业务文案由宿主传入 |
+| 本地化 | 关闭、加载、通知、对话框等通用标签来自共享目录的 `vueUi.primitives`，默认英文、`zh-CN` 返回中文，宿主可用 `messages` 覆盖；业务文案由宿主传入 |
 
 ## 6. 测试与包体积
 

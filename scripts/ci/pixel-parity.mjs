@@ -103,7 +103,7 @@ function main() {
 
   if (options.tokens) {
     console.log("▸ extract Extend tokens");
-    const status = run(process.execPath, ["scripts/ci/extend-tokens.mjs"]);
+    const status = run(process.execPath, ["scripts/ci/extract-extend-tokens.mjs"]);
     if (status !== 0) process.exit(status);
   }
 

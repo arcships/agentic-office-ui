@@ -117,11 +117,15 @@ test("DOCX thumbnail rail keeps long-document scroll space and paints table text
   await vue.nextTick();
   await vue.nextTick();
 
-  const pageCount = Number(textContent(nodesWithClass(mounted.root, "docx-thumbnail-count")[0]));
+  const list = nodesWithClass(mounted.root, "docx-thumbnail-list")[0];
+  const pageCount = Number(list.props["data-page-count"]);
   assert.ok(pageCount > 20, `expected a long document, got ${pageCount} pages`);
   assert.equal(nodesWithClass(mounted.root, "docx-thumbnail-item").length, 20);
-  const bottomSpacer = nodesWithClass(mounted.root, "docx-thumbnail-spacer").at(-1);
-  assert.equal(bottomSpacer.props.style.height, `${(pageCount - 20) * 106}px`);
+  // Upstream row stride: a 92px card at this 2:1 page ratio (46px) plus the
+  // 40px option box and 12px `pb-3` row gap, with 16px track padding.
+  const rowStride = 46 + 52;
+  const track = nodesWithClass(mounted.root, "docx-thumbnail-track")[0];
+  assert.equal(track.props.style.height, `${pageCount * rowStride + 32}px`);
 
   const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
   assert.equal(firstCanvas.dataset.thumbnailState, "ready");
@@ -136,16 +140,19 @@ test("DOCX thumbnail rail keeps long-document scroll space and paints table text
   assert.ok(tableFill > contentScale && tableStroke > tableFill, "table fill must precede its border");
   assert.ok(firstCanvasOperations.some((operation) => operation.name === "fillText"));
 
-  const list = nodesWithClass(mounted.root, "docx-thumbnail-list")[0];
-  list.props.onScrollPassive({ target: { scrollTop: 24 * 106 } });
+  list.props.onScrollPassive({ target: { scrollTop: 24 * rowStride } });
   await vue.nextTick();
   await vue.nextTick();
 
   const visibleItems = nodesWithClass(mounted.root, "docx-thumbnail-item");
   assert.equal(visibleItems[0].props["data-thumbnail-page-index"], 19);
   assert.equal(visibleItems.at(-1).props["data-thumbnail-page-index"], Math.min(19 + 20, pageCount) - 1);
-  const topSpacer = nodesWithClass(mounted.root, "docx-thumbnail-spacer")[0];
-  assert.equal(topSpacer.props.style.height, `${19 * 106}px`);
+  const rows = nodesWithClass(mounted.root, "docx-thumbnail-row");
+  assert.equal(
+    rows[0].props.style.transform,
+    `translateY(${16 + 19 * rowStride}px)`,
+    "the first rendered row must sit at its virtual offset inside the track",
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
@@ -386,7 +393,7 @@ test("DOCX thumbnail rail follows device pixel ratio changes", async (t) => {
   await vue.nextTick();
 
   const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
-  assert.equal(firstCanvas.props.width, 140);
+  assert.equal(firstCanvas.props.width, 92);
   assert.equal(firstCanvas.props.height, firstCanvas.props.width * (300 / 200));
 
   globalThis.window.devicePixelRatio = 2;
@@ -394,8 +401,8 @@ test("DOCX thumbnail rail follows device pixel ratio changes", async (t) => {
   await vue.nextTick();
   await vue.nextTick();
 
-  assert.equal(firstCanvas.props.width, 280);
-  assert.equal(firstCanvas.props.height, 280 * (300 / 200));
+  assert.equal(firstCanvas.props.width, 184);
+  assert.equal(firstCanvas.props.height, 184 * (300 / 200));
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

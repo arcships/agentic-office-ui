@@ -372,36 +372,45 @@ pnpm --filter @arcships/vue-ui build
 - axe-core 由 #165 接入；本 issue 的手工检查覆盖角色、名称、重复 id 和 live region，
   组件测试覆盖键盘与焦点行为。
 
-## 10. DOCX 迁移（issue #159）
+## 10. DOCX 迁移（issue #159，2026-11-20 重开补齐）
 
-`DocxViewerToolbar` / `DocxToolbar` 现在由共享 chrome 组成：
+参考面与产品面都以固定 commit `70fe70c6` 的 Extend DOCX 组件为唯一布局来源：
 
-- 根节点是 `OfficeToolbar`，页/缩放/编辑/评论组使用 `OfficeToolbarGroup`，组间使用
-  `OfficeToolbarSeparator`；图标统一走 `OfficeIcon`，纯图标动作使用
-  `OfficeIconButton`，文字动作使用 `OfficeButton`。
-- `DocxViewerToolbar` 使用 `OfficePageControl`（`native-input`）和
-  `OfficeZoomControl`（`native-select`），保留 `docx-page-current` / `docx-zoom-select`
-  的既有原生表单契约；搜索使用 `OfficeSearchPopover` 的 `inline` 模式，保留
-  `Ctrl/Cmd+F`、焦点、计数、上一个/下一个和原有 `docx-search-*` test id。
-- `DocxToolbar` 的两行分别渲染为 `.docx-toolbar-topbar` 和 `.docx-toolbar`，保留
-  blackbox 依赖的类名、`editor-zoom` 原生 select 和 fieldset disabled 语义。
-- 空/加载/错误/页数限制使用 `OfficeEmptyState` / `OfficeLoadingState` /
-  `OfficeErrorState`；loading/error 仍外包一层现有 test id 的 wrapper，以保留
-  `docx-loading-state`、`load-error` 的 `data-error-*` 契约。
-- `DocxThumbnailPanel` 改用 `DocumentViewerSidebar`：160px、`auto` 模式、768px
-  以下 overlay、内置 skeleton；旧 170px/折叠 rail 已移除，open/close 由宿主和
-  sidebar 控制。
-- 评论/修订 gutter 卡片、链接 hover card 和表单字段 dialog 使用 `OfficeCard`；
-  dialog/footer 与 link card 动作使用 `OfficeButton` / `OfficeIconButton`，锚点、
-  偏移、选区同步和原有 test id 不变。
+- 参考面 `tools/extend-reference/src/vendor/extend/docx-toolbar.tsx` 是
+  `apps/v4/components/extend/docx-viewer.tsx` 的 `DocxToolbar`（含
+  `DocxPageNumberControl`、`DocxFileActionsMenu`）逐类名拷贝；
+  `tools/extend-reference/src/vendor/extend/docx-sidebar.tsx` 是
+  `DocxThumbnailSidebarContent`/`DocxThumbnailSidebarList` 的静态版本。
+  旧的手写「Extend 风格完整控件集」参考面（文件/搜索/版式/修订/主题/上传/下载）
+  已删除，因为它不是上游默认行。
+- `DocxViewerToolbar` 默认节点就是上游行：48px `min-h-12 px-3 py-2` 根节点，
+  左侧缩略图开关 + `Page`/页码/`of N`，右侧缩放减/档位/加、分隔线和 `⋯` 动作菜单。
+  图标使用上游 Hugeicons（`HugeIcon`），不再用 Lucide 的等价图标。
+- 上游行里没有的产品命令收进动作菜单（`.docx-viewer-toolbar__menu`）：
+  Find、Comments、Edits、主题、上传、下载；`docx-show-comments`、
+  `docx-show-tracked-changes`、`docx-theme-toggle`、`docx-upload`、`docx-download`、
+  `docx-find` 的 test id 不变，但只在菜单打开时存在。
+  版式/适配/审阅显示是上游没有的 host 能力，改为可选 props
+  （`showViewControls` / `showReviewControls`，默认 `false`），同样只在菜单里出现；
+  文件名字段是 `showFileName`（默认 `false`），内联搜索是 `showSearch`（默认
+  `false`）。`DocxViewer` 透传为 `toolbarSearch` / `toolbarFileName` /
+  `toolbarViewControls` / `toolbarReviewControls`，全部默认关闭。
+- 原生表单契约保留：`docx-page-current` 仍是 `<input>`（`type=text`
+  + `inputmode=numeric`，聚焦时草稿不被 `currentPage` 覆盖），`docx-zoom-select`
+  仍是覆盖在触发器之上的原生 `<select>`；`docx-zoom-out` / `docx-zoom-in` 为按钮。
+  `Ctrl/Cmd+F` 仍打开同一个 find 弹层并聚焦输入框。
+- `DocxThumbnailPanel` 与上游一致：160px `w-40` rail、无 header、16px 轨道留白、
+  12px 行内缩进、92px `FileThumbnail` 页卡 + `text-xs` 页码 + `pb-3` 行距、
+  `bg-sidebar-accent` 选中态和 `p-4` 骨架；行使用上游的绝对定位 + `translateY`
+  （同时保证嵌套 canvas 的圆角栅格化与参考面一致）。`data-testid="docx-thumbnail"`、
+  `docx-thumbnail-label`、`data-thumbnail-page-index/-label/-parity-blank`、
+  `data-thumbnail-state` 保持不变；页数改由 listbox 的 `data-page-count` 读取。
+- `DocxToolbar`（编辑器工具栏）不在本次参考面范围内，保持既有两行结构、类名和
+  `editor-zoom` 原生 select。
 
-证据：`tests/baseline/visual/docx-stories/`（8 个确定性 story，覆盖 viewer/editor、
-read-only、continuous/single/spread、light/dark、390/768/1440），以及
-`tests/component/docx-*.test.mjs`、`tests/blackbox/docx_*.py`。
-
-已知边界：Extend 的上游 toolbar 把文件动作收进 dropdown。DOCX 在宽屏（≥1360px）
-保留可见 search/edit/theme/upload/download；窄屏把非参考控件收进真实 overflow
-dropdown，搜索保留为共享 `OfficeSearchPopover` 的 compact trigger，因此
-`Ctrl/Cmd+F`、touch target 和搜索能力不丢失。`pnpm ui:parity -- --only
-docx-toolbar,docx-sidebar` 已运行，精确像素/几何 delta 见
-[docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)。
+证据：`pnpm ui:parity -- --only docx-toolbar,docx-sidebar` 全矩阵
+（4 视口 × 2 主题 × toolbar 4 状态 / sidebar 3 状态 = 56 例）56/56 PASS，
+diff 像素 0、diff ratio 0、几何 delta 0（详见
+[docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)）。
+`tests/component/docx-*.test.mjs` 与 `tests/blackbox/docx_*.py` 已同步到新的
+默认行（菜单内命令、`toolbarSearch` 选项）。

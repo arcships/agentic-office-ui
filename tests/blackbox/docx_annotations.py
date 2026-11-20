@@ -339,6 +339,12 @@ def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dic
               && document.querySelector('[data-testid="loaded-file"]')?.textContent?.includes('review-comments.docx')
               && document.querySelector('[data-testid="docx-viewer"]')?.dataset.state === 'ready'"""
         )
+        # Comments/edits toggles live in the upstream DOCX actions menu.
+        def open_docx_actions() -> None:
+            page.locator('[data-testid="docx-toolbar-actions"]').click()
+            page.locator('[data-testid="docx-actions-menu"]').wait_for(state="visible")
+
+        open_docx_actions()
         page.locator('[data-testid="docx-show-tracked-changes"]').wait_for(state="visible")
         page.locator('[data-testid="docx-show-comments"]').wait_for(state="visible")
 
@@ -351,8 +357,8 @@ def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dic
         page.wait_for_function("() => document.querySelectorAll('.docx-gutter-card').length === 2")
         visible_text = page.locator('[data-testid="docx-viewer"]').inner_text()
         assertions["initialCardCount"] = gutter_cards.count()
-        assertions["initialTrackedPressed"] = tracked.get_attribute("aria-pressed")
-        assertions["initialCommentsPressed"] = comments.get_attribute("aria-pressed")
+        assertions["initialTrackedPressed"] = tracked.get_attribute("aria-checked")
+        assertions["initialCommentsPressed"] = comments.get_attribute("aria-checked")
         assertions["authorsVisible"] = all(
             value in visible_text for value in ["Alex Reviewer", "Priya Reviewer"]
         )
@@ -361,22 +367,25 @@ def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dic
         assertions["insertionVisibleInline"] = "two business days" in visible_text
         page.screenshot(path=str(attempt_dir / "annotations-visible.png"), full_page=True)
 
-        comments.click()
+        open_docx_actions()
+        page.locator('[data-testid="docx-show-comments"]').click()
         page.wait_for_function(
-            """() => document.querySelector('[data-testid="docx-show-comments"]')?.getAttribute('aria-pressed') === 'false'
-              && document.querySelectorAll('.docx-gutter-card--comment').length === 0"""
+            "() => document.querySelectorAll('.docx-gutter-card--comment').length === 0"
         )
         assertions["commentToggleHidesCards"] = page.locator(".docx-gutter-card--comment").count() == 0
         assertions["trackedCardsRemain"] = page.locator(".docx-gutter-card:not(.docx-gutter-card--comment)").count() == 1
         page.screenshot(path=str(attempt_dir / "comments-hidden.png"), full_page=True)
 
-        tracked.click()
+        open_docx_actions()
+        page.locator('[data-testid="docx-show-tracked-changes"]').click()
         page.wait_for_function("() => document.querySelectorAll('.docx-gutter-card').length === 0")
         assertions["trackedToggleHidesCards"] = gutter_cards.count() == 0
         page.screenshot(path=str(attempt_dir / "annotations-hidden.png"), full_page=True)
 
-        comments.click()
-        tracked.click()
+        open_docx_actions()
+        page.locator('[data-testid="docx-show-comments"]').click()
+        open_docx_actions()
+        page.locator('[data-testid="docx-show-tracked-changes"]').click()
         page.wait_for_function("() => document.querySelectorAll('.docx-gutter-card').length === 2")
         assertions["togglesRecover"] = gutter_cards.count() == 2
         assertions["workerRequested"] = any("worker" in item["url"].lower() for item in responses)

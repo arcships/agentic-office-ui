@@ -458,7 +458,7 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-pdf", "src/pdf-url-policy.ts", "The source is not a verified PDF file.", "messages.invalidPdf"],
     ["vue-pptx", "src/PptxViewer.vue", "上一页", "m.pptx.viewer.previousSlide"],
     ["vue-pptx", "src/PptxThumbnail.vue", "隐藏", "m.pptx.thumbnail.hidden"],
-    ["vue-pdf", "src/components/PdfViewer.vue", "搜索 PDF 文本", "m.pdf.viewer.searchLabel"],
+    ["vue-pdf", "src/components/PdfViewerToolbar.vue", "搜索 PDF 文本", "m.pdf.viewer.searchLabel"],
     ["vue-pdf", "src/components/PdfSurface.vue", "选择 PDF 页面区域", "m.pdf.surface.selectionRegion"],
     ["vue-ui", "src/components/OfficeRegionSelector.vue", "选定区域", "m.vueUi.regionSelector.label"],
     ["vue-ui", "src/components/OfficeObjectOutlineLayer.vue", "没有可用对象", "m.vueUi.objectOutline.noObjects"],

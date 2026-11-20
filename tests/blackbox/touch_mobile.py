@@ -302,7 +302,7 @@ TARGETS: tuple[TargetSpec, ...] = (
         selectors=(
             ".docx-viewer-toolbar__icon-button",
             ".docx-viewer-toolbar__zoom",
-            ".docx-viewer-toolbar__search button",
+            ".docx-viewer-toolbar__actions-wrap button",
         ),
     ),
     TargetSpec(

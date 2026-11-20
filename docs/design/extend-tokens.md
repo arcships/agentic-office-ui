@@ -49,9 +49,18 @@ pnpm ui:tokens:check  # 报告是否与 vendored CSS / Tailwind 默认值同步�
 
 ## 与 #156 的结论（2026-11-20）
 
-- 27 个标量 token：26 个一致，1 个语义差异
-  `control-padding-inline`（Extend `calc(4px*3 - 1px)` = 11px，Office token = 12px；Extend 用 1px border 补足）。
-- 46 个语义色中 42 个一致；4 个 `--code*` token 在 #156 未定义，报告标为 `missing-in-token-layer`。
+- 27 个标量 token：**27/27 一致，0 mismatch，0 missing**。`control-padding-inline` 按渲染内缩比较：
+  Extend `px-[calc(--spacing(3)-1px)]` = 11px padding + 1px border = 12px inset，Office token
+  `0.75rem` = 12px inset；消费方在自绘 1px 描边时减去 `--office-border-width`（`ui.css`），
+  最终 padding 与参考同为 11px。报告条目已改为比较同一语义（full inset），不再把 11px padding
+  与 12px inset 直接对比。
+- 46 个语义色：**46/46 一致**（light 46、dark 46，max channel delta 0）。
+  `--office-code`、`--office-code-foreground`、`--office-code-highlight`、`--office-code-number`
+  已补齐并映射到 Extend `--code*`（上游 `--code` / `--code-foreground` 分别继承 surface）。
+- `--office-card` / `--office-popover` 的浅色值改为 `white`：上游是 `var(--color-white)`，
+  而 `oklch(1 0 0)` 在 Chromium 中会序列化为 `color(srgb 0.999871 1.00005 1.00007)`，
+  合成描边/焦点环/阴影后偏 1/255（#157 的 input 焦点差异）。`--office-background` 仍与上游
+  一致使用 `oklch(1 0 0)`。
 - 唯一“当前仓库仍读旧变量名”的地方是尚未迁移的组件（`FileUpload`/`FileThumbnail`/`PdfViewer` 读
   `var(--border, …)` 等）。harness 的 `tools/vue-reference/src/parity.css` 只做名称桥接，不含数值。
 

@@ -2,15 +2,15 @@
 /**
  * Localized labels for the primitive layer.
  *
- * The shared `@arcships/office-interaction` message catalog does not own
- * generic control labels (dialog close, menu, notifications). Rather than
- * inventing new catalog keys in a UI-package issue, primitives resolve these
- * few strings from the active Office locale, so a `zh-CN` provider stays
+ * Generic control labels (dialog close, menu, notifications) live in the
+ * shared `vueUi.primitives` section of the `@arcships/office-interaction`
+ * message catalog. Primitives therefore follow the active Office locale
+ * (`en` by default) and host message overrides, so a `zh-CN` provider stays
  * Chinese. Hosts can override any label through the component prop.
  */
 
 import { computed, type ComputedRef } from "vue"
-import { useOfficeUiLocale } from "../../i18n"
+import { useOfficeUiMessages } from "../../i18n"
 
 export interface OfficeUiPrimitiveLabels {
   close: string
@@ -21,27 +21,8 @@ export interface OfficeUiPrimitiveLabels {
   more: string
 }
 
-const LABELS: Record<"en" | "zh-CN", OfficeUiPrimitiveLabels> = {
-  en: {
-    close: "Close",
-    loading: "Loading",
-    menu: "Menu",
-    notifications: "Notifications",
-    dialog: "Dialog",
-    more: "More",
-  },
-  "zh-CN": {
-    close: "关闭",
-    loading: "加载中",
-    menu: "菜单",
-    notifications: "通知",
-    dialog: "对话框",
-    more: "更多",
-  },
-}
-
 /** Resolve the primitive label set for the active Office locale. */
 export function useOfficeUiLabels(): ComputedRef<OfficeUiPrimitiveLabels> {
-  const locale = useOfficeUiLocale()
-  return computed(() => (locale.value === "zh-CN" ? LABELS["zh-CN"] : LABELS.en))
+  const messages = useOfficeUiMessages()
+  return computed(() => messages.value.vueUi.primitives)
 }
