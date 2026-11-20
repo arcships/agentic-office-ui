@@ -154,7 +154,11 @@ test("the sidebar contract is 160px with inline/overlay animation and ResizeObse
   assert.match(sidebar, /margin-inline-start var\(--office-ui-sidebar-duration\) ease-out/u)
   assert.match(sidebar, /translate var\(--office-ui-sidebar-duration\) ease-out/u)
   assert.match(sidebar, /background:\s*var\(--office-sidebar\)/u)
-  assert.match(sidebar, /border-inline-end:\s*var\(--office-border-width\) solid var\(--office-sidebar-border\)/u)
+  // Upstream `border-r` resolves to the base `--border` (8% black) through the
+  // shadcn base layer, not `--sidebar-border` (6%). The pinned sidebar surfaces
+  // (pdf-sidebar, docx-sidebar, document-sidebar) are pixel-equal with this
+  // token; `--office-sidebar-border` stays for the header/footer separators.
+  assert.match(sidebar, /border-inline-end:\s*var\(--office-border-width\) solid var\(--office-border\)/u)
 
   assert.match(
     stripComments(chromeCss),

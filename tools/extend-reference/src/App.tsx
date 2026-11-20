@@ -13,6 +13,10 @@ import { DocumentSidebarSurface } from "./surfaces/DocumentSidebarSurface";
 import { FileThumbnailSurface } from "./surfaces/FileThumbnailSurface";
 import { FileUploadSurface } from "./surfaces/FileUploadSurface";
 import { InputSurface } from "./surfaces/InputSurface";
+import { OfficeEmptyStateSurface } from "./surfaces/OfficeEmptyStateSurface";
+import { OfficeErrorStateSurface } from "./surfaces/OfficeErrorStateSurface";
+import { OfficeLoadingStateSurface } from "./surfaces/OfficeLoadingStateSurface";
+import { OfficeStatusBarSurface } from "./surfaces/OfficeStatusBarSurface";
 import { PdfSidebarSurface } from "./surfaces/PdfSidebarSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
@@ -36,6 +40,10 @@ const renderers: Record<
   "docx-toolbar": DocxToolbarSurface,
   "docx-sidebar": DocxSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,
+  "office-empty-state": OfficeEmptyStateSurface,
+  "office-error-state": OfficeErrorStateSurface,
+  "office-loading-state": OfficeLoadingStateSurface,
+  "office-status-bar": OfficeStatusBarSurface,
   "bounding-box-citations": BoundingBoxCitationsSurface,
   "layout-blocks": LayoutBlocksSurface,
   "e-signature": ESignatureSurface,

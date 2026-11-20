@@ -92,7 +92,14 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `file-upload` | default(empty)、hover、focus、dragging、rejected(error)、file-selected | ✅ `FileUpload.vue` |
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
 | `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
-| `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
+| `pdf-sidebar` | open、closed、skeleton(loading) | ✅ `PdfThumbnailStrip.vue` + 共享 `DocumentViewerSidebar`（24/24 pass） |
+| `docx-toolbar` | default、hover、focus、disabled | ✅ `DocxViewerToolbar`（#159，32/32 pass） |
+| `docx-sidebar` | open、closed、skeleton(loading) | ✅ `DocxThumbnailPanel`（#159，24/24 pass） |
+| `document-sidebar` | open、closed、skeleton(loading)、overlay-open、overlay-closed | ✅ `DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`（40/40 pass；160px rail、inline 与 overlay 两种布局） |
+| `office-empty-state` | default、action | ✅ `OfficeEmptyState.vue`（16/16 pass；对照 `PdfEditorEmptyState`） |
+| `office-error-state` | default、message | ✅ `OfficeErrorState.vue`（16/16 pass；对照 viewer error card） |
+| `office-loading-state` | default、hidden | ✅ `OfficeLoadingState.vue`（16/16 pass；对照 `ViewerLoadingSurface`） |
+| `office-status-bar` | default | ✅ `OfficeStatusBar.vue`（8/8 pass；对照上游 footer 契约组合） |
 | `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
 | `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
 | `e-signature` | unsigned、signed、exporting、preview、loading、error | ✅ `ESignatureFields.vue`（字段面板；232/232 pass） |
@@ -162,8 +169,12 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
   依赖不可分发的私有包 `@extend-ai/react-xlsx`，参考侧无法渲染。结论与替代证据
   （geometry / structural / token 三层已对齐，像素 diff 不可达）见
   [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
-- `document-sidebar` 只保留参考基线：规范组件由 #158 在
-  `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
+- `document-sidebar` 在 #158 重新打开后补齐对照侧：`DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`
+  与 vendored `DocumentViewerThumbnailSidebar` 对齐，5 个状态（inline open/closed/skeleton、overlay
+  open/closed）× 4 viewport × 2 theme = 40/40 `pass`，0 px、几何 0 px。
+- `office-empty-state` / `office-error-state` / `office-loading-state` / `office-status-bar` 是 #158
+  新增的 state surface：对照分别是 `PdfEditorEmptyState`、viewer error card、`ViewerLoadingSurface`
+  与上游 footer 类名组合，共 56/56 `pass`（0 px、几何 0 px）。
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
   `ParitySurface` 现在按主题写入 `color-scheme`，避免 focus ring 因为原生控件配色不同而误报。
 

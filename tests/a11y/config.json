@@ -61,6 +61,41 @@
       "id": "pdf-sidebar",
       "keyboardState": "open",
       "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "docx-toolbar",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "document-sidebar",
+      "keyboardState": "open",
+      "checks": [],
+      "notes": "The shared sidebar is a labelled landmark (`<aside aria-label>`) with host-owned children; the fixture strip has no controls, and the overlay Escape-close / inline-vs-overlay ResizeObserver behaviour is pinned by the `DocumentViewerSidebar` component tests and scripts/ci/capture-office-chrome.py. axe-core still checks the landmark, the inert closed cells and duplicate ids."
+    },
+    {
+      "id": "office-empty-state",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "`role=group` with labelledby/describedby and no controls; axe-core covers the grouping, the icon decoration and colour contrast."
+    },
+    {
+      "id": "office-error-state",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"],
+      "notes": "The default cell renders the Retry action, which must stay Tab reachable, visibly focused and named."
+    },
+    {
+      "id": "office-loading-state",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "`role=status aria-live=polite aria-busy=true` with no controls; axe-core covers the live region contract."
+    },
+    {
+      "id": "office-status-bar",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "A labelled `<footer>` with no controls; axe-core covers the landmark and the nested `role=status`/`role=alert` regions."
     }
   ]
 }

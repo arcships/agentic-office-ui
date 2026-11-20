@@ -27,6 +27,7 @@
   --office-ui-space-5: 1.25rem;
   --office-ui-space-6: 1.5rem;
   --office-ui-space-8: 2rem;
+  --office-ui-space-10: 2.5rem;
   --office-ui-space-12: 3rem;
 
   /* Control metrics derived from the density tokens. */
@@ -38,6 +39,9 @@
 
   /* Primitive-only values. */
   --office-ui-touch-target: 2.75rem;
+  --office-ui-state-min-height: 13rem;
+  --office-ui-state-card-max-width: 28rem;
+  --office-ui-state-description-max-width: 14rem;
   --office-ui-menu-min-width: 9rem;
   --office-ui-menu-max-height: 18rem;
   --office-ui-content-max-width: 32rem;
@@ -60,6 +64,10 @@
   --office-ui-empty-shadow:
     0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 0 transparent,
     0 0 0 0 transparent, 0 0 0 0 transparent;
+  /* Extend `shadow-lg` as used by the overlay sidebar. */
+  --office-ui-overlay-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
   --office-ui-ring-shadow:
     0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 0 transparent,
     0 0 0 calc(var(--office-ring-width) + var(--office-border-width))
