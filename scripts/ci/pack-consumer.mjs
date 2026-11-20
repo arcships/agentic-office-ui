@@ -392,11 +392,17 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   );
   const builtWasm = builtRuntimeFiles.filter((item) => item.path.endsWith(".wasm"));
   const builtWorkers = builtRuntimeFiles.filter((item) => /worker.*\.js$/.test(path.basename(item.path)));
+  const builtWorkerKinds = new Set(
+    builtWorkers
+      .map((item) => path.basename(item.path).match(/^(docx-import|docx-export|xlsx)-worker/)?.[1])
+      .filter(Boolean),
+  );
   const builtWasmHashes = new Set(builtWasm.map((item) => item.sha256));
   if (
-    builtRuntimeFiles.length !== 5 ||
+    builtRuntimeFiles.length !== 6 ||
     builtWasm.length !== 3 ||
-    builtWorkers.length !== 2 ||
+    builtWorkers.length !== 3 ||
+    builtWorkerKinds.size !== 3 ||
     builtWasmHashes.size !== expectedWasmHashes.size ||
     builtWasm.some((item) => !expectedWasmHashes.has(item.sha256))
   ) {
