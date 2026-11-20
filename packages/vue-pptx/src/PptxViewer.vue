@@ -74,11 +74,13 @@
       <span v-if="searchResults.length" class="pptx-viewer__search-count" aria-hidden="true">
         {{ searchCursor + 1 }} / {{ searchResults.length }}
       </span>
-      <OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" />
       <button v-if="searchResults.length" type="button" :aria-label="m.common.search.previous" @click="run(() => moveSearch(-1))">↑</button>
       <button v-if="searchResults.length" type="button" :aria-label="m.common.search.next" @click="run(() => moveSearch(1))">↓</button>
       <button type="button" :aria-label="m.common.search.close" data-testid="pptx-search-close" @click="closeSearch">×</button>
     </form>
+    <template v-if="showSearch && !isPresent">
+      <OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" />
+    </template>
 
     <div v-if="warnings.length" class="pptx-viewer__warnings" role="status" data-testid="pptx-warnings">
       <slot name="warnings" :warnings="warnings">
@@ -1559,6 +1561,10 @@ function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
       return true
     case "search":
       if (isPresent.value || !props.showToolbar || !props.showSearch) return false
+      if (!searchOpen.value) {
+        toggleSearchBar()
+        return true
+      }
       searchInputRef.value?.focus()
       return true
     case "escape":
@@ -1566,7 +1572,7 @@ function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
         void invoke(exitFullscreen)
         return true
       }
-      if (searchQuery.value || searchResults.value.length) {
+      if (searchOpen.value || searchQuery.value || searchResults.value.length) {
         closeSearch()
         return true
       }

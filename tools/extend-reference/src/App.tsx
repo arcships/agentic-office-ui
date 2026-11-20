@@ -47,7 +47,8 @@ const renderers: Record<
 };
 
 function hasReference(surface: Surface): boolean {
-  return (surface as { referenceStatus?: string }).referenceStatus !== "fixtures-only";
+  const status = (surface as { referenceStatus?: string }).referenceStatus;
+  return status !== "fixtures-only" && status !== "unreachable";
 }
 
 export function App(): React.ReactElement {

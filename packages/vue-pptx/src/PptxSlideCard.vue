@@ -119,7 +119,7 @@ const frameStyle = computed(() => ({ aspectRatio: props.aspectRatio }))
   inline-size: 100%;
   overflow: hidden;
   border-radius: var(--office-radius-sm);
-  background: #fff;
+  background: var(--office-background);
   box-shadow: var(--office-shadow-xs);
   transition: box-shadow 150ms ease;
 }

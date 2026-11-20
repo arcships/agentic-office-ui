@@ -18,7 +18,7 @@ import slideUrl from "../../../parity-fixtures/assets/pptx-slide.png";
 defineProps<{ cellWidth: number; theme: string }>();
 
 const sorter = fixtures.pptxSorter;
-const cardCount = 6;
+const cardCount = 3;
 const columns = 3;
 
 const states = [
@@ -43,6 +43,9 @@ function fixtureSession(): PptxPreviewSession {
       const image = document.createElement("img");
       image.src = slideUrl;
       image.alt = "";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.draggable = false;
       image.style.cssText = "display:block;width:100%;height:100%;object-fit:cover";
       target.replaceChildren(image);
       return { ready: Promise.resolve(), dispose() {} };

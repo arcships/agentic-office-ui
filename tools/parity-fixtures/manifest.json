@@ -671,6 +671,32 @@
       ]
     },
     {
+      "id": "pptx-presenter",
+      "title": "PPTX presenter panel",
+      "referenceComponent": null,
+      "subjectComponent": "packages/vue-pptx/src/PptxPresenterPanel.vue ([data-testid=pptx-presenter])",
+      "subjectStatus": "available",
+      "referenceStatus": "unreachable",
+      "pendingIssue": "#161",
+      "cellWidth": 300,
+      "notes": "No reference surface exists at the pinned commit.",
+      "unreachableReason": "The pinned Extend UI commit 70fe70c6 has no PPTX presenter/speaker-notes layout: apps/v4/components/extend/pptx-viewer.tsx renders only the toolbar, thumbnail rail and loading/empty/error chrome; presenter view and speaker notes live inside the private @extend-ai/react-pptx engine, which this repository does not vendor. Building a reference out of Extend primitives would only re-assert our own composition, so the panel is aligned to Extend primitives (Card/Separator/ScrollArea) and validated by the PPTX chrome story (scripts/ci/capture-pptx-chrome.py) plus component tests instead of a pixel reference.",
+      "states": [
+        {
+          "id": "browse",
+          "label": "browse notes rail",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "present",
+          "label": "presenter rail (next slide, timer)",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
       "id": "document-sidebar",
       "title": "DocumentViewerSidebar",
       "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",

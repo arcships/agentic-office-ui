@@ -28,6 +28,7 @@ const { surface: surfaceParam, theme } = readQuery();
 const selected = manifest.surfaces.filter(
   (surface: Surface) =>
     surface.referenceStatus !== "fixtures-only" &&
+    surface.referenceStatus !== "unreachable" &&
     (!surfaceParam || surface.id === surfaceParam),
 );
 

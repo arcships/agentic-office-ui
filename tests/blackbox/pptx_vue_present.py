@@ -58,6 +58,10 @@ def main() -> None:
         )
         assert browse_layout == {"count": 12, "vertical": True, "scrollable": True}, browse_layout
         search = page.get_by_role("search")
+        if search.count() == 0:
+            page.keyboard.press("Control+f")
+            page.wait_for_selector("[role='search']", timeout=5_000)
+            search = page.get_by_role("search")
         search.get_by_role("searchbox").fill("单击动画")
         search.locator('button[type="submit"]').click()
         page.wait_for_function(
@@ -67,7 +71,7 @@ def main() -> None:
         page.get_by_role("button", name="Zoom in").click()
         page.wait_for_function(
             """() => document
-              .querySelector('[data-testid="office-zoom-control"] [role="combobox"]')
+              .querySelector('[data-testid="pptx-zoom-reset"] .pptx-toolbar__zoom-value')
               ?.textContent?.includes('125%')""",
             timeout=5_000,
         )

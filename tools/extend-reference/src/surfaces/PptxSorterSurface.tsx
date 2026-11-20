@@ -15,7 +15,7 @@ import { PptxSlideCard } from "../vendor/extend/pptx-slide-card";
 import slideUrl from "../../../parity-fixtures/assets/pptx-slide.png";
 
 const sorter = fixtures.pptxSorter;
-const cardCount = 6;
+const cardCount = 3;
 const columns = 3;
 
 const states = [

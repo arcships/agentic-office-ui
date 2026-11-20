@@ -190,10 +190,11 @@ function button(root, label) {
  * span, so tests read both parts.
  */
 function pagePosition(root) {
-  const input = findByTestId(root, "office-page-input");
-  const current = input?.props?.value ?? input?.value ?? "";
-  const total = /\d+/.exec(textContent(findByTestId(root, "pptx-page-counter")))?.[0] ?? "";
-  return `${String(current).trim()} / ${total}`;
+  const counter = findByTestId(root, "pptx-page-counter");
+  const numbers = (textContent(counter) ?? "").match(/\d+/g) ?? [];
+  const current = numbers[0] ?? "";
+  const total = numbers[numbers.length - 1] ?? "";
+  return `${current} / ${total}`;
 }
 
 function pressKey(node, key, init = {}) {
@@ -627,6 +628,9 @@ test("PptxViewer keeps the deck reachable when a single slide fails to render", 
   );
   button(mounted.root, "下一页").props.onClick();
   await waitFor(() => calls.renderSlide.includes(1), "second slide render");
+  // The toolbar receives the active slide as a prop; let the parent flush
+  // before clicking again so the second click starts from slide 2.
+  await vue.nextTick();
   button(mounted.root, "下一页").props.onClick();
   await waitFor(() => failures.length === 1, "slide failure event");
 
@@ -1201,21 +1205,27 @@ test("PptxViewer browse keys scroll the slide list instead of changing slides", 
   const search = walk(mounted.root).find(
     (node) => node.type === "input" && node.props?.type === "search",
   );
-  assert.ok(search, "search input is available in browse mode");
+  assert.equal(search, undefined, "the find field stays closed until requested");
   let focused = 0;
-  search.focus = () => { focused += 1; };
+  pressKey(viewer, "f", { ctrlKey: true });
+  await vue.nextTick();
+  const opened = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "search",
+  );
+  assert.ok(opened, "Ctrl+F opens the PPTX find bar");
+  opened.focus = () => { focused += 1; };
   pressKey(viewer, "f", { ctrlKey: true });
   assert.equal(focused, 1, "Ctrl+F focuses the PPTX search field");
 
-  search.value = "deck";
-  search.dispatchEvent({ type: "input", target: search });
+  opened.value = "deck";
+  opened.dispatchEvent({ type: "input", target: opened });
   await vue.nextTick();
   pressKey(viewer, "Escape");
   await vue.nextTick();
   assert.equal(
-    walk(mounted.root).find((node) => node.type === "input" && node.props?.type === "search")?.value,
-    "",
-    "Escape cancels the PPTX search",
+    walk(mounted.root).find((node) => node.type === "input" && node.props?.type === "search"),
+    undefined,
+    "Escape closes the PPTX find bar",
   );
 
   mounted.app.unmount();
