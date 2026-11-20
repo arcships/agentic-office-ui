@@ -56,7 +56,7 @@ const classes = computed(() =>
     :as-child="props.asChild"
     :data-active="props.active ? 'true' : undefined"
     :aria-label="props.label"
-    :aria-pressed="props.active ? 'true' : undefined"
+    :aria-pressed="props.active ? true : undefined"
     :title="props.title ?? props.label"
     data-slot="icon-button"
   >

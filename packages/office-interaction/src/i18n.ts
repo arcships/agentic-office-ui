@@ -1495,6 +1495,12 @@ export interface OfficeMessages {
     }
     fileUpload: {
       prompt: string
+      title: string
+      browse: string
+      drop: string
+      ready: string
+      rejected: string
+      unknownType: string
     }
     layoutBlocks: {
       noBlocks: string
@@ -2792,6 +2798,12 @@ export const officeMessagesEn: OfficeMessages = {
     },
     fileUpload: {
       prompt: "Drag & drop files here, or click to select",
+      title: "Click to upload or drop files",
+      browse: "Browse files",
+      drop: "Drop to add",
+      ready: "Ready",
+      rejected: "This file type is not supported here.",
+      unknownType: "Unknown type",
     },
     layoutBlocks: {
       noBlocks: "No layout blocks detected",
@@ -4078,6 +4090,12 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
     fileUpload: {
       prompt: "将文件拖放到此处，或点击选择",
+      title: "点击上传或拖放文件",
+      browse: "浏览文件",
+      drop: "拖放以添加",
+      ready: "就绪",
+      rejected: "不支持此文件类型。",
+      unknownType: "未知类型",
     },
     layoutBlocks: {
       noBlocks: "未检测到布局块",

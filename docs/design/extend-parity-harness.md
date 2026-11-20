@@ -84,11 +84,15 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 
 | Surface | 已定义状态 | Vue 对照 |
 |---|---|---|
-| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ❌ 无 Button（#157）→ 仅参考基线 |
+| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ✅ `OfficeButton.vue`（196/200 矩阵中全部 pass） |
+| `input` | default、focus、disabled、invalid、size-sm | ✅ `OfficeInput.vue`（focus/light 有 52 px / 1-255 抗锯齿残差） |
+| `select` | default、focus、disabled、placeholder | ✅ `OfficeSelect.vue` |
+| `dialog` | open（header/空 panel/footer/close） | ✅ `OfficeDialog.vue` |
+| `tooltip` | open（hover 触发） | ✅ `OfficeTooltip.vue` |
 | `file-upload` | default(empty)、hover、focus、dragging、rejected(error)、file-selected | ✅ `FileUpload.vue` |
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
 | `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
-| `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#163）→ 仅参考基线 |
+| `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
 | `document-blocks` | 只有 fixtures（渲染对照由 #164 接管） | — |
 
 截图前统一执行：`document.fonts.ready`、`prefers-reduced-motion: reduce`、注入
@@ -113,17 +117,30 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
 阈值失败而卡住），并在之后跑 `ui:parity:self-check`（1440×900 / light）确认 harness 自身可重复。
 #165 把 `pnpm ui:parity`（退出码 gate）接成必需检查。
 
-## 7. 实施现状（2026-11-20，0.8 wave 1）
+## 7. 实施现状（2026-11-20，0.8 wave 2）
 
-- 参考侧 5 个 surface 全部可渲染；Vue 侧 3 个 surface 完成端到端采集。
-- `pnpm ui:parity:self-check`（参考页对自身）在 1440×900 / light 下 32/32 全部 `pass`
+- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 8 个 surface 完成端到端采集
+  （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar）。
+- `pnpm ui:parity:self-check`（参考页对自身）在完整矩阵下 344/344 全部 `pass`
   （0 像素差、0 几何差），证明截图/阈值链路可重复；`pass` 不是永远无法到达的状态。
-- `button` 只有参考基线：`@arcships/vue-ui` 还没有 Button primitive（#157）。报告里状态是
-  `baseline-only`，用于给 #157 提供逐状态目标图。
+- #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入，最终矩阵 200 case
+  中 196 `pass`、4 个 `input/focus/light` 仅有 52 px、单通道 1/255（diff ratio 0.077%）
+  的抗锯齿残差；其余状态 0 px。
 - `file-upload` / `file-thumbnail` / `pdf-toolbar` 全部 `fail`，这是**真实 delta**：
   - FileUpload：参考是 icon-cluster + browse chip + 组件内文件列表；当前 Vue 组件是宿主渲染的简化 dropzone（180px、单图标、额外 “Accepted/Max size” 行）。
   - FileThumbnail：参考是方形预览卡（loading/error/fallback 图层）；当前 Vue 是带文件名/类型的行内缩略图。
   - PDF toolbar：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
+- `file-upload` / `file-thumbnail` 已由 #163 收敛：
+  `pnpm ui:parity -- --only file-upload,file-thumbnail --skip-tokens` 的 80 个 case 全部通过
+  （61 `pass` + 19 `pass-with-antialiasing`，0 `fail`）。实现细节、状态和边界见
+  [components/file-components.md](../components/file-components.md)。
+- `pdf-toolbar` 仍有真实 delta：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；
+  当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
+- `document-sidebar` 只保留参考基线：规范组件由 #158 在
+  `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
+- 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
+  `ParitySurface` 现在按主题写入 `color-scheme`，避免 focus ring 因为原生控件配色不同而误报。
+
 - token 层：27 个标量 token 中 26 个与 #156 一致；唯一差异是 `--office-control-padding-inline`（12px）与
   Extend 的 `px-[calc(--spacing(3)-1px)]`（11px）语义不同，已在报告里注明。#156 未声明的 4 个 `--office-code*`
   token 由 token 报告标为 `missing-in-token-layer`。
@@ -138,8 +155,10 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
 ## 9. 后续 issue 分工
 
 - #156：token/theme/OfficeIcon（已合入；本 harness 直接消费 `theme.css`）。
-- #157：Button primitive + reka-ui 层 → 让 `button` 从 `baseline-only` 变成可比。
+- #157：Button/Input/Select/Dialog/Tooltip primitive + reka-ui 层（已合入，像素对照见 §7）。
+- #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）。
+
 - #158/#162：PDF chrome → 收敛 `pdf-toolbar` 的 2 行布局、padding、gap 与控件样式。
-- #163：FileUpload / FileThumbnail / DocumentViewerSidebar → 收敛上传区与缩略图。
+- #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
 - #164：document blocks 渲染对照。
 - #165：把 `pnpm ui:parity` 变成必需 CI gate、补文本/非文本分区与 stylelint/axe。

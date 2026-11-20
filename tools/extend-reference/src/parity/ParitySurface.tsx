@@ -36,6 +36,7 @@ export function ParitySurface({
         alignItems: "flex-start",
         gap: 16,
         boxSizing: "border-box",
+        colorScheme: theme === "dark" ? "dark" : "light",
         background: "var(--background)",
         color: "var(--foreground)",
       }}

@@ -138,7 +138,7 @@ function onPointerDownOutside(event: Event) {
         <DialogClose v-if="props.showClose" as-child :aria-label="resolvedCloseLabel">
           <button
             type="button"
-            class="office-ui office-button office-button--ghost office-button--icon-sm office-sheet__close"
+            class="office-ui office-button office-button--ghost office-button--size-icon office-sheet__close"
             data-slot="sheet-close"
             :aria-label="resolvedCloseLabel"
           >

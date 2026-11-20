@@ -48,7 +48,18 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
   const ids = manifest.surfaces.map((surface) => surface.id);
   assert.deepEqual(
     ids,
-    ["button", "file-upload", "file-thumbnail", "pdf-toolbar", "document-sidebar", "document-blocks"],
+    [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "document-sidebar",
+      "document-blocks",
+    ],
   );
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");
 
@@ -79,8 +90,9 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
   }
 
   const button = manifest.surfaces.find((surface) => surface.id === "button");
-  assert.equal(button?.subjectStatus, "missing");
-  assert.equal(button?.pendingIssue, "#157");
+  assert.equal(button?.subjectStatus, "available");
+  assert.equal(button?.subjectComponent, "packages/vue-ui/src/components/ui/OfficeButton.vue");
+  assert.equal(button?.pendingIssue ?? null, null);
 });
 
 test("both harness apps render every manifest surface and honour the DOM contract", () => {
@@ -146,7 +158,17 @@ test("shared fixtures cover the document formats and block data from the issue",
 
 test("shell asks for the full state coverage on reference surfaces", () => {
   const referenceApp = read("tools/extend-reference/src/App.tsx");
-  for (const surfaceId of ["ButtonSurface", "FileUploadSurface", "FileThumbnailSurface", "PdfToolbarSurface", "DocumentSidebarSurface"]) {
+  for (const surfaceId of [
+    "ButtonSurface",
+    "InputSurface",
+    "SelectSurface",
+    "DialogSurface",
+    "TooltipSurface",
+    "FileUploadSurface",
+    "FileThumbnailSurface",
+    "PdfToolbarSurface",
+    "DocumentSidebarSurface",
+  ]) {
     assert.ok(referenceApp.includes(surfaceId), `reference app does not mount ${surfaceId}`);
   }
   const buttonSurface = read("tools/extend-reference/src/surfaces/ButtonSurface.tsx");
@@ -179,6 +201,9 @@ test("vendored components carry the MIT attribution header", () => {
     "tools/extend-reference/src/vendor/ui/card.tsx",
     "tools/extend-reference/src/vendor/ui/separator.tsx",
     "tools/extend-reference/src/vendor/ui/select.tsx",
+    "tools/extend-reference/src/vendor/ui/input.tsx",
+    "tools/extend-reference/src/vendor/ui/dialog.tsx",
+    "tools/extend-reference/src/vendor/ui/tooltip.tsx",
     "tools/extend-reference/src/vendor/extend/file-upload.tsx",
     "tools/extend-reference/src/vendor/extend/file-thumbnail.tsx",
     "tools/extend-reference/src/vendor/extend/document-viewer-sidebar.tsx",

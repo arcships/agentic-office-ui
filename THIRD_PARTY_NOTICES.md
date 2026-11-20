@@ -21,7 +21,7 @@ commit and the MIT copyright. See the index for the exact format and for the sta
 
 | Project | License | Copyright | Usage scope |
 |---|---|---|---|
-| Extend UI (extend-hq/ui) | MIT | Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn | Reference-only design, token, layout, and behavior baseline for the 0.8 Office UI work. No upstream file is copied or adapted yet; every adapted or copied file must carry the Extend header and be listed in docs/upstream/extend-ui.md. |
+| Extend UI (extend-hq/ui) | MIT | Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn | Reference design, token, layout and behavior baseline for the 0.8 Office UI work. Adapted files carry the Extend header and are listed in docs/upstream/extend-ui.md. |
 | @extend-ai/react-docx (DOCX engine port) | MIT | Copyright (c) 2026 CrowdView Inc, dba Extend | Source of the DOCX engine and editor port in packages/docx-core and packages/vue-docx (ported from upstream commit 6f70b92). File-level provenance stays in each ported module header. |
 | @extend-ai/react-xlsx (XLSX chart and sheet port) | MIT | Copyright (c) 2026 CrowdView Inc, dba Extend | Source of the XLSX chart renderer and related sheet behavior adapted in packages/vue-xlsx. File-level provenance stays in each adapted module header. |
 | shadcn (React primitives upstream) | MIT | Portions Copyright (c) 2023 shadcn (covered by the Extend UI notice) | Upstream primitive design that Extend UI vendors; attribution is carried by the Extend UI MIT notice that names the 2023 shadcn portions. |
@@ -29,6 +29,7 @@ commit and the MIT copyright. See the index for the exact format and for the sta
 | reka-ui (runtime primitive dependency) | MIT | Copyright (c) 2023 radix-vue | Runtime dependency for the Vue primitive layer planned in #157 (reka-ui 2.11.x). Installed through pnpm; the MIT notice ships with the dependency. |
 | Lucide (@lucide/vue) | ISC | Copyright (c) 2026 Lucide Icons and Contributors | Icon set for the planned OfficeIcon adapter (#156, @lucide/vue 1.76.x). Icons are consumed as a dependency, not vendored. |
 | Geist and Geist Mono fonts | SIL Open Font License 1.1 | Copyright (c) 2023 Vercel, in collaboration with basement.studio | Default sans and mono font tokens for the Office theme (#156); consumed through @fontsource-variable/geist (OFL-1.1) or a host-provided Geist installation. |
+| Hugeicons (@hugeicons/core-free-icons) | MIT | Copyright (c) 2025 Hugeicons | Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
 
 ## Full notices
 
@@ -38,7 +39,7 @@ commit and the MIT copyright. See the index for the exact format and for the sta
 |---|---|
 | License | MIT |
 | Copyright | Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn |
-| Usage scope | Reference-only design, token, layout, and behavior baseline for the 0.8 Office UI work. No upstream file is copied or adapted yet; every adapted or copied file must carry the Extend header and be listed in docs/upstream/extend-ui.md. |
+| Usage scope | Reference design, token, layout and behavior baseline for the 0.8 Office UI work. Adapted files carry the Extend header and are listed in docs/upstream/extend-ui.md. |
 | Source | https://github.com/extend-hq/ui |
 | Pinned reference | https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e |
 | License URL | https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/LICENSE.md |
@@ -415,6 +416,42 @@ FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
 
+### Hugeicons (@hugeicons/core-free-icons)
+
+| Field | Value |
+|---|---|
+| License | MIT |
+| Copyright | Copyright (c) 2025 Hugeicons |
+| Usage scope | Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
+| Source | https://github.com/hugeicons/hugeicons |
+| Pinned reference | https://github.com/hugeicons/hugeicons |
+| License URL | https://github.com/hugeicons/hugeicons/blob/main/LICENSE |
+| License copy | [docs/upstream/licenses/hugeicons-MIT.txt](docs/upstream/licenses/hugeicons-MIT.txt) |
+
+```text
+MIT License
+
+Copyright (c) 2025 Hugeicons
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Dependency-only notices
 
 The following projects are installed as dependencies rather than vendored into this repository.
@@ -422,6 +459,7 @@ Their license texts are reproduced above and stored in [docs/upstream/licenses/]
 
 - **reka-ui** 2.11.x (MIT) for the Vue primitive layer planned in #157.
 - **@lucide/vue** 1.76.x (Lucide, ISC) for the Office icon adapter planned in #156.
+- **@hugeicons/core-free-icons** 4.4.0 (Hugeicons, MIT) for the Extend-aligned FileUpload glyphs in #163.
 - **@fontsource-variable/geist** 5.3.x (SIL OFL 1.1) or a host-provided Geist installation for the
   default sans and mono tokens planned in #156.
 

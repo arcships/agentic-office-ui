@@ -37,7 +37,7 @@
     <div class="xlsx-authoring__actions">
       <button
         type="button"
-        class="xlsx-authoring__button xlsx-authoring__button--primary"
+        class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
         data-testid="xlsx-number-format-apply"
         @click="applyFormat"
       >{{ m.xlsx.authoring.numberFormat.apply }}</button>

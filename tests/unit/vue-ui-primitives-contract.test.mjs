@@ -150,7 +150,7 @@ test("the variant and size contract is complete", () => {
   for (const size of ["xs", "sm", "lg", "icon", "icon-sm", "icon-lg"]) {
     assert.match(
       uiCss,
-      new RegExp(`\\.office-button--${size}\\b`),
+      new RegExp(`\\.office-button--size-${size}\\b`),
       `missing button size ${size}`,
     );
   }

@@ -63,7 +63,9 @@ const contentClasses = computed(() =>
           :side-offset="props.sideOffset"
           data-slot="tooltip-content"
         >
-          <slot name="content">{{ props.content }}</slot>
+          <span class="office-tooltip__viewport">
+            <slot name="content">{{ props.content }}</slot>
+          </span>
         </TooltipContent>
       </TooltipPortal>
     </TooltipRoot>

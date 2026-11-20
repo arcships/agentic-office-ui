@@ -116,7 +116,7 @@ saveXlsxBytes()                 # 引擎提供权威单元格数据
 
 - 功能区分组 `xlsx-ribbon-authoring`：图表、批注、超链接、表格、条件格式、数据验证、冻结开关；
 - 右键菜单：插入/编辑批注、插入/编辑超链接、插入图表、条件格式、数据验证、创建/删除表格、冻结/取消冻结；
-- `XlsxAuthoringDialog`：一个对话框按 `kind` 渲染各表单；`XlsxViewer` 与最小化的 `XlsxSheetSurface` 都会从右键菜单打开它；宿主也可以自行挂载；
+- `XlsxAuthoringDialog`：一个对话框按 `kind` 渲染各表单；`XlsxViewer` 与最小化的 `XlsxSheetSurface` 都会从右键菜单打开它；宿主也可以自行挂载；外壳自 0.8 起复用共享 `office-dialog` 表面（见 [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md)），表单状态、校验与焦点行为不变；
 - 所有文案走 `office-interaction` 消息目录（`xlsx.authoring.*`，en + zh-CN），不硬编码。
 
 ## 6. 限制

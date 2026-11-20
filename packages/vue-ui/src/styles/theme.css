@@ -54,6 +54,7 @@
   --office-border: color-mix(in oklab, white 6%, transparent);
   --office-input: color-mix(in oklab, white 8%, transparent);
   --office-ring: oklch(55.6% 0 0);
+  --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.25), 0 2px 4px -2px oklab(0 0 0 / 0.25);
 
   --office-chart-1: oklch(80.9% 0.105 251.813);
   --office-chart-2: oklch(62.3% 0.214 259.815);
@@ -112,6 +113,7 @@
     --office-border: color-mix(in oklab, white 6%, transparent);
     --office-input: color-mix(in oklab, white 8%, transparent);
     --office-ring: oklch(55.6% 0 0);
+    --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.25), 0 2px 4px -2px oklab(0 0 0 / 0.25);
 
     --office-chart-1: oklch(80.9% 0.105 251.813);
     --office-chart-2: oklch(62.3% 0.214 259.815);

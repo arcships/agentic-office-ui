@@ -271,6 +271,7 @@ command("core-behavior-5", process.execPath, [
 
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/file-components.test.mjs",
       "tests/component/file-drop-import.test.mjs",
       "tests/component/pdf-page-lifecycle.test.mjs",
       "tests/component/i18n-source.test.mjs",
@@ -375,6 +376,7 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/xlsx-sheet-order.test.mjs",
       "tests/component/xlsx-sheet-tabs.test.mjs",
       "tests/component/xlsx-status-bar.test.mjs",
+      "tests/component/xlsx-office-chrome.test.mjs",
       "tests/component/xlsx-viewer-tab-surface.test.mjs",
       "tests/component/xlsx-sheet-visibility.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",

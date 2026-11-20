@@ -56,6 +56,7 @@
 | reka-ui（运行时 primitive） | MIT | Copyright (c) 2023 radix-vue | [`licenses/reka-ui-MIT.txt`](licenses/reka-ui-MIT.txt) |
 | Lucide（`@lucide/vue`） | ISC | Copyright (c) 2026 Lucide Icons and Contributors | [`licenses/lucide-ISC.txt`](licenses/lucide-ISC.txt) |
 | Geist / Geist Mono | SIL Open Font License 1.1 | Copyright (c) 2023 Vercel, in collaboration with basement.studio | [`licenses/geist-OFL-1.1.txt`](licenses/geist-OFL-1.1.txt) |
+| Hugeicons（`@hugeicons/core-free-icons`） | MIT | Copyright (c) 2025 Hugeicons | [`licenses/hugeicons-MIT.txt`](licenses/hugeicons-MIT.txt) |
 
 许可证文件是上游原文的逐字副本，不添加本地文件头。根仓库仍为 Apache-2.0（[`../../LICENSE`](../../LICENSE)），第三方声明集中在 [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)。
 
@@ -171,9 +172,9 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/pdf-editor-dialogs.tsx` | 打印、截取、安全、属性对话框 | `packages/vue-pdf/src/components/PdfEditorDialogs.vue` | reference-only | #162 |
 | `apps/v4/components/extend/pdf-editor-properties.tsx` | 表单字段与文档属性面板 | `packages/vue-pdf/src/components/PdfEditorProperties.vue` | reference-only | #162 |
 | `apps/v4/components/extend/pdf-editor-shared.tsx` | 共享 context、feature flag、颜色预设 | `packages/vue-pdf/src/components/PdfEditor.vue` | reference-only | #162 |
-| `apps/v4/components/extend/document-viewer-sidebar.tsx` | inline/overlay 文档侧栏、skeleton、动画 | `packages/vue-ui/src/components/DocumentViewerSidebar.vue` | reference-only | #158 抽出，#163 补齐，#162 复用 |
-| `apps/v4/components/extend/file-upload.tsx` | 拖拽区、accept chips、文件列表、ready/error | `packages/vue-ui/src/components/FileUpload.vue` | reference-only | 现有实现早于固定提交，本批次重新对齐视觉 |
-| `apps/v4/components/extend/file-thumbnail.tsx` | 方形/可配置预览卡、blur-in、错误回退 | `packages/vue-ui/src/components/FileThumbnail.vue` | reference-only | #163 |
+| `apps/v4/components/extend/document-viewer-sidebar.tsx` | inline/overlay 文档侧栏、skeleton、动画 | `packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue` | reference-only | 规范组件由 #158 在 `components/chrome/` 实现；#163 只记录缩略图条集成 seam，不重复实现 |
+| `apps/v4/components/extend/file-upload.tsx` | 拖拽区、accept chips、文件列表、ready/error | `packages/vue-ui/src/components/FileUpload.vue` | adapted | #163 用 scoped CSS + `--office-*` token 重写；Hugeicons 提供与参考一致的 glyph 数据 |
+| `apps/v4/components/extend/file-thumbnail.tsx` | 方形/可配置预览卡、blur-in、错误回退 | `packages/vue-ui/src/components/FileThumbnail.vue` | adapted | #163 重写 preview 卡、reveal、loading 与 error fallback |
 | `apps/v4/components/extend/docx-viewer.tsx` | DOCX viewer chrome 与翻页 | `packages/vue-docx/src/components/DocxViewer.vue` | reference-only | #159 |
 | `apps/v4/components/extend/docx-editor.tsx` | DOCX editor chrome 与格式控件 | `packages/vue-docx/src/components/DocxEditor.vue` | reference-only | #159 |
 | `apps/v4/components/extend/docx-annotation-card.tsx` | 评论与修订 gutter 卡片 | `packages/vue-docx/src/components/DocxAnnotationCard.vue` | reference-only | #159 |
@@ -218,7 +219,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/registry/new-york-v4/ui/*.tsx` | 所有 primitive 共用的 token 样式规则 | `packages/vue-ui/src/styles/ui.css` | adapted | Tailwind utility 改写为 `office-*` class，只读取 `--office-*` token |
 | `apps/v4/components/ui/*.tsx` | primitive 目录约定 | `packages/vue-ui/src/components/ui/` | adapted | 该目录下任何 `.vue` / `.ts` / `.css` 都源自对应 Extend primitive，必须带来源头 |
 | `apps/v4/components/ui/*.tsx` | 共用 Office chrome 目录约定 | `packages/vue-ui/src/components/office/` | adapted | #158 新建的 toolbar/sidebar/state 组件按 Extend PDF/DOCX chrome 尺寸实现，必须带来源头 |
-| `apps/v4 vendored reference snapshot (components)` | #155 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | adapted | 类名与结构对齐上游；改动清单见 `vendor/NOTICE.md`（render-prop 换成原生元素、去掉 border-beam 依赖、不复制弹层） |
+| `apps/v4 vendored reference snapshot (components)` | #155/#157 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | adapted | 类名与结构对齐上游；改动清单见 `vendor/NOTICE.md`（render-prop 换成原生元素、去掉 border-beam 依赖、弹层改为可测量的静态 markup） |
 | `apps/v4 vendored reference snapshot (styles)` | #155 harness 复制的上游 CSS | `tools/extend-reference/src/styles/` | adapted | `extend-globals.css` 只裁剪 `@import` 图，正文由 `extract-extend-tokens.mjs` 校验 sha256；`extend-shadcn-tailwind.css` 除来源头外逐字复制；`parity.css` 是 harness 自有代码，不在范围内 |
 
 ## 与 #155 协调：`tools/extend-reference` 路径约定
@@ -251,7 +252,7 @@ tools/extend-reference/
 5. 如果改为从仓库外 checkout 读取上游源码而不 vendoring，则 `src/vendor/` 不创建，本行保持 `copied` 但校验器只报告 pending；此时必须在 `UPSTREAM.md` 记录 checkout 的 commit 和获取方式。
 6. `tools/extend-reference` 只用于对照验证，不进入任何公开包的构建产物。
 
-2026-11-20 状态（#155）：上表路径已落地。`src/vendor/` 下 9 个组件文件、`src/styles/extend-globals.css`、`src/styles/extend-shadcn-tailwind.css`、`src/lib/cn.ts` 均带来源头；`src/vendor/NOTICE.md`、`src/vendor/` 同级 `UPSTREAM.md` 与 `README.md` 记录改动清单。上游 CSS 正文的 sha256 由 `docs/design/extend-token-sources.json` 固定并在 `scripts/ci/extract-extend-tokens.mjs --extend-dir <checkout>` 时与上游 checkout 交叉校验。
+2026-11-20 状态（#155/#157）：上表路径已落地。`src/vendor/` 下 12 个组件文件、`src/styles/extend-globals.css`、`src/styles/extend-shadcn-tailwind.css`、`src/lib/cn.ts` 均带来源头；`src/vendor/NOTICE.md`、`src/vendor/` 同级 `UPSTREAM.md` 与 `README.md` 记录改动清单。上游 CSS 正文的 sha256 由 `docs/design/extend-token-sources.json` 固定并在 `scripts/ci/extract-extend-tokens.mjs --extend-dir <checkout>` 时与上游 checkout 交叉校验。
 
 ## 维护流程
 

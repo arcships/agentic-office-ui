@@ -59,6 +59,7 @@
   },
   "dependencies": {
     "@arcships/office-interaction": "^0.7.1",
+    "@hugeicons/core-free-icons": "4.4.0",
     "@lucide/vue": "^1.76.0",
     "reka-ui": "^2.11",
     "signature_pad": "^5.1.3"

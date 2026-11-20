@@ -5,13 +5,12 @@
  * Copyright (c) 2026 CrowdView Inc, dba Extend. Portions Copyright (c) 2023 shadcn.
  * Licensed under the MIT License; see ../NOTICE.md.
  *
- * Adaptation: Extend's `IconPlaceholder` resolves Hugeicons by default; the
- * resolved `Loading03Icon` is imported directly so the harness does not need
- * the registry icon-switching machinery.
+ * Adaptation: Extend's `IconPlaceholder` supports Lucide; the harness uses the
+ * Lucide `Loader2` glyph so the spinner matches `@arcships/vue-ui`'s
+ * `OfficeIcon` family. The `animate-spin` class and role/aria contract are
+ * unchanged.
  */
 import type * as React from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon } from "@hugeicons/core-free-icons";
 
 import { cn } from "../../lib/cn";
 
@@ -20,12 +19,19 @@ export function Spinner({
   ...props
 }: React.ComponentProps<"svg">): React.ReactElement {
   return (
-    <HugeiconsIcon
-      icon={Loading03Icon}
+    <svg
       aria-label="Loading"
       className={cn("animate-spin", className)}
+      fill="none"
       role="status"
-      {...(props as Record<string, unknown>)}
-    />
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      {...props}
+    >
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
   );
 }

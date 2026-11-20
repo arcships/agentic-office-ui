@@ -25,8 +25,11 @@ defineProps<{ cellWidth: number }>();
     :width="cellWidth"
   >
     <FileThumbnail
-      :file="{ name: pdf.name, type: pdf.type, url: entry.url }"
-      size="md"
+      :file="{ name: pdf.name, type: pdf.type }"
+      :size="80"
+      :is-loading="entry.state === 'loading'"
+      :has-error="entry.state === 'error'"
+      :preview-image-url="entry.state === 'image' ? png.asset : null"
     />
   </ParityCell>
 </template>

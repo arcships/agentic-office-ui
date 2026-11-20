@@ -39,6 +39,30 @@
       "destructive": "Delete",
       "link": "Read the docs",
       "iconAlt": "Page actions"
+    },
+    "input": {
+      "label": "Document title",
+      "value": "Quarterly report",
+      "placeholder": "Enter a title",
+      "invalid": "Invalid value",
+      "disabled": "Read only value"
+    },
+    "select": {
+      "label": "Word document",
+      "placeholder": "Choose a format",
+      "options": ["Word document", "PDF", "Presentation"]
+    },
+    "dialog": {
+      "trigger": "Open dialog",
+      "title": "Rename document",
+      "description": "Choose a new name for the shared document.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "close": "Close"
+    },
+    "tooltip": {
+      "trigger": "Copy",
+      "content": "Copy to clipboard"
     }
   },
   "documents": [

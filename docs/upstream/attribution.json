@@ -46,7 +46,7 @@
       "sourceUrl": "https://github.com/extend-hq/ui",
       "pinnedUrl": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e",
       "licenseUrl": "https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/LICENSE.md",
-      "usage": "Reference-only design, token, layout, and behavior baseline for the 0.8 Office UI work. No upstream file is copied or adapted yet; every adapted or copied file must carry the Extend header and be listed in docs/upstream/extend-ui.md."
+      "usage": "Reference design, token, layout and behavior baseline for the 0.8 Office UI work. Adapted files carry the Extend header and are listed in docs/upstream/extend-ui.md."
     },
     {
       "id": "extend-react-docx",
@@ -141,6 +141,19 @@
       "pinnedUrl": "https://github.com/vercel/geist-font",
       "licenseUrl": "https://github.com/vercel/geist-font/blob/main/LICENSE.txt",
       "usage": "Default sans and mono font tokens for the Office theme (#156); consumed through @fontsource-variable/geist (OFL-1.1) or a host-provided Geist installation."
+    },
+    {
+      "id": "hugeicons",
+      "name": "Hugeicons (@hugeicons/core-free-icons)",
+      "aliases": ["Hugeicons", "@hugeicons/core-free-icons", "hugeicons"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2025 Hugeicons",
+      "licenseFile": "docs/upstream/licenses/hugeicons-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2025 Hugeicons"],
+      "sourceUrl": "https://github.com/hugeicons/hugeicons",
+      "pinnedUrl": "https://github.com/hugeicons/hugeicons",
+      "licenseUrl": "https://github.com/hugeicons/hugeicons/blob/main/LICENSE",
+      "usage": "Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored."
     }
   ],
   "index": [
@@ -533,25 +546,26 @@
     {
       "upstreamFile": "apps/v4/components/extend/document-viewer-sidebar.tsx",
       "purpose": "Inline and overlay document sidebar with skeleton and animation.",
-      "target": "packages/vue-ui/src/components/DocumentViewerSidebar.vue",
+      "target": "packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue",
       "status": "reference-only",
       "issues": ["#158", "#163"],
-      "notes": "Shared by DOCX, XLSX, PPTX, and PDF (#158/#163)."
+      "notes": "Canonical sidebar lives in #158 under components/chrome; #163 documents the thumbnail-strip integration seam and does not duplicate the component."
     },
     {
       "upstreamFile": "apps/v4/components/extend/file-upload.tsx",
       "purpose": "Dropzone, accept chips, file list, ready and error states.",
       "target": "packages/vue-ui/src/components/FileUpload.vue",
-      "status": "reference-only",
+      "status": "adapted",
       "issues": ["#163"],
-      "notes": "Existing implementation predates the pinned commit; this issue re-baselines it visually."
+      "notes": "Vue scoped-CSS rewrite of the icon cluster, dropzone, browse chip and file list using --office-* tokens; Hugeicons supply the same glyph data as the reference."
     },
     {
       "upstreamFile": "apps/v4/components/extend/file-thumbnail.tsx",
       "purpose": "Square and configurable preview card with blur-in and error fallback.",
       "target": "packages/vue-ui/src/components/FileThumbnail.vue",
-      "status": "reference-only",
-      "issues": ["#163"]
+      "status": "adapted",
+      "issues": ["#163"],
+      "notes": "Vue scoped-CSS rewrite of the square/custom-ratio preview card, blur-in reveal, loading overlay and error fallback."
     },
     {
       "upstreamFile": "apps/v4/components/extend/docx-viewer.tsx",
@@ -793,8 +807,8 @@
       "purpose": "Upstream component copies rendered by the #155 parity harness.",
       "target": "tools/extend-reference/src/vendor/",
       "status": "adapted",
-      "issues": ["#155"],
-      "notes": "Markup and class strings match upstream; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups not vendored). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
+      "issues": ["#155", "#157"],
+      "notes": "Markup and class strings match upstream for the Button/Input/Select/Dialog/Tooltip surfaces; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups rendered as static measurable markup). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
     },
     {
       "upstreamFile": "apps/v4 vendored reference snapshot (styles)",
