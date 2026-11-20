@@ -60,11 +60,17 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "pdf-sidebar",
       "docx-toolbar",
       "docx-sidebar",
+      "pptx-toolbar",
+      "pptx-sorter",
+      "pptx-presenter",
       "document-sidebar",
       "bounding-box-citations",
       "layout-blocks",
       "e-signature",
       "document-splits",
+      "xlsx-toolbar",
+      "xlsx-sheet-tabs",
+      "xlsx-status-bar",
     ],
   );
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");
@@ -109,7 +115,7 @@ test("both harness apps render every manifest surface and honour the DOM contrac
   const vueSurface = read("tools/vue-reference/src/parity/ParitySurface.vue");
 
   for (const surface of manifest.surfaces.filter(
-    (entry) => entry.referenceStatus !== "fixtures-only",
+    (entry) => !["fixtures-only", "unreachable"].includes(entry.referenceStatus),
   )) {
     assert.match(
       referenceApp,
@@ -174,6 +180,8 @@ test("shell asks for the full state coverage on reference surfaces", () => {
     "FileThumbnailSurface",
     "PdfToolbarSurface",
     "DocxToolbarSurface",
+    "PptxToolbarSurface",
+    "PptxSorterSurface",
     "DocumentSidebarSurface",
   ]) {
     assert.ok(referenceApp.includes(surfaceId), `reference app does not mount ${surfaceId}`);
