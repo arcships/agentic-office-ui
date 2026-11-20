@@ -171,6 +171,8 @@ coarse-pointer 命中区、loading/error/fallback/type glyph、图片 reveal 与
 
 - `file-drop-import`：`useFileDrop` 3 例、XLSX 1 例、PDF 1 例通过；PPTX 复合挂载 1 例跳过——#161 的 Reka chrome 需要真实 DOM 全局，DOM-free renderer 会在 teleport/remove 路径上 OOM；拖放合同本身已由 `useFileDrop` 用例覆盖，浏览器侧由 #161 套件覆盖。
 - `touch-interactions`：7/9 通过；`context menus close on outside pointer down` 与 `touch hit targets reach 44px` 在 base `6b1c8367` 上同样失败（#160b/#161 Reka 迁移遗留），不是 #163 引入。
+- `vue-components`：43/44 通过；`PdfSurface exposes the unified controlled object/region reference contract` 在 base `6b1c8367` 上同样失败。
+- `i18n-source`：7/9 通过；两个失败（`labels.ts` 中文字面量与 previously hard-coded 检查）是 #157 遗留，base 上同样失败。
 
 ## 9. 已知边界
 
