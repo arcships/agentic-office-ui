@@ -368,7 +368,7 @@
 }
 .pptx-thumbnail__error {
   align-items: center;
-  background: color-mix(in srgb, var(--office-muted, #71717a) 10%, white);
+  background: color-mix(in srgb, var(--office-muted, #71717a) 10%, var(--office-background, white));
   color: #b91c1c;
   display: flex;
   flex-direction: column;

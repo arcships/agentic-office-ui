@@ -396,7 +396,7 @@
     </div>
 
     <PptxLinkMenu
-      v-if="linkMenuVisible && canUseDom"
+      v-if="canUseDom"
       :open="linkMenuOpen"
       :x="linkMenuPosition.x"
       :y="linkMenuPosition.y"
@@ -1176,7 +1176,6 @@ const EMPTY_LINK_INDEX: ReadonlyMap<string, PptxLinkEntry> = new Map()
 const contextMenu = shallowRef<ContextMenuState | null>(null)
 const linkMenuOpen = ref(false)
 const linkMenuPosition = ref({ x: 0, y: 0 })
-const linkMenuVisible = computed(() => contextMenu.value !== null && props.showContextMenu !== false)
 const canUseDom = typeof window !== "undefined"
 const contextMenuCopyValue = computed(() => {
   const target = contextMenu.value?.target
