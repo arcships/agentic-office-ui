@@ -82,7 +82,7 @@
 | `@arcships/vue-pdf` | `PdfViewer` | `apps/v4/components/extend/pdf-viewer.tsx` | `pdf-toolbar`, `pdf-sidebar` | ✅ blocking（#162） |
 | `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ⏳ #159 |
 | `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | 无上游可渲染 surface（`@extend-ai/react-xlsx` 不可分发） | 见 [xlsx-office-chrome-migration.md](../design/xlsx-office-chrome-migration.md) |
-| `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface | 见 [pptx-chrome.md](pptx-chrome.md) |
+| `@arcships/vue-pptx` | `PptxViewer` / `PptxViewerToolbar` / `PptxSlideCard` / `PptxPresenterPanel` | `apps/v4/components/extend/pptx-viewer.tsx` | `pptx-toolbar`, `pptx-sorter`（presenter 无上游布局） | ⏳ #161（toolbar 40/40、sorter 24/24 像素一致；`pptx-presenter` 为 unreachable） |
 
 ## 6. 面板与文档
 

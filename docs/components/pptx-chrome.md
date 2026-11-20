@@ -45,7 +45,7 @@
 | 页码按钮 | 32/28px 高，`padding: 0 9px`，`font-weight: 400`，`text-primary` | `Button size=sm font-normal` |
 | 缩放触发框 | `104px × 32/28px`，9px 内边距，`size=sm` 边框/阴影 | `w-[104px] min-w-[104px]` |
 | 分隔线 | 1×16px，`margin: 0 4px` | `Separator mx-1 h-4` |
-| 换行 | 390px 下左右两组各占一行，工具栏高 89px；无横向溢出 | `flex-wrap` |
+| 换行 | 390px 下左右两组各占一行（矩阵 89px；coarse pointer 44px 命中区时 chrome story 为 113px）；无横向溢出 | `flex-wrap` |
 | 搜索 | 不在工具栏内；操作菜单“搜索幻灯片”或 `Ctrl+F` 打开 find bar | #161b |
 
 ### 2.1 操作菜单
@@ -208,7 +208,7 @@ pnpm ui:parity -- --only pptx-toolbar,pptx-sorter,pptx-presenter
 | `pptx-sorter` | default/hover/selected | 4×2×3 = 24 | 24 pass | 0px | 0% |
 | `pptx-presenter` | — | — | unreachable（§4） | — | — |
 
-矩阵阈值未修改（`maxChannelDelta: 2`、`maxDiffPixelRatio: 0.001`、0px 几何）。
+矩阵阈值未修改（`maxChannelDelta: 2`、`maxDiffPixelRatio: 0.001`、0px 几何）。两个 surface 目前是 `gateStatus: "pending"`（`gatePendingIssue: "#161"`）：像素已经为 0，但 #165 的 committed baseline/approval 仍待补；`pptx-presenter` 以 `referenceStatus: "unreachable"` 出现在 report 的 unreachable 表，不参与 pass/fail 计数。
 
 ### 7.2 响应式 story
 

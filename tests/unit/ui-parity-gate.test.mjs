@@ -103,6 +103,9 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "document-blocks:#164",
     "document-sidebar:#158",
     "input:#157",
+    "pptx-presenter:#161",
+    "pptx-sorter:#161",
+    "pptx-toolbar:#161",
   ].sort());
 });
 
