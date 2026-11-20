@@ -71,10 +71,10 @@
 
 | 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
 |---|---|---|---|---|---|
-| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | reference-only | `BoundingBoxCitations` | `document-blocks` | ⏳ #164 | 引用框叠加层 |
-| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | reference-only | `LayoutBlocks` | `document-blocks` | ⏳ #164 | Block 布局容器 |
-| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | reference-only | `SignaturePad` | — | — | 画布组件，边框/背景已 token 化 |
-| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | reference-only | 未实现（#164 评估） | — | — | 登记来源，避免以后从头找 |
+| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | reference-only | `BoundingBoxCitations` | `bounding-box-citations` | ✅ 232/232 | 引用框叠加层 |
+| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | reference-only | `LayoutBlocks` | `layout-blocks` | ✅ 232/232 | Block 布局容器 |
+| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | reference-only | `ESignatureFields`（字段面板）、`SignaturePad`（画布） | `e-signature` | ✅ 232/232（字段面板） | 画布组件边框/背景已 token 化 |
+| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | reference-only | `DocumentSplits` | `document-splits` | ✅ 232/232 | 拆分结果列表；拖拽由组件测试覆盖 |
 | `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | 未实现（#164 后置） | — | — | 同上 |
 | Extend 选区/标注 blocks | reference-only | `OfficeRegionSelector` / `OfficeRegionAnnotator` / `OfficeObjectOutlineLayer` | — | — | 规范坐标选区原语，见[组件手册](README.md) |
 

@@ -145,6 +145,7 @@ Extend 用 `var(--color-white)` 声明 card / popover；这两项必须写成 `w
 | `--office-radius-2xl` | `calc(var(--office-radius) * 1.8)` | 18px |
 | `--office-radius-3xl` | `calc(var(--office-radius) * 2.2)` | 22px |
 | `--office-radius-4xl` | `calc(var(--office-radius) * 2.6)` | 26px |
+| `--office-radius-full` | `9999px` | `rounded-full`（empty state glyph、skeleton caption） |
 | `--office-ring-width` | `2px` | 焦点环宽度 |
 | `--office-ring-offset-width` | `1px` | 焦点环偏移 |
 | `--office-border-width` | `1px` | 默认描边 |
