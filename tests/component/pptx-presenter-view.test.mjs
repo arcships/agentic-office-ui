@@ -15,6 +15,10 @@ import {
 // update. The custom component renderer intentionally has no browser DOM.
 if (globalThis.Document === undefined) globalThis.Document = class Document {};
 if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
+// Reka UI primitives check refs against these constructors even when the
+// custom renderer has no real DOM; the stubs keep mounting DOM-free.
+if (globalThis.Element === undefined) globalThis.Element = class Element {};
+if (globalThis.DocumentFragment === undefined) globalThis.DocumentFragment = class DocumentFragment {};
 
 const { PptxViewer } = await importFromDemo("@arcships/vue-pptx");
 

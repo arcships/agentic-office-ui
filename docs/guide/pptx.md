@@ -24,14 +24,17 @@ import "@arcships/vue-pptx/style.css"
 | 属性 | 默认值 | 说明 |
 |---|---|---|
 | `source` | `null` | `ArrayBuffer`、`Uint8Array` 或文件对象 |
-| `mode` | `browse` | 浏览或演示 |
+| `mode` | `browse` | 浏览或演示；支持 `v-model:mode`，省略时由工具栏切换 |
 | `height` | `100%` | 组件高度 |
 | `minHeight` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `initialSlide` | `0` | 初始页，从零开始 |
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
-| `showNotes` | `false` | 显示演讲者备注面板；演示模式下变为演讲者视图（当前页备注 + 下一页缩略图 + 计时） |
-| `showToolbar` | `true` | 浏览工具栏 |
+| `showNotes` | `false` | 显示演讲者备注面板；演示模式下变为演讲者视图（当前页备注 + 下一页缩略图 + 计时）。支持 `v-model:show-notes`，工具栏备注按钮也会发 `update:showNotes` |
+| `showNotesToggle` | `true` | 工具栏备注切换按钮 |
+| `showPresentToggle` | `true` | 工具栏“演示”按钮；演示模式在播放控制条显示“退出演示” |
+| `showFullscreenControl` | `true` | 浏览工具栏全屏按钮 |
+| `showToolbar` | `true` | 浏览工具栏（`OfficeToolbar`，桌面 49px / 48px min-height） |
 | `viewMode` | `null` | 浏览布局：`single` 或 `sorter`；`null` 跟随内部工具栏状态 |
 | `defaultViewMode` | `single` | 未受控时的初始浏览布局 |
 | `showSidebar` | `true` | 缩略图侧栏 |
@@ -54,7 +57,7 @@ import "@arcships/vue-pptx/style.css"
 
 `a:hlinkClick` 和 `a:hlinkHover` 在浏览与演示模式下都可用。形状点击先经过共享 URL 策略：只允许 `http:`、`https:`、`mailto:` 和文档内跳页，`javascript:`、`data:`、`vbscript:` 等目标一律拒绝（不会被当作可点击链接，也不会到达 `window.open`）。外部链接在新标签页打开（`noopener,noreferrer`），内部跳转调用同一个 `goTo()`，因此浏览模式会滚到目标页、演示模式沿用播放控制器的跳页规则。两种模式都继续抛出 `action` 事件（`open-url` / `mailto` / `go-to-slide` / `unsupported`），宿主可以照旧接管。`linkHandling="host"` 关闭内置打开/复制行为，只保留事件。
 
-右键带链接的形状会显示一个最小内置菜单（`data-testid="pptx-context-menu"`）：外部链接提供“打开链接”（`pptx-context-menu-open-link`）和“复制链接”（`pptx-context-menu-copy-link`），内部跳转提供“跳到第 N 页”。菜单遵循共享的菜单键盘语义（`↑`/`↓`/`Home`/`End` 移动焦点，`Esc`/`Tab` 关闭），点击背景关闭，文档、页码或模式变化时自动收起。无论是否显示内置菜单，`context-menu` 事件都会先抛出，宿主可用 `showContextMenu="false"` 完全接管。
+右键带链接的形状会显示共享 `OfficeDropdownMenu` 渲染的内置菜单（内容节点 `data-testid="pptx-context-menu"`，`role="menu"`）：外部链接提供“打开链接”（`pptx-context-menu-open-link`）和“复制链接”（`pptx-context-menu-copy-link`），内部跳转提供“跳到第 N 页”。菜单以右击点为零尺寸锚点，由 Reka 处理视口翻转；键盘语义来自共享 primitive（`↑`/`↓`/`Home`/`End` 移动焦点，typeahead，`Esc`/`Tab` 或外部点击关闭），关闭后焦点回到查看器根节点。文档、页码或模式变化时菜单自动收起。无论是否显示内置菜单，`context-menu` 事件都会先抛出，宿主可用 `showContextMenu="false"` 完全接管；自建舞台可复用导出的 `PptxLinkMenu`。
 
 渲染完成后，标记层会把链接信息写到形状元素上：`title` 为 `tooltip` 属性（没有时回退到 URL），并设置 `data-pptx-hyperlink`（`click`/`hover`）、`data-pptx-hyperlink-kind`、`data-pptx-hyperlink-url`、`data-pptx-hyperlink-slide` 和 `data-pptx-hyperlink-tooltip`。点击链接的形状获得 `role="link"` 和 `tabindex="0"`，`Enter`/`Space` 与鼠标点击走同一条链接路由；缩略图里的链接只保留 tooltip，不会在缩略图按钮里再嵌套可聚焦元素。悬停链接（`a:hlinkHover`）只显示 tooltip，不会自动执行；播放能力报告把悬停动作记为 `static`。同一份链接元数据也会出现在 `PptxObjectIdentity.hyperlinks`（`PptxObjectHyperlink[]`）和 `PptxSlideAction.tooltip` 中，供无障碍、引用适配器和自建界面使用。
 
@@ -63,7 +66,7 @@ import "@arcships/vue-pptx/style.css"
 浏览模式支持两种布局，工具栏左侧的两个按钮（`data-testid="pptx-view-mode-single"`、`pptx-view-mode-sorter"`）切换，也可以由 `viewMode` 属性控制：
 
 - `single`（默认）：保持原来的纵向幻灯片列表。
-- `sorter`：网格缩略图，与侧栏共用同一套 `PptxThumbnail` 与懒加载门控；网格只挂载可视行附近的缩略图（上方和下方有等高占位块），滚动与 `PageUp`/`PageDown`/`Home`/`End` 只滚动网格，不切换当前页；点击缩略图会切到该页但网格保持打开，选中项保持高亮。网格打开时隐藏侧栏，舞台仍然挂载（会话仍渲染到它）但在网格下方。
+- `sorter`：网格缩略图，每页一张 `OfficeCard`，与侧栏共用同一套 `PptxThumbnail` 与懒加载门控；缩略图加载时显示 `OfficeSkeleton`，渲染失败显示错误 badge，隐藏页显示 `OfficeBadge`。网格只挂载可视行附近的缩略图（上方和下方有等高占位块），滚动与 `PageUp`/`PageDown`/`Home`/`End` 只滚动网格，不切换当前页；点击缩略图会切到该页但网格保持打开，选中项保持高亮。网格打开时隐藏侧栏，舞台仍然挂载（会话仍渲染到它）但在网格下方。移动端 390px 下 2 列，卡片不横向溢出，网格可滚动。
 
 两种布局共用同一个活动页（`data-slide-index`），切换布局时保持当前页与选中项；`sorter` 打开时会把当前页滚到可视区域。演示模式始终使用单页舞台，不显示布局按钮。事件新增 `update:viewMode`，网格根节点为 `data-testid="pptx-sorter"`，每个格子为 `data-testid="pptx-sorter-item"` 并带 `data-slide-index` 与 `data-active`。
 
@@ -75,7 +78,7 @@ import "@arcships/vue-pptx/style.css"
 
 加载时会读取每页的备注部件（`ppt/notesSlides/notesSlide*.xml`），并按段落换行写入 `PptxPreviewDocument.slides[i].notes`。没有备注部件的页面不带该字段，空备注也不会产生空字符串。幻灯片图像、页码、页眉/页脚和日期占位符不算备注内容；备注只解析一次，且只解压备注部件本身，幻灯片 XML 和媒体不会再次解码。
 
-- `showNotes`（默认 `false`）打开备注面板：浏览模式显示当前页备注，演示模式显示完整演讲者视图。两种模式共用同一个面板根节点 `data-testid="pptx-presenter"`，由 `data-presenter-mode="browse"|"present"` 区分。
+- `showNotes`（默认 `false`）打开备注面板：浏览模式显示当前页备注，演示模式显示完整演讲者视图；工具栏备注按钮也可切换。两种模式共用同一个面板根节点 `data-testid="pptx-presenter"`，由 `data-presenter-mode="browse"|"present"` 区分，内部是 `OfficeCard` + `OfficeSeparator` + `OfficeScrollArea`。
 - 演讲者视图包含当前页备注（`pptx-presenter-notes`）、下一页缩略图（`showHiddenSlides=false` 时跳过隐藏页；最后一页显示 `pptx-presenter-last`）和从开始演示算起的计时（`pptx-presenter-timer`，`mm:ss`，超过一小时为 `h:mm:ss`）。
 - 备注面板可用 `notes` 插槽整体替换，插槽参数为 `{ notes, slide }`。没有备注的页面显示本地化的空状态。
 - 备注部件损坏时只影响该页备注，不会阻止演示文稿打开；但超过 XML 预算或加载被取消仍会使打开失败。
@@ -86,9 +89,10 @@ import "@arcships/vue-pptx/style.css"
 
 ## 界面状态
 
-`data-state` 暴露当前视图状态：`empty`、`waiting`（舞台尚未挂载）、`loading`、`ready`、`cancelled` 和 `error`。
+`data-state` 暴露当前视图状态：`empty`、`waiting`（舞台尚未挂载）、`loading`、`ready`、`cancelled` 和 `error`。状态面板由共享 `OfficeEmptyState` / `OfficeLoadingState` / `OfficeErrorState` 渲染；`empty`/`waiting`/`loading`/`cancelled`/`error` 插槽仍可替换描述内容。
 
 - 加载失败、超时或取消才会进入 `error`/`cancelled`，并显示重试按钮；
+- 密码保护或旧版 OLE/CFB 演示文稿会返回 `UNSUPPORTED_CONTENT`，查看器显示锁图标的“受保护”状态（`data-testid="pptx-encrypted"`，根节点 `data-encrypted="true"`）；`data-state` 仍为 `error`；
 - 单页渲染失败不会锁死查看器：上一页保持可见，顶部提示第几页失败，并可选择“重试”或“跳过”到相邻页；
 - 切换 `browse`/`present` 会重新打开文档，但保留当前页；
 - 全屏时组件自动占满屏幕，忽略 `height`；演示模式按幻灯片比例等比缩放并留黑边，不会裁切页面；

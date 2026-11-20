@@ -1259,10 +1259,17 @@ export interface OfficePptxMessages {
     previousSlide: string
     nextSlide: string
     hiddenSlide: string
-    /** Browse layout control: single slide list or slide-sorter grid. */
+    /** Accessible name of the viewer toolbar. */
+    toolbar: string
+    /** Browse layout control: single slide list, slide-sorter grid or present. */
     viewMode: string
     viewModeSingle: string
     viewModeSorter: string
+    viewModePresent: string
+    /** Leaves presentation mode and returns to the single browse layout. */
+    viewModeBrowse: string
+    /** Toolbar toggle for the speaker-notes / presenter rail. */
+    notesToggle: string
     /** Accessible name of the slide-sorter grid. */
     sorter: string
     searchPlaceholder: string
@@ -1272,6 +1279,9 @@ export interface OfficePptxMessages {
     loading: string
     waiting: string
     cancelled: string
+    /** Password-protected or legacy binary (OLE/CFB) presentations. */
+    encryptedTitle: string
+    encryptedDescription: string
     /** Rejected drop: the file type is not a PowerPoint presentation. */
     unsupportedDrop: string
     reload: string
@@ -1369,6 +1379,10 @@ export interface OfficePptxMessages {
     /** Template with a `{number}` placeholder. */
     hiddenLabel: string
     hidden: string
+    /** Accessible name of the thumbnail loading skeleton. */
+    loading: string
+    /** Shown when the thumbnail renderer rejects. */
+    failed: string
   }
   stage: {
     region: string
@@ -2607,9 +2621,13 @@ export const officeMessagesEn: OfficeMessages = {
       previousSlide: "Previous slide",
       nextSlide: "Next slide",
       hiddenSlide: "Hidden slide",
+      toolbar: "Presentation toolbar",
       viewMode: "Browse layout",
       viewModeSingle: "Single slide view",
       viewModeSorter: "Slide sorter",
+      viewModePresent: "Present",
+      viewModeBrowse: "Exit presentation",
+      notesToggle: "Speaker notes",
       sorter: "Slide sorter",
       searchPlaceholder: "Search slides",
       search: "Search",
@@ -2618,6 +2636,8 @@ export const officeMessagesEn: OfficeMessages = {
       loading: "Loading PPTX…",
       waiting: "Waiting for the slide stage…",
       cancelled: "PPTX loading was cancelled.",
+      encryptedTitle: "Presentation is protected",
+      encryptedDescription: "This presentation is password-protected or saved in the legacy binary format. Remove the password or save it as .pptx and try again.",
       unsupportedDrop: "Only .pptx, .pptm, .ppsx, .ppsm, .potx and .potm files are supported",
       reload: "Reload",
       retry: "Retry",
@@ -2698,6 +2718,8 @@ export const officeMessagesEn: OfficeMessages = {
       label: "Slide {number}",
       hiddenLabel: "Slide {number}, hidden",
       hidden: "Hidden",
+      loading: "Loading thumbnail",
+      failed: "Thumbnail unavailable",
     },
     stage: {
       region: "Choose slide area",
@@ -3900,9 +3922,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       previousSlide: "上一页",
       nextSlide: "下一页",
       hiddenSlide: "隐藏页",
+      toolbar: "幻灯片工具栏",
       viewMode: "浏览布局",
       viewModeSingle: "单页视图",
       viewModeSorter: "幻灯片浏览",
+      viewModePresent: "演示",
+      viewModeBrowse: "退出演示",
+      notesToggle: "演讲者备注",
       sorter: "幻灯片浏览",
       searchPlaceholder: "搜索幻灯片",
       search: "搜索",
@@ -3911,6 +3937,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       loading: "正在加载 PPTX…",
       waiting: "正在等待幻灯片舞台…",
       cancelled: "PPTX 加载已取消。",
+      encryptedTitle: "演示文稿受保护",
+      encryptedDescription: "该演示文稿已加密，或保存为旧版二进制格式。请取消密码保护或另存为 .pptx 后重试。",
       unsupportedDrop: "仅支持 .pptx、.pptm、.ppsx、.ppsm、.potx 和 .potm 文件",
       reload: "重新加载",
       retry: "重试",
@@ -3991,6 +4019,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       label: "第 {number} 页",
       hiddenLabel: "第 {number} 页，隐藏页",
       hidden: "隐藏",
+      loading: "正在加载缩略图",
+      failed: "缩略图不可用",
     },
     stage: {
       region: "选择幻灯片区域",

@@ -1,3 +1,10 @@
+/* The shared chrome and primitives below resolve every colour, radius and
+   control metric from the Office token layer. Importing the theme and the
+   primitive stylesheet here keeps `@arcships/vue-pptx/style.css` self-contained
+   for hosts that use the viewer without a separate `@arcships/vue-ui` request. */
+@import "@arcships/vue-ui/theme.css";
+@import "@arcships/vue-ui/style.css";
+
 .pptx-viewer {
   --pptx-bg: #f4f4f5;
   --pptx-panel: #ffffff;
@@ -49,59 +56,71 @@
 }
 
 .pptx-viewer__toolbar {
-  align-items: center;
-  background: var(--pptx-panel);
-  border-bottom: 1px solid var(--pptx-border);
-  display: flex;
   flex: 0 0 auto;
-  gap: 12px;
-  justify-content: space-between;
-  min-height: 48px;
-  padding: 6px 10px;
 }
 
-.pptx-viewer__toolbar button,
+.pptx-viewer__search {
+  align-items: center;
+  display: flex;
+  flex: 1 1 320px;
+  gap: var(--office-ui-space-1, 4px);
+  justify-content: center;
+  max-inline-size: 520px;
+  min-inline-size: 0;
+}
+
 .pptx-viewer__search input {
-  background: var(--pptx-panel);
-  border: 1px solid var(--pptx-border);
-  border-radius: 6px;
-  color: inherit;
-  min-height: 30px;
+  background: var(--office-background);
+  border: var(--office-border-width) solid var(--office-border);
+  border-radius: var(--office-radius-md);
+  color: var(--office-foreground);
+  flex: 1 1 auto;
+  font: inherit;
+  min-block-size: var(--office-control-height-sm);
+  min-inline-size: 80px;
+  padding: 4px 9px;
 }
 
-.pptx-viewer__toolbar button { cursor: pointer; min-width: 32px; padding: 4px 8px; }
-.pptx-viewer__toolbar button:disabled { cursor: default; opacity: 0.42; }
-.pptx-viewer__toolbar-group,
-.pptx-viewer__search { align-items: center; display: flex; gap: 6px; }
-.pptx-viewer__counter { color: var(--pptx-muted); font-size: 12px; min-width: 58px; text-align: center; }
-.pptx-viewer__hidden-badge,
-.pptx-thumbnail__hidden { background: #fef3c7; border-radius: 999px; color: #92400e; font-size: 11px; padding: 2px 7px; }
-.pptx-viewer__search { flex: 1 1 280px; justify-content: center; max-width: 520px; }
-.pptx-viewer__search input { flex: 1 1 auto; min-width: 80px; padding: 4px 9px; }
-.pptx-viewer__search-count { color: var(--pptx-muted); font-size: 12px; white-space: nowrap; }
+.pptx-viewer__search input:focus-visible {
+  outline: var(--office-ring-width) solid var(--office-ring);
+  outline-offset: var(--office-ring-offset-width);
+}
+
+.pptx-viewer__toolbar .pptx-viewer__search button {
+  background: var(--office-background);
+  border: var(--office-border-width) solid var(--office-border);
+  border-radius: var(--office-radius-md);
+  color: var(--office-foreground);
+  cursor: pointer;
+  font: inherit;
+  min-block-size: var(--office-control-height-sm);
+  min-inline-size: 32px;
+  padding: 4px 8px;
+}
+
+.pptx-viewer__toolbar .pptx-viewer__search button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.pptx-viewer__search-count {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  white-space: nowrap;
+}
+
+.pptx-viewer__zoom-value {
+  font-variant-numeric: tabular-nums;
+  min-inline-size: calc(var(--office-ui-space-12, 48px) + var(--office-ui-space-2, 8px));
+}
+
 .pptx-viewer__body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: block; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; position: relative; }
-/* Browse layout toggle. */
-.pptx-viewer__view-modes { gap: 1px; padding: 1px; }
-.pptx-viewer__view-mode {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  height: 26px;
-  justify-content: center;
-  padding: 0;
-  width: 28px;
-}
-.pptx-viewer__view-mode:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
-.pptx-viewer__view-mode--active { background: color-mix(in srgb, var(--pptx-accent) 14%, transparent); color: var(--pptx-accent); }
-.pptx-viewer__view-mode:disabled { cursor: default; opacity: .35; }
-.pptx-viewer__view-mode svg { fill: none; height: 14px; stroke: currentColor; stroke-width: 1.6; width: 14px; }
-/* Slide sorter grid: overlays the stage and reuses the sidebar thumbnails. */
+/* Browse layout toggle lives in the shared toolbar; only the sorter surface
+   keeps viewer-specific rules. */
+/* Slide sorter grid: overlays the stage and reuses the sidebar thumbnails as
+   shared cards. `--pptx-sorter-item-height` keeps the virtual window aligned. */
 .pptx-viewer__sorter {
   background: var(--pptx-bg);
   box-sizing: border-box;
@@ -117,15 +136,27 @@
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
+  border-radius: var(--office-radius-lg);
+  box-shadow: none;
+}
+.pptx-viewer__sorter-item > .office-card__content {
+  block-size: 100%;
+  padding: 5px;
 }
 .pptx-viewer__sorter-spacer { pointer-events: none; }
 .pptx-viewer__sorter .pptx-thumbnail {
-  block-size: var(--pptx-sorter-item-height, auto);
+  block-size: 100%;
   box-sizing: border-box;
   margin-block-end: 0;
   overflow: hidden;
+  padding: 0;
 }
+.pptx-viewer__sorter .pptx-thumbnail__frame { border-radius: var(--office-radius-md); }
 .pptx-viewer__sorter .pptx-thumbnail--active {
+  border-color: transparent;
+  box-shadow: none;
+}
+.pptx-viewer__sorter-item[data-active="true"] {
   border-color: var(--pptx-accent);
   box-shadow: 0 0 0 2px var(--pptx-accent);
 }
@@ -134,9 +165,17 @@
 .pptx-stage__object-outline { border: 2px solid #2563eb; box-sizing: border-box; pointer-events: none; position: absolute; z-index: 12; }
 .pptx-stage__object-outline-label { background: #2563eb; border-radius: 2px; color: #fff; font-size: 11px; left: -2px; max-width: 280px; overflow: hidden; padding: 1px 4px; position: absolute; text-overflow: ellipsis; top: -20px; white-space: nowrap; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
-.pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
-.pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }
-.pptx-viewer__message > button { margin-inline-start: 8px; }
+.pptx-viewer__message {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: absolute;
+  z-index: 2;
+}
+.pptx-viewer__message .office-state { max-inline-size: 32rem; }
+.pptx-viewer__message--error { text-align: center; }
 
 .pptx-viewer__warnings {
   background: color-mix(in srgb, #f59e0b 14%, var(--pptx-panel));
@@ -161,44 +200,18 @@
   padding: 6px 10px;
 }
 
-/* Built-in link menu. `position: fixed` keeps it at the pointer even though it
-   is rendered inside the viewer's flex column. */
-.pptx-viewer__context-backdrop {
-  inset: 0;
+/* Built-in link menu: a zero-size anchor at the pointer; the shared dropdown
+   surface is portalled by Reka and positioned relative to it. */
+.pptx-viewer__link-menu-anchor {
+  block-size: 1px;
+  inline-size: 1px;
+  pointer-events: none;
   position: fixed;
-  z-index: 60;
+  z-index: calc(var(--office-ui-z, 50) + 11);
 }
 
-.pptx-viewer__context-menu {
-  background: var(--pptx-panel);
-  border: 1px solid var(--pptx-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 180px;
-  padding: 4px;
-  position: fixed;
-  z-index: 61;
-}
-
-.pptx-viewer__context-item {
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  padding: 7px 10px;
-  text-align: start;
-}
-
-.pptx-viewer__context-item:hover,
-.pptx-viewer__context-item:focus-visible {
-  background: color-mix(in srgb, var(--pptx-accent) 14%, transparent);
-  outline: none;
+.pptx-viewer__link-menu {
+  min-inline-size: 180px;
 }
 
 /* Linked shapes are interactive: the renderer paints them, the markers make
@@ -207,9 +220,9 @@
 
 .pptx-viewer__slide-error {
   align-items: center;
-  background: color-mix(in srgb, #f59e0b 22%, var(--pptx-panel));
+  background: color-mix(in srgb, #f59e0b 22%, var(--office-background));
   border-bottom: 1px solid #f59e0b;
-  color: var(--pptx-text);
+  color: var(--office-foreground);
   display: flex;
   flex-wrap: wrap;
   font-size: 12px;
@@ -223,7 +236,6 @@
 }
 
 .pptx-viewer__slide-error-actions { display: flex; gap: 6px; }
-.pptx-viewer__slide-error button { background: var(--pptx-panel); border: 1px solid var(--pptx-border); border-radius: 6px; color: inherit; cursor: pointer; min-height: 26px; padding: 2px 8px; }
 
 /* Letterbox the presented slide instead of clipping it: --pptx-slide-aspect
    and --pptx-slide-ratio are supplied by PptxViewer from the deck size. */
@@ -298,21 +310,38 @@
   display: flex;
   flex: 0 0 300px;
   flex-direction: column;
-  gap: 12px;
   max-inline-size: 40cqw;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
+  padding: 12px;
+}
+.pptx-presenter__card {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
+}
+.pptx-presenter__card > .office-card__content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-block-size: 0;
   padding: 12px;
 }
 .pptx-presenter__meta { display: flex; flex-direction: column; gap: 6px; }
 .pptx-presenter__label { color: var(--pptx-muted); font-size: 11px; letter-spacing: 0.04em; margin: 0; text-transform: uppercase; }
 .pptx-presenter__next { pointer-events: none; }
-.pptx-presenter__timer { color: var(--pptx-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
-.pptx-presenter__body { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.pptx-presenter__timer-row { align-items: center; color: var(--pptx-muted); display: flex; gap: 6px; }
+.pptx-presenter__timer-icon { block-size: 14px; inline-size: 14px; }
+.pptx-presenter__timer { font-size: 13px; font-variant-numeric: tabular-nums; }
+.pptx-presenter__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; min-block-size: 0; }
+.pptx-presenter__scroll { flex: 1 1 auto; min-block-size: 0; }
+.pptx-presenter__scroll .office-scroll-area__viewport { block-size: 100%; }
 .pptx-presenter__paragraph { font-size: 14px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .pptx-presenter__empty { color: var(--pptx-muted); font-size: 13px; margin: 0; }
 @container pptx-viewer (max-width: 720px) {
   .pptx-viewer__presenter { flex-basis: 200px; max-inline-size: 50cqw; padding: 8px; }
+  .pptx-presenter__card > .office-card__content { gap: 8px; padding: 8px; }
 }
 
 .pptx-thumbnail {
@@ -330,8 +359,28 @@
 
 .pptx-thumbnail:hover { background: color-mix(in srgb, var(--pptx-accent) 7%, transparent); }
 .pptx-thumbnail--active { border-color: var(--pptx-accent); box-shadow: 0 0 0 1px var(--pptx-accent); }
+.pptx-thumbnail__frame { display: block; position: relative; }
 .pptx-thumbnail__canvas { background: white; display: block; min-height: 84px; overflow: hidden; pointer-events: none; width: 100%; }
-.pptx-thumbnail__canvas[data-error="true"]::after { color: #b91c1c; content: "缩略图失败"; display: block; font-size: 11px; padding: 24px 4px; text-align: center; }
+.pptx-thumbnail__skeleton {
+  block-size: 100%;
+  inset: 0;
+  position: absolute;
+}
+.pptx-thumbnail__error {
+  align-items: center;
+  background: color-mix(in srgb, var(--office-muted, #71717a) 10%, var(--office-background, white));
+  color: #b91c1c;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  inset: 0;
+  justify-content: center;
+  padding: 8px;
+  position: absolute;
+  text-align: center;
+}
+.pptx-thumbnail__error svg { block-size: 16px; inline-size: 16px; }
+.pptx-thumbnail__error-label { font-size: 11px; }
 .pptx-thumbnail__label { align-items: center; color: var(--pptx-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; line-height: 16px; padding-top: 6px; }
 
 /* Fixed sidebar rows keep the virtual window and its spacers pixel-aligned. */
@@ -353,8 +402,10 @@
 }
 
 @container pptx-viewer (max-width: 720px) {
-  .pptx-viewer__toolbar { align-items: stretch; flex-wrap: wrap; }
-  .pptx-viewer__search { flex-basis: 100%; max-width: none; order: 3; }
+  /* The shared toolbar already wraps; give the search its own row so controls
+     keep their 28/32px hit area instead of shrinking. */
+  .pptx-viewer__toolbar .office-toolbar__center { flex: 1 1 100%; }
+  .pptx-viewer__search { flex-basis: 100%; max-inline-size: none; }
   .pptx-viewer__sidebar { display: none; }
   .pptx-viewer__stage { padding: 12px; }
   .pptx-viewer--present .pptx-viewer__stage { padding: 0; }

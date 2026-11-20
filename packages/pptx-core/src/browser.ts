@@ -136,6 +136,21 @@ function toZipLimits(limits: Readonly<PptxPreviewLimits>): PptxArchiveZipLimits 
   }
 }
 
+/**
+ * OLE Compound File Binary signature. A `.pptx` saved with a password (and a
+ * legacy `.ppt` renamed to `.pptx`) is a CFB container, not an OOXML zip, so
+ * the archive reader can only report a generic parse failure. Detecting the
+ * signature first lets the viewer show its "protected presentation" state
+ * instead of a bare parse error.
+ */
+const OLE_COMPOUND_FILE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] as const
+
+function isOleCompoundFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < OLE_COMPOUND_FILE_MAGIC.length) return false
+  const header = new Uint8Array(buffer, 0, OLE_COMPOUND_FILE_MAGIC.length)
+  return OLE_COMPOUND_FILE_MAGIC.every((value, index) => header[index] === value)
+}
+
 function toOfficeSource(source: PptxPreviewSource): OfficeSource {
   if (source instanceof ArrayBuffer) return { kind: "bytes", bytes: source }
   if (source instanceof Uint8Array) {
@@ -331,6 +346,12 @@ export function createPptxDocumentSession(
           limits: task.context.limits,
         })
         task.assertCurrent()
+        if (isOleCompoundFile(resolved.buffer)) {
+          throw new PptxPreviewError(
+            "UNSUPPORTED_CONTENT",
+            "该演示文稿已加密，或保存为旧版二进制格式；请取消密码保护或另存为 .pptx 后重试。",
+          )
+        }
         const lazyMedia = openOptions.lazyMedia ?? options.lazyMedia ?? true
         // One decompression pass: the renderer reads the container and the shared
         // validator checks the decoded parts, instead of inflating twice.

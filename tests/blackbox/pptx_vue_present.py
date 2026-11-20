@@ -66,7 +66,9 @@ def main() -> None:
         )
         page.get_by_role("button", name="Zoom in").click()
         page.wait_for_function(
-            "() => document.querySelector('[aria-label=\"Fit to window\"]')?.textContent?.includes('125%')",
+            """() => document
+              .querySelector('[data-testid="office-zoom-control"] [role="combobox"]')
+              ?.textContent?.includes('125%')""",
             timeout=5_000,
         )
 

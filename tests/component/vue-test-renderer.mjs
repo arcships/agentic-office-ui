@@ -40,6 +40,14 @@ function createHostNode(type, text = "") {
     focus() {},
     blur() {},
     select() {},
+    // Reka UI's form-control bridge asks for the nearest form/field ancestor;
+    // the host tree has no real DOM, so "no ancestor" is the faithful answer.
+    closest() {
+      return null;
+    },
+    getBoundingClientRect() {
+      return { bottom: 0, height: 0, left: 0, right: 0, top: 0, width: 0, x: 0, y: 0 };
+    },
     // Scroll APIs used by components that keep the active tab in view. Tests
     // can inspect the recorded calls or replace the method with their own spy.
     scrollIntoViewCalls: [],

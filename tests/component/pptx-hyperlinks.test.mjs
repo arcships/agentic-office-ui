@@ -6,7 +6,6 @@ import {
   importFromDemo,
   keydownEvent,
   mount,
-  textContent,
   vue,
   waitFor,
 } from "./vue-test-renderer.mjs";
@@ -15,6 +14,10 @@ import {
 // update. The custom component renderer intentionally has no browser DOM.
 if (globalThis.Document === undefined) globalThis.Document = class Document {};
 if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
+// Reka UI primitives check refs against these constructors even when the
+// custom renderer has no real DOM; the stubs keep mounting DOM-free.
+if (globalThis.Element === undefined) globalThis.Element = class Element {};
+if (globalThis.DocumentFragment === undefined) globalThis.DocumentFragment = class DocumentFragment {};
 
 const {
   PptxStage,
@@ -241,20 +244,6 @@ function installOpener(t) {
   return opened;
 }
 
-function installClipboard(t) {
-  const written = [];
-  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: { clipboard: { async writeText(value) { written.push(value); } } },
-  });
-  t.after(() => {
-    if (original) Object.defineProperty(globalThis, "navigator", original);
-    else delete globalThis.navigator;
-  });
-  return written;
-}
-
 async function mountReady(t, props) {
   const mounted = await mount(PptxViewer, props);
   await waitFor(
@@ -465,10 +454,8 @@ test("a linked shape click in present mode is left to the controller", async (t)
   mounted.app.unmount();
 });
 
-test("the built-in context menu opens and copies links and still reports the host event", async (t) => {
-  const opened = installOpener(t);
-  const written = installClipboard(t);
-  const { calls, session } = createBrowseSession();
+test("right-click reports the host event for linked and unlinked shapes", async () => {
+  const { session } = createBrowseSession();
   const menus = [];
   const mounted = await mount(PptxViewer, {
     source: new Uint8Array([9, 9, 9]),
@@ -484,9 +471,11 @@ test("the built-in context menu opens and copies links and still reports the hos
   const stage = findByTestId(mounted.root, "pptx-stage");
   stage.getBoundingClientRect = () => ({ left: 10, top: 20 });
 
+  // The menu surface is the shared Reka dropdown (covered in
+  // pptx-context-menu.test.mjs under a real DOM). The headless renderer keeps
+  // the policy contract: every right-click reaches the host.
   const external = fakeTarget(0, EXTERNAL_KEY);
-  const openEvent = mouseEvent({ target: external.target, clientX: 40, clientY: 60 });
-  stage.props.onContextmenu(openEvent.event);
+  stage.props.onContextmenu(mouseEvent({ target: external.target, clientX: 40, clientY: 60 }).event);
   await vue.nextTick();
 
   assert.equal(menus.length, 1);
@@ -499,53 +488,12 @@ test("the built-in context menu opens and copies links and still reports the hos
     containerX: 30,
     containerY: 40,
   });
-  const menu = findByTestId(mounted.root, "pptx-context-menu");
-  assert.ok(menu, "built-in menu is rendered");
-  assert.equal(menu.props.role, "menu");
-  assert.deepEqual(menu.props.style, { left: "40px", top: "60px" });
-  const openItem = findByTestId(mounted.root, "pptx-context-menu-open-link");
-  assert.match(textContent(openItem), /Open link/);
-  const copyItem = findByTestId(mounted.root, "pptx-context-menu-copy-link");
-  assert.match(textContent(copyItem), /Copy link/);
 
-  copyItem.props.onClick();
-  await waitFor(() => written.length === 1, "copy link");
-  assert.deepEqual(written, ["https://example.com/docs"]);
-  assert.equal(findByTestId(mounted.root, "pptx-context-menu"), undefined, "copy closes the menu");
-  assert.equal(opened.length, 0);
-
-  // Open link routes through the same policy as a click.
-  const secondOpen = mouseEvent({ target: external.target, clientX: 12, clientY: 24 });
-  stage.props.onContextmenu(secondOpen.event);
-  await vue.nextTick();
-  findByTestId(mounted.root, "pptx-context-menu-open-link").props.onClick();
-  await waitFor(() => opened.length === 1, "context menu open link");
-  assert.deepEqual(opened, [["https://example.com/docs", "_blank", "noopener,noreferrer"]]);
-
-  // Internal jumps get a slide-specific label and navigate.
-  const internal = fakeTarget(0, INTERNAL_KEY);
-  stage.props.onContextmenu(mouseEvent({ target: internal.target, clientX: 1, clientY: 2 }).event);
-  await vue.nextTick();
-  const goItem = findByTestId(mounted.root, "pptx-context-menu-open-link");
-  assert.match(textContent(goItem), /Go to slide 3/);
-  goItem.props.onClick();
-  await waitFor(() => calls.renderSlide.includes(2), "context menu internal jump");
-  assert.equal(findByTestId(mounted.root, "pptx-context-menu-copy-link"), undefined);
-
-  // Unlinked shapes keep the host event but show no built-in menu.
+  // Unlinked shapes keep the host event too.
   stage.props.onContextmenu(mouseEvent({ target: fakeTarget(0, PLAIN_KEY).target, clientX: 3, clientY: 4 }).event);
   await vue.nextTick();
-  assert.equal(findByTestId(mounted.root, "pptx-context-menu"), undefined);
-  assert.equal(menus.length, 4);
-
-  // Escape closes the menu through the shared menu keyboard semantics.
-  stage.props.onContextmenu(mouseEvent({ target: external.target, clientX: 5, clientY: 6 }).event);
-  await vue.nextTick();
-  const reopened = findByTestId(mounted.root, "pptx-context-menu");
-  const { event: escape } = keydownEvent("Escape");
-  reopened.props.onKeydown(escape);
-  await vue.nextTick();
-  assert.equal(findByTestId(mounted.root, "pptx-context-menu"), undefined);
+  assert.equal(menus.length, 2);
+  assert.equal(menus[1].kind, "object");
 
   mounted.app.unmount();
   assert.deepEqual(mounted.warnings, []);

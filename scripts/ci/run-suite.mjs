@@ -358,6 +358,7 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/pdf-navigation-aids.test.mjs",
       "tests/component/pptx-slide-sorter.test.mjs",
       "tests/component/pptx-presenter-view.test.mjs",
+      "tests/component/pptx-context-menu.test.mjs",
       "tests/component/docx-notes.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/docx-edit-clone-sharing.test.mjs",
