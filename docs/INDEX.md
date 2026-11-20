@@ -18,6 +18,7 @@
 | [components/office-chrome.md](components/office-chrome.md) | 共享 Office chrome：toolbar、page/zoom/search、status、empty/error/loading 状态与 160px document sidebar（#158） |
 | [components/docx-ui-stories.md](components/docx-ui-stories.md) | DOCX viewer/editor chrome 的确定性截图 story、390/768/1440 与 inline/overlay 证据（#159） |
 | [components/file-components.md](components/file-components.md) | FileUpload / FileThumbnail 的 Extend 对齐合同、像素对照、story 与 DocumentViewerSidebar 集成 seam（#163） |
+| [components/document-blocks.md](components/document-blocks.md) | BoundingBoxCitations / LayoutBlocks / SignaturePad / ESignatureFields / DocumentSplits 的 Extend 对齐、232 个像素 case、API 与 FileSystem/SchemaBuilder 延期论证（#164） |
 | [components/pptx-chrome.md](components/pptx-chrome.md) | PPTX viewer/presenter/sorter 的共享 chrome、sorter/presenter 结构、右键菜单、状态与 390/768/1440 截图证据（#161） |
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
 

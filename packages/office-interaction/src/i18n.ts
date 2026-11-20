@@ -1533,6 +1533,7 @@ export interface OfficeMessages {
       modified: string
       loading: string
       error: string
+      reviewView: string
     }
     fileUpload: {
       prompt: string
@@ -1549,6 +1550,16 @@ export interface OfficeMessages {
       loading: string
       error: string
       markdown: string
+      blockLabels: {
+        heading: string
+        paragraph: string
+        list: string
+        table: string
+        figure: string
+        header: string
+        footer: string
+        pageNumber: string
+      }
     }
     signaturePad: {
       clear: string
@@ -2903,6 +2914,7 @@ export const officeMessagesEn: OfficeMessages = {
       modified: "Modified",
       loading: "Loading review fields…",
       error: "Review fields could not be loaded.",
+      reviewView: "Review view",
     },
     fileUpload: {
       prompt: "Drag & drop files here, or click to select",
@@ -2919,6 +2931,16 @@ export const officeMessagesEn: OfficeMessages = {
       loading: "Loading layout blocks…",
       error: "Layout blocks could not be loaded.",
       markdown: "Markdown",
+      blockLabels: {
+        heading: "Heading",
+        paragraph: "Paragraph",
+        list: "List",
+        table: "Table",
+        figure: "Figure",
+        header: "Header",
+        footer: "Footer",
+        pageNumber: "Page number",
+      },
     },
     signaturePad: {
       clear: "Clear",
@@ -4258,6 +4280,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       modified: "已修改",
       loading: "正在加载审核字段…",
       error: "审核字段加载失败。",
+      reviewView: "审核视图",
     },
     fileUpload: {
       prompt: "将文件拖放到此处，或点击选择",
@@ -4274,6 +4297,16 @@ export const officeMessagesZhCN: OfficeMessages = {
       loading: "正在加载布局块…",
       error: "布局块加载失败。",
       markdown: "Markdown",
+      blockLabels: {
+        heading: "标题",
+        paragraph: "段落",
+        list: "列表",
+        table: "表格",
+        figure: "图形",
+        header: "页眉",
+        footer: "页脚",
+        pageNumber: "页码",
+      },
     },
     signaturePad: {
       clear: "清除",

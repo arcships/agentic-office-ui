@@ -81,11 +81,13 @@ async function captureRegionPreview() {
 | `OfficeObjectOutlineLayer` | 在单个 Surface 容器上显示规范化对象轮廓和候选焦点 |
 | `OfficeRegionSelector` | 鼠标或键盘框选规范化区域 |
 | `OfficeRegionAnnotator` | 在截图上添加箭头、矩形、文字和高亮，输出可序列化标注文档 |
-| `SignaturePad` | 签名板 |
+| `SignaturePad` | 手写/输入签名板（清除、确认、预览，支持移动端 pointer） |
+| `ESignatureFields` | 电子签名字段面板（Signed/Unsigned、预览、导出） |
 | `FileUpload` | 文件上传（含校验、可选内置文件列表与 BorderBeam） |
 | `FileThumbnail` | 文件预览卡（方形/自定义比例、blur-in、loading/error/fallback） |
-| `BoundingBoxCitations` | 引用框标注 |
-| `LayoutBlocks` | 版面块 |
+| `BoundingBoxCitations` | 引用框标注 / Extend review 字段面板（Actual/Expected、页高亮） |
+| `LayoutBlocks` | OCR 版面块面板与页叠加（置信度、页码、安全 markdown） |
+| `DocumentSplits` | 文档拆分结果列表（缩略图、增删、拖放与键盘重排） |
 | `Spinner` | 加载指示（兼容入口；新代码可用 `OfficeSpinner`） |
 | `Tooltip` | 提示（兼容入口；内部委托 `OfficeTooltip`） |
 | `OfficeThemeProvider` | 提供 `light` / `dark` / `system` 主题、密度、locale 和共享主题上下文 |
@@ -136,7 +138,7 @@ import { OfficeIcon, OfficeThemeProvider } from "@arcships/vue-ui"
 
 `captureRegion()` 返回的 `url` 由调用方释放；`OfficeRegionAnnotator` 只为 `Blob` 类型的 `image` 创建 URL，并在替换/卸载时撤销。
 
-`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；`showFileList` 默认 `false`，开启后按 Extend 布局渲染大小/类型/Ready。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数，`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`。
+`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；`showFileList` 默认 `false`，开启后按 Extend 布局渲染大小/类型/Ready。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数，`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`（draw 数据地址或 `null`）、`update:modelValue`、`clear`、`cancel`、`confirm`；`ESignatureFields` 发出 `sign`、`edit`、`clear`、`export`。`BoundingBoxCitations` 在 legacy `field-click` 之外新增 `field-focus`、`update:activeFieldKey`、`update:expected`；`LayoutBlocks` 新增 `block-focus`、`update:activeBlockId`；`DocumentSplits` 发出 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。完整状态与 Extend 像素证据见 [Document blocks](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/document-blocks.md)。
 
 ## 文档
 

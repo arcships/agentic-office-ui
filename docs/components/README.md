@@ -58,7 +58,11 @@
 
 ### `SignaturePad`
 
-属性：`width`、`height`、`penColor`、`backgroundColor`、`className`。通过 `update:signature` 返回数据地址或 `null`。模板引用公开 `clear()`、`isEmpty()` 和 `toDataURL()`。
+属性：`width`、`height`、`penColor`、`backgroundColor`、`className`；0.8 新增 `mode`（`draw`/`typed`）、`modelValue`、`defaultValue`、`placeholder`、`showControls`、`showClear`、`showCancel`、`showConfirm`、`confirmDisabled`、`disabled`、`guide`、`loading`、`error`、`ariaLabel`。`draw` 模式通过 `update:signature` 返回数据地址或 `null`；两种模式都通过 `update:modelValue` 返回当前值，`confirm` 只在有签名时触发。模板引用公开 `clear()`、`isEmpty()`、`toDataURL()`、`confirm()` 和 `focus()`。
+
+### `ESignatureFields`
+
+电子签名字段面板：`fields: ESignatureField[]`（`label`、`page`、`bbox`、`imageDataUrl`）、`canExport`、`exporting`、`showPreview`、`title`、`description`、`loading`、`error`。事件为 `sign`、`edit`、`clear`、`export`；Signed/Unsigned 徽章和导出禁用态由属性驱动。`showPreview` 默认关闭以匹配 Extend 面板，打开后在卡片内显示签名图。
 
 ### `FileThumbnail`
 
@@ -66,11 +70,17 @@
 
 ### `BoundingBoxCitations`
 
-接收原始文件地址和 `BoundingBoxField[]`，通过 `field-click` 返回被点击字段。矩形格式为 `[x, y, width, height]`，页码由字段的 `page` 给出。
+保留 0.8 之前的 `file` + `BoundingBoxField[]` 页卡模式：矩形为 `[x, y, width, height]`，通过 `field-click` 返回被点击字段。新增 Extend review 模式（`reviewFields`）：Form 标签页渲染字段卡（Actual / Expected、类型、置信度位置、修订圆点），`ArrowUp/ArrowDown` 切换字段，`Escape` 清除本地活动态；`activeFieldKey`、`expectedValues`、`showExpected`、`readOnly`、`view`、`loading`、`error`、`emptyMessage` 控制状态。事件为 `field-focus`、`update:activeFieldKey`、`update:expected`，legacy `field-click` 保持不变。
 
 ### `LayoutBlocks`
 
-接收文件地址和 OCR 版面结果，通过 `block-click` 返回被点击的 `LayoutBlock`。
+旧 API（`file` + `ParsedOcrOutput`）保持不变；新 `blocks` 接受 Extend 的 `heading/paragraph/list/table/figure/header/footer/page_number`。`view="split"` 显示页图或 `#viewer` slot + 百分比 block 叠加，`view="panel"` 只渲染 OCR 面板。面板包含类型徽章、置信度、页码、活动态和 `ArrowUp/ArrowDown/Home/End` 焦点导航；`renderMarkdown` 渲染转义后的安全 markdown 子集。空/加载/错误状态、`heading`、`emptyMessage`、`pageWidth/pageHeight` 均为可选。
+
+### `DocumentSplits`
+
+拆分结果列表：`splits`、`thumbnailImages`、`withFrameDivider`、`hideAddSplit`、`disableRemove`、`loading`、`error`、`emptyMessage`。事件为 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。页缩略图使用 `FileThumbnail`；支持页在组内/组间拖放，也提供键盘替代（`ArrowLeft/ArrowRight` 组内重排，`Ctrl/Cmd + ArrowLeft/ArrowRight` 跨组移动，拖拽手柄 `ArrowUp/ArrowDown` 重排拆分卡）。
+
+四个文档 block 的像素证据、状态矩阵、限制和 `FileSystem` / `SchemaBuilder` 的延期论证见[Document blocks：Extend 对齐](document-blocks.md)。
 
 ### `Spinner`
 

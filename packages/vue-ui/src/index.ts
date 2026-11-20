@@ -9,7 +9,6 @@ import "./styles/ui.css"
 import "./styles/chrome.css"
 
 // Signature pad
-// Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn.
 export { default as SignaturePad } from "./components/SignaturePad.vue"
 export { default as ESignatureFields } from "./components/ESignatureFields.vue"
 

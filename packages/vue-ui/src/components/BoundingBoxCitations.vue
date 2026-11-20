@@ -303,7 +303,7 @@ const jsonValue = computed(() => {
 
     <div class="review-panel" data-slot="bounding-box-panel">
       <div class="review-panel__toolbar">
-        <div class="review-tabs" role="tablist" aria-label="Review view">
+        <div class="review-tabs" role="tablist" :aria-label="m.vueUi.boundingBox.reviewView">
           <button
             type="button"
             role="tab"

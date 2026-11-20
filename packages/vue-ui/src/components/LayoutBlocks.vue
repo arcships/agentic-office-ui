@@ -1,6 +1,6 @@
 <!-- Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn. -->
 <script setup lang="ts">
-import { computed, nextTick, ref, type Component } from "vue"
+import { computed, nextTick, ref } from "vue"
 import {
   AlignBoxBottomCenterIcon,
   Heading01Icon,
@@ -25,6 +25,8 @@ const props = withDefaults(defineProps<LayoutBlocksProps>(), {
   output: undefined,
   blocks: undefined,
   pageImage: undefined,
+  pageWidth: undefined,
+  pageHeight: undefined,
   activeBlockId: undefined,
   view: "split",
   heading: undefined,
@@ -45,23 +47,6 @@ const emit = defineEmits<{
 const m = useOfficeUiMessages()
 const localActiveId = ref<string | null>(props.activeBlockId ?? null)
 const cardRefs = ref<Array<HTMLButtonElement | null>>([])
-
-interface BlockStyle {
-  label: string
-  icon: Component
-  tone: LayoutBlockType
-}
-
-const BLOCK_STYLES: Record<LayoutBlockType, BlockStyle> = {
-  heading: { label: "Heading", icon: HugeIcon, tone: "heading" },
-  paragraph: { label: "Paragraph", icon: HugeIcon, tone: "paragraph" },
-  list: { label: "List", icon: HugeIcon, tone: "list" },
-  table: { label: "Table", icon: HugeIcon, tone: "table" },
-  figure: { label: "Figure", icon: HugeIcon, tone: "figure" },
-  header: { label: "Header", icon: HugeIcon, tone: "header" },
-  footer: { label: "Footer", icon: HugeIcon, tone: "footer" },
-  page_number: { label: "Page number", icon: HugeIcon, tone: "page_number" },
-}
 
 const BLOCK_ICONS: Record<LayoutBlockType, typeof Heading01Icon> = {
   heading: Heading01Icon,
@@ -93,8 +78,12 @@ const resolvedOutput = computed<ParsedOcrOutput | null>(() => {
   if (props.blocks) {
     const firstBbox = props.blocks[0]?.bbox
     return {
-      width: firstBbox ? Math.max(1, firstBbox[0] + firstBbox[2]) : 1000,
-      height: firstBbox ? Math.max(1, firstBbox[1] + firstBbox[3]) : 1330,
+      width:
+        props.pageWidth ??
+        (firstBbox ? Math.max(1, firstBbox[0] + firstBbox[2]) : 1000),
+      height:
+        props.pageHeight ??
+        (firstBbox ? Math.max(1, firstBbox[1] + firstBbox[3]) : 1330),
       blocks: props.blocks,
     }
   }
@@ -139,7 +128,11 @@ function blockIcon(block: LayoutBlock) {
 }
 
 function blockLabel(block: LayoutBlock): string {
-  return block.label ?? BLOCK_STYLES[blockType(block)]?.label ?? block.kind
+  if (block.label) return block.label
+  const labels = m.value.vueUi.layoutBlocks.blockLabels
+  const key = blockType(block)
+  if (key === "page_number") return labels.pageNumber
+  return labels[key] ?? block.kind
 }
 
 function confidenceLabel(block: LayoutBlock): string | null {

@@ -252,6 +252,10 @@ export interface LayoutBlocksProps {
   blocks?: LayoutBlock[]
   /** Image rendered behind the block overlay in split mode. */
   pageImage?: string
+  /** Intrinsic page width used for overlay percentages when `blocks` is used. */
+  pageWidth?: number
+  /** Intrinsic page height used for overlay percentages when `blocks` is used. */
+  pageHeight?: number
   activeBlockId?: string
   /** `split` renders page + panel; `panel` renders the block list alone. */
   view?: "split" | "panel"

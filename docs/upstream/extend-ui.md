@@ -183,16 +183,16 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/xlsx-controls.tsx` | ribbon 按钮、输入、下拉 | `packages/vue-xlsx/src/components/XlsxRibbon.vue` | reference-only | #160 |
 | `apps/v4/components/extend/workbook-select.tsx` | 工作簿/sheet 选择 | `packages/vue-xlsx/src/components/XlsxSheetTabs.vue` | reference-only | #160 |
 | `apps/v4/components/extend/pptx-viewer.tsx` | PPTX viewer、presenter、sorter chrome | `packages/vue-pptx/src/PptxViewer.vue` | reference-only | #161 |
-| `apps/v4/components/extend/bounding-box-citations.tsx` | 引用框浮层、框、侧栏列表 | `packages/vue-ui/src/components/BoundingBoxCitations.vue` | reference-only | #164 |
-| `apps/v4/components/extend/layout-blocks.tsx` | Layout blocks viewer、OCR blocks、PDF 叠加 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | #164 |
-| `apps/v4/components/extend/layout-blocks-panel.tsx` | block 列表、置信度、markdown | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | #164 |
-| `apps/v4/components/extend/document-splits.tsx` | 拆分区间选择与结果列表 | `packages/vue-ui/src/components/DocumentSplits.vue` | reference-only | #164 |
-| `apps/v4/components/extend/file-system.tsx` | Finder 风格文件浏览 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 暂缓；若启动实现需复核状态 |
+| `apps/v4/components/extend/bounding-box-citations.tsx` | 引用框浮层、框、侧栏列表 | `packages/vue-ui/src/components/BoundingBoxCitations.vue` | adapted | #164：Form 标签页、标量字段编辑、高亮与活动字段；JSON 标签页（pierre/diffs）与数组/对象网格编辑器保持 reference-only |
+| `apps/v4/components/extend/layout-blocks.tsx` | Layout blocks viewer、OCR blocks、PDF 叠加 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：页图/宿主 viewer slot、block 叠加几何、类型配色 |
+| `apps/v4/components/extend/layout-blocks-panel.tsx` | block 列表、置信度、markdown | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：卡片列表、置信度/页码、空/加载/错误、安全 markdown 子集 |
+| `apps/v4/components/extend/document-splits.tsx` | 拆分区间选择与结果列表 | `packages/vue-ui/src/components/DocumentSplits.vue` | adapted | #164：拆分卡片、页缩略图、增删、拖放与键盘重排 |
+| `apps/v4/components/extend/file-system.tsx` | Finder 风格文件浏览 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 评估后暂缓：上游 5,381 行，依赖完整文件模型、面包屑、预览卡与 DocumentPreviewCard，0.8 无宿主消费方；证据见 [`../components/document-blocks.md`](../components/document-blocks.md#filesystem-暂缓) |
 | `apps/v4/components/extend/document-preview-card.tsx` | 文档引用悬浮预览卡 | `packages/vue-ui/src/components/DocumentPreviewCard.vue` | reference-only | 与 FileSystem 一并后置，先登记避免以后从头找来源 |
 | `apps/v4/components/extend/pdf-block-resizable-shell.tsx` | 文档站 PDF block 可缩放外壳 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | 只有 PDF 叠加块支持缩放时才相关 |
 | `apps/v4/components/extend/document-scroll-content.tsx` | Radix ScrollArea content 的薄封装 | — | not-used | 没有可移植行为 |
 | `apps/v4/components/extend/csv-viewer.tsx` | CSV 表格查看器 | — | not-used | CSV 不在 0.8 范围 |
-| `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 编辑器 | — | not-used | #164 评估后延期 |
+| `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 编辑器 | — | not-used | #164 评估后延期：上游 2,703 行（嵌套字段/类型编辑、校验、抽取预览），0.8 无消费方；证据见 [`../components/document-blocks.md`](../components/document-blocks.md#schemabuilder-暂缓) |
 | `apps/v4/components/extend/ui-toast.tsx` | Toast manager provider | — | not-used | 通知归宿主，库不内置 toast manager |
 | `apps/v4/components/extend/xlsx-pivot-controls.tsx` | 数据透视表控件 | — | not-used | 透视表不在 0.8 范围 |
 | `apps/v4/components/extend/xlsx-pivot-header.tsx` | 透视表表头菜单 | — | not-used | 透视表不在 0.8 范围 |
@@ -201,13 +201,13 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 
 | Extend 文件 | 用途 | 我们的目标文件 | 状态 | 备注 |
 |---|---|---|---|---|
-| `apps/v4/registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | 引用框 block 组合 | `packages/vue-ui/src/components/BoundingBoxCitations.vue` | reference-only | #164 |
-| `apps/v4/registry/new-york-v4/blocks/layout-blocks-block.tsx` | Layout blocks block 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | #164 |
-| `apps/v4/registry/new-york-v4/blocks/document-splits-block.tsx` | 文档拆分 block 组合 | `packages/vue-ui/src/components/DocumentSplits.vue` | reference-only | #164 |
-| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | 电子签名流程、手写/打印签名预览 | `packages/vue-ui/src/components/SignaturePad.vue` | reference-only | #164 |
-| `apps/v4/registry/new-york-v4/blocks/file-system-block.tsx` | 文件系统 block 组合 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 后置 |
+| `apps/v4/registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | 引用框 block 组合 | `packages/vue-ui/src/components/BoundingBoxCitations.vue` | adapted | #164：review panel + 页高亮；PDF viewer 由宿主 slot 提供 |
+| `apps/v4/registry/new-york-v4/blocks/layout-blocks-block.tsx` | Layout blocks block 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：页叠加 + OCR block 面板 |
+| `apps/v4/registry/new-york-v4/blocks/document-splits-block.tsx` | 文档拆分 block 组合 | `packages/vue-ui/src/components/DocumentSplits.vue` | adapted | #164：拆分面板 + 宿主页选择回调 |
+| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | 电子签名流程、手写/打印签名预览 | `packages/vue-ui/src/components/SignaturePad.vue`、`packages/vue-ui/src/components/ESignatureFields.vue` | adapted | #164：手写/输入签名、清除/确认/预览；字段面板独立为 `ESignatureFields` |
+| `apps/v4/registry/new-york-v4/blocks/file-system-block.tsx` | 文件系统 block 组合 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 后置，与 FileSystem 同一结论 |
 | `apps/v4/registry/new-york-v4/blocks/docx-editor.tsx` | DOCX editor block 组合 | `packages/vue-docx/src/components/DocxEditor.vue` | reference-only | #159 |
-| `apps/v4/registry/new-york-v4/blocks/docx-layout-blocks.tsx` | DOCX + layout blocks 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | #164 |
+| `apps/v4/registry/new-york-v4/blocks/docx-layout-blocks.tsx` | DOCX + layout blocks 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：`#viewer` slot 可接入 DOCX surface；block 面板共用 |
 | `apps/v4/registry/new-york-v4/blocks/excel-editor.tsx` | Excel editor block 组合 | `packages/vue-xlsx/src/components/XlsxViewer.vue` | reference-only | #160 |
 | `apps/v4/registry/new-york-v4/blocks/pdf-dropzone.tsx` | PDF 拖拽上传 block | `packages/vue-ui/src/components/FileUpload.vue` | reference-only | #163 |
 | `apps/v4/registry/new-york-v4/blocks/pdf-editor-block.tsx` | PDF editor block 组合 | `packages/vue-pdf/src/components/PdfViewer.vue` | reference-only | #162 |

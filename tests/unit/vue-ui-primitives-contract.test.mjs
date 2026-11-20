@@ -229,8 +229,11 @@ test("the new primitive layer stays inside the 35 KB gzip budget", () => {
     delta <= budget.budgetBytes,
     `primitive layer added ${delta} gzip bytes; budget is ${budget.budgetBytes}`,
   );
+  // Sanity cap: #164 document blocks raise the whole-package total above the
+  // former 60 KB guard. The 35 KB delta gate above remains the authoritative
+  // budget; this only catches an accidental dependency being inlined.
   assert.ok(
-    total < 60_000,
+    total < 80_000,
     `unexpectedly large vue-ui bundle (${total} gzip bytes)`,
   );
 

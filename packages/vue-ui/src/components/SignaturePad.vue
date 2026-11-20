@@ -65,14 +65,17 @@ const ariaLabel = computed(
 function setupCanvas() {
   const canvas = canvasRef.value
   if (!canvas) return
-  canvasRatio = window.devicePixelRatio || 1
+  canvasRatio =
+    typeof window === "undefined" ? 1 : window.devicePixelRatio || 1
   const width = Math.max(1, props.width)
   const height = Math.max(1, props.height)
   canvas.width = Math.floor(width * canvasRatio)
   canvas.height = Math.floor(height * canvasRatio)
-  canvas.style.width = "100%"
-  canvas.style.maxWidth = `${width}px`
-  canvas.style.height = `${height}px`
+  if (canvas.style) {
+    canvas.style.width = "100%"
+    canvas.style.maxWidth = `${width}px`
+    canvas.style.height = `${height}px`
+  }
   ctx = canvas.getContext("2d")
   if (!ctx) return
   ctx.setTransform(canvasRatio, 0, 0, canvasRatio, 0, 0)

@@ -93,7 +93,10 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
 | `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
 | `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
-| `document-blocks` | 只有 fixtures（渲染对照由 #164 接管） | — |
+| `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
+| `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
+| `e-signature` | unsigned、signed、exporting、preview、loading、error | ✅ `ESignatureFields.vue`（字段面板；232/232 pass） |
+| `document-splits` | default、hover、focus、single、empty-pages、empty、loading、error | ✅ `DocumentSplits.vue`（232/232 pass） |
 
 截图前统一执行：`document.fonts.ready`、`prefers-reduced-motion: reduce`、注入
 `animation:none / transition:none`、`caret-color:transparent`。字体：Geist / Geist Mono

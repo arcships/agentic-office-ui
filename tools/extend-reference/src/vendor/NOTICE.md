@@ -51,6 +51,10 @@ SOFTWARE.
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
 | `extend/docx-toolbar.tsx` | `apps/v4/components/extend/docx-viewer.tsx` | Toolbar/page/zoom/actions subset: tooltip/dropdown popups dropped; static trigger classes and icon sizes kept |
 | `extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Toolbar subset: tooltip/popover/select popups dropped, static trigger classes kept |
+| `extend/bounding-box-citations.tsx` | `apps/v4/components/extend/bounding-box-citations.tsx` | `HumanReviewPanel` Form tab + scalar field cards; pierre/diffs JSON tab, glide-data-grid array/object editors and tooltips dropped; loading/error states are harness extensions |
+| `extend/layout-blocks-panel.tsx` | `apps/v4/components/extend/layout-blocks-panel.tsx` | `@tanstack/react-virtual` and the Base UI ScrollArea replaced by flow/scroll divs with the same classes; loading/error/markdown states are harness extensions |
+| `extend/signature-fields.tsx` | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | `SignatureFieldsPanel` only; PDF viewer and `signature_pad` dialog dropped; `showPreview`, loading and error are harness extensions |
+| `extend/document-splits.tsx` | `apps/v4/components/extend/document-splits.tsx` | Static split cards and thumbnails; `@dnd-kit` wrappers dropped (drag/drop is covered by Vue interaction tests); ScrollArea replaced; loading/error/empty are harness extensions |
 | `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
 | `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |
 | `../lib/cn.ts` | `apps/v4/lib/utils.ts` | `siteConfig`/`absoluteUrl` dropped |
