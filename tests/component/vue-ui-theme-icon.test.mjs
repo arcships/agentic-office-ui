@@ -328,6 +328,13 @@ test("built package ships self-contained theme.css, tokens.css and icon styles",
   assert.match(theme, /\[data-office-theme="dark"\]/u);
   assert.match(theme, /@media \(prefers-color-scheme: dark\)/u);
   assert.match(theme, /--office-success:/u);
+  // #156 reopened: the --code* family must survive the build, and the light
+  // card/popover must stay literal white (not oklch(1 0 0)).
+  assert.match(theme, /--office-code:\s*var\(--office-surface\)/u);
+  assert.match(theme, /--office-code-highlight:\s*oklch\(27% 0 0\)/u);
+  assert.match(theme, /--office-code-number:\s*oklch\(72% 0 0\)/u);
+  assert.match(tokens, /--office-popover:\s*white;/u);
+  assert.match(tokens, /--office-card:\s*white;/u);
   assert.doesNotMatch(theme, /@import\s+["']\.\/tokens\.css["']/u, "dist theme.css must be self-contained");
   assert.match(tokens, /--office-radius: 0\.625rem/u);
   assert.match(style, /office-icon/u);
