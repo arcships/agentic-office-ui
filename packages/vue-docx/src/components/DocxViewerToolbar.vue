@@ -1,9 +1,11 @@
 <template>
+  <div ref="toolbarRef" class="docx-viewer-toolbar-host">
   <OfficeToolbar
     class="docx-viewer-toolbar"
     data-testid="docx-viewer-toolbar"
     :data-office-theme="isDark ? 'dark' : 'light'"
     data-office-density="comfortable"
+    :data-toolbar-compact="compact ? 'true' : 'false'"
   >
     <template #leading>
       <OfficeToolbarGroup gap="sm" class="docx-viewer-toolbar__leading">
@@ -18,10 +20,10 @@
           :disabled="disabled"
           @click="emit('toggleSidebar')"
         >
-          <OfficeIcon name="panel-left" />
+          <OfficeIcon name="columns-2" />
         </OfficeButton>
 
-        <span class="docx-viewer-toolbar__file" :title="fileName">{{ fileName }}</span>
+        <span v-if="!compact" class="docx-viewer-toolbar__file" :title="fileName">{{ fileName }}</span>
 
         <OfficePageControl
           class="docx-viewer-toolbar__page"
@@ -37,93 +39,19 @@
 
     <template #trailing>
       <OfficeToolbarGroup gap="sm" class="docx-viewer-toolbar__actions">
-        <OfficeToolbarGroup
-          gap="sm"
-          class="docx-viewer-toolbar__segments"
-          role="group"
-          :aria-label="m.docx.toolbar.viewMode"
-        >
-          <OfficeButton
-            variant="ghost"
-            size="icon-sm"
-            class="docx-viewer-toolbar__segment"
-            :class="viewMode === 'continuous' ? 'docx-viewer-toolbar__segment--active' : undefined"
-            data-testid="docx-view-mode-continuous"
-            :aria-label="m.docx.toolbar.viewModeContinuous"
-            :title="m.docx.toolbar.viewModeContinuous"
-            :aria-pressed="viewMode === 'continuous'"
-            :disabled="disabled"
-            @click="emit('update:viewMode', 'continuous')"
-          >
-            <OfficeIcon name="rows-3" />
-          </OfficeButton>
-          <OfficeButton
-            variant="ghost"
-            size="icon-sm"
-            class="docx-viewer-toolbar__segment"
-            :class="viewMode === 'single' ? 'docx-viewer-toolbar__segment--active' : undefined"
-            data-testid="docx-view-mode-single"
-            :aria-label="m.docx.toolbar.viewModeSingle"
-            :title="m.docx.toolbar.viewModeSingle"
-            :aria-pressed="viewMode === 'single'"
-            :disabled="disabled"
-            @click="emit('update:viewMode', 'single')"
-          >
-            <OfficeIcon name="file" />
-          </OfficeButton>
-          <OfficeButton
-            variant="ghost"
-            size="icon-sm"
-            class="docx-viewer-toolbar__segment"
-            :class="viewMode === 'spread' ? 'docx-viewer-toolbar__segment--active' : undefined"
-            data-testid="docx-view-mode-spread"
-            :aria-label="m.docx.toolbar.viewModeSpread"
-            :title="m.docx.toolbar.viewModeSpread"
-            :aria-pressed="viewMode === 'spread'"
-            :disabled="disabled"
-            @click="emit('update:viewMode', 'spread')"
-          >
-            <OfficeIcon name="columns-2" />
-          </OfficeButton>
-        </OfficeToolbarGroup>
-
-        <OfficeToolbarGroup
-          gap="sm"
-          class="docx-viewer-toolbar__segments"
-          role="group"
-          :aria-label="m.common.zoom.level"
-        >
-          <OfficeButton
-            variant="ghost"
-            size="icon-sm"
-            class="docx-viewer-toolbar__segment"
-            :class="fitMode === 'width' ? 'docx-viewer-toolbar__segment--active' : undefined"
-            data-testid="docx-fit-width"
-            :aria-label="m.docx.toolbar.fitWidth"
-            :title="m.docx.toolbar.fitWidth"
-            :aria-pressed="fitMode === 'width'"
-            :disabled="disabled"
-            @click="emit('update:fitMode', fitMode === 'width' ? 'none' : 'width')"
-          >
-            <OfficeIcon name="move-horizontal" />
-          </OfficeButton>
-          <OfficeButton
-            variant="ghost"
-            size="icon-sm"
-            class="docx-viewer-toolbar__segment"
-            :class="fitMode === 'page' ? 'docx-viewer-toolbar__segment--active' : undefined"
-            data-testid="docx-fit-page"
-            :aria-label="m.docx.toolbar.fitPage"
-            :title="m.docx.toolbar.fitPage"
-            :aria-pressed="fitMode === 'page'"
-            :disabled="disabled"
-            @click="emit('update:fitMode', fitMode === 'page' ? 'none' : 'page')"
-          >
-            <OfficeIcon name="scan" />
-          </OfficeButton>
-        </OfficeToolbarGroup>
+        <OfficeZoomControl
+          :model-value="zoom"
+          :options="zoomOptions"
+          :show-fit="false"
+          :native-select="true"
+          select-test-id="docx-zoom-select"
+          select-class="docx-viewer-toolbar__zoom"
+          :disabled="disabled"
+          @update:model-value="emit('update:zoom', $event)"
+        />
 
         <OfficeSearchPopover
+          v-if="!compact"
           ref="searchPopoverRef"
           class="docx-viewer-toolbar__search"
           inline
@@ -147,114 +75,84 @@
           @next="emit('searchNext')"
           @close="emit('searchClose')"
         />
-
-        <OfficeZoomControl
-          :model-value="zoom"
-          :options="zoomOptions"
-          :show-fit="false"
-          :native-select="true"
-          select-test-id="docx-zoom-select"
+        <span v-else class="docx-viewer-toolbar__search">
+        <OfficeSearchPopover
+          ref="searchPopoverRef"
+          :model-value="searchQuery"
+          :result-count="searchResultCount"
+          :active-index="searchResultIndex"
+          :status-text="searchStatusText"
+          :case-sensitive="searchCaseSensitive"
+          :whole-word="searchWholeWord"
+          :regex="searchRegex"
+          :show-options="true"
           :disabled="disabled"
-          @update:model-value="emit('update:zoom', $event)"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          input-type="search"
+          test-id-prefix="docx-search"
+          @update:model-value="emit('update:searchQuery', $event)"
+          @update:case-sensitive="emit('update:searchCaseSensitive', $event)"
+          @update:whole-word="emit('update:searchWholeWord', $event)"
+          @update:regex="emit('update:searchRegex', $event)"
+          @previous="emit('searchPrevious')"
+          @next="emit('searchNext')"
+          @close="emit('searchClose')"
+        />
+        </span>
+
+        <DocxViewerToolbarControls
+          v-if="!compact"
+          v-bind="controlsProps"
+          v-on="controlsListeners"
         />
 
-        <OfficeToolbarSeparator />
-
-        <OfficeButton
-          variant="outline"
-          size="sm"
-          class="docx-viewer-toolbar__toggle-button"
-          data-testid="docx-show-tracked-changes"
-          :aria-pressed="showTrackedChanges"
-          :disabled="disabled || trackedChangeCount === 0"
-          :title="trackedChangesTitle"
-          @click="emit('toggleTrackedChanges')"
+        <OfficePopover
+          v-else
+          v-model:open="overflowOpen"
+          side="bottom"
+          align="end"
+          :side-offset="6"
+          content-class="docx-viewer-toolbar__overflow"
         >
-          <OfficeIcon name="history" />
-          <span v-if="trackedChangeCount > 0" class="docx-viewer-toolbar__count">{{ trackedChangeCount }}</span>
-        </OfficeButton>
-        <label class="docx-viewer-toolbar__revision" :title="m.docx.toolbar.revisionDisplay">
-          <select
-            data-testid="docx-revision-display"
-            class="office-ui office-zoom-control__native docx-viewer-toolbar__revision-select"
-            :value="revisionDisplay"
-            :aria-label="m.docx.toolbar.revisionDisplay"
-            :disabled="disabled"
-            @change="onRevisionDisplayChange"
-          >
-            <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
-            <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
-            <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
-          </select>
-        </label>
-        <OfficeButton
-          variant="outline"
-          size="sm"
-          class="docx-viewer-toolbar__toggle-button"
-          data-testid="docx-show-comments"
-          :aria-pressed="showComments"
-          :disabled="disabled || commentCount === 0"
-          :title="commentsTitle"
-          @click="emit('toggleComments')"
-        >
-          <OfficeIcon name="message-square" />
-          <span v-if="commentCount > 0" class="docx-viewer-toolbar__count">{{ commentCount }}</span>
-        </OfficeButton>
-
-        <OfficeToolbarSeparator />
-
-        <OfficeIconButton
-          variant="ghost"
-          size="icon-sm"
-          class="docx-viewer-toolbar__icon-button"
-          data-testid="docx-theme-toggle"
-          :label="isDark ? m.docx.toolbar.lightThemeAction : m.docx.toolbar.darkThemeAction"
-          :title="isDark ? m.docx.toolbar.lightDocument : m.docx.toolbar.darkDocument"
-          :icon="isDark ? 'sun' : 'moon'"
-          :disabled="disabled"
-          @click="emit('toggleTheme')"
-        />
-        <OfficeIconButton
-          v-if="showUpload"
-          variant="ghost"
-          size="icon-sm"
-          class="docx-viewer-toolbar__icon-button"
-          data-testid="docx-upload"
-          :label="m.docx.toolbar.upload"
-          icon="upload"
-          @click="emit('upload')"
-        />
-        <OfficeIconButton
-          v-if="showDownload"
-          variant="ghost"
-          size="icon-sm"
-          class="docx-viewer-toolbar__icon-button"
-          data-testid="docx-download"
-          :label="m.docx.toolbar.download"
-          icon="download"
-          :disabled="disabled || !canDownload"
-          @click="emit('download')"
-        />
+          <template #trigger>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              class="docx-viewer-toolbar__icon-button"
+              data-testid="docx-toolbar-overflow"
+              :label="m.docx.toolbar.moreActions"
+              :title="m.docx.toolbar.moreActions"
+              icon="more-horizontal"
+              :disabled="disabled"
+            />
+          </template>
+          <DocxViewerToolbarControls
+              v-bind="controlsProps"
+            v-on="controlsListeners"
+          />
+        </OfficePopover>
       </OfficeToolbarGroup>
     </template>
   </OfficeToolbar>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import { formatOfficeMessage } from "@arcships/office-interaction"
+import { computed, nextTick, ref, watch } from "vue"
 import {
   OfficeButton,
   OfficeIcon,
   OfficeIconButton,
   OfficePageControl,
+  OfficePopover,
   OfficeSearchPopover,
   OfficeToolbar,
   OfficeToolbarGroup,
-  OfficeToolbarSeparator,
   OfficeZoomControl,
+  useElementWidth,
 } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
+import DocxViewerToolbarControls from "./DocxViewerToolbarControls.vue"
 
 const props = withDefaults(
   defineProps<{
@@ -310,20 +208,10 @@ const emit = defineEmits<{
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const m = useDocxMessages()
-const trackedChangesTitle = computed(() => {
-  if (props.trackedChangeCount <= 0) return m.value.docx.toolbar.trackedChangesNone
-  const template = props.showTrackedChanges
-    ? m.value.docx.toolbar.trackedChangesHide
-    : m.value.docx.toolbar.trackedChangesShow
-  return formatOfficeMessage(template, { count: props.trackedChangeCount })
-})
-const commentsTitle = computed(() => {
-  if (props.commentCount <= 0) return m.value.docx.toolbar.commentsNone
-  const template = props.showComments
-    ? m.value.docx.toolbar.commentsHide
-    : m.value.docx.toolbar.commentsShow
-  return formatOfficeMessage(template, { count: props.commentCount })
-})
+const toolbarRef = ref<HTMLElement | null>(null)
+const toolbarWidth = useElementWidth(toolbarRef)
+const compact = computed(() => toolbarWidth.value > 0 && toolbarWidth.value < 1360)
+const overflowOpen = ref(false)
 const searchPopoverRef = ref<InstanceType<typeof OfficeSearchPopover>>()
 const searchStatusText = computed(() =>
   props.searchResultCount
@@ -333,19 +221,92 @@ const searchStatusText = computed(() =>
       : "",
 )
 
-function onRevisionDisplayChange(event: Event): void {
-  const value = (event.target as HTMLSelectElement).value
-  if (value === "inline" || value === "balloons" || value === "none") {
-    emit("update:revisionDisplay", value)
+const controlsProps = computed(() => ({
+  canDownload: props.canDownload,
+  disabled: props.disabled,
+  isDark: props.isDark,
+  showTrackedChanges: props.showTrackedChanges,
+  revisionDisplay: props.revisionDisplay,
+  showComments: props.showComments,
+  trackedChangeCount: props.trackedChangeCount,
+  commentCount: props.commentCount,
+  viewMode: props.viewMode,
+  fitMode: props.fitMode,
+  searchQuery: props.searchQuery,
+  searchResultCount: props.searchResultCount,
+  searchResultIndex: props.searchResultIndex,
+  searchCaseSensitive: props.searchCaseSensitive,
+  searchWholeWord: props.searchWholeWord,
+  searchRegex: props.searchRegex,
+  showUpload: props.showUpload,
+  showDownload: props.showDownload,
+}))
+
+const controlsListeners = {
+  download: () => emit("download"),
+  upload: () => emit("upload"),
+  toggleTheme: () => emit("toggleTheme"),
+  toggleTrackedChanges: () => emit("toggleTrackedChanges"),
+  toggleComments: () => emit("toggleComments"),
+  "update:revisionDisplay": (display: import("@arcships/docx-core").DocxRevisionDisplay) =>
+    emit("update:revisionDisplay", display),
+  "update:viewMode": (mode: import("../composables/docx-view-mode").DocxViewMode) =>
+    emit("update:viewMode", mode),
+  "update:fitMode": (
+    mode: import("../composables/docx-view-mode").DocxFitMode | "none",
+  ) => emit("update:fitMode", mode),
+  "update:searchQuery": (query: string) => emit("update:searchQuery", query),
+  "update:searchCaseSensitive": (value: boolean) =>
+    emit("update:searchCaseSensitive", value),
+  "update:searchWholeWord": (value: boolean) =>
+    emit("update:searchWholeWord", value),
+  "update:searchRegex": (value: boolean) => emit("update:searchRegex", value),
+  searchNext: () => emit("searchNext"),
+  searchPrevious: () => emit("searchPrevious"),
+  searchClose: () => emit("searchClose"),
+}
+
+watch(compact, (value) => {
+  if (!value) overflowOpen.value = false
+})
+
+
+async function focusSearch(): Promise<void> {
+  if (compact.value) {
+    searchPopoverRef.value?.open()
+    await nextTick()
   }
+  searchPopoverRef.value?.focus()
 }
 
 defineExpose({
-  focusSearch: () => searchPopoverRef.value?.focus(),
+  focusSearch,
 })
 </script>
 
 <style scoped>
+.docx-viewer-toolbar-host {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+:global(.docx-viewer-toolbar__overflow) {
+  inline-size: 19rem;
+  max-inline-size: calc(100vw - var(--office-ui-space-6));
+  padding: var(--office-ui-space-2);
+}
+
+:global(.docx-viewer-toolbar__overflow .docx-viewer-toolbar__actions) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--office-ui-space-2);
+}
+
+:global(.docx-viewer-toolbar__overflow .docx-viewer-toolbar__actions .docx-viewer-toolbar__search) {
+  flex-wrap: wrap;
+  inline-size: 100%;
+}
+
 .docx-viewer-toolbar {
   --office-ui-toolbar-min-height: 3rem;
   --office-ui-toolbar-padding-block: var(--office-ui-space-2);
@@ -540,6 +501,15 @@ defineExpose({
   .docx-viewer-toolbar :deep(select) {
     min-height: 44px;
     min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+  .docx-viewer-toolbar :deep(.office-input),
+  .docx-viewer-toolbar :deep(.office-page-control__input),
+  .docx-viewer-toolbar :deep(.office-zoom-control__native),
+  .docx-viewer-toolbar__revision-select {
+    height: 44px;
+    min-height: 44px;
+    min-inline-size: 44px;
   }
   .docx-viewer-toolbar__search :deep(.office-search-popover__option) {
     min-inline-size: 44px;

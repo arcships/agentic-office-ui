@@ -3,8 +3,8 @@ import { computed, nextTick, ref, watch } from "vue"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useOfficeUiMessages } from "../../i18n"
 import OfficeIconButton from "../ui/OfficeIconButton.vue"
+import OfficeInput from "../ui/OfficeInput.vue"
 import OfficePopover from "../ui/OfficePopover.vue"
-import OfficeSearchFields from "./OfficeSearchFields.vue"
 import { officeClass } from "../ui/types"
 import type { OfficeSearchStatus } from "./types"
 
@@ -89,7 +89,8 @@ const m = useOfficeUiMessages()
 const internalQuery = ref(props.defaultQuery)
 const internalOpen = ref(props.defaultOpen)
 const contentRoot = ref<HTMLElement | null>(null)
-const fieldsRef = ref<InstanceType<typeof OfficeSearchFields> | null>(null)
+const inputRef = ref<InstanceType<typeof OfficeInput> | null>(null)
+let composing = false
 
 const query = computed(() => props.modelValue ?? internalQuery.value)
 const isOpen = computed(() => props.open ?? internalOpen.value)
@@ -116,6 +117,30 @@ const statusText = computed(() => {
 })
 
 const testId = (suffix: string) => `${props.testIdPrefix}-${suffix}`
+
+const optionEntries = computed(() => [
+  {
+    key: "caseSensitive" as const,
+    suffix: "case-sensitive",
+    label: m.value.common.search.caseSensitive,
+    text: "Aa",
+    value: props.caseSensitive,
+  },
+  {
+    key: "wholeWord" as const,
+    suffix: "whole-word",
+    label: m.value.common.search.wholeWord,
+    text: "ab|",
+    value: props.wholeWord,
+  },
+  {
+    key: "regex" as const,
+    suffix: "regex",
+    label: m.value.common.search.regex,
+    text: ".*",
+    value: props.regex,
+  },
+])
 
 const contentClasses = computed(() =>
   officeClass("office-search-popover__content", props.contentClass),
@@ -153,6 +178,20 @@ function onQueryInput(value: string): void {
   emit("update:modelValue", value)
 }
 
+function onInput(value: string): void {
+  if (composing) return
+  onQueryInput(value)
+}
+
+function onCompositionStart(): void {
+  composing = true
+}
+
+function onCompositionEnd(event: CompositionEvent): void {
+  composing = false
+  onQueryInput((event.target as HTMLInputElement).value)
+}
+
 function navigate(direction: -1 | 1): void {
   if (navigationDisabled.value) return
   if (direction < 0) emit("previous")
@@ -174,70 +213,40 @@ function onKeydown(event: KeyboardEvent): void {
   navigate(event.shiftKey ? -1 : 1)
 }
 
-const fieldsProps = computed(() => ({
-  query: query.value,
-  resultCount: props.resultCount,
-  activeIndex: props.activeIndex,
-  statusText: statusText.value,
-  caseSensitive: props.caseSensitive,
-  wholeWord: props.wholeWord,
-  regex: props.regex,
-  showOptions: props.showOptions,
-  disabled: props.disabled,
-  placeholder: placeholderText.value,
-  inputType: props.inputType,
-  testIdPrefix: props.testIdPrefix,
-  navigationDisabled: navigationDisabled.value,
-}))
+function toggle(key: "caseSensitive" | "wholeWord" | "regex"): void {
+  if (props.disabled) return
+  const next = !props[key]
+  if (key === "caseSensitive") emit("update:caseSensitive", next)
+  else if (key === "wholeWord") emit("update:wholeWord", next)
+  else emit("update:regex", next)
+}
 
 defineExpose({
-  focus: () => {
-    if (fieldsRef.value) {
-      fieldsRef.value.focus()
-      return
-    }
-    contentRoot.value?.querySelector?.("input")?.focus()
-  },
+  focus: () => inputRef.value?.focus(),
   open: () => setOpen(true),
   close: () => setOpen(false),
 })
 </script>
 
 <template>
-  <div
-    v-if="props.inline"
-    ref="contentRoot"
-    :class="officeClass('office-search-popover', 'office-search-popover--inline', props.class)"
-    role="search"
-    data-slot="search-popover"
-    :data-testid="testId('popover')"
-    @keydown="onKeydown"
-  >
-    <OfficeSearchFields
-      ref="fieldsRef"
-      v-bind="fieldsProps"
-      @update:query="onQueryInput"
-      @update:case-sensitive="emit('update:caseSensitive', $event)"
-      @update:whole-word="emit('update:wholeWord', $event)"
-      @update:regex="emit('update:regex', $event)"
-      @previous="emit('previous')"
-      @next="emit('next')"
-    >
-      <template #options><slot name="options" /></template>
-    </OfficeSearchFields>
-  </div>
-
-  <OfficePopover
-    v-else
-    :open="isOpen"
-    :class="props.class"
-    :content-class="contentClasses"
-    side="bottom"
-    align="end"
-    :side-offset="6"
+  <component
+    :is="props.inline ? 'div' : OfficePopover"
+    :open="props.inline ? undefined : isOpen"
+    :class="
+      props.inline
+        ? officeClass('office-search-popover', 'office-search-popover--inline', props.class)
+        : props.class
+    "
+    :content-class="props.inline ? undefined : contentClasses"
+    :side="props.inline ? undefined : 'bottom'"
+    :align="props.inline ? undefined : 'end'"
+    :side-offset="props.inline ? undefined : 6"
+    :role="props.inline ? 'search' : undefined"
+    :data-slot="props.inline ? 'search-popover' : undefined"
+    :data-testid="props.inline ? testId('popover') : undefined"
     @update:open="setOpen"
   >
-    <template #trigger>
+    <template v-if="!props.inline" #trigger>
       <slot name="trigger">
         <OfficeIconButton
           :label="triggerLabelText"
@@ -245,29 +254,84 @@ defineExpose({
           size="icon-sm"
           :active="isOpen"
           :disabled="props.disabled"
-          data-testid="office-search-trigger"
+          :data-testid="testId('trigger')"
         />
       </slot>
     </template>
     <div
       ref="contentRoot"
-      class="office-search-popover"
-      data-slot="search-popover"
-      :data-testid="testId('popover')"
+      :class="props.inline ? 'office-search-popover__fields' : 'office-search-popover'"
+      :role="props.inline ? undefined : 'search'"
+      :data-slot="props.inline ? undefined : 'search-popover'"
+      :data-testid="props.inline ? undefined : testId('popover')"
       @keydown="onKeydown"
     >
-      <OfficeSearchFields
-        ref="fieldsRef"
-        v-bind="fieldsProps"
-        @update:query="onQueryInput"
-        @update:case-sensitive="emit('update:caseSensitive', $event)"
-        @update:whole-word="emit('update:wholeWord', $event)"
-        @update:regex="emit('update:regex', $event)"
-        @previous="emit('previous')"
-        @next="emit('next')"
+      <OfficeInput
+        ref="inputRef"
+        :model-value="query"
+        :type="props.inputType"
+        :placeholder="placeholderText"
+        :aria-label="placeholderText"
+        :disabled="props.disabled"
+        autocomplete="off"
+        spellcheck="false"
+        data-slot="search-input"
+        :data-testid="testId('input')"
+        @update:model-value="onInput"
+        @compositionstart="onCompositionStart"
+        @compositionend="onCompositionEnd"
+      />
+      <div class="office-search-popover__row">
+        <span
+          class="office-search-popover__status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-slot="search-status"
+          :data-testid="testId('status')"
+        >{{ statusText }}</span>
+        <div class="office-search-popover__navigation">
+          <OfficeIconButton
+            :label="m.common.search.previous"
+            icon="chevron-left"
+            variant="outline"
+            size="icon-sm"
+            :disabled="navigationDisabled"
+            :data-testid="testId('previous')"
+            @click="navigate(-1)"
+          />
+          <OfficeIconButton
+            :label="m.common.search.next"
+            icon="chevron-right"
+            variant="outline"
+            size="icon-sm"
+            :disabled="navigationDisabled"
+            :data-testid="testId('next')"
+            @click="navigate(1)"
+          />
+        </div>
+      </div>
+      <div
+        v-if="props.showOptions"
+        class="office-search-popover__options"
+        role="group"
+        :aria-label="m.common.search.placeholder"
       >
-        <template #options><slot name="options" /></template>
-      </OfficeSearchFields>
+        <button
+          v-for="entry of optionEntries"
+          :key="entry.key"
+          type="button"
+          class="office-ui office-toggle office-toggle--outline office-toggle--xs office-search-popover__option"
+          :data-state="entry.value ? 'on' : 'off'"
+          :aria-pressed="entry.value"
+          :aria-label="entry.label"
+          :title="entry.label"
+          :disabled="props.disabled"
+          :data-testid="testId(entry.suffix)"
+          @click="toggle(entry.key)"
+        >{{ entry.text }}</button>
+        <slot name="options" />
+      </div>
     </div>
-  </OfficePopover>
+  </component>
 </template>

@@ -526,12 +526,12 @@
       "id": "docx-sidebar",
       "title": "DOCX thumbnail sidebar",
       "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
-      "subjectComponent": "packages/vue-docx/src/components/DocxThumbnailPanel.vue (shell) + packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue",
+      "subjectComponent": "packages/vue-docx/src/components/DocxThumbnailPanel.vue (real canvas thumbnails, DocumentViewerSidebar shell)",
       "subjectStatus": "available",
-      "subjectTargetSelector": "[data-testid='document-viewer-sidebar']",
+      "subjectTargetSelector": "[data-testid='docx-thumbnail-panel']",
       "referenceTargetSelector": "[data-document-thumbnail-sidebar]",
       "cellWidth": 220,
-      "notes": "The reference and subject both use the 160px inline/overlay sidebar with fixture FileThumbnail children. The real DOCX canvas thumbnail rail is covered by tests/baseline/visual/docx-stories; this surface isolates the shared sidebar chrome.",
+      "notes": "The reference uses the upstream DocumentViewerThumbnailSidebar with fixture FileThumbnail children; the subject is the real DocxThumbnailPanel rendering real DOCX canvas page thumbnails through DocumentViewerSidebar. Pixel delta therefore includes thumbnail rendering, not just the shell.",
       "states": [
         {
           "id": "open",

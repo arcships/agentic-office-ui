@@ -1,17 +1,32 @@
 <script setup lang="ts">
 import { fixtures, type ParityTheme } from "../fixtures";
 import ParityCell from "../parity/ParityCell.vue";
-import DocumentViewerSidebar from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue";
-import FileThumbnail from "../../../../packages/vue-ui/src/components/FileThumbnail.vue";
+import DocxThumbnailPanel from "../../../../packages/vue-docx/src/components/DocxThumbnailPanel.vue";
+import { createBlankDocumentModel } from "../../../../packages/docx-core/src/editor/helpers/default-model";
 
 const props = defineProps<{ cellWidth: number; theme: ParityTheme }>();
 const sidebar = fixtures.documentSidebar;
-const pages = fixtures.documents.filter((entry) => "pages" in entry && entry.pages);
+
+const base = createBlankDocumentModel();
+const model = {
+  ...base,
+  nodes: Array.from({ length: 12 }, (_, index) => ({
+    type: "paragraph" as const,
+    children: [{ type: "text" as const, text: `Legal contract clause ${index + 1}` }],
+  })),
+};
+const layoutOptions = {
+  pageWidth: 200,
+  pageHeight: 300,
+  margin: 20,
+  minLineHeight: 20,
+  paragraphSpacing: 6,
+};
 
 const states = [
-  { state: "open", matrixState: "default", open: true, loading: false },
-  { state: "closed", matrixState: "default", open: false, loading: false },
-  { state: "skeleton", matrixState: "loading", open: true, loading: true },
+  { state: "open", matrixState: "default", collapsed: false, loading: false },
+  { state: "closed", matrixState: "default", collapsed: true, loading: false },
+  { state: "skeleton", matrixState: "loading", collapsed: false, loading: true },
 ];
 </script>
 
@@ -26,36 +41,22 @@ const states = [
     <div
       :style="{
         width: `${sidebar.widthPx}px`,
-        height: entry.loading ? '240px' : undefined,
-        minHeight: '240px',
+        height: entry.state === 'skeleton' ? '240px' : '292px',
         overflow: 'hidden',
         position: 'relative',
         background: 'var(--office-sidebar)',
       }"
     >
-      <DocumentViewerSidebar
-        :open="entry.open"
-        mode="inline"
-        :width="sidebar.widthPx"
-        :loading="entry.loading"
-        label="Document pages"
+      <DocxThumbnailPanel
+        :model="entry.loading ? undefined : model"
+        :layout-options="layoutOptions"
+        :default-collapsed="entry.collapsed"
+        :show-toggle="false"
+        :current-page="1"
+        :total-pages="entry.loading ? 0 : 2"
+        :is-dark="props.theme === 'dark'"
         :style="entry.loading ? { borderInlineEndWidth: '0' } : undefined"
-      >
-        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px;overflow:hidden">
-          <div
-            v-for="(page, index) in pages"
-            :key="page.id"
-            style="display:flex;flex-direction:column;align-items:center;gap:4px"
-          >
-            <FileThumbnail
-              :file="{ name: page.name, type: page.type }"
-              :size="80"
-              style="height:102px;border-radius:6px"
-            />
-            <span style="font-size:12px;color:var(--office-muted-foreground)">{{ index + 1 }}</span>
-          </div>
-        </div>
-      </DocumentViewerSidebar>
+      />
     </div>
   </ParityCell>
 </template>

@@ -269,11 +269,8 @@ test("SearchPopover exposes an inline mode with stable host hooks", () => {
   assert.match(source, /testIdPrefix\?: string/u)
   assert.match(source, /inputType\?: string/u)
   assert.match(source, /statusText\?: string/u)
-  assert.match(source, /OfficeSearchFields/u)
-  assert.match(
-    read("packages/vue-ui/src/components/chrome/OfficeSearchFields.vue"),
-    /nativeOptions|office-toggle--outline/u,
-  )
+  assert.match(source, /office-search-popover__fields/u)
+  assert.match(source, /office-toggle--outline/u)
 })
 
 test("the shared catalog ships chrome and zoom labels in English and zh-CN", () => {

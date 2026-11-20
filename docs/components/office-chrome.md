@@ -354,9 +354,8 @@ pnpm --filter @arcships/vue-ui build
   open/close、zh-CN。
 - 合同测试：Extend 几何、token-only CSS、公开导出、i18n 键、gzip 预算和 public
   API fingerprint。
-- 包体积：`dist/index.js` 43,965 B gzip + `style.css` 11,559 B gzip，相对 #157 前
-  基线增加 36,389 B，在 36,864 B 预算内（#159 的 inline search 模式已记录在
-  `scripts/ci/vue-ui-primitives-size-budget.json`）。
+- 包体积：`dist/index.js` 43,391 B gzip + `style.css` 11,567 B gzip，相对 #157 前
+  基线增加 35,818 B，仍在 35,840 B 预算内。
 - `public-api-contract.json`：`@arcships/vue-ui` fingerprint 从 199/`8a1aff85…`
   更新为 233/`1479c668…`；`@arcships/office-interaction` 因新增导出类型
   `OfficeChromeMessages` 从 154/`e1b91beb…` 更新为 155/`5732cb82…`。
@@ -400,9 +399,9 @@ pnpm --filter @arcships/vue-ui build
 read-only、continuous/single/spread、light/dark、390/768/1440），以及
 `tests/component/docx-*.test.mjs`、`tests/blackbox/docx_*.py`。
 
-已知边界：Extend 的上游 toolbar 把文件动作收进 dropdown；本 issue 保留现有可见的
-Upload/Download/Theme 按钮以不破坏公开事件和 blackbox 路径。上游 toolbar 没有常驻
-搜索；DOCX 通过 `OfficeSearchPopover` 的 `inline` 模式保留共享实现和
-`Ctrl/Cmd+F` 契约。`pnpm ui:parity -- --only docx-toolbar,docx-sidebar` 已运行，
-精确像素/几何 delta 见
+已知边界：Extend 的上游 toolbar 把文件动作收进 dropdown。DOCX 在宽屏（≥1360px）
+保留可见 search/edit/theme/upload/download；窄屏把非参考控件收进真实 overflow
+dropdown，搜索保留为共享 `OfficeSearchPopover` 的 compact trigger，因此
+`Ctrl/Cmd+F`、touch target 和搜索能力不丢失。`pnpm ui:parity -- --only
+docx-toolbar,docx-sidebar` 已运行，精确像素/几何 delta 见
 [docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)。

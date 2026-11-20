@@ -34,3 +34,5 @@ export { default as OfficeBadge } from "../../../../packages/vue-ui/src/componen
 export { default as DocumentViewerSidebar } from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue";
 export { default as FileThumbnail } from "../../../../packages/vue-ui/src/components/FileThumbnail.vue";
 export { default as OfficeIcon } from "../../../../packages/vue-ui/src/components/OfficeIcon.vue";
+export { default as OfficePopover } from "../../../../packages/vue-ui/src/components/ui/OfficePopover.vue";
+export { useElementWidth } from "../../../../packages/vue-ui/src/composables/element-width";
