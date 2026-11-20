@@ -133,8 +133,8 @@ const searchRoot = ref<HTMLElement | null>(null)
 const actionsRoot = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 
-function commitPage(raw: string = pageInput.value): void {
-  const parsed = Number.parseInt(raw.trim(), 10)
+function commitPage(raw: string | number = pageInput.value): void {
+  const parsed = Number.parseInt(String(raw).trim(), 10)
   if (!Number.isInteger(parsed) || props.totalPages < 1) {
     pageInput.value = String(displayPage.value)
     return
@@ -295,6 +295,7 @@ defineExpose({
     role="toolbar"
     :aria-label="m.common.chrome.toolbar"
     data-testid="pdf-toolbar"
+    @keydown.esc.stop.prevent="closeActions(); closeSearch()"
   >
     <div class="pdf-toolbar__leading">
       <span class="pdf-toolbar__tooltip-trigger">
@@ -319,7 +320,7 @@ defineExpose({
           <span class="pdf-toolbar__page-display" aria-hidden="true">{{ displayPage }}</span>
           <input
             v-model="pageInput"
-            class="pdf-toolbar__page-input"
+            class="office-ui pdf-toolbar__page-input"
             type="number"
             inputmode="numeric"
             pattern="[0-9]*"
@@ -677,6 +678,10 @@ defineExpose({
 
 .pdf-toolbar__icon--mirror {
   transform: scaleX(-1);
+}
+
+.pdf-toolbar .office-icon-button[data-active="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--office-ring) 40%, transparent);
 }
 
 .pdf-toolbar__page {
@@ -1065,6 +1070,7 @@ defineExpose({
   .pdf-toolbar select,
   .pdf-toolbar input {
     min-block-size: 44px;
+    min-inline-size: 44px;
   }
 
   .pdf-toolbar__zoom-native {
