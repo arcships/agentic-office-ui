@@ -456,7 +456,7 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
     ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
     ["vue-pdf", "src/pdf-url-policy.ts", "The source is not a verified PDF file.", "messages.invalidPdf"],
-    ["vue-pptx", "src/PptxViewer.vue", "上一页", "m.pptx.viewer.previousSlide"],
+    ["vue-pptx", "src/PptxViewerToolbar.vue", "上一页", "m.pptx.viewer.previousSlide"],
     ["vue-pptx", "src/PptxThumbnail.vue", "隐藏", "m.pptx.thumbnail.hidden"],
     ["vue-pdf", "src/components/PdfViewerToolbar.vue", "搜索 PDF 文本", "m.pdf.viewer.searchLabel"],
     ["vue-pdf", "src/components/PdfSurface.vue", "选择 PDF 页面区域", "m.pdf.surface.selectionRegion"],

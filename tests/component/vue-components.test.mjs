@@ -862,6 +862,9 @@ test("PdfSurface exposes the unified controlled object/region reference contract
   });
   const mounted = await mount(Harness);
   await waitFor(() => api && fake.calls.getPageTextGeometry.length === 1, "PDF unified reference surface");
+  const surface = findByTestId(mounted.root, "pdf-surface");
+  surface.focus = () => {};
+  routePdfPointerToPage(surface, pdfInteractionLayers(mounted.root).get(0));
   let interaction = preparePdfSurfaceInteraction(mounted.root);
 
   await interaction.props.onClick({
@@ -872,7 +875,7 @@ test("PdfSurface exposes the unified controlled object/region reference contract
     detail: 1,
     shiftKey: false,
   });
-  assert.equal(confirmations.length, 1);
+  await waitFor(() => confirmations.length === 1, "PDF page reference");
   assert.equal(confirmations[0].reference.kind, "page");
   assert.equal(confirmations[0].reference.document.documentId, "reference.pdf");
   assert.equal(api.getDocumentRevision().format, "pdf");
