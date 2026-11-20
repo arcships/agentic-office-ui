@@ -958,6 +958,122 @@
       ],
       "core": false,
       "gateStatus": "ready"
+    },
+    {
+      "id": "xlsx-toolbar",
+      "title": "XLSX viewer toolbar",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-toolbar.tsx (apps/v4/components/extend/xlsx-viewer.tsx WorkbookToolbar)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxToolbar.vue ([data-testid=xlsx-toolbar])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-toolbar']",
+      "referenceTargetSelector": "[data-parity-xlsx-toolbar]",
+      "cellWidth": 1000,
+      "notes": "Both sides render the pinned Extend WorkbookToolbar row: min-h-12 px-3 py-2 gap-2, zoom out / 84px zoom select / zoom in, separator, search trigger, separator, workbook actions trigger. The Vue subject is the production XlsxToolbar; everything upstream keeps in the closed ... menu (download, export, upload, print preview, page breaks, file name) lives in the same menu and does not affect the resting row.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (zoom out)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (zoom out)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "empty workbook (controls disabled)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#160"
+    },
+    {
+      "id": "xlsx-sheet-tabs",
+      "title": "XLSX sheet tabs",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-sheet-tabs.tsx (apps/v4/components/extend/xlsx-viewer.tsx WorkbookSheetTabsInner)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxSheetTabs.vue ([data-testid=xlsx-sheet-tabs])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-sheet-tabs']",
+      "referenceTargetSelector": "[data-parity-xlsx-sheet-tabs]",
+      "cellWidth": 1000,
+      "notes": "Upstream sheet-tab strip: border-t bg-muted/40 px-3 py-2, a horizontally scrollable 40px (50px when overflowing) viewport with the sm TabsList (bg-muted, p-0.5, rounded-lg) and max-w-48 triggers. The Vue subject keeps drag reorder, rename, hidden/unhide and the tab context menu; the add/remove/nav buttons upstream does not render are opt-in host props.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (inactive tab)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[role='tab'][aria-selected='false']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (inactive tab)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[role='tab'][aria-selected='false']"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#160"
+    },
+    {
+      "id": "xlsx-status-bar",
+      "title": "XLSX status strip",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-status-bar.tsx (apps/v4/components/extend/file-system.tsx status strip)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxStatusBar.vue ([data-testid=xlsx-status-bar])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-status-bar']",
+      "referenceTargetSelector": "[data-parity-xlsx-status-bar]",
+      "cellWidth": 1000,
+      "notes": "The pinned Extend XLSX viewer/editor has no status bar, so the reference is Extend status-strip markup (file-system.tsx: 28px aria-live footer, border-t, bg-muted/40, px-3, text-xs, muted). Segments come from the shared fixture, so only geometry/typography/colour are compared; the XLSX address/stat semantics stay in the Vue component.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#160"
     }
   ],
   "coreSubset": {

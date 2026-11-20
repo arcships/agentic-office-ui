@@ -342,8 +342,11 @@ def xlsx_story_flow(page: Page, out: Path, prefix: str) -> dict[str, Any]:
             const box = element.getBoundingClientRect();
             return { height: box.height, width: box.width, top: box.top, bottom: box.bottom };
           };
-          const leading = toolbar.querySelector('.office-toolbar__leading').getBoundingClientRect();
-          const trailing = toolbar.querySelector('.office-toolbar__trailing').getBoundingClientRect();
+          const toolbarTop = toolbar.getBoundingClientRect().top;
+          const paddingTop = parseFloat(getComputedStyle(toolbar).paddingTop) || 0;
+          const cluster =
+            toolbar.querySelector('.xlsx-toolbar__zoom') ||
+            toolbar.querySelector('.office-toolbar__trailing');
           const unnamed = [...story.querySelectorAll('button')]
             .filter((element) => {
               const text = (element.innerText || '').trim();
@@ -356,7 +359,8 @@ def xlsx_story_flow(page: Page, out: Path, prefix: str) -> dict[str, Any]:
             status: rect(status),
             toolbarOverflow: toolbar.scrollWidth - toolbar.clientWidth,
             ribbonOverflow: ribbon.scrollWidth - ribbon.clientWidth,
-            wrapped: trailing.top > leading.top + 1,
+            wrapped: Boolean(cluster) &&
+              cluster.getBoundingClientRect().top > toolbarTop + paddingTop + 4,
             iconButtons: toolbar.querySelectorAll('.office-icon-button').length,
             ribbonIconButtons: ribbon.querySelectorAll('.office-icon-button').length,
             unnamedButtons: unnamed,
@@ -366,7 +370,7 @@ def xlsx_story_flow(page: Page, out: Path, prefix: str) -> dict[str, Any]:
     assert metrics["toolbar"]["height"] >= 48, f"{prefix}: xlsx toolbar height {metrics}"
     assert metrics["toolbarOverflow"] <= 1, f"{prefix}: xlsx toolbar overflows {metrics}"
     assert metrics["ribbonOverflow"] <= 1, f"{prefix}: xlsx ribbon overflows {metrics}"
-    assert metrics["iconButtons"] >= 5, f"{prefix}: xlsx toolbar icon controls {metrics}"
+    assert metrics["iconButtons"] >= 4, f"{prefix}: xlsx toolbar icon controls {metrics}"
     assert metrics["ribbonIconButtons"] >= 10, f"{prefix}: xlsx ribbon icon controls {metrics}"
     assert not metrics["unnamedButtons"], f"{prefix}: xlsx unnamed buttons {metrics['unnamedButtons']}"
     story.screenshot(path=str(out / f"{prefix}-xlsx-chrome.png"))

@@ -436,5 +436,29 @@
     "showUpload": true,
     "showDownload": true,
     "isDark": false
+  },
+  "xlsxToolbar": {
+    "zoomPercent": 100,
+    "fileName": "financial-model.xlsx",
+    "showUpload": true,
+    "showDownload": true,
+    "showExport": true
+  },
+  "xlsxSheetTabs": {
+    "activeIndex": 1,
+    "sheets": [
+      "Dashboard",
+      "Revenue Chart",
+      "P&L"
+    ]
+  },
+  "xlsxStatusBar": {
+    "segments": [
+      "A1:C10",
+      "Count: 3",
+      "Sum: 42",
+      "Selected"
+    ],
+    "note": "kept short so the strip stays inside a 390px viewport; overflowing segments are clipped by the reference strip and are not part of the compared surface"
   }
 }

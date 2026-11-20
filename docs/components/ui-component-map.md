@@ -64,7 +64,19 @@
 | `apps/v4/components/extend/file-upload.tsx` | adapted | `FileUpload` | `file-upload` | ✅ blocking | 6 状态；默认 `showFileList=false` 与宿主列表去重 |
 | `apps/v4/components/extend/file-thumbnail.tsx` | adapted | `FileThumbnail` | `file-thumbnail` | ✅ blocking | 方形预览卡 + loading/error 图层 |
 
-## 4. Block 组件（文档内容块，#164）
+## 4. XLSX chrome（#160）
+
+XLSX 用到的上游 chrome 已按功能切分：`@extend-ai/react-xlsx` 私有引擎仍不可分发，但
+toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 commit，可直接渲染。
+
+| 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
+|---|---|---|---|---|---|
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookToolbar`） | reference-only | `XlsxToolbar`（`OfficeToolbar` + `OfficeIconButton` + `HugeIcon`） | `xlsx-toolbar` | ⏳ #160 | 4 viewport × light/dark 共 32 case 全部 0px；下载/导出/上传/打印/分页在 ⋯ 菜单 |
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookSheetTabsInner`） | reference-only | `XlsxSheetTabs` | `xlsx-sheet-tabs` | ⏳ #160 | 24 case 全部 0px；新增/删除/翻页按钮改成 `show-sheet-actions`（默认关） |
+| `apps/v4/components/extend/file-system.tsx`（`aria-live` 状态条） | reference-only | `XlsxStatusBar`（`OfficeStatusBar`） | `xlsx-status-bar` | ⏳ #160 | 上游 XLSX 没有状态栏，取 Extend 自己的状态条 markup 作参考；8 case 全部 0px |
+| `apps/v4/components/extend/xlsx-editor.tsx`（格式行/公式行） | reference-only | `XlsxRibbon` / `XlsxFormulaBar` | — | — | 上游 editor 的公式行是私有包内部的 `Group`，暂无对照 surface |
+
+## 5. Block 组件（文档内容块，#164）
 
 | 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
 |---|---|---|---|---|---|
@@ -75,16 +87,16 @@
 | `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | 未实现（#164 后置） | — | — | 同上 |
 | Extend 选区/标注 blocks | reference-only | `OfficeRegionSelector` / `OfficeRegionAnnotator` / `OfficeObjectOutlineLayer` | — | — | 规范坐标选区原语，见[组件手册](README.md) |
 
-## 5. Viewer 外壳
+## 6. Viewer 外壳
 
 | 包 | 组件 | 上游 Extend 文件 | parity surface | 基线 |
 |---|---|---|---|---|
 | `@arcships/vue-pdf` | `PdfViewer` | `apps/v4/components/extend/pdf-viewer.tsx` | `pdf-toolbar`, `pdf-sidebar` | ✅ blocking（#162） |
 | `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ⏳ #159 |
-| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | 无上游可渲染 surface（`@extend-ai/react-xlsx` 不可分发） | 见 [xlsx-office-chrome-migration.md](../design/xlsx-office-chrome-migration.md) |
+| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ⏳ #160（32 + 24 + 8 case 全 0px） |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface | 见 [pptx-chrome.md](pptx-chrome.md) |
 
-## 6. 面板与文档
+## 7. 面板与文档
 
 - Primitive 属性、键盘与 ARIA 合同：[ui-primitives.md](ui-primitives.md)
 - 共享 chrome：[office-chrome.md](office-chrome.md)

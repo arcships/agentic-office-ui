@@ -264,16 +264,31 @@ test("toolbar exposes page-break preview and print-preview controls", async (t) 
 
   const { app, root } = await mount(XlsxToolbar, { controller });
   t.after(() => app.unmount());
-  const pageBreakButton = findByTestId(root, "xlsx-toolbar-page-breaks");
-  assert.ok(pageBreakButton, "toolbar must expose the page-break toggle");
-  pageBreakButton.props.onClick();
+
+  // #160: the upstream row keeps print preview and page-break preview in the
+  // workbook actions menu; the commands and their test ids are unchanged.
+  async function openActions() {
+    findByTestId(root, "xlsx-toolbar-actions").props.onClick();
+    await vue.nextTick();
+  }
+
+  await openActions();
+  const pageBreakItem = findByTestId(root, "xlsx-toolbar-page-breaks");
+  assert.ok(pageBreakItem, "toolbar must expose the page-break toggle");
+  assert.equal(pageBreakItem.props.role, "menuitemcheckbox");
+  pageBreakItem.props.onClick();
   await vue.nextTick();
   assert.equal(controller.isPageBreakPreview, true);
-  assert.equal(pageBreakButton.props["aria-pressed"], true);
+  await openActions();
+  assert.equal(
+    findByTestId(root, "xlsx-toolbar-page-breaks").props["aria-checked"],
+    true,
+    "the page-break row reports the active state",
+  );
 
-  const previewButton = findByTestId(root, "xlsx-toolbar-print-preview");
-  assert.ok(previewButton, "toolbar must expose print preview");
-  previewButton.props.onClick();
+  const previewItem = findByTestId(root, "xlsx-toolbar-print-preview");
+  assert.ok(previewItem, "toolbar must expose print preview");
+  previewItem.props.onClick();
   await vue.nextTick();
   assert.equal(controller.isPrintPreviewOpen, true);
 });
@@ -304,6 +319,11 @@ test("viewer, grid and print preview ship print CSS and page-break overlay hooks
   assert.match(grid, /xlsx-grid__page-break-line--row/);
   assert.match(grid, /page\.range\.start/);
 
-  assert.match(toolbar, /data-testid="xlsx-toolbar-page-breaks"/);
-  assert.match(toolbar, /data-testid="xlsx-toolbar-print-preview"/);
+  // Upstream keeps print preview and page breaks in the workbook actions menu
+  // (#160), so the ids are declared by the menu model instead of being static
+  // attributes on row buttons.
+  assert.match(toolbar, /testId: "xlsx-toolbar-page-breaks"/);
+  assert.match(toolbar, /testId: "xlsx-toolbar-print-preview"/);
+  assert.match(toolbar, /openPrintPreview\(\)/);
+  assert.match(toolbar, /setPageBreakPreview\(/);
 });

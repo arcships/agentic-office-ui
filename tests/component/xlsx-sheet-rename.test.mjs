@@ -526,3 +526,61 @@ test("chartsheet tabs and read-only viewers expose no rename affordance", async 
     readOnly.app.unmount();
   }
 });
+
+test("the tab menu keeps sheet insert/delete while the strip buttons stay opt-in", async () => {
+  const { app, root, controller } = await mountTabs("financial-model.xlsx");
+  try {
+    // #160: the default strip renders tabs only (upstream geometry); the
+    // Excel add/remove buttons are behind `showSheetActions`.
+    assert.equal(findByTestId(root, "xlsx-add-sheet"), undefined, "no add button by default");
+    assert.equal(findByTestId(root, "xlsx-remove-sheet"), undefined, "no remove button by default");
+
+    const openMenu = async (name) => {
+      const tab = tabButton(root, name);
+      tabWrapper(tab).props.onContextmenu({ clientX: 40, clientY: 20, preventDefault() {} });
+      await vue.nextTick();
+      assert.ok(findByTestId(root, "xlsx-sheet-tab-menu"), "the tab menu opens");
+    };
+
+    await openMenu("P&L");
+    findByTestId(root, "xlsx-insert-sheet").props.onClick();
+    await vue.nextTick();
+    assert.equal(findByTestId(root, "xlsx-sheet-tab-menu"), undefined, "the menu closes");
+    assert.equal(controller.tabs.length, 4, "Insert sheet adds a worksheet tab");
+
+    await openMenu("Notes");
+    const before = controller.tabs.length;
+    findByTestId(root, "xlsx-delete-sheet").props.onClick();
+    await vue.nextTick();
+    assert.equal(findByTestId(root, "xlsx-sheet-tab-menu"), undefined, "the menu closes");
+    assert.equal(controller.tabs.length, before - 1, "Delete sheet removes the active worksheet");
+  } finally {
+    app.unmount();
+  }
+});
+
+test("showSheetActions restores Excel's arrows, add and remove buttons", async () => {
+  const buffer = workbookBuffer("financial-model.xlsx");
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController({ file: buffer, fileName: "financial-model.xlsx", useWorker: false });
+      return () =>
+        controller.sourceState === "ready"
+          ? vue.h(XlsxSheetTabs, { controller, showSheetActions: true })
+          : vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  try {
+    await waitFor(() => controller.sourceState === "ready", "controller ready");
+    assert.ok(findByTestId(mounted.root, "xlsx-add-sheet"), "add button");
+    assert.ok(findByTestId(mounted.root, "xlsx-remove-sheet"), "remove button");
+    assert.ok(
+      walk(mounted.root).some((node) => String(node.props?.class ?? "").includes("xlsx-sheettabs--actions")),
+      "the opt-in strip switches to the actions layout",
+    );
+  } finally {
+    mounted.app.unmount();
+  }
+});

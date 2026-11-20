@@ -17,6 +17,9 @@ import { PdfSidebarSurface } from "./surfaces/PdfSidebarSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
 import { TooltipSurface } from "./surfaces/TooltipSurface";
+import { XlsxSheetTabsSurface } from "./surfaces/XlsxSheetTabsSurface";
+import { XlsxStatusBarSurface } from "./surfaces/XlsxStatusBarSurface";
+import { XlsxToolbarSurface } from "./surfaces/XlsxToolbarSurface";
 
 type Surface = (typeof manifest.surfaces)[number];
 
@@ -40,6 +43,9 @@ const renderers: Record<
   "layout-blocks": LayoutBlocksSurface,
   "e-signature": ESignatureSurface,
   "document-splits": DocumentSplitsSurface,
+  "xlsx-toolbar": XlsxToolbarSurface,
+  "xlsx-sheet-tabs": XlsxSheetTabsSurface,
+  "xlsx-status-bar": XlsxStatusBarSurface,
 };
 
 function hasReference(surface: Surface): boolean {

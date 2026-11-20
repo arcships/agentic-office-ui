@@ -437,6 +437,10 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         arg=marker,
         timeout=10_000,
     )
+    # #160: upstream keeps Export in the workbook actions menu, so open it
+    # first; the command and its test id are unchanged.
+    page.locator('[data-testid="xlsx-toolbar-actions"]').click()
+    page.locator('[data-testid="xlsx-toolbar-menu"]').wait_for(state="visible", timeout=10_000)
     with page.expect_download(timeout=30_000) as export_info:
         page.locator('[data-testid="xlsx-toolbar-export"]').click()
     exported = save_download(export_info.value, attempt_dir / "downloads")

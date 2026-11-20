@@ -37,6 +37,9 @@ function readComponent(name) {
   );
 }
 
+const SHEET_TABS_SOURCE = readComponent("XlsxSheetTabs");
+const TOOLBAR_SOURCE = readComponent("XlsxToolbar");
+
 const CHROME_READINESS = "viewer chrome migration";
 
 function classesOf(node) {
@@ -101,7 +104,7 @@ function toolbarController(overrides = {}) {
   };
 }
 
-test("XlsxToolbar renders the shared Office toolbar and keeps its controls", async () => {
+test("XlsxToolbar renders the upstream row and keeps its controls", async () => {
   const { controller } = toolbarController();
   const mounted = await mount(XlsxToolbar, { controller, showUpload: true });
   try {
@@ -114,30 +117,43 @@ test("XlsxToolbar renders the shared Office toolbar and keeps its controls", asy
       "the chrome root keeps the shared Office scope class",
     );
 
+    // Default row (issue #160): zoom cluster, search and the workbook actions
+    // trigger. Everything upstream keeps in the ⋯ menu stays in the same menu.
     const iconButtons = nodesWithClass(mounted.root, "office-icon-button");
-    assert.ok(
-      iconButtons.length >= 5,
-      `toolbar icon controls use OfficeIconButton (${iconButtons.length})`,
+    assert.equal(
+      iconButtons.length,
+      4,
+      `the resting row is zoom out/in, search and actions (${iconButtons.length})`,
     );
     for (const testId of [
       "xlsx-zoom-out",
       "xlsx-zoom-in",
       "xlsx-search-toggle",
+      "xlsx-toolbar-actions",
+    ]) {
+      assert.ok(findByTestId(mounted.root, testId), `${testId} is rendered in the row`);
+    }
+    assert.ok(
+      nodesWithClass(mounted.root, "office-toolbar__separator").length >= 2,
+      "the zoom/search/actions clusters keep shared separators",
+    );
+    const menu = findByTestId(mounted.root, "xlsx-toolbar-menu");
+    assert.ok(menu, "the workbook actions menu is rendered");
+    assert.equal(menu.props.role, "menu");
+    for (const testId of [
       "xlsx-toolbar-upload",
       "xlsx-toolbar-page-breaks",
       "xlsx-toolbar-print-preview",
       "xlsx-toolbar-download",
       "xlsx-toolbar-export",
     ]) {
-      assert.ok(findByTestId(mounted.root, testId), `${testId} is still rendered`);
+      const item = findByTestId(mounted.root, testId);
+      assert.ok(item, `${testId} is still rendered inside the actions menu`);
+      assert.equal(item.props.role === "menuitem" || item.props.role === "menuitemcheckbox", true);
     }
-    assert.ok(
-      nodesWithClass(mounted.root, "office-toolbar__separator").length >= 1,
-      "the zoom/search cluster keeps a shared separator",
-    );
     // The blackbox touch suite measures this class directly.
     assert.equal(
-      findByTestId(mounted.root, "xlsx-toolbar-upload").props.class.includes("xlsx-toolbar__icon-button"),
+      classesOf(findByTestId(mounted.root, "xlsx-zoom-out")).includes("xlsx-toolbar__icon-button"),
       true,
       "the legacy icon-button class survives for the touch matrix",
     );
@@ -383,18 +399,23 @@ test("sheet tabs resolve their palette from the shared theme and tokens", async 
     );
     const strip = nodesWithClass(mounted.root, "xlsx-sheettabs")[0];
     assert.ok(strip, "the strip keeps its public class");
+    assert.equal(strip.props.style, undefined, "the strip is styled by CSS, not inline values");
     assert.match(
-      String(strip.props.style.backgroundColor),
-      /var\(--office-muted/,
-      "the strip background is a token, not a hardcoded zinc value",
+      SHEET_TABS_SOURCE,
+      /\.xlsx-sheettabs \{[^}]*background: color-mix\(in oklab, var\(--office-muted\) 40%/,
+      "the strip background is the reference's muted token wash",
     );
     const tabs = nodesWithClass(mounted.root, "xlsx-sheettabs__tab");
     assert.ok(tabs.length >= 2, "tabs still render");
-    assert.match(String(tabs[0].props.style.color), /inherit/);
     assert.match(
-      String(tabs.at(-1).props.style.color),
-      /var\(--office-muted-foreground/,
-      "inactive tabs use the muted token",
+      SHEET_TABS_SOURCE,
+      /\.xlsx-sheettabs__tab \{[^}]*color: inherit/,
+      "tabs inherit the tablist colour like the upstream trigger",
+    );
+    assert.match(
+      SHEET_TABS_SOURCE,
+      /\.xlsx-sheettabs__list \{[^}]*color: color-mix\(in oklab, var\(--office-muted-foreground\) 72%/,
+      "inactive tabs use the muted token at the reference alpha",
     );
     tabs.at(-1).props.onClick();
     await vue.nextTick();

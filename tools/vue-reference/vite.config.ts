@@ -52,6 +52,11 @@ export default defineConfig({
     // rewrites them to 8-bit hex and adds a channel delta on large fills.
     cssMinify: false,
   },
+  // `@arcships/xlsx-core` ships a worker entry; ES is the only worker format
+  // that supports the code-split build this harness produces.
+  worker: {
+    format: "es",
+  },
   server: {
     fs: {
       allow: [here, repoRoot],
