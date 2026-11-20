@@ -95,7 +95,7 @@ function allByTestId(root, testId) {
   return walk(root).filter((node) => node.props?.["data-testid"] === testId);
 }
 
-test("PdfViewer toolbar is the shared OfficeToolbar with every PDF command", async (t) => {
+test("PdfViewer toolbar uses the upstream PDF row with an actions menu", async (t) => {
   stubObjectUrls(t);
   const fake = createRuntime();
   const mounted = await mount(PdfViewer, {
@@ -112,13 +112,12 @@ test("PdfViewer toolbar is the shared OfficeToolbar with every PDF command", asy
     const toolbar = findByTestId(mounted.root, "pdf-toolbar");
     assert.ok(toolbar, "PDF toolbar");
     assert.equal(toolbar.props.role, "toolbar");
-    assert.ok(classNames(toolbar).includes("office-toolbar"), "toolbar uses the shared chrome class");
     assert.ok(classNames(toolbar).includes("pdf-toolbar"), "the public print/touch hook stays");
-    assert.ok(walk(toolbar).some((node) => classNames(node).includes("office-toolbar__leading")));
-    assert.ok(walk(toolbar).some((node) => classNames(node).includes("office-toolbar__trailing")));
+    assert.ok(walk(toolbar).some((node) => classNames(node).includes("pdf-toolbar__leading")));
+    assert.ok(walk(toolbar).some((node) => classNames(node).includes("pdf-toolbar__trailing")));
     assert.ok(
-      nodesWithClass(toolbar, "office-icon-button").length >= 10,
-      "sidebar, paging, zoom, rotate, search, print and download are shared icon buttons",
+      nodesWithClass(toolbar, "office-icon-button").length >= 7,
+      "sidebar, rotate pair, zoom pair, search and actions are shared icon buttons",
     );
 
     const pageInput = findByTestId(mounted.root, "pdf-page-input");
@@ -130,8 +129,36 @@ test("PdfViewer toolbar is the shared OfficeToolbar with every PDF command", asy
     assert.equal(findByTestId(mounted.root, "pdf-zoom-select").props["aria-label"], "Zoom level");
     assert.equal(findByTestId(mounted.root, "pdf-zoom-select").options.length, 6);
     assert.ok(findByTestId(mounted.root, "pdf-rotate"));
-    assert.ok(findByTestId(mounted.root, "pdf-search-input"));
+    assert.ok(findByTestId(mounted.root, "pdf-rotate-counterclockwise"));
+    assert.ok(findByTestId(mounted.root, "pdf-search-toggle"));
+    assert.ok(findByTestId(mounted.root, "pdf-actions"));
+
+    // Upstream does not show these in the default row; they are one click away.
+    assert.equal(findByTestId(mounted.root, "pdf-search-input"), undefined);
+    assert.equal(findByTestId(mounted.root, "pdf-print"), undefined);
+    assert.equal(findByTestId(mounted.root, "pdf-download"), undefined);
+    assert.equal(findByTestId(mounted.root, "pdf-page-layout"), undefined);
+    assert.equal(findByTestId(mounted.root, "pdf-first-page"), undefined);
+    assert.equal(findByTestId(mounted.root, "pdf-last-page"), undefined);
+
+    findByTestId(mounted.root, "pdf-search-toggle").props.onClick();
+    await vue.nextTick();
+    assert.ok(findByTestId(mounted.root, "pdf-search-input"), "search opens on the toolbar row");
     assert.ok(findByTestId(mounted.root, "pdf-search-submit"));
+    assert.ok(findByTestId(mounted.root, "pdf-search-result"));
+    findByTestId(mounted.root, "pdf-search-toggle").props.onClick();
+    await vue.nextTick();
+    assert.equal(findByTestId(mounted.root, "pdf-search-input"), undefined, "search closes again");
+
+    findByTestId(mounted.root, "pdf-actions").props.onClick();
+    await vue.nextTick();
+    assert.ok(findByTestId(mounted.root, "pdf-actions-menu"), "actions menu opens");
+    assert.ok(findByTestId(mounted.root, "pdf-page-layout"));
+    assert.ok(findByTestId(mounted.root, "pdf-page-layout-continuous"));
+    assert.ok(findByTestId(mounted.root, "pdf-page-layout-single"));
+    assert.ok(findByTestId(mounted.root, "pdf-page-layout-spread"));
+    assert.ok(findByTestId(mounted.root, "pdf-first-page"));
+    assert.ok(findByTestId(mounted.root, "pdf-last-page"));
     assert.ok(findByTestId(mounted.root, "pdf-print"));
     assert.ok(findByTestId(mounted.root, "pdf-download"));
 
@@ -159,6 +186,8 @@ test("PdfViewer print command rasterizes every page through the toolbar", async 
       () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready",
       "rendered PDF page",
     );
+    findByTestId(mounted.root, "pdf-actions").props.onClick();
+    await vue.nextTick();
     findByTestId(mounted.root, "pdf-print").props.onClick();
     await waitFor(() => printed === 1, "browser print dialog");
     assert.equal(fake.calls.renderPage.length, 1 + 3, "print renders every page, not just the active one");

@@ -30,6 +30,7 @@ const DOCX_EDITOR_PATH = "packages/vue-docx/src/components/DocxEditor.vue";
 const DOCX_MENU_PATH = "packages/vue-docx/src/components/DocxContextMenu.vue";
 const PPTX_VIEWER_PATH = "packages/vue-pptx/src/PptxViewer.vue";
 const PDF_VIEWER_PATH = "packages/vue-pdf/src/components/PdfViewer.vue";
+const PDF_TOOLBAR_PATH = "packages/vue-pdf/src/components/PdfViewerToolbar.vue";
 const XLSX_VIEWER_PATH = "packages/vue-xlsx/src/components/XlsxViewer.vue";
 const XLSX_GRID_PATH = "packages/vue-xlsx/src/components/XlsxGrid.vue";
 const XLSX_MENU_PATH = "packages/vue-xlsx/src/components/XlsxContextMenu.vue";
@@ -299,6 +300,7 @@ test("PPTX search live region announces counts, no results and clearing", async 
 
 test("vue-pdf announces viewer state and search hits through live regions", () => {
   const pdf = read(PDF_VIEWER_PATH);
+  const toolbar = read(PDF_TOOLBAR_PATH);
   assert.match(
     pdf,
     /data-testid="pdf-status"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,
@@ -311,7 +313,7 @@ test("vue-pdf announces viewer state and search hits through live regions", () =
     "the PDF state region must be visually hidden but announced",
   );
   assert.match(
-    pdf,
+    toolbar,
     /data-testid="pdf-search-result"[^>]*role="status"[^>]*aria-atomic="true"/,
     "PDF search hits need an atomic status region",
   );

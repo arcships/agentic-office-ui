@@ -1188,6 +1188,7 @@ function stepZoom(direction: 1 | -1): boolean {
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
   cancelRenderWork()
+  toolbarRef.value?.closeSearch()
   clearSelection()
   textLayerRequest += 1
   pageTextLayer.value = null

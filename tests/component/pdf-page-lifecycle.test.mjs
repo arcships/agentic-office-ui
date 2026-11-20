@@ -331,6 +331,8 @@ test("PdfViewer keeps the current page bitmap mounted while the next page render
   assert.ok(firstImage);
   const firstSource = firstImage.props.src;
 
+  findByTestId(mounted.root, "pdf-actions").props.onClick();
+  await vue.nextTick();
   findByTestId(mounted.root, "pdf-next-page").props.onClick();
   await waitFor(
     () => findByTestId(mounted.root, "pdf-page")?.props["data-render-state"] === "rendering",
@@ -406,6 +408,8 @@ test("PdfViewer exposes intrinsic page rotation separately from the user rotatio
   assert.equal(findByTestId(mounted.root, "pdf-document")?.props["data-rotation"], 0);
   assert.equal(findByTestId(mounted.root, "pdf-page")?.props["data-page-rotation"], 0);
 
+  findByTestId(mounted.root, "pdf-actions").props.onClick();
+  await vue.nextTick();
   findByTestId(mounted.root, "pdf-next-page").props.onClick();
   await waitFor(
     () => findByTestId(mounted.root, "pdf-page")?.props["data-page-number"] === 2 &&

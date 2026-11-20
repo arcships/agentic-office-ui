@@ -572,6 +572,8 @@ def run_pdf(browser, attempt_dir: Path) -> dict[str, object]:
         return page_text(page_number, marker)
 
     def search(query: str) -> dict[str, object]:
+        if page.locator('[data-testid="pdf-search-input"]').count() == 0:
+            page.locator('[data-testid="pdf-search-toggle"]').click()
         page.locator('[data-testid="pdf-search-input"]').fill(query)
         page.locator('[data-testid="pdf-search-submit"]').click()
         page.wait_for_function(

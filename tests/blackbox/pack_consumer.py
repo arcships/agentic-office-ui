@@ -437,6 +437,8 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
         page.locator('[data-testid="pdf-thumbnail-image"]').first.wait_for(
             state="visible", timeout=30_000
         )
+        page.locator('[data-testid="pdf-actions"]').click()
+        page.locator('[data-testid="pdf-actions-menu"]').wait_for(state="visible", timeout=10_000)
         page.locator('[data-testid="pdf-next-page"]').click()
         wait_for_pdf_page(page, 2)
         page.locator('[data-testid="pdf-zoom-select"]').select_option("2")
@@ -455,6 +457,7 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
               document.querySelector('[data-testid="pdf-page"]')?.dataset.renderState === 'rendered'""",
             timeout=45_000,
         )
+        page.locator('[data-testid="pdf-search-toggle"]').click()
         page.locator('[data-testid="pdf-search-input"]').fill("ALPHA-4")
         page.locator('[data-testid="pdf-search-submit"]').click()
         page.wait_for_function(
@@ -471,6 +474,8 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
         downloads_dir = attempt_dir / "downloads"
         downloads_dir.mkdir(parents=True, exist_ok=True)
         with page.expect_download(timeout=30_000) as download_info:
+            page.locator('[data-testid="pdf-actions"]').click()
+            page.locator('[data-testid="pdf-actions-menu"]').wait_for(state="visible", timeout=10_000)
             page.locator('[data-testid="pdf-download"]').click()
         download = download_info.value
         downloaded_path = downloads_dir / download.suggested_filename

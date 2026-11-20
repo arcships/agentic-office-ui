@@ -132,7 +132,6 @@ const actionsOpen = ref(false)
 const searchRoot = ref<HTMLElement | null>(null)
 const actionsRoot = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
-const actionsButton = ref<HTMLElement | null>(null)
 
 function commitPage(raw: string = pageInput.value): void {
   const parsed = Number.parseInt(raw.trim(), 10)
@@ -213,13 +212,10 @@ function openSearch(): void {
   void nextTick(() => searchInput.value?.focus())
 }
 
-function closeSearch(restore = true): void {
+function closeSearch(): void {
   if (!searchOpen.value) return
   searchOpen.value = false
   emit("searchClose")
-  if (restore) {
-    void nextTick(() => actionsButton.value?.blur?.())
-  }
 }
 
 function toggleSearch(): void {
@@ -247,13 +243,19 @@ function toggleActions(): void {
   else openActions()
 }
 
-function runAction(action: "download" | "print" | "first" | "last"): void {
+function runAction(action: "download" | "print" | "first" | "previous" | "next" | "last"): void {
   if (action === "download") emit("download")
   else if (action === "print") emit("print")
   else if (action === "first") emit("selectPage", 1)
+  else if (action === "previous") emit("selectPage", displayPage.value - 1)
+  else if (action === "next") emit("selectPage", displayPage.value + 1)
   else if (props.totalPages > 0) emit("selectPage", props.totalPages)
   closeActions()
-  void nextTick(() => actionsButton.value?.focus?.())
+  void nextTick(() => {
+    const root = actionsRoot.value
+    if (!root || typeof root.querySelector !== "function") return
+    root.querySelector<HTMLButtonElement>("button")?.focus()
+  })
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
@@ -468,10 +470,10 @@ defineExpose({
           <div class="pdf-toolbar__search-row">
             <span
               class="pdf-toolbar__search-result"
+              data-testid="pdf-search-result"
               role="status"
               aria-live="polite"
               aria-atomic="true"
-              data-testid="pdf-search-result"
             >{{ searchResult }}</span>
             <OfficeIconButton
               variant="outline"
@@ -553,6 +555,22 @@ defineExpose({
             </button>
           </div>
           <div class="pdf-toolbar__menu-separator" role="separator" />
+          <button
+            type="button"
+            class="pdf-toolbar__menu-item"
+            role="menuitem"
+            data-testid="pdf-previous-page"
+            :disabled="disabled || displayPage <= 1"
+            @click="runAction('previous')"
+          >{{ m.common.page.previous }}</button>
+          <button
+            type="button"
+            class="pdf-toolbar__menu-item"
+            role="menuitem"
+            data-testid="pdf-next-page"
+            :disabled="disabled || displayPage >= (props.totalPages || 0)"
+            @click="runAction('next')"
+          >{{ m.common.page.next }}</button>
           <button
             type="button"
             class="pdf-toolbar__menu-item"
@@ -844,7 +862,7 @@ defineExpose({
 }
 
 [data-office-theme="dark"] .pdf-toolbar__zoom-trigger::before {
-  box-shadow: 0 -1px 0 0 color-mix(in srgb, white 6%, transparent);
+  box-shadow: 0 -1px 0 0 color-mix(in oklab, white 6%, transparent);
 }
 
 .pdf-toolbar__zoom-native option {
@@ -854,6 +872,11 @@ defineExpose({
 
 .pdf-toolbar__zoom[data-disabled="true"] .pdf-toolbar__zoom-trigger {
   opacity: 0.64;
+  box-shadow: none;
+}
+
+.pdf-toolbar__zoom[data-disabled="true"] .pdf-toolbar__zoom-trigger::before {
+  box-shadow: none;
 }
 
 .pdf-toolbar__zoom:focus-within .pdf-toolbar__zoom-trigger {
@@ -1015,6 +1038,21 @@ defineExpose({
   .pdf-toolbar__zoom,
   .pdf-toolbar__zoom-trigger {
     block-size: 32px;
+  }
+
+  .pdf-toolbar__page-control,
+  .pdf-toolbar__zoom-trigger {
+    font-size: var(--office-text-base);
+    line-height: var(--office-leading-base);
+  }
+
+  .pdf-toolbar__page-display {
+    line-height: var(--office-leading-base);
+  }
+
+  .pdf-toolbar__zoom-icon {
+    inline-size: 18px;
+    block-size: 18px;
   }
 }
 
