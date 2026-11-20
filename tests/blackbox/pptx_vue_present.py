@@ -57,7 +57,15 @@ def main() -> None:
             }"""
         )
         assert browse_layout == {"count": 12, "vertical": True, "scrollable": True}, browse_layout
+        # Find lives in the upstream-style actions menu; the resting toolbar row
+        # only carries the pinned Extend controls.
         search = page.get_by_role("search")
+        if search.count() == 0:
+            page.locator('[data-testid="pptx-actions"]').click()
+            page.wait_for_selector('[data-testid="pptx-actions-menu"]', timeout=5_000)
+            page.locator('[data-testid="pptx-search-toggle"]').click()
+            page.wait_for_selector("[role='search']", timeout=5_000)
+            search = page.get_by_role("search")
         search.get_by_role("searchbox").fill("单击动画")
         search.locator('button[type="submit"]').click()
         page.wait_for_function(
@@ -67,7 +75,7 @@ def main() -> None:
         page.get_by_role("button", name="Zoom in").click()
         page.wait_for_function(
             """() => document
-              .querySelector('[data-testid="office-zoom-control"] [role="combobox"]')
+              .querySelector('[data-testid="pptx-zoom-reset"] .pptx-toolbar__zoom-value')
               ?.textContent?.includes('125%')""",
             timeout=5_000,
         )

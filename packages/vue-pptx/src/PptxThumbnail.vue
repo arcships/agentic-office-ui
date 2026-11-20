@@ -33,7 +33,7 @@
         <span class="pptx-thumbnail__error-label">{{ m.pptx.thumbnail.failed }}</span>
       </span>
     </span>
-    <span class="pptx-thumbnail__label">
+    <span v-if="showLabel" class="pptx-thumbnail__label">
       <span>{{ slide.number }}</span>
       <OfficeBadge
         v-if="slide.hidden"
@@ -65,9 +65,12 @@ const props = withDefaults(defineProps<{
   slide: PptxSlideInfo
   width?: number
   active?: boolean
+  /** Render the slide-number label under the canvas (the sorter card owns it). */
+  showLabel?: boolean
 }>(), {
   width: 148,
   active: false,
+  showLabel: true,
 })
 
 const emit = defineEmits<{ select: [index: number] }>()

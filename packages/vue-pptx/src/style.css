@@ -59,34 +59,37 @@
   flex: 0 0 auto;
 }
 
-.pptx-viewer__search {
+/* Find bar opened from the toolbar actions menu (upstream has no find control). */
+.pptx-viewer__searchbar {
   align-items: center;
+  background: var(--pptx-panel);
+  border-block-end: 1px solid var(--pptx-border);
   display: flex;
-  flex: 1 1 320px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: var(--office-ui-space-1, 4px);
-  justify-content: center;
-  max-inline-size: 520px;
-  min-inline-size: 0;
+  padding: 8px 12px;
 }
 
-.pptx-viewer__search input {
+.pptx-viewer__searchbar input {
   background: var(--office-background);
   border: var(--office-border-width) solid var(--office-border);
   border-radius: var(--office-radius-md);
   color: var(--office-foreground);
-  flex: 1 1 auto;
+  flex: 1 1 240px;
   font: inherit;
+  max-inline-size: 520px;
   min-block-size: var(--office-control-height-sm);
-  min-inline-size: 80px;
+  min-inline-size: 120px;
   padding: 4px 9px;
 }
 
-.pptx-viewer__search input:focus-visible {
+.pptx-viewer__searchbar input:focus-visible {
   outline: var(--office-ring-width) solid var(--office-ring);
   outline-offset: var(--office-ring-offset-width);
 }
 
-.pptx-viewer__toolbar .pptx-viewer__search button {
+.pptx-viewer__searchbar button {
   background: var(--office-background);
   border: var(--office-border-width) solid var(--office-border);
   border-radius: var(--office-radius-md);
@@ -98,7 +101,7 @@
   padding: 4px 8px;
 }
 
-.pptx-viewer__toolbar .pptx-viewer__search button:disabled {
+.pptx-viewer__searchbar button:disabled {
   cursor: default;
   opacity: 0.42;
 }
@@ -107,11 +110,6 @@
   color: var(--office-muted-foreground);
   font-size: var(--office-text-xs);
   white-space: nowrap;
-}
-
-.pptx-viewer__zoom-value {
-  font-variant-numeric: tabular-nums;
-  min-inline-size: calc(var(--office-ui-space-12, 48px) + var(--office-ui-space-2, 8px));
 }
 
 .pptx-viewer__body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
@@ -131,35 +129,18 @@
   z-index: 3;
 }
 .pptx-viewer__sorter-grid { display: grid; gap: 12px; }
+/* The card owns its padding/radius/shadow (upstream slide-card anatomy); the
+   grid only fixes the virtual row height so spacers and rows stay aligned. */
 .pptx-viewer__sorter-item {
   block-size: var(--pptx-sorter-item-height, auto);
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
-  border-radius: var(--office-radius-lg);
-  box-shadow: none;
 }
-.pptx-viewer__sorter-item > .office-card__content {
-  block-size: 100%;
-  padding: 5px;
+.pptx-viewer__sorter-item:focus-visible {
+  box-shadow: 0 0 0 2px var(--office-ring);
 }
 .pptx-viewer__sorter-spacer { pointer-events: none; }
-.pptx-viewer__sorter .pptx-thumbnail {
-  block-size: 100%;
-  box-sizing: border-box;
-  margin-block-end: 0;
-  overflow: hidden;
-  padding: 0;
-}
-.pptx-viewer__sorter .pptx-thumbnail__frame { border-radius: var(--office-radius-md); }
-.pptx-viewer__sorter .pptx-thumbnail--active {
-  border-color: transparent;
-  box-shadow: none;
-}
-.pptx-viewer__sorter-item[data-active="true"] {
-  border-color: var(--pptx-accent);
-  box-shadow: 0 0 0 2px var(--pptx-accent);
-}
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; min-height: 1px; padding: 24px; }
 .pptx-stage { box-sizing: border-box; min-height: 1px; position: relative; touch-action: pan-x pan-y; }
 .pptx-stage__object-outline { border: 2px solid #2563eb; box-sizing: border-box; pointer-events: none; position: absolute; z-index: 12; }
@@ -394,7 +375,7 @@
 
 @media (pointer: coarse) {
   .pptx-viewer__toolbar button,
-  .pptx-viewer__search input,
+  .pptx-viewer__searchbar input,
   .pptx-viewer__playback-controls button {
     min-height: 44px;
     min-width: 44px;
@@ -402,10 +383,7 @@
 }
 
 @container pptx-viewer (max-width: 720px) {
-  /* The shared toolbar already wraps; give the search its own row so controls
-     keep their 28/32px hit area instead of shrinking. */
-  .pptx-viewer__toolbar .office-toolbar__center { flex: 1 1 100%; }
-  .pptx-viewer__search { flex-basis: 100%; max-inline-size: none; }
+  .pptx-viewer__searchbar input { flex-basis: 100%; max-inline-size: none; }
   .pptx-viewer__sidebar { display: none; }
   .pptx-viewer__stage { padding: 12px; }
   .pptx-viewer--present .pptx-viewer__stage { padding: 0; }

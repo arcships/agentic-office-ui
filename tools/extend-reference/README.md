@@ -22,7 +22,7 @@ Query parameters:
 
 | Parameter | Values | Meaning |
 |---|---|---|
-| `surface` | `button`, `file-upload`, `file-thumbnail`, `pdf-toolbar`, `document-sidebar` | render one surface; omit for all |
+| `surface` | `button`, `file-upload`, `file-thumbnail`, `pdf-toolbar`, `pptx-toolbar`, `pptx-sorter`, `document-sidebar` | render one surface; omit for all |
 | `theme` | `light` (default), `dark` | toggles the `.dark` scope, same as the reference site |
 
 The comparison page is [`tools/vue-reference`](../vue-reference). The matrix and
@@ -51,3 +51,8 @@ file-input) and captures the target box plus a 12px ring margin from both apps.
   only the drag-active beam is absent, and the report records that.
 - No PDF engine, no search popover, no dropdown menus: the PDF toolbar cells
   render the toolbar chrome and the closed trigger states.
+- No PPTX engine and no PPTX presenter: `pptx-toolbar` vendors the toolbar row
+  (closed tooltips/select/menu), `pptx-sorter` renders the vendored thumbnail
+  card in the production sorter grid metrics. `pptx-presenter` has no upstream
+  reference at the pinned commit and is reported as `unreachable` by the
+  harness instead of being compared against a harness-authored composition.

@@ -23,6 +23,8 @@
 | `src/vendor/extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | adapted |
 | `src/vendor/extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | copied |
 | `src/vendor/extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | adapted |
+| `src/vendor/extend/pptx-toolbar.tsx` | `apps/v4/components/extend/pptx-viewer.tsx` | adapted (#161) |
+| `src/vendor/extend/pptx-slide-card.tsx` | `apps/v4/components/extend/pptx-viewer.tsx` + `file-thumbnail.tsx` | adapted (#161) |
 | `src/vendor/extend/bounding-box-citations.tsx` | `apps/v4/components/extend/bounding-box-citations.tsx` | adapted (#164) |
 | `src/vendor/extend/layout-blocks-panel.tsx` | `apps/v4/components/extend/layout-blocks-panel.tsx` | adapted (#164) |
 | `src/vendor/extend/signature-fields.tsx` | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | adapted (#164) |

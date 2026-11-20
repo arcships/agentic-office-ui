@@ -103,7 +103,7 @@ def viewer_metrics(page: Page, label: str) -> dict[str, Any]:
     metrics = page.evaluate(
         """() => {
           const viewer = document.querySelector('[data-testid="pptx-viewer"]');
-          const toolbar = viewer.querySelector('[data-testid="office-toolbar"]');
+          const toolbar = viewer.querySelector('[data-testid="pptx-viewer-toolbar"]');
           const stageWrap = viewer.querySelector('.pptx-viewer__stage-wrap');
           const stage = viewer.querySelector('[data-testid="pptx-stage"]');
           const presenter = viewer.querySelector('[data-testid="pptx-presenter"]');
@@ -115,8 +115,8 @@ def viewer_metrics(page: Page, label: str) -> dict[str, Any]:
               right: box.right, top: box.top, width: box.width,
             };
           };
-          const leading = toolbar?.querySelector('.office-toolbar__leading');
-          const trailing = toolbar?.querySelector('.office-toolbar__trailing');
+          const leading = toolbar?.querySelector('.pptx-toolbar__leading');
+          const trailing = toolbar?.querySelector('.pptx-toolbar__trailing');
           const toolbarBox = toolbar?.getBoundingClientRect();
           const outside = toolbar
             ? [...toolbar.querySelectorAll('button, input, [role="combobox"]')]
@@ -148,11 +148,11 @@ def viewer_metrics(page: Page, label: str) -> dict[str, Any]:
             outside,
             unnamed,
             zoomLabel: (
-              toolbar?.querySelector('[data-testid="office-zoom-control"] [role="combobox"]')?.innerText?.trim()
-              ?? toolbar?.querySelector('[data-testid="pptx-zoom-reset"]')?.innerText?.trim()
+              toolbar?.querySelector('[data-testid="pptx-zoom-reset"] .pptx-toolbar__zoom-value')?.innerText?.trim()
               ?? ''
             ),
-            pageInput: toolbar?.querySelector('[data-testid="office-page-input"]')?.value ?? '',
+            pageCounter: toolbar?.querySelector('[data-testid="pptx-page-counter"]')?.innerText?.trim() ?? '',
+            pageInput: toolbar?.querySelector('[data-testid="office-page-input"]')?.innerText?.trim() ?? '',
             pageTotal: toolbar?.querySelector('[data-testid="office-page-total"]')?.innerText?.trim() ?? '',
           };
         }"""
@@ -182,14 +182,27 @@ def browse_story(page: Page, out: Path, prefix: str, theme: str) -> dict[str, An
 
     viewer = page.locator('[data-testid="pptx-viewer"]')
     viewer.screenshot(path=str(out / f"{prefix}-browse-single.png"))
-    page.locator('[data-testid="office-toolbar"]').screenshot(
+    page.locator('[data-testid="pptx-viewer-toolbar"]').screenshot(
         path=str(out / f"{prefix}-browse-toolbar.png")
     )
     return metrics
 
 
+def open_toolbar_actions(page: Page) -> None:
+    """Layout/present/notes/find live in the upstream-style actions menu."""
+    menu = page.locator('[data-testid="pptx-actions-menu"]')
+    if menu.count() == 0:
+        page.locator('[data-testid="pptx-actions"]').click()
+        menu.wait_for(state="attached")
+
+
+def toolbar_menu_item(page: Page, selector: str):
+    open_toolbar_actions(page)
+    return page.locator(selector)
+
+
 def sorter_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
-    page.locator('[data-testid="pptx-view-mode-sorter"]').click()
+    toolbar_menu_item(page, '[data-testid="pptx-view-mode-sorter"]').click()
     page.wait_for_selector('[data-testid="pptx-sorter"]')
     wait_idle(page)
     metrics = viewer_metrics(page, f"{prefix}-sorter")
@@ -215,6 +228,7 @@ def sorter_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
             cardStyles: cards.slice(0, 2).map((card) => ({
               border: getComputedStyle(card).borderTopWidth,
               radius: getComputedStyle(card).borderTopLeftRadius,
+              shadow: getComputedStyle(card).boxShadow,
             })),
           };
         }"""
@@ -228,8 +242,21 @@ def sorter_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
     assert sorter["columns"] >= 2, f"{prefix}: sorter columns {sorter['columns']}"
     assert not sorter["overflowing"], f"{prefix}: sorter cards overflow horizontally {sorter['overflowing']}"
     assert sorter["scrollWidth"] <= sorter["clientWidth"] + 1, f"{prefix}: sorter overflows {sorter}"
-    assert sorter["cardStyles"] and float(sorter["cardStyles"][0]["border"].replace("px", "")) >= 1, (
-        f"{prefix}: sorter cards are not shared card surfaces {sorter['cardStyles']}"
+    assert sorter["cardStyles"], f"{prefix}: no sorter cards"
+    first_card = sorter["cardStyles"][0]
+    assert float(first_card["radius"].replace("px", "")) >= 4, (
+        f"{prefix}: sorter cards lost the upstream rounded card radius {first_card}"
+    )
+    # The card frame itself carries the upstream `shadow-xs` (active: `shadow-sm`).
+    frame_style = page.evaluate(
+        """() => {
+          const card = document.querySelector('[data-testid="pptx-sorter-item"]');
+          const frame = card?.querySelector('.pptx-slide-card__frame');
+          return frame ? getComputedStyle(frame).boxShadow : '';
+        }"""
+    )
+    assert frame_style and frame_style != "none", (
+        f"{prefix}: sorter card frame lost the upstream shadow {frame_style!r}"
     )
 
     # The mobile grid must scroll through the deck without changing the slide.
@@ -264,8 +291,8 @@ def sorter_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
 
 
 def present_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
-    page.locator('[data-testid="pptx-view-mode-single"]').click()
-    page.locator('[data-testid="pptx-notes-toggle"]').click()
+    toolbar_menu_item(page, '[data-testid="pptx-view-mode-single"]').click()
+    toolbar_menu_item(page, '[data-testid="pptx-notes-toggle"]').click()
     page.wait_for_selector('[data-testid="pptx-presenter"]')
     page.locator('[data-testid="pptx-mode-present"]').click()
     page.wait_for_selector('[data-testid="pptx-viewer"].pptx-viewer--present')

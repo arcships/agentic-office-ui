@@ -111,8 +111,16 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     .filter((surface) => surface.gateStatus === "pending")
     .map((surface) => `${surface.id}:${surface.gatePendingIssue}`)
     .sort();
-  // Only the canonical DocumentViewerSidebar (#158) is still in flight.
-  assert.deepEqual(pending, ["document-sidebar:#158"]);
+  // DocumentViewerSidebar (#158) and the PPTX surfaces (#161b) are still in flight.
+  assert.deepEqual(
+    pending,
+    [
+      "document-sidebar:#158",
+      "pptx-presenter:#161",
+      "pptx-sorter:#161",
+      "pptx-toolbar:#161",
+    ].sort(),
+  );
 });
 
 test("committed baselines cover exactly the gate-blocking matrix", () => {
