@@ -574,7 +574,7 @@ const jsonValue = computed(() => {
   z-index: 0;
   display: flex;
   width: fit-content;
-  height: 28px;
+  height: 32px;
   align-items: center;
   justify-content: center;
   column-gap: 2px;
@@ -588,7 +588,7 @@ const jsonValue = computed(() => {
 .review-tab {
   position: relative;
   display: flex;
-  height: 24px;
+  height: 28px;
   flex-shrink: 0;
   flex-grow: 1;
   cursor: pointer;
@@ -617,7 +617,9 @@ const jsonValue = computed(() => {
 .review-tab.is-active {
   background: var(--office-background);
   color: var(--office-foreground);
-  box-shadow: 0 1px 2px 0 color-mix(in oklab, black 5%, transparent);
+  box-shadow:
+    0 1px 3px 0 color-mix(in oklab, black 5%, transparent),
+    0 1px 2px -1px color-mix(in oklab, black 5%, transparent);
 }
 .review-tab:focus-visible {
   outline: none;
@@ -627,7 +629,6 @@ const jsonValue = computed(() => {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  margin-inline: -2px;
 }
 .review-scroll {
   min-height: 0;
@@ -662,7 +663,16 @@ const jsonValue = computed(() => {
 .review-card.is-active {
   border-color: color-mix(in oklab, oklch(62.3% .214 259.815) 60%, transparent);
   background: color-mix(in oklab, oklch(62.3% .214 259.815) 5%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in oklab, oklch(62.3% .214 259.815) 8%, transparent);
+  box-shadow: 0 0 0 1px rgb(59 130 246 / 8%);
+}
+.review-card.is-active:hover,
+.review-card.is-active:focus-within {
+  border-color: color-mix(in oklab, oklch(62.3% .214 259.815) 50%, transparent);
+}
+.review-card.is-active:focus-visible {
+  box-shadow:
+    0 0 0 2px color-mix(in oklab, oklch(62.3% .214 259.815) 20%, transparent),
+    0 0 0 1px rgb(59 130 246 / 8%);
 }
 .review-card__header {
   display: flex;
@@ -760,7 +770,7 @@ const jsonValue = computed(() => {
   margin-bottom: var(--office-ui-space-1);
   color: var(--office-muted-foreground);
   font-size: 11px;
-  line-height: 16px;
+  line-height: 1.5;
   font-weight: 500;
 }
 .review-value__static {

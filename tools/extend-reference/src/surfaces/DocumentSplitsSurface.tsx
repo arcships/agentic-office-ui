@@ -6,6 +6,12 @@ import {
 import { ParityCell } from "../parity/ParitySurface";
 
 const splits = fixtures.blocks.documentSplits;
+// Warm the shared page image before thumbnails mount (deterministic capture).
+if (typeof window !== "undefined") {
+  const preload = new Image();
+  preload.src = splits.thumbnailImage;
+}
+
 const thumbnailImages = Object.fromEntries(
   splits.splits.flatMap((group) =>
     group.pages.map((pageId) => [pageId, splits.thumbnailImage])

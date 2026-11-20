@@ -387,16 +387,16 @@ function isDropTarget(key: string): boolean {
             </div>
             <div class="doc-splits__card-actions">
               <div class="doc-splits__count">{{ group.pages.length }}</div>
-              <OfficeButton
-                variant="ghost"
-                size="icon-sm"
+              <button
+                type="button"
+                class="doc-splits__remove"
                 :disabled="!canRemove()"
                 :aria-label="removeLabel(group)"
                 data-slot="document-split-remove"
                 @click="removeSplit(group)"
               >
                 <HugeIcon :icon="Delete02Icon" class="doc-splits__action-icon" />
-              </OfficeButton>
+              </button>
             </div>
           </div>
 
@@ -485,6 +485,46 @@ function isDropTarget(key: string): boolean {
   background: var(--office-background);
   padding-inline: var(--office-ui-space-3);
 }
+.doc-splits__remove {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: var(--office-ui-space-2);
+  margin: 0;
+  padding: 0;
+  border: var(--office-border-width) solid transparent;
+  border-radius: var(--office-radius-lg);
+  background: transparent;
+  color: var(--office-foreground);
+  font: inherit;
+  outline: none;
+}
+.doc-splits__remove:hover {
+  background: var(--office-accent);
+}
+.doc-splits__remove:focus-visible {
+  box-shadow: 0 0 0 2px var(--office-ring);
+  outline: none;
+}
+.doc-splits__remove:disabled {
+  pointer-events: none;
+  opacity: 0.64;
+}
+.doc-splits__remove svg {
+  margin-inline: -2px;
+  opacity: 0.8;
+}
+@media (min-width: 640px) {
+  .doc-splits__remove {
+    width: 28px;
+    height: 28px;
+  }
+}
 .doc-splits__button-icon,
 .doc-splits__action-icon,
 .doc-splits__handle-icon {
@@ -498,10 +538,10 @@ function isDropTarget(key: string): boolean {
   overflow-y: auto;
 }
 .doc-splits__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--office-ui-space-3);
   padding: var(--office-ui-space-3);
+}
+.doc-splits__list > * + * {
+  margin-top: var(--office-ui-space-3);
 }
 .doc-splits__state-wrap {
   padding: var(--office-ui-space-3);
@@ -522,7 +562,6 @@ function isDropTarget(key: string): boolean {
 }
 .doc-splits__card {
   width: 100%;
-  overflow: hidden;
   border: var(--office-border-width) solid var(--office-border);
   border-radius: var(--office-radius-lg);
   background: var(--office-background);
@@ -656,11 +695,15 @@ function isDropTarget(key: string): boolean {
 }
 .doc-splits__thumb:hover {
   border-color: color-mix(in oklab, var(--office-ring) 40%, transparent);
-  box-shadow: 0 0 0 2px var(--office-ring);
+  box-shadow:
+    0 0 0 2px var(--office-ring),
+    var(--office-shadow-xs);
 }
 .doc-splits__thumb:focus-visible {
   border-color: color-mix(in oklab, var(--office-ring) 40%, transparent);
-  box-shadow: 0 0 0 2px var(--office-ring);
+  box-shadow:
+    0 0 0 2px var(--office-ring),
+    var(--office-shadow-xs);
 }
 .doc-splits__thumb:active {
   cursor: grabbing;
@@ -677,16 +720,16 @@ function isDropTarget(key: string): boolean {
   position: absolute;
   right: var(--office-ui-space-1);
   bottom: var(--office-ui-space-1);
-  border-radius: var(--office-radius-sm);
+  border-radius: 4px;
   background: color-mix(in oklab, var(--office-background) 95%, transparent);
   padding: var(--office-ui-space-0-5) var(--office-ui-space-1-5);
   color: var(--office-foreground);
   font-size: 10px;
   line-height: 15px;
   font-weight: 600;
-  box-shadow: var(--office-shadow-xs);
-  outline: 1px solid color-mix(in oklab, var(--office-border) 80%, transparent);
-  outline-offset: -1px;
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--office-border) 80%, transparent),
+    var(--office-shadow-xs);
 }
 .doc-splits__empty-drop {
   display: grid;

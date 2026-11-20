@@ -547,8 +547,8 @@ function setCardRef(element: unknown, index: number) {
 }
 .layout-blocks__card.is-active:focus-visible {
   box-shadow:
-    0 0 0 1px rgb(0 0 0 / 4%),
-    0 0 0 2px var(--office-ring);
+    0 0 0 2px var(--office-ring),
+    0 0 0 1px rgb(0 0 0 / 4%);
 }
 .layout-blocks__card-inner {
   min-width: 0;
@@ -647,6 +647,12 @@ function setCardRef(element: unknown, index: number) {
   border-color: color-mix(in oklab, oklch(55.2% .016 285.938) 60%, transparent);
   background: color-mix(in oklab, oklch(55.2% .016 285.938) 5%, transparent);
 }
+.layout-blocks__card:hover {
+  background: color-mix(in oklab, var(--office-muted) 40%, transparent);
+}
+.layout-blocks__card.is-active:hover {
+  background: color-mix(in oklab, var(--office-muted) 40%, transparent);
+}
 .layout-blocks__confidence {
   overflow: hidden;
   color: var(--office-muted-foreground);
@@ -715,6 +721,73 @@ function setCardRef(element: unknown, index: number) {
   border-color: color-mix(in oklab, var(--office-destructive) 45%, transparent);
   background: color-mix(in oklab, var(--office-destructive) 8%, transparent);
   color: var(--office-destructive);
+}
+
+[data-office-theme="dark"] .layout-blocks__card--heading .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(81.1% .111 293.571) 10%, transparent);
+  color: oklch(81.1% .111 293.571);
+}
+[data-office-theme="dark"] .layout-blocks__card--paragraph .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(80.9% .105 251.813) 10%, transparent);
+  color: oklch(80.9% .105 251.813);
+}
+[data-office-theme="dark"] .layout-blocks__card--list .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(84.5% .143 164.978) 10%, transparent);
+  color: oklch(84.5% .143 164.978);
+}
+[data-office-theme="dark"] .layout-blocks__card--table .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(87.9% .169 91.605) 10%, transparent);
+  color: oklch(87.9% .169 91.605);
+}
+[data-office-theme="dark"] .layout-blocks__card--figure .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(81% .117 11.638) 10%, transparent);
+  color: oklch(81% .117 11.638);
+}
+[data-office-theme="dark"] .layout-blocks__card--header .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(86.5% .127 207.078) 10%, transparent);
+  color: oklch(86.5% .127 207.078);
+}
+[data-office-theme="dark"] .layout-blocks__card--footer .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(86.9% .022 252.894) 10%, transparent);
+  color: oklch(86.9% .022 252.894);
+}
+[data-office-theme="dark"] .layout-blocks__card--page_number .layout-blocks__badge {
+  background: color-mix(in oklab, oklch(87.1% .006 286.286) 10%, transparent);
+  color: oklch(87.1% .006 286.286);
+}
+@media (prefers-color-scheme: dark) {
+  [data-office-theme="system"] .layout-blocks__card--heading .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(81.1% .111 293.571) 10%, transparent);
+    color: oklch(81.1% .111 293.571);
+  }
+  [data-office-theme="system"] .layout-blocks__card--paragraph .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(80.9% .105 251.813) 10%, transparent);
+    color: oklch(80.9% .105 251.813);
+  }
+  [data-office-theme="system"] .layout-blocks__card--list .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(84.5% .143 164.978) 10%, transparent);
+    color: oklch(84.5% .143 164.978);
+  }
+  [data-office-theme="system"] .layout-blocks__card--table .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(87.9% .169 91.605) 10%, transparent);
+    color: oklch(87.9% .169 91.605);
+  }
+  [data-office-theme="system"] .layout-blocks__card--figure .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(81% .117 11.638) 10%, transparent);
+    color: oklch(81% .117 11.638);
+  }
+  [data-office-theme="system"] .layout-blocks__card--header .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(86.5% .127 207.078) 10%, transparent);
+    color: oklch(86.5% .127 207.078);
+  }
+  [data-office-theme="system"] .layout-blocks__card--footer .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(86.9% .022 252.894) 10%, transparent);
+    color: oklch(86.9% .022 252.894);
+  }
+  [data-office-theme="system"] .layout-blocks__card--page_number .layout-blocks__badge {
+    background: color-mix(in oklab, oklch(87.1% .006 286.286) 10%, transparent);
+    color: oklch(87.1% .006 286.286);
+  }
 }
 @keyframes layout-blocks-pulse {
   50% {

@@ -300,4 +300,19 @@ function exportSigned(field: ESignatureField) {
 .e-signature-fields__export {
   width: 100%;
 }
+
+[data-office-theme="dark"] .e-signature-field__icon {
+  color: oklch(80.9% .105 251.813);
+}
+[data-office-theme="dark"] .e-signature-field__badge.is-signed {
+  color: oklch(84.5% .143 164.978);
+}
+@media (prefers-color-scheme: dark) {
+  [data-office-theme="system"] .e-signature-field__icon {
+    color: oklch(80.9% .105 251.813);
+  }
+  [data-office-theme="system"] .e-signature-field__badge.is-signed {
+    color: oklch(84.5% .143 164.978);
+  }
+}
 </style>

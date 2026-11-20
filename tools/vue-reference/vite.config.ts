@@ -47,6 +47,10 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     target: "chrome120",
+    // Keep CSS colour functions (oklch / color-mix) verbatim. The parity gate
+    // compares computed colours with the reference page; colour minification
+    // rewrites them to 8-bit hex and adds a channel delta on large fills.
+    cssMinify: false,
   },
   server: {
     fs: {

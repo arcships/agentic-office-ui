@@ -24,6 +24,13 @@ const states = [
 
 defineProps<{ cellWidth: number }>();
 
+// Lazy <img> decoding must not race the capture: warm the shared page image
+// before either harness renders a thumbnail (same URL on both sides).
+if (typeof window !== "undefined") {
+  const preload = new Image();
+  preload.src = splits.thumbnailImage;
+}
+
 function stateSplits(key: string) {
   if (key === "none") return [];
   return splits[key as "splits" | "singleSplit" | "emptyPagesSplit"];
