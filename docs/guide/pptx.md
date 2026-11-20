@@ -30,15 +30,15 @@ import "@arcships/vue-pptx/style.css"
 | `initialSlide` | `0` | 初始页，从零开始 |
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
-| `showNotes` | `false` | 显示演讲者备注面板；演示模式下变为演讲者视图（当前页备注 + 下一页缩略图 + 计时）。支持 `v-model:show-notes`，工具栏备注按钮也会发 `update:showNotes` |
-| `showNotesToggle` | `true` | 工具栏备注切换按钮 |
-| `showPresentToggle` | `true` | 工具栏“演示”按钮；演示模式在播放控制条显示“退出演示” |
-| `showFullscreenControl` | `true` | 浏览工具栏全屏按钮 |
-| `showToolbar` | `true` | 浏览工具栏（`OfficeToolbar`，桌面 49px / 48px min-height） |
-| `viewMode` | `null` | 浏览布局：`single` 或 `sorter`；`null` 跟随内部工具栏状态 |
+| `showNotes` | `false` | 显示演讲者备注面板；演示模式下变为演讲者视图（当前页备注 + 下一页缩略图 + 计时）。支持 `v-model:show-notes`，工具栏 `⋯` 菜单的备注项也会发 `update:showNotes` |
+| `showNotesToggle` | `true` | 工具栏 `⋯` 菜单的备注切换项 |
+| `showPresentToggle` | `true` | 工具栏 `⋯` 菜单的“演示”项；演示模式在播放控制条显示“退出演示” |
+| `showFullscreenControl` | `true` | 工具栏 `⋯` 菜单的全屏项 |
+| `showToolbar` | `true` | 浏览工具栏（`PptxViewerToolbar`，48px min-height + 1px 底边） |
+| `viewMode` | `null` | 浏览布局：`single` 或 `sorter`；`null` 跟随内部菜单状态 |
 | `defaultViewMode` | `single` | 未受控时的初始浏览布局 |
-| `showSidebar` | `true` | 缩略图侧栏 |
-| `showSearch` | `true` | 搜索框 |
+| `showSidebar` | `true` | 缩略图侧栏（工具栏首项可切换） |
+| `showSearch` | `true` | 搜索入口：工具栏 `⋯` 菜单的“搜索幻灯片”，或 `Ctrl/Cmd+F`；打开后工具栏下方出现 find bar |
 | `showPlaybackControls` | `true` | 播放控制条 |
 | `showWarnings` | `true` | 显示文档 `warnings`（备注不支持、宏已忽略等） |
 | `showContextMenu` | `true` | 内置链接右键菜单；设为 `false` 时只发 `context-menu` |
@@ -63,10 +63,10 @@ import "@arcships/vue-pptx/style.css"
 
 ### 幻灯片浏览（Sorter）
 
-浏览模式支持两种布局，工具栏左侧的两个按钮（`data-testid="pptx-view-mode-single"`、`pptx-view-mode-sorter"`）切换，也可以由 `viewMode` 属性控制：
+浏览模式支持两种布局，工具栏右侧 `⋯` 菜单（`data-testid="pptx-actions"`）里的“单页视图”/“幻灯片浏览”（`data-testid="pptx-view-mode-single"`、`pptx-view-mode-sorter`）切换，也可以由 `viewMode` 属性控制：
 
 - `single`（默认）：保持原来的纵向幻灯片列表。
-- `sorter`：网格缩略图，每页一张 `OfficeCard`，与侧栏共用同一套 `PptxThumbnail` 与懒加载门控；缩略图加载时显示 `OfficeSkeleton`，渲染失败显示错误 badge，隐藏页显示 `OfficeBadge`。网格只挂载可视行附近的缩略图（上方和下方有等高占位块），滚动与 `PageUp`/`PageDown`/`Home`/`End` 只滚动网格，不切换当前页；点击缩略图会切到该页但网格保持打开，选中项保持高亮。网格打开时隐藏侧栏，舞台仍然挂载（会话仍渲染到它）但在网格下方。移动端 390px 下 2 列，卡片不横向溢出，网格可滚动。
+- `sorter`：网格缩略图，每页一张 `PptxSlideCard`（上游缩略图卡片的 `p-2` / `gap-2` / `rounded-md` / `shadow-xs` 结构），与侧栏共用同一套 `PptxThumbnail` 与懒加载门控；缩略图加载时显示 `OfficeSkeleton`，渲染失败显示错误 badge，隐藏页显示 `OfficeBadge`。网格只挂载可视行附近的缩略图（上方和下方有等高占位块），滚动与 `PageUp`/`PageDown`/`Home`/`End` 只滚动网格，不切换当前页；点击缩略图会切到该页但网格保持打开，选中项保持高亮。网格打开时隐藏侧栏，舞台仍然挂载（会话仍渲染到它）但在网格下方。移动端 390px 下 2 列，卡片不横向溢出，网格可滚动。
 
 两种布局共用同一个活动页（`data-slide-index`），切换布局时保持当前页与选中项；`sorter` 打开时会把当前页滚到可视区域。演示模式始终使用单页舞台，不显示布局按钮。事件新增 `update:viewMode`，网格根节点为 `data-testid="pptx-sorter"`，每个格子为 `data-testid="pptx-sorter-item"` 并带 `data-slide-index` 与 `data-active`。
 
@@ -78,7 +78,7 @@ import "@arcships/vue-pptx/style.css"
 
 加载时会读取每页的备注部件（`ppt/notesSlides/notesSlide*.xml`），并按段落换行写入 `PptxPreviewDocument.slides[i].notes`。没有备注部件的页面不带该字段，空备注也不会产生空字符串。幻灯片图像、页码、页眉/页脚和日期占位符不算备注内容；备注只解析一次，且只解压备注部件本身，幻灯片 XML 和媒体不会再次解码。
 
-- `showNotes`（默认 `false`）打开备注面板：浏览模式显示当前页备注，演示模式显示完整演讲者视图；工具栏备注按钮也可切换。两种模式共用同一个面板根节点 `data-testid="pptx-presenter"`，由 `data-presenter-mode="browse"|"present"` 区分，内部是 `OfficeCard` + `OfficeSeparator` + `OfficeScrollArea`。
+- `showNotes`（默认 `false`）打开备注面板：浏览模式显示当前页备注，演示模式显示完整演讲者视图；工具栏 `⋯` 菜单的备注项也可切换。两种模式共用同一个面板根节点 `data-testid="pptx-presenter"`，由 `data-presenter-mode="browse"|"present"` 区分，内部是 `OfficeCard` + `OfficeSeparator` + `OfficeScrollArea`。
 - 演讲者视图包含当前页备注（`pptx-presenter-notes`）、下一页缩略图（`showHiddenSlides=false` 时跳过隐藏页；最后一页显示 `pptx-presenter-last`）和从开始演示算起的计时（`pptx-presenter-timer`，`mm:ss`，超过一小时为 `h:mm:ss`）。
 - 备注面板可用 `notes` 插槽整体替换，插槽参数为 `{ notes, slide }`。没有备注的页面显示本地化的空状态。
 - 备注部件损坏时只影响该页备注，不会阻止演示文稿打开；但超过 XML 预算或加载被取消仍会使打开失败。

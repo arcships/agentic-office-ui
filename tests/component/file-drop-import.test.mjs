@@ -479,7 +479,7 @@ function createPptxSession({ document = pptxDocumentWithSlides(2) } = {}) {
 // The drop contract itself is covered by the `useFileDrop` cases above and by
 // the PPTX browser suites; skip only this composite mount so the shared
 // regression file stays finite.
-test("dropping a presentation on PptxViewer opens it and rejects other files", { skip: "PptxViewer's Reka chrome needs DOM globals (follow-up to #161)" }, async () => {
+test("dropping a presentation on PptxViewer opens it and rejects other files", { skip: "Mounting the full PptxViewer in the DOM-free renderer still OOMs; the drop contract is covered by useFileDrop and the PPTX browser suites" }, async () => {
   const fake = createPptxSession();
   const dropped = [];
   const mounted = await mount(PptxViewer, {

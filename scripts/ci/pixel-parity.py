@@ -775,6 +775,14 @@ def write_html_report(report: dict, destination: Path) -> None:
         )
 
     summary = report["summary"]
+    unreachable_rows = []
+    for entry in report.get("unreachable", []):
+        unreachable_rows.append(
+            f"<tr><td>{html.escape(entry['id'])}</td>"
+            f"<td>{html.escape(entry.get('subjectComponent') or '—')}</td>"
+            f"<td>{html.escape(entry.get('pendingIssue') or '—')}</td>"
+            f"<td>{html.escape(entry.get('reason') or '')}</td></tr>"
+        )
     document = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -827,6 +835,11 @@ def write_html_report(report: dict, destination: Path) -> None:
   <thead><tr><th>Color token</th><th>Extend light</th><th>Office light</th><th>Status</th></tr></thead>
   <tbody>{''.join(color_rows) or '<tr><td colspan="4">no color gaps or mismatches</td></tr>'}</tbody>
 </table>
+<h2>Unreachable surfaces</h2>
+<table>
+  <thead><tr><th>Surface</th><th>Subject</th><th>Pending</th><th>Reason</th></tr></thead>
+  <tbody>{''.join(unreachable_rows) or '<tr><td colspan="4">none</td></tr>'}</tbody>
+</table>
 <h2>Cases</h2>
 <table>
   <thead><tr><th>Surface</th><th>State</th><th>Viewport</th><th>Theme</th><th>Status</th><th>Screens</th></tr></thead>
@@ -864,6 +877,19 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
             f"| {surface.get('gatePendingIssue') or surface['pendingIssue'] or '—'} "
             f"| {counts['passed'] + counts['passedWithAntialiasing']} | {counts['failed']} | {counts['baselineOnly']} |"
         )
+    lines.extend(["", "## Unreachable surfaces", ""])
+    if report.get("unreachable"):
+        lines.extend([
+            "| Surface | Subject | Pending | Reason |",
+            "|---|---|---|---|",
+        ])
+        for entry in report["unreachable"]:
+            lines.append(
+                f"| {entry['id']} | {entry.get('subjectComponent') or '—'} "
+                f"| {entry.get('pendingIssue') or '—'} | {entry.get('reason') or ''} |"
+            )
+    else:
+        lines.append("None.")
     lines.extend(
         [
             "",
@@ -1048,11 +1074,29 @@ def main() -> int:
     surfaces = [
         surface
         for surface in manifest["surfaces"]
-        if surface.get("referenceStatus") != "fixtures-only"
+        if surface.get("referenceStatus") not in ("fixtures-only", "unreachable")
         and (not only or surface["id"] in only)
         and surface.get("states")
     ]
-    if not surfaces:
+    # Surfaces whose reference cannot exist at the pinned upstream commit are
+    # reported, not measured: fabricating a reference composition would make
+    # the comparison tautological. `--only` still accepts them so a release
+    # checklist can ask for every surface of an issue.
+    unreachable = [
+        {
+            "id": surface["id"],
+            "title": surface.get("title"),
+            "subjectComponent": surface.get("subjectComponent"),
+            "pendingIssue": surface.get("pendingIssue"),
+            "reason": surface.get("unreachableReason") or surface.get("notes"),
+        }
+        for surface in manifest["surfaces"]
+        if surface.get("referenceStatus") == "unreachable"
+        and (not only or surface["id"] in only)
+    ]
+    for entry in unreachable:
+        log(f"unreachable surface {entry['id']}: {entry['reason']}")
+    if not surfaces and not unreachable:
         log("no surfaces selected")
         return 2
 
@@ -1188,6 +1232,7 @@ def main() -> int:
         "viewports": viewports,
         "themes": themes,
         "surfaces": surface_summaries,
+        "unreachable": unreachable,
         "summary": summary,
         "tokens": tokens,
         "cases": cases,

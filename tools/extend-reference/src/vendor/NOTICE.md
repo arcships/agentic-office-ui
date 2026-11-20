@@ -51,6 +51,8 @@ SOFTWARE.
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
 | `extend/docx-toolbar.tsx` | `apps/v4/components/extend/docx-viewer.tsx` | Toolbar/page/zoom/actions subset: tooltip/dropdown popups dropped; static trigger classes and icon sizes kept |
 | `extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Toolbar subset: tooltip/popover/select popups dropped, static trigger classes kept |
+| `extend/pptx-toolbar.tsx` | `apps/v4/components/extend/pptx-viewer.tsx` | Toolbar subset: tooltip/select/dropdown popups dropped; static trigger classes, slide counter, zoom cluster and actions trigger kept |
+| `extend/pptx-slide-card.tsx` | `apps/v4/components/extend/pptx-viewer.tsx` + `file-thumbnail.tsx` | Thumbnail-rail slide card: rendered markup/classes unchanged; the engine canvas is replaced by the shared fixture PNG |
 | `extend/bounding-box-citations.tsx` | `apps/v4/components/extend/bounding-box-citations.tsx` | `HumanReviewPanel` Form tab + scalar field cards; pierre/diffs JSON tab, glide-data-grid array/object editors and tooltips dropped; loading/error states are harness extensions |
 | `extend/layout-blocks-panel.tsx` | `apps/v4/components/extend/layout-blocks-panel.tsx` | `@tanstack/react-virtual` and the Base UI ScrollArea replaced by flow/scroll divs with the same classes; loading/error/markdown states are harness extensions |
 | `extend/signature-fields.tsx` | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | `SignatureFieldsPanel` only; PDF viewer and `signature_pad` dialog dropped; `showPreview`, loading and error are harness extensions |

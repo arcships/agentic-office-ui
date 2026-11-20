@@ -263,6 +263,11 @@ test("PPTX search live region announces counts, no results and clearing", async 
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
     "PPTX ready state",
   );
+  // The find bar opens from the toolbar actions menu / Ctrl+F so the resting
+  // toolbar keeps the upstream row.
+  const viewer = findByTestId(mounted.root, "pptx-viewer");
+  viewer.props.onKeydown({ key: "f", ctrlKey: true, preventDefault() {}, target: viewer });
+  await vue.nextTick();
   const form = walk(mounted.root).find(
     (node) => node.type === "form" && node.props?.role === "search",
   );

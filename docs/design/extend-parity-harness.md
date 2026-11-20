@@ -92,6 +92,9 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `file-upload` | default(empty)、hover、focus、dragging、rejected(error)、file-selected | ✅ `FileUpload.vue` |
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
 | `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
+| `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
+| `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
+| `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
 | `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
 | `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
 | `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
@@ -168,6 +171,12 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
   [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
 - `document-sidebar` 只保留参考基线：规范组件由 #158 在
   `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
+- `pptx-toolbar` / `pptx-sorter` 已收敛到 vendored 上游标记：40 + 24 个 case
+  全部 pass，0 像素差、0 几何差（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。
+  `pptx-presenter` 在固定 commit 没有上游布局（presenter 在私有
+  `@extend-ai/react-pptx` 内），manifest 用 `referenceStatus: "unreachable"`
+  描述它：harness 在 report/SUMMARY 的 unreachable 表列出原因并跳过采集，
+  不把“自己拼的参考”当成 parity 证据。
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
   `ParitySurface` 现在按主题写入 `color-scheme`，避免 focus ring 因为原生控件配色不同而误报。
 

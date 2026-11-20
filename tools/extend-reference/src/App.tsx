@@ -15,6 +15,8 @@ import { FileUploadSurface } from "./surfaces/FileUploadSurface";
 import { InputSurface } from "./surfaces/InputSurface";
 import { PdfSidebarSurface } from "./surfaces/PdfSidebarSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
+import { PptxSorterSurface } from "./surfaces/PptxSorterSurface";
+import { PptxToolbarSurface } from "./surfaces/PptxToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
 import { TooltipSurface } from "./surfaces/TooltipSurface";
 import { XlsxSheetTabsSurface } from "./surfaces/XlsxSheetTabsSurface";
@@ -36,6 +38,8 @@ const renderers: Record<
   "file-thumbnail": FileThumbnailSurface,
   "pdf-toolbar": PdfToolbarSurface,
   "pdf-sidebar": PdfSidebarSurface,
+  "pptx-toolbar": PptxToolbarSurface,
+  "pptx-sorter": PptxSorterSurface,
   "docx-toolbar": DocxToolbarSurface,
   "docx-sidebar": DocxSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,
@@ -49,7 +53,8 @@ const renderers: Record<
 };
 
 function hasReference(surface: Surface): boolean {
-  return (surface as { referenceStatus?: string }).referenceStatus !== "fixtures-only";
+  const status = (surface as { referenceStatus?: string }).referenceStatus;
+  return status !== "fixtures-only" && status !== "unreachable";
 }
 
 export function App(): React.ReactElement {

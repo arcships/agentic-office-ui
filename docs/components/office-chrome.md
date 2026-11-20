@@ -414,3 +414,15 @@ diff 像素 0、diff ratio 0、几何 delta 0（详见
 [docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)）。
 `tests/component/docx-*.test.mjs` 与 `tests/blackbox/docx_*.py` 已同步到新的
 默认行（菜单内命令、`toolbarSearch` 选项）。
+
+## 11. PPTX 迁移（issue #161）
+
+PPTX 的生产工具栏是 `PptxViewerToolbar`，行结构、控件顺序、32/28px 控件、
+`Slide N of M` 和 104px 缩放触发框逐项对齐 Extend `PptxToolbar`；它没有套
+`OfficeToolbar` 的 leading/center/trailing 外壳，否则多出的 wrapper 会改变
+390px 下的换行位置（像素矩阵会直接暴露 2px 偏差）。工具栏内的按钮仍复用
+`OfficeIconButton` 与 Hugeicons，菜单复用共享 dropdown 几何。
+
+布局/演示/备注/全屏/查找不在上游默认行里，统一收进右侧 `⋯` 操作菜单；搜索
+`Ctrl/Cmd+F` 打开工具栏下方的 find bar。证据与像素数字见
+[pptx-chrome.md](./pptx-chrome.md#7-测试与像素证据)。

@@ -293,6 +293,9 @@ importers:
       '@arcships/vue-ui':
         specifier: ^0.7.1
         version: link:../vue-ui
+      '@hugeicons/core-free-icons':
+        specifier: 4.4.0
+        version: 4.4.0
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^5.0.0
