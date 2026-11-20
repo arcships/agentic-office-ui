@@ -476,6 +476,43 @@
       ]
     },
     {
+      "id": "pdf-sidebar",
+      "title": "PDF thumbnails sidebar",
+      "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx + pdf-viewer.tsx (PDFViewerThumbnails)",
+      "subjectComponent": "packages/vue-pdf/src/components/PdfViewer.vue (DocumentViewerSidebar + PdfThumbnailStrip)",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-pdf-sidebar-frame]",
+      "subjectTargetSelector": "[data-pdf-sidebar-frame]",
+      "cellWidth": 220,
+      "notes": "Both sides render a 160px rail over four 600×800 PDF pages, one shared thumbnail PNG, numeric page labels, active page 1 and the same 768px inline breakpoint. The reference is the pinned Extend DocumentViewerThumbnailSidebar with the real PDFViewerThumbnails markup; the subject is the production DocumentViewerSidebar + PdfThumbnailStrip pair used by PdfViewer.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    {
       "id": "docx-toolbar",
       "title": "DOCX toolbar",
       "referenceComponent": "tools/extend-reference/src/surfaces/DocxToolbarSurface.tsx (Extend-style full control set)",

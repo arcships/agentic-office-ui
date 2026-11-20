@@ -1812,12 +1812,13 @@ defineExpose({
       <DocumentViewerSidebar
         :open="showThumbnails"
         :close-on-escape="false"
+        flush
         :label="m.pdf.viewer.thumbnails"
         class="pdf-sidebar"
         data-testid="pdf-thumbnails-sidebar"
         @update:open="showThumbnails = $event"
       >
-        <DocumentViewerSidebarSkeleton v-if="thumbnailsLoading" :items="3" />
+        <DocumentViewerSidebarSkeleton v-if="thumbnailsLoading" variant="thumbnail" />
         <PdfThumbnailStrip
           :pageCount="numPages"
           :labels="pdfPageLabels"
@@ -1826,6 +1827,7 @@ defineExpose({
           :label="m.pdf.viewer.thumbnails"
           :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
           :pageLabel="m.pdf.viewer.pageLabel"
+          :page-sizes="renderDocument?.pages ?? []"
           @select="setActivePage"
         />
       </DocumentViewerSidebar>

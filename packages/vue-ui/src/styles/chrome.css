@@ -519,7 +519,7 @@
   block-size: 100%;
   min-block-size: 0;
   overflow: hidden;
-  border-inline-end: var(--office-border-width) solid var(--office-sidebar-border);
+  border-inline-end: var(--office-border-width) solid var(--office-border);
   background: var(--office-sidebar);
   color: var(--office-sidebar-foreground);
   font-family: inherit;
@@ -539,7 +539,9 @@
   inset-block: 0;
   inset-inline-start: 0;
   z-index: calc(var(--office-ui-z) - 10);
-  box-shadow: var(--office-shadow-sm);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .office-document-sidebar[data-sidebar-open="false"] {
@@ -581,6 +583,11 @@
   padding: var(--office-ui-space-2);
 }
 
+.office-document-sidebar--flush .office-document-sidebar__body {
+  overflow: hidden;
+  padding: 0;
+}
+
 .office-document-sidebar__skeleton {
   display: flex;
   flex-direction: column;
@@ -611,6 +618,43 @@
   inline-size: var(--office-ui-space-8);
   block-size: var(--office-ui-space-2);
   border-radius: var(--office-radius-sm);
+}
+
+/* Upstream PDF sidebar skeleton: one 80×112 page block and a 40×12 caption. */
+.office-document-sidebar__skeleton--thumbnail {
+  inline-size: 10rem;
+  flex: none;
+  gap: 0;
+  padding: var(--office-ui-space-4);
+  border-inline-end: var(--office-border-width) solid var(--office-border);
+  background: var(--office-sidebar);
+  box-sizing: border-box;
+}
+
+.office-document-sidebar__thumbnail-skeleton-thumb {
+  inline-size: 5rem;
+  block-size: 7rem;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: var(--office-radius-md);
+  background: var(--office-background);
+  box-shadow: var(--office-shadow-xs);
+}
+
+.office-document-sidebar__thumbnail-skeleton-pulse {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  background: var(--office-muted);
+}
+
+.office-document-sidebar__thumbnail-skeleton-caption {
+  inline-size: 2.5rem;
+  block-size: 0.75rem;
+  margin-block-start: 0.75rem;
+  margin-inline: auto;
+  border-radius: 9999px;
+  background: var(--office-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -9,6 +9,7 @@ import { DocumentSidebarSurface } from "./surfaces/DocumentSidebarSurface";
 import { FileThumbnailSurface } from "./surfaces/FileThumbnailSurface";
 import { FileUploadSurface } from "./surfaces/FileUploadSurface";
 import { InputSurface } from "./surfaces/InputSurface";
+import { PdfSidebarSurface } from "./surfaces/PdfSidebarSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
 import { TooltipSurface } from "./surfaces/TooltipSurface";
@@ -27,6 +28,7 @@ const renderers: Record<
   "file-upload": FileUploadSurface,
   "file-thumbnail": FileThumbnailSurface,
   "pdf-toolbar": PdfToolbarSurface,
+  "pdf-sidebar": PdfSidebarSurface,
   "docx-toolbar": DocxToolbarSurface,
   "docx-sidebar": DocxSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,

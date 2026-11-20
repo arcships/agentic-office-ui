@@ -7,12 +7,18 @@ import { officeClass } from "../ui/types"
 export interface DocumentViewerSidebarSkeletonProps {
   /** Number of placeholder page cards. */
   items?: number
+  /**
+   * `list` renders the generic multi-card skeleton; `thumbnail` mirrors the
+   * upstream PDF sidebar skeleton (one 80×112 page block and a caption).
+   */
+  variant?: "list" | "thumbnail"
   /** Extra classes merged on the root. */
   class?: string
 }
 
 const props = withDefaults(defineProps<DocumentViewerSidebarSkeletonProps>(), {
   items: 3,
+  variant: "list",
   class: "",
 })
 
@@ -23,6 +29,7 @@ const classes = computed(() =>
   officeClass(
     "office-ui",
     "office-document-sidebar__skeleton",
+    props.variant === "thumbnail" && "office-document-sidebar__skeleton--thumbnail",
     props.class,
   ),
 )
@@ -33,15 +40,21 @@ const count = computed(() => Math.max(Math.trunc(props.items) || 0, 1))
   <div
     :class="classes"
     role="status"
-    :aria-labelledby="labelId"
+    :aria-labelledby="props.variant === 'thumbnail' ? undefined : labelId"
     data-slot="sidebar-skeleton"
     data-testid="document-viewer-sidebar-skeleton"
   >
-    <span :id="labelId" class="office-document-sidebar__skeleton-label">
+    <span v-if="props.variant !== 'thumbnail'" :id="labelId" class="office-document-sidebar__skeleton-label">
       {{ m.common.chrome.loadingTitle }}
     </span>
+    <template v-if="props.variant === 'thumbnail'">
+      <div class="office-document-sidebar__thumbnail-skeleton-thumb" data-slot="sidebar-skeleton-item">
+        <span class="office-document-sidebar__thumbnail-skeleton-pulse" />
+      </div>
+      <div class="office-document-sidebar__thumbnail-skeleton-caption" />
+    </template>
     <div
-      v-for="index in count"
+      v-for="index in props.variant === 'thumbnail' ? 0 : count"
       :key="index"
       class="office-document-sidebar__skeleton-item"
       data-slot="sidebar-skeleton-item"
