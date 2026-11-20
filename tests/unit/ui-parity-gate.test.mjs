@@ -53,9 +53,10 @@ test("parity thresholds stay at geometry 0px, pixels <=0.1%, top-N regions", () 
   assert.equal(manifest.thresholds.maxDiffPixelRatio, 0.001);
   assert.equal(manifest.thresholds.maxChannelDelta, 2);
   assert.equal(manifest.thresholds.topDiffRegions, 5);
-  // Gate modes: default `all` keeps `pnpm ui:parity` behaviour, CI uses `ready`.
+  // Gate modes: default `all` keeps `pnpm ui:parity` behaviour; CI now uses the
+  // final `all` mode for both the PR subset and the nightly matrix.
   assert.deepEqual(Object.keys(manifest.gate.modes).sort(), ["all", "off", "ready"]);
-  assert.equal(manifest.gate.prMode, "ready");
+  assert.equal(manifest.gate.prMode, "all");
   assert.equal(manifest.gate.finalMode, "all");
 });
 
@@ -68,7 +69,7 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   assert.ok(core.includes("xlsx-toolbar"), "closed XLSX chrome gates on pull requests");
   assert.ok(core.includes("pptx-toolbar"), "closed PPTX chrome gates on pull requests");
   assert.ok(!core.includes("bounding-box-citations"), "the large block matrix stays nightly-only");
-  assert.ok(!core.includes("document-sidebar"), "the pending sidebar stays out of the PR subset");
+  assert.ok(!core.includes("document-sidebar"), "the sidebar chrome stays in the nightly subset");
 
   for (const surface of manifest.surfaces) {
     assert.ok(["blocking", "pending"].includes(surface.gateStatus), `${surface.id} gateStatus`);
@@ -92,6 +93,7 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "bounding-box-citations",
     "button",
     "dialog",
+    "document-sidebar",
     "document-splits",
     "docx-sidebar",
     "docx-toolbar",
@@ -100,6 +102,10 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "file-upload",
     "input",
     "layout-blocks",
+    "office-empty-state",
+    "office-error-state",
+    "office-loading-state",
+    "office-status-bar",
     "pdf-sidebar",
     "pdf-toolbar",
     "pptx-sorter",
@@ -114,8 +120,8 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     .filter((surface) => surface.gateStatus === "pending")
     .map((surface) => `${surface.id}:${surface.gatePendingIssue}`)
     .sort();
-  // DocumentViewerSidebar (#158) and the unreachable presenter panel are left.
-  assert.deepEqual(pending, ["document-sidebar:#158", "pptx-presenter:#161"]);
+  // Only the upstream-unreachable presenter panel stays out of the gate.
+  assert.deepEqual(pending, ["pptx-presenter:#161"]);
 });
 
 test("committed baselines cover exactly the gate-blocking matrix", () => {
@@ -145,7 +151,8 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 380);
+  assert.equal(baselineManifest.files.length, 432);
+  assert.equal(baselineManifest.files.length, expected.size);
 
   for (const file of baselineManifest.files) {
     assert.match(file.path, /^[a-z0-9-]+\/[a-z0-9-]+\/(light|dark)-[0-9]+x[0-9]+\.png$/);
@@ -250,7 +257,23 @@ test("style baseline cannot grow without an approval", () => {
 test("a11y config covers the core surfaces and allowlists only owned findings", () => {
   assert.deepEqual(
     a11yConfig.surfaces.map((surface) => surface.id),
-    ["button", "input", "select", "dialog", "tooltip", "file-upload", "file-thumbnail", "pdf-toolbar", "pdf-sidebar"],
+    [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "pdf-sidebar",
+      "docx-toolbar",
+      "document-sidebar",
+      "office-empty-state",
+      "office-error-state",
+      "office-loading-state",
+      "office-status-bar",
+    ],
   );
   assert.ok(a11yConfig.axe.tags.includes("wcag2a"));
   assert.ok(a11yConfig.axe.tags.includes("wcag21aa"));
@@ -275,14 +298,16 @@ test("a11y config covers the core surfaces and allowlists only owned findings", 
   }
 });
 
-test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the strict switch", () => {
+test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the final all gate", () => {
   for (const job of ["ui-contracts", "ui-parity-core", "ui-parity-nightly", "ui-a11y"]) {
     assert.match(workflow, new RegExp(`\\n  ${job}:`), `missing job ${job}`);
   }
   assert.match(workflow, /schedule:\s*\n(?:\s*#[^\n]*\n)*\s*- cron:/);
   assert.match(workflow, /--only "\$\{UI_PARITY_SUBSET\}"/);
   assert.match(workflow, /UI_PARITY_SUBSET: core/);
-  assert.match(workflow, /--gate-mode "\$\{\{ inputs.strict && 'all' \|\| 'ready' \}\}"/);
+  assert.ok((workflow.match(/--gate-mode all/g) || []).length >= 2, "both parity jobs use the final gate");
+  assert.ok(!workflow.includes("inputs.strict"), "the strict dispatch input is gone");
+  assert.ok(!workflow.includes("--gate-mode ready"), "no job falls back to the ready mode");
   assert.match(workflow, /--baseline/);
   assert.match(workflow, /pnpm ui:baseline:verify/);
   assert.match(workflow, /pnpm lint:style/);

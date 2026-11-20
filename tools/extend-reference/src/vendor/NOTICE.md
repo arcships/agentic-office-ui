@@ -49,6 +49,7 @@ SOFTWARE.
 | `extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | Rendered markup and classes unchanged |
 | `extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | `border-beam` dependency dropped (`BorderBeam` only paints while dragging); icons resolved directly; vendored `Card` |
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
+| `extend/viewer-states.tsx` | `apps/v4/components/extend/pdf-editor-shared.tsx` (`PdfEditorEmptyState`), `docx-viewer.tsx`/`xlsx-viewer.tsx` (`ViewerLoadingSurface`), `xlsx-viewer.tsx` (`loadError` card), `file-system.tsx`/`xlsx-viewer.tsx`/`pdf-editor-panels.tsx` (footer strips) | Class strings copied verbatim; the empty-state glyph is a prop instead of the upstream icon set, the error-card action drops its upload glyph, and the status footer composes the pinned footer classes with the page/status/file content |
 | `extend/docx-toolbar.tsx` | `apps/v4/components/extend/docx-viewer.tsx` | Toolbar/page/zoom/actions subset: tooltip/dropdown popups dropped; static trigger classes and icon sizes kept |
 | `extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Toolbar subset: tooltip/popover/select popups dropped, static trigger classes kept |
 | `extend/pptx-toolbar.tsx` | `apps/v4/components/extend/pptx-viewer.tsx` | Toolbar subset: tooltip/select/dropdown popups dropped; static trigger classes, slide counter, zoom cluster and actions trigger kept |

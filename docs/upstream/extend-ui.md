@@ -219,7 +219,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 |---|---|---|---|---|
 | `apps/v4/registry/new-york-v4/ui/*.tsx` | 所有 primitive 共用的 token 样式规则 | `packages/vue-ui/src/styles/ui.css` | adapted | Tailwind utility 改写为 `office-*` class，只读取 `--office-*` token |
 | `apps/v4/components/ui/*.tsx` | primitive 目录约定 | `packages/vue-ui/src/components/ui/` | adapted | 该目录下任何 `.vue` / `.ts` / `.css` 都源自对应 Extend primitive，必须带来源头 |
-| `apps/v4/components/ui/*.tsx` | 共用 Office chrome 目录约定 | `packages/vue-ui/src/components/office/` | adapted | #158 新建的 toolbar/sidebar/state 组件按 Extend PDF/DOCX chrome 尺寸实现，必须带来源头 |
+| `apps/v4/components/ui/*.tsx` | 共用 Office chrome 目录约定 | `packages/vue-ui/src/components/chrome/` | reference-only | #158 的 toolbar/sidebar/status/state 组件是独立实现，按 Extend PDF/DOCX chrome 尺寸与 token 对齐，不复制上游代码（因此不加来源头）；像素证据见 `document-sidebar` 与 `office-*` surface |
 | `apps/v4 vendored reference snapshot (components)` | #155/#157 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | adapted | 类名与结构对齐上游；改动清单见 `vendor/NOTICE.md`（render-prop 换成原生元素、去掉 border-beam 依赖、弹层改为可测量的静态 markup） |
 | `apps/v4 vendored reference snapshot (styles)` | #155 harness 复制的上游 CSS | `tools/extend-reference/src/styles/` | adapted | `extend-globals.css` 只裁剪 `@import` 图，正文由 `extract-extend-tokens.mjs` 校验 sha256；`extend-shadcn-tailwind.css` 除来源头外逐字复制；`parity.css` 是 harness 自有代码，不在范围内 |
 

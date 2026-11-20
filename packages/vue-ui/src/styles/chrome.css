@@ -324,20 +324,27 @@
 
 /* ── Status bar ─────────────────────────────────────────────────────────── */
 
+/* There is no standalone status-bar component in the pinned Extend tree; every
+ * viewer appends its own footer strip. Those strips all share the same chrome:
+ * `border-t`, `px-3 py-2`, `text-xs text-muted-foreground` (xlsx-viewer.tsx
+ * `WorkbookSheetTabs`, pdf-editor-panels.tsx hint rows) and the muted footer
+ * tint used by file-system.tsx. OfficeStatusBar renders that shared footer, so
+ * the parity surface pins these metrics instead of a single upstream class
+ * list. */
 .office-status-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--office-ui-space-1) var(--office-ui-space-2);
-  min-block-size: var(--office-ui-space-8);
   min-inline-size: 0;
-  padding: var(--office-ui-space-1) var(--office-ui-space-3);
+  padding: var(--office-ui-space-2) var(--office-ui-space-3);
   border-block-start: var(--office-border-width) solid var(--office-border);
-  background: var(--office-background);
+  background: color-mix(in oklab, var(--office-muted) 40%, transparent);
   color: var(--office-muted-foreground);
   font-family: inherit;
   font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
 }
 
 .office-status-bar__group {
@@ -418,69 +425,184 @@
 
 /* ── Empty / error / loading states ─────────────────────────────────────── */
 
+/*
+ * The pinned Extend tree has no shared state component: every viewer inlines
+ * its fallback. OfficeEmptyState / OfficeErrorState / OfficeLoadingState are
+ * the shared equivalents of the three documented shapes:
+ *
+ *   empty    apps/v4/components/extend/pdf-editor-shared.tsx
+ *            `PdfEditorEmptyState` (flex column, gap-2 px-4 py-10, 40px glyph
+ *            circle, `text-sm font-medium` title, `max-w-56 text-xs` body)
+ *   error    apps/v4/components/extend/xlsx-viewer.tsx
+ *            error card (`max-w-md rounded-lg border bg-background p-4
+ *            text-sm`, `font-medium` title, `mt-1` muted message, `mt-4`
+ *            action)
+ *   loading  apps/v4/components/extend/docx-viewer.tsx `ViewerLoadingSurface`
+ *            (`grid h-full min-h-52 place-items-center bg-transparent`)
+ *
+ * Each variant therefore owns its own metric block; the shared `.office-state`
+ * rule only carries the typography and box-model contract.
+ */
 .office-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--office-ui-space-3);
-  min-block-size: 12rem;
-  padding: var(--office-ui-space-8) var(--office-ui-space-6);
-  background: var(--office-background);
   color: var(--office-foreground);
   font-family: inherit;
-  text-align: center;
-}
-
-.office-state--compact {
-  gap: var(--office-ui-space-2);
-  min-block-size: 0;
-  padding: var(--office-ui-space-4);
-}
-
-.office-state__icon {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--office-ui-space-8);
-  block-size: var(--office-ui-space-8);
-  border-radius: var(--office-radius-lg);
-  background: var(--office-muted);
-  color: var(--office-muted-foreground);
-}
-
-.office-state__icon svg {
-  inline-size: var(--office-icon-size);
-  block-size: var(--office-icon-size);
-}
-
-.office-state--error .office-state__icon {
-  background: color-mix(in oklab, var(--office-destructive) 12%, transparent);
-  color: var(--office-destructive-foreground);
-}
-
-.office-state--loading .office-state__icon {
-  background: transparent;
-  color: var(--office-muted-foreground);
 }
 
 .office-state__title {
   margin: 0;
   color: var(--office-foreground);
-  font-size: var(--office-text-base);
-  font-weight: 600;
-  line-height: var(--office-leading-base);
 }
 
 .office-state__description {
-  max-inline-size: 26rem;
+  color: var(--office-muted-foreground);
+}
+
+.office-state--compact {
+  --office-ui-state-padding-block: var(--office-ui-space-4);
+  --office-ui-state-padding-inline: var(--office-ui-space-4);
+}
+
+/* Empty — upstream `PdfEditorEmptyState`. */
+.office-state--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--office-ui-space-2);
+  padding: var(--office-ui-space-10) var(--office-ui-space-4);
+  background: transparent;
+  text-align: center;
+}
+
+.office-state--empty .office-state__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: var(--office-ui-space-10);
+  block-size: var(--office-ui-space-10);
+  border-radius: var(--office-radius-full);
+  background: var(--office-muted);
+  color: var(--office-muted-foreground);
+}
+
+.office-state--empty .office-state__icon svg {
+  inline-size: var(--office-ui-space-5);
+  block-size: var(--office-ui-space-5);
+}
+
+.office-state--empty .office-state__title {
+  font-size: var(--office-text-sm);
+  font-weight: 500;
+  line-height: var(--office-leading-sm);
+}
+
+.office-state--empty .office-state__description {
+  max-inline-size: var(--office-ui-state-description-max-width);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
+}
+
+.office-state--empty .office-state__actions,
+.office-state--error .office-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--office-ui-space-2);
+}
+
+.office-state--empty .office-state__actions {
+  margin-block-start: var(--office-ui-space-2);
+}
+
+/* Error — upstream viewer error card. */
+.office-state--error {
+  display: block;
+  max-inline-size: var(--office-ui-state-card-max-width);
+  padding: var(--office-ui-state-padding-block, var(--office-ui-space-4))
+    var(--office-ui-state-padding-inline, var(--office-ui-space-4));
+  border: var(--office-border-width) solid var(--office-border);
+  border-radius: var(--office-radius-lg);
+  background: var(--office-background);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+  text-align: start;
+}
+
+.office-state--error .office-state__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-block-end: var(--office-ui-space-1);
+  color: var(--office-destructive-foreground);
+}
+
+.office-state--error .office-state__icon svg {
+  inline-size: var(--office-icon-size);
+  block-size: var(--office-icon-size);
+}
+
+.office-state--error .office-state__title {
+  font-size: var(--office-text-sm);
+  font-weight: 500;
+  line-height: var(--office-leading-sm);
+}
+
+.office-state--error .office-state__description {
+  margin-block-start: var(--office-ui-space-1);
   color: var(--office-muted-foreground);
   font-size: var(--office-text-sm);
   line-height: var(--office-leading-sm);
 }
 
-.office-state__actions {
+.office-state--error .office-state__actions {
+  justify-content: flex-start;
+  margin-block-start: var(--office-ui-space-4);
+}
+
+/* Loading — upstream `ViewerLoadingSurface`. */
+.office-state--loading {
+  display: grid;
+  place-items: center;
+  min-block-size: var(--office-ui-state-min-height);
+  padding: 0;
+  background: transparent;
+  text-align: center;
+}
+
+.office-state--loading .office-state__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+
+.office-state--loading .office-state__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.office-state--loading .office-spinner {
+  color: var(--office-foreground);
+}
+
+.office-state--loading .office-state__title {
+  font-size: var(--office-text-sm);
+  font-weight: 500;
+  line-height: var(--office-leading-sm);
+}
+
+.office-state--loading .office-state__description {
+  max-inline-size: var(--office-ui-state-description-max-width);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
+}
+
+.office-state--loading .office-state__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -539,9 +661,7 @@
   inset-block: 0;
   inset-inline-start: 0;
   z-index: calc(var(--office-ui-z) - 10);
-  box-shadow:
-    0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
+  box-shadow: var(--office-shadow-lg);
 }
 
 .office-document-sidebar[data-sidebar-open="false"] {
@@ -653,7 +773,7 @@
   block-size: 0.75rem;
   margin-block-start: 0.75rem;
   margin-inline: auto;
-  border-radius: 9999px;
+  border-radius: var(--office-radius-full);
   background: var(--office-muted);
 }
 

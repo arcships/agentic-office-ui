@@ -5,6 +5,11 @@ import OfficeSpinner from "../ui/OfficeSpinner.vue"
 import { officeClass } from "../ui/types"
 
 export interface OfficeLoadingStateProps {
+  /**
+   * Title line. Defaults to the catalog `common.chrome.loadingTitle`; pass an
+   * empty string for the icon-only surface the upstream `ViewerLoadingSurface`
+   * renders.
+   */
   title?: string
   description?: string
   /** Deterministic progress, 0-100. Omit for an indeterminate spinner. */
@@ -63,37 +68,48 @@ const progressStyle = computed(() => ({
     role="status"
     aria-live="polite"
     aria-busy="true"
-    :aria-labelledby="titleId"
-    :aria-describedby="descriptionId"
+    :aria-labelledby="titleText ? titleId : undefined"
+    :aria-describedby="descriptionText ? descriptionId : undefined"
     data-slot="loading-state"
     data-testid="office-loading-state"
   >
-    <div class="office-state__icon" data-slot="state-icon">
-      <slot name="icon">
-        <OfficeSpinner v-if="props.showSpinner" size="lg" :label="null" />
-      </slot>
-    </div>
-    <p :id="titleId" class="office-state__title" data-slot="state-title">
-      {{ titleText }}
-    </p>
-    <div :id="descriptionId" class="office-state__description" data-slot="state-description">
-      <slot>{{ descriptionText }}</slot>
-    </div>
-    <div
-      v-if="hasProgress"
-      class="office-state__progress"
-      role="progressbar"
-      :aria-label="titleText"
-      :aria-valuemin="0"
-      :aria-valuemax="100"
-      :aria-valuenow="progressValue"
-      data-slot="state-progress"
-      data-testid="office-loading-progress"
-    >
-      <span class="office-state__progress-bar" :style="progressStyle" />
-    </div>
-    <div v-if="$slots.actions" class="office-state__actions" data-slot="state-actions">
-      <slot name="actions" />
+    <div class="office-state__body" data-slot="state-body">
+      <div
+        v-if="props.showSpinner || $slots.icon"
+        class="office-state__icon"
+        data-slot="state-icon"
+      >
+        <slot name="icon">
+          <OfficeSpinner v-if="props.showSpinner" :label="null" />
+        </slot>
+      </div>
+      <p v-if="titleText" :id="titleId" class="office-state__title" data-slot="state-title">
+        {{ titleText }}
+      </p>
+      <div
+        v-if="descriptionText || $slots.default"
+        :id="descriptionId"
+        class="office-state__description"
+        data-slot="state-description"
+      >
+        <slot>{{ descriptionText }}</slot>
+      </div>
+      <div
+        v-if="hasProgress"
+        class="office-state__progress"
+        role="progressbar"
+        :aria-label="titleText || m.common.loading"
+        :aria-valuemin="0"
+        :aria-valuemax="100"
+        :aria-valuenow="progressValue"
+        data-slot="state-progress"
+        data-testid="office-loading-progress"
+      >
+        <span class="office-state__progress-bar" :style="progressStyle" />
+      </div>
+      <div v-if="$slots.actions" class="office-state__actions" data-slot="state-actions">
+        <slot name="actions" />
+      </div>
     </div>
   </div>
 </template>

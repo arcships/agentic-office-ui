@@ -95,13 +95,17 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `pdf-sidebar` | open、closed、skeleton | ✅ `DocumentViewerSidebar` + `PdfThumbnailStrip`（24/24） |
 | `docx-toolbar` | default、hover、focus、disabled(empty document) | ✅ `DocxViewerToolbar.vue`（32/32 pass） |
 | `docx-sidebar` | open、closed、skeleton | ✅ `DocxThumbnailPanel.vue`（24/24 pass） |
+| `document-sidebar` | open、closed、skeleton、overlay-open、overlay-closed | ✅ `DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`（40/40 pass） |
+| `office-empty-state` | default、action | ✅ `OfficeEmptyState.vue`（16/16 pass） |
+| `office-error-state` | default、message、wrapped | ✅ `OfficeErrorState.vue`（24/24 pass） |
+| `office-loading-state` | default、hidden | ✅ `OfficeLoadingState.vue`（16/16 pass） |
+| `office-status-bar` | default | ✅ `OfficeStatusBar.vue`（8/8 pass） |
 | `xlsx-toolbar` | default、hover、focus、disabled(empty workbook) | ✅ `XlsxToolbar.vue`（32/32 pass） |
 | `xlsx-sheet-tabs` | default、hover、focus | ✅ `XlsxSheetTabs.vue`（24/24 pass） |
 | `xlsx-status-bar` | default | ✅ `XlsxStatusBar.vue`（8/8 pass） |
 | `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
 | `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
 | `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
-| `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
 | `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
 | `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
 | `e-signature` | unsigned、signed、exporting、preview、loading、error | ✅ `ESignatureFields.vue`（字段面板；232/232 pass） |
@@ -133,11 +137,10 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 历史 artifact 名 `ui-parity-report` 在 #165 拆成 `ui-parity-core-<sha>`（PR 核心子集）与
 `ui-parity-full-<sha>`（nightly 全矩阵），两者都包含同一份 `report.json` / `report.html` / `cases/**`。
 `.github/workflows/ui-parity.yml` 现在有四个 job：`ui-contracts`（样式 guard + 基线审批）、
-`ui-parity-core`（PR 核心子集 + 基线比对，`--gate-mode ready`）、`ui-parity-nightly`（全矩阵）、
+`ui-parity-core`（PR 核心子集 + 基线比对）、`ui-parity-nightly`（全矩阵）、
 `ui-a11y`（axe-core + 键盘 smoke）。所有 job 上传 artifact（含 diff/heatmap/baseline diff）。
-`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（当前是等 #158 的
-`document-sidebar` 与上游不可达的 `pptx-presenter`）仍采集、仍报告，但不阻断。最终切换用
-`strict: true`（`--gate-mode all`），正式切换步骤见门禁文档 §5。
+两个 parity job 现在都传 `--gate-mode all`：PR 子集与 nightly 全矩阵都严格阻断；
+`gateStatus: pending` 只剩上游不可达的 `pptx-presenter`，它只进 report 的 unreachable 表。
 
 ## 6.1 提交基线（#165）
 
@@ -150,9 +153,9 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 
 ## 7. 实施现状（2026-11-20，0.8 wave 2）
 
-- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **20 个 surface** 完成端到端采集并提交基线
+- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **25 个 surface** 完成端到端采集并提交基线
   （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar+PdfSidebar / DOCX ×2 / PPTX ×2 /
-  XLSX ×3 / document blocks ×4）。
+  document-sidebar + 4 个 office-state / XLSX ×3 / document blocks ×4）。
 - `pnpm ui:parity:self-check`（参考页对自身）在完整矩阵下 344/344 全部 `pass`
   （0 像素差、0 几何差），证明截图/阈值链路可重复；`pass` 不是永远无法到达的状态。
 - #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入；0.8 复跑
@@ -173,11 +176,15 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
   在 4 viewport × light/dark × 全部 state 上 **64/64 pass、0px、0 AA**；三条 surface 已补基线并切
   `blocking`。`xlsx-ribbon` / 公式行仍无对照（上游 editor 的格式行来自私有包，且控件集合不同），
   结论与细节见 [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
+- `document-sidebar` 已由 #158 补齐对照侧：`DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`
+  与 vendored `DocumentViewerThumbnailSidebar` 对齐，5 个状态 × 4 viewport × 2 theme = 40/40 `pass`，
+  0 px、几何 0 px；已补基线并切 `blocking`。
+- `office-empty-state` / `office-error-state` / `office-loading-state` / `office-status-bar` 是 #158
+  新增的 state surface：对照分别是 `PdfEditorEmptyState`、viewer error card、`ViewerLoadingSurface`
+  与上游 footer 类名组合，共 64/64 `pass`（0 px、几何 0 px）；已补基线并切 `blocking`。
 - `bounding-box-citations` / `layout-blocks` / `e-signature` / `document-splits` 已由 #164 完成：
   232/232 case、0px、0 AA；四条 surface 已补基线并切 `blocking`。FileSystem / SchemaBuilder 按
   [components/document-blocks.md](../components/document-blocks.md) 记录为延期，不建 surface。
-- `document-sidebar` 只保留参考基线：规范组件由 #158 在
-  `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
 - `pptx-toolbar` / `pptx-sorter` 已收敛到 vendored 上游标记：40 + 24 个 case
   全部 pass，0 像素差、0 几何差；#165 在合并后的 0.8 树上复跑 64/64 后补基线并切
   `blocking`，两条都进 PR 子集（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。
@@ -207,8 +214,8 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 
 - #156：token/theme/OfficeIcon（已合入；本 harness 直接消费 `theme.css`）。
 - #157：Button/Input/Select/Dialog/Tooltip primitive + reka-ui 层（已合入并 `blocking`，像素对照见 §7）。
-- #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）；`document-sidebar`
-  仍是唯一 pending 的 sidebar surface（另一个 pending 是上游不可达的 `pptx-presenter`）。
+- #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）；
+  `document-sidebar` 与 4 个 office-state surface 已合入、补基线并切 `blocking`。
 - #159：DOCX toolbar/sidebar（已合入，32/32 + 24/24 像素 0）。
 - #160：XLSX toolbar/sheet tabs/status（已合入，64/64 像素 0；ribbon 无对照）。
 - #161b：PPTX toolbar/sorter/presenter（已合入；toolbar/sorter 64/64 像素 0，已补基线并切
@@ -216,5 +223,5 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 - #162：PDF toolbar/sidebar（已合入，40/40 + 24/24 像素 0）。
 - #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
 - #164：document blocks（已合入，232/232 像素 0；FileSystem/SchemaBuilder 延期）。
-- #165：gate、基线、stylelint/axe、文档——基础设施已完成；20 个可渲染 surface 已全部 `blocking`，
-  等 #158 补 `document-sidebar` 后切 `prMode: all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。
+- #165：gate、基线、stylelint/axe、文档——25 个可渲染 surface 已全部 `blocking`，
+  `prMode`/workflow 已切到 `all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。

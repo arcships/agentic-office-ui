@@ -64,6 +64,10 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "pptx-sorter",
       "pptx-presenter",
       "document-sidebar",
+      "office-empty-state",
+      "office-error-state",
+      "office-loading-state",
+      "office-status-bar",
       "bounding-box-citations",
       "layout-blocks",
       "e-signature",
@@ -191,6 +195,10 @@ test("shell asks for the full state coverage on reference surfaces", () => {
     "PptxToolbarSurface",
     "PptxSorterSurface",
     "DocumentSidebarSurface",
+    "OfficeEmptyStateSurface",
+    "OfficeErrorStateSurface",
+    "OfficeLoadingStateSurface",
+    "OfficeStatusBarSurface",
   ]) {
     assert.ok(referenceApp.includes(surfaceId), `reference app does not mount ${surfaceId}`);
   }
