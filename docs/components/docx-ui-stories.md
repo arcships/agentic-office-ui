@@ -49,11 +49,12 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 
 ## 当前结果
 
-2026-11-20 在 `fix/159` 上采集（`page-sizes.docx`）：
+2026-11-20 在 `fix/159b` 上重新采集（`page-sizes.docx`，8 个 story 全部重写）：
 
-- viewer 1440：toolbar 48px，最大控件 28px；
-- viewer 390：toolbar 85px（compact 控件 + 搜索 trigger 在 356px 容器内换行），无横向溢出，sidebar overlay；
-- viewer 768：toolbar 48px（compact overflow），无横向溢出，sidebar overlay；
+- viewer 1440：toolbar 48px，最大控件 36px；
+- viewer 390：toolbar 85px（上游行在 356px 容器内换行），无横向溢出，sidebar overlay；
+  coarse pointer（真机/触摸模拟）下所有目标 ≥44px，toolbar 换行到 109px，仍无横向溢出；
+- viewer 768：toolbar 48px，无横向溢出，sidebar overlay；
 - editor 1440：topbar + formatting bar 合计 117px，sidebar inline 160px；
 - editor 390：toolbar 346px（多行 formatter），无横向溢出，sidebar overlay。
 

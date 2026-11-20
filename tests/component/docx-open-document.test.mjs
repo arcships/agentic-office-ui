@@ -108,6 +108,18 @@ test("the public file policy names both Word and OpenDocument text families", ()
   assert.match(OPEN_DOCUMENT_VIEW_ONLY_REASON, /view-only/);
 });
 
+/**
+ * Download lives in the upstream DOCX actions menu, so the entry only exists
+ * while the menu is open.
+ */
+async function openActionsMenu(root) {
+  const trigger = findByTestId(root, "docx-toolbar-actions");
+  assert.ok(trigger, "the toolbar actions trigger must render");
+  await trigger.props.onClick();
+  await vue.nextTick();
+  return findByTestId(root, "docx-actions-menu");
+}
+
 test("DocxViewer shows the view-only reason and disables download for an OpenDocument model", async () => {
   const model = await odtModel();
   const mounted = await mount(DocxViewer, {
@@ -130,6 +142,7 @@ test("DocxViewer shows the view-only reason and disables download for an OpenDoc
       false,
       "the viewer never becomes editable",
     );
+    assert.ok(await openActionsMenu(mounted.root), "the actions menu must open");
     assert.equal(findByTestId(mounted.root, "docx-download").props.disabled, true);
     assert.ok(
       walk(mounted.root).some((node) => node.props?.["data-docx-page-index"] !== undefined),
@@ -156,6 +169,7 @@ test("opening a real .odt renders read-only and leaves .docx download enabled", 
     );
     assert.equal(findByTestId(openDocumentViewer.root, "docx-viewer").props["data-view-only"], "true");
     assert.ok(findByTestId(openDocumentViewer.root, "docx-view-only-reason"));
+    assert.ok(await openActionsMenu(openDocumentViewer.root), "the actions menu must open");
     assert.equal(findByTestId(openDocumentViewer.root, "docx-download").props.disabled, true);
   } finally {
     openDocumentViewer.app.unmount();
@@ -172,6 +186,7 @@ test("opening a real .odt renders read-only and leaves .docx download enabled", 
     );
     assert.equal(findByTestId(word.root, "docx-viewer").props["data-view-only"], undefined);
     assert.equal(findByTestId(word.root, "docx-view-only-reason"), undefined);
+    assert.ok(await openActionsMenu(word.root), "the actions menu must open");
     assert.equal(findByTestId(word.root, "docx-download").props.disabled, false);
   } finally {
     word.app.unmount();
