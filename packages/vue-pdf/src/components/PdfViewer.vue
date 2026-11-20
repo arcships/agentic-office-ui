@@ -639,8 +639,13 @@ function onSelectionPopoverOpen(open: boolean): void {
 async function copySelection(): Promise<void> {
   if (selectionState.value.kind !== "text") return
   const text = selectionState.value.text
+  const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined
+  if (!clipboard?.writeText) {
+    selectionCopied.value = false
+    return
+  }
   try {
-    await navigator.clipboard?.writeText(text)
+    await clipboard.writeText(text)
     selectionCopied.value = true
   } catch {
     selectionCopied.value = false
