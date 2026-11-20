@@ -24,12 +24,12 @@
 ```bash
 PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity \
   -- --only bounding-box-citations,layout-blocks,e-signature,document-splits \
-  --skip-tokens --out output/ui-parity-164-full
+  --skip-tokens --out output/ui-parity-164-final
 ```
 
 - 232/232 case 通过；`diffPixels = 0`，几何 delta `0px`，无 `pass-with-AA`。
 - 4 个 viewport（1440×900、1280×720、768×1024、390×844）× light/dark。
-- 产物：`output/ui-parity-164-full/report.{json,html,md}`、`SUMMARY.md`、`cases/**`。
+- 产物：`output/ui-parity-164-final/report.{json,html,md}`、`SUMMARY.md`、`cases/**`。
 
 复现时的两个 harness 约定：
 
