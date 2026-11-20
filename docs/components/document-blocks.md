@@ -30,6 +30,9 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity \
 - 232/232 case 通过；`diffPixels = 0`，几何 delta `0px`，无 `pass-with-AA`。
 - 4 个 viewport（1440×900、1280×720、768×1024、390×844）× light/dark。
 - 产物：`output/ui-parity-164-final/report.{json,html,md}`、`SUMMARY.md`、`cases/**`。
+- 门禁（#165）：四条 surface 已切为 `gateStatus: blocking`，`tests/visual/extend` 下提交
+  29 state × 2 viewport × 2 theme = 116 张对照基线；nightly 全矩阵改坏任一 block 即失败。
+  FileSystem / SchemaBuilder 没有 parity surface，不参与门禁，也不标 `blocking`。
 
 复现时的两个 harness 约定：
 

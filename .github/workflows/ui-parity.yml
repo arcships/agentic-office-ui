@@ -5,18 +5,15 @@ name: UI parity (Extend reference)
 # Gate behaviour:
 #   - `ui-contracts`      style-token guards + committed-baseline approval contract.
 #   - `ui-parity-core`    pull-request core subset against the pinned reference AND
-#                         the committed baselines. Only surfaces marked
-#                         `gateStatus: blocking` in tools/parity-fixtures/manifest.json
-#                         can fail this job; `pending` surfaces (#157 input,
-#                         #159 docx chrome) are captured and reported, not gating.
+#                         the committed baselines, in the final `--gate-mode all`.
 #   - `ui-parity-nightly` the full 4-viewport × light/dark matrix, nightly and on
-#                         dispatch, with the same gate mode.
+#                         dispatch, also in `--gate-mode all`.
 #   - `ui-a11y`           axe-core WCAG A/AA + keyboard smoke for the core components.
 #
-# `ui-parity-strict` is the final switch: dispatch with `strict: true` to run
-# `--gate-mode all`, which puts the pending surfaces in the gate too. Once every
-# surface is green, flip `gateStatus`/`prMode` in the manifest and drop the
-# dispatch input from the command (docs/testing/ui-parity-ci.md).
+# The final gate is on: both parity jobs pass `--gate-mode all`, so any captured
+# parity or baseline failure blocks. The only non-gating surface is the
+# upstream-unreachable `pptx-presenter`, which is reported as unreachable and is
+# not captured (docs/testing/ui-parity-ci.md).
 #
 # Everything is diffed against `tests/visual/extend/**`; those PNGs are only
 # updated through `pnpm ui:baseline capture --approve ...` (see
@@ -24,11 +21,6 @@ name: UI parity (Extend reference)
 # without a matching approval record.
 on:
   workflow_dispatch:
-    inputs:
-      strict:
-        description: "Run the final strict gate (--gate-mode all, pending surfaces included)"
-        type: boolean
-        default: false
   pull_request:
     paths:
       - "tools/**"
@@ -164,15 +156,13 @@ jobs:
       - name: Verify the Extend token report is current
         run: pnpm ui:tokens:check
 
-      # `--gate-mode ready`: live reference parity and baseline diffs fail the
-      # job for gate-blocking surfaces only. Pending surfaces stay report-only
-      # until their issue flips `gateStatus` in the manifest. Dispatch with
-      # `strict: true` to run the final `all` gate.
+      # Final gate: live reference parity and committed-baseline diffs both
+      # block. `pptx-presenter` is unreachable and is skipped, not faked.
       - name: Capture and gate the core parity subset
         run: >-
           pnpm ui:parity -- --only "${UI_PARITY_SUBSET}"
           --viewports "${UI_PARITY_VIEWPORTS}" --themes "${UI_PARITY_THEMES}"
-          --baseline --gate-mode "${{ inputs.strict && 'all' || 'ready' }}"
+          --baseline --gate-mode all
           --skip-tokens
         env:
           UI_PARITY_SUBSET: core
@@ -247,7 +237,7 @@ jobs:
       # Baseline comparisons only cover the committed baseline matrix
       # (1440x900 + 390x844 × light + dark); the rest is live parity.
       - name: Capture and gate the full parity matrix
-        run: pnpm ui:parity -- --baseline --gate-mode "${{ inputs.strict && 'all' || 'ready' }}"
+        run: pnpm ui:parity -- --baseline --gate-mode all
 
       - name: Upload the full parity report and diffs
         if: always()

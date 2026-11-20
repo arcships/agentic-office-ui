@@ -139,7 +139,7 @@ const frameStyle = computed(() => ({ aspectRatio: props.aspectRatio }))
   padding: 0;
   border: 0;
   border-radius: var(--office-radius-sm);
-  background: #fff;
+  background: white;
   overflow: hidden;
   text-align: start;
 }

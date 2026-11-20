@@ -385,8 +385,9 @@ region）。
 - `office-*` 对照 `PdfEditorEmptyState` / viewer error card / `ViewerLoadingSurface` /
   footer 类名组合；卡片内边距、边框、10px 圆角、字号行高都由几何比较同时验证。
 - 所有新增 surface 均为 `gateStatus: blocking`，不再有 `pendingIssue` 豁免。
-- 全矩阵（20 surface × 4 viewport × 2 theme）同一轮：**736 case / 717 `pass` +
-  19 `pass-with-antialiasing`（存量 file-upload dark）+ 0 `fail`**，`--gate-mode ready` PASS。
+- 合并后的 0.8 全矩阵（25 surface × 4 viewport × 2 theme）同一轮：**864 case / 845 `pass` +
+  19 `pass-with-antialiasing`（存量 file-upload dark）+ 0 `fail`**，`--gate-mode all` PASS
+  （#165 收口复跑，`pptx-presenter` unreachable 不采集）。
 
 axe-core（WCAG 2.0/2.1 A + AA，light + dark）与键盘 smoke 覆盖
 `pdf-toolbar`、`docx-toolbar`、`document-sidebar`、`office-*`：**0 violation、

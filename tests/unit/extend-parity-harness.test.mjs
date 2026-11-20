@@ -60,11 +60,21 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "pdf-sidebar",
       "docx-toolbar",
       "docx-sidebar",
+      "pptx-toolbar",
+      "pptx-sorter",
+      "pptx-presenter",
       "document-sidebar",
+      "office-empty-state",
+      "office-error-state",
+      "office-loading-state",
+      "office-status-bar",
       "bounding-box-citations",
       "layout-blocks",
       "e-signature",
       "document-splits",
+      "xlsx-toolbar",
+      "xlsx-sheet-tabs",
+      "xlsx-status-bar",
     ],
   );
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");
@@ -85,10 +95,18 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
 
   for (const surface of manifest.surfaces.filter((entry) => entry.states.length > 0)) {
     assert.ok(surface.cellWidth > 0, `${surface.id} needs a cellWidth`);
-    assert.ok(surface.referenceComponent, `${surface.id} needs a referenceComponent`);
+    if (surface.referenceStatus === "unreachable") {
+      assert.ok(surface.unreachableReason?.length > 20, `${surface.id} needs an unreachableReason`);
+    } else {
+      assert.ok(surface.referenceComponent, `${surface.id} needs a referenceComponent`);
+    }
     if (surface.subjectStatus === "available") {
       assert.ok(surface.subjectComponent, `${surface.id} needs a subjectComponent`);
-      assert.equal(surface.pendingIssue ?? null, null);
+      if (surface.referenceStatus !== "unreachable") {
+        assert.equal(surface.pendingIssue ?? null, null);
+      } else {
+        assert.ok(surface.pendingIssue, `${surface.id} must name the owning issue`);
+      }
     } else {
       assert.equal(surface.subjectStatus, "missing");
       assert.ok(surface.pendingIssue, `${surface.id} must name the blocking issue`);
@@ -109,7 +127,7 @@ test("both harness apps render every manifest surface and honour the DOM contrac
   const vueSurface = read("tools/vue-reference/src/parity/ParitySurface.vue");
 
   for (const surface of manifest.surfaces.filter(
-    (entry) => entry.referenceStatus !== "fixtures-only",
+    (entry) => !["fixtures-only", "unreachable"].includes(entry.referenceStatus),
   )) {
     assert.match(
       referenceApp,
@@ -174,7 +192,13 @@ test("shell asks for the full state coverage on reference surfaces", () => {
     "FileThumbnailSurface",
     "PdfToolbarSurface",
     "DocxToolbarSurface",
+    "PptxToolbarSurface",
+    "PptxSorterSurface",
     "DocumentSidebarSurface",
+    "OfficeEmptyStateSurface",
+    "OfficeErrorStateSurface",
+    "OfficeLoadingStateSurface",
+    "OfficeStatusBarSurface",
   ]) {
     assert.ok(referenceApp.includes(surfaceId), `reference app does not mount ${surfaceId}`);
   }
@@ -331,6 +355,11 @@ test("pnpm ui:parity wires the mjs entry point to the Playwright helper", () => 
   assert.ok(helper.includes("maxContiguousDiffPx") || helper.includes("maxContiguousRunPx"));
   assert.ok(helper.includes("heatmap"));
   assert.ok(helper.includes("--self-check"), "the helper needs a determinism self-check mode");
+  // Lazy offscreen thumbnails must be loaded and decoded before a capture, or
+  // only one side of the matrix renders them and the case looks flaky.
+  assert.ok(helper.includes("def settle_images(page)"), "capture must settle lazy images");
+  assert.ok(helper.includes("settle_images(page)"), "capture_side must call settle_images");
+  assert.ok(helper.includes("image.decode()"), "settle_images must wait for decode");
 
   const referenceVite = read("tools/extend-reference/vite.config.ts");
   assert.ok(referenceVite.includes("@tailwindcss/vite"));

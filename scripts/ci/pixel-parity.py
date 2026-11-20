@@ -195,6 +195,46 @@ def wait_ready(page, surface: str) -> None:
     page.wait_for_timeout(120)
 
 
+def settle_images(page) -> None:
+    """Load and decode every `<img>` before the capture.
+
+    `loading="lazy"` thumbnails below the viewport are otherwise requested by
+    only one of the two pages (or by neither), which shows up as a blank
+    thumbnail and makes an exact surface look flaky at some viewports. The
+    warm-up in the harness surfaces only *starts* the fetch; this waits for the
+    decode so the reference and subject screenshots always include it.
+    """
+    page.evaluate(
+        """async () => {
+          const images = Array.from(document.images);
+          for (const image of images) {
+            if (image.loading !== 'eager') image.loading = 'eager';
+            if (!image.complete) image.src = image.src;
+          }
+          await Promise.all(images.map((image) => new Promise((resolve) => {
+            const finish = () => {
+              if (typeof image.decode === 'function') {
+                image.decode().catch(() => {}).then(resolve);
+              } else {
+                resolve();
+              }
+            };
+            if (image.complete) {
+              finish();
+              return;
+            }
+            const timeout = setTimeout(resolve, 5_000);
+            const done = () => {
+              clearTimeout(timeout);
+              finish();
+            };
+            image.addEventListener('load', done, { once: true });
+            image.addEventListener('error', done, { once: true });
+          })));
+        }"""
+    )
+
+
 def cell_locator(page, state: str):
     return page.locator(f"[data-parity-cell='{state}']")
 
@@ -1574,6 +1614,7 @@ def capture_side(
     if target.count() == 0 and not interaction.get("selector"):
         raise RuntimeError(f"no parity target for cell {state['id']}")
     apply_interaction(page, target, interaction, cell)
+    settle_images(page)
     try:
         target.first.wait_for(state="attached", timeout=5_000)
         captured = capture(page, cell, target, destination, padding)

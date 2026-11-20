@@ -26,8 +26,9 @@
 
 - [ ] **`ui-parity` 结果**：附 `ui-parity-core-<sha>` artifact 链接，或本地
       `pnpm ui:parity:core` 的 `SUMMARY.md`；`gate: PASS` 且 `blocking=0`。
-- [ ] 若本次改动涉及 pending surface（`input`/`docx-*`/`document-sidebar`/`document-blocks`），
-      附 nightly 全矩阵 artifact，并写明剩余 delta 归哪个 issue。
+- [ ] 附 nightly 全矩阵 artifact；`pptx-presenter` 是唯一 unreachable surface（#161，不采集）。
+- [ ] 最终门禁已启用：workflow 的 PR + nightly 都传 `--gate-mode all`，`manifest.gate.prMode` 为
+      `all`；本地等价命令 `pnpm ui:parity -- --gate-mode all --baseline` 必须 PASS。
 - [ ] `pnpm ui:baseline:verify` 通过；基线变化都有审批记录（`APPROVALS.md` 新增行）。
 - [ ] `pnpm lint:style` 输出 `new=0`；新增裸值要么修掉，要么有审批记录。
 - [ ] `pnpm test:a11y` 通过；新增 allowlist 条目必须带 issue 与理由。

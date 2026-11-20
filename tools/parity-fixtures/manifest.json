@@ -225,8 +225,7 @@
         }
       ],
       "core": true,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#157"
+      "gateStatus": "blocking"
     },
     {
       "id": "select",
@@ -578,9 +577,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#159"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "docx-sidebar",
@@ -618,9 +616,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#159"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "pptx-toolbar",
@@ -630,9 +627,8 @@
       "subjectStatus": "available",
       "referenceTargetSelector": "[data-pptx-toolbar]",
       "subjectTargetSelector": "[data-pptx-toolbar]",
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#161",
+      "core": true,
+      "gateStatus": "blocking",
       "cellWidth": 960,
       "notes": "Both sides render the pinned Extend PptxToolbar resting row with the same fixture values (slide 3 of 12, 100%, thumbnail rail closed, download/upload available). The Vue subject is the production PptxViewerToolbar; the PPTX-only commands (browse layout, present, speaker notes, fullscreen, find) live in the closed ... actions menu and do not affect the default row.",
       "states": [
@@ -676,9 +672,8 @@
       "subjectStatus": "available",
       "referenceTargetSelector": "[data-pptx-sorter-grid]",
       "subjectTargetSelector": "[data-pptx-sorter-grid]",
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#161",
+      "core": true,
+      "gateStatus": "blocking",
       "cellWidth": 672,
       "notes": "The pinned Extend PPTX viewer has no sorter grid; the only slide-card markup upstream is the thumbnail-rail item (PptxSidebarThumbnail inside the role=option wrapper). Both sides render six of those cards in the production sorter grid metrics (3 columns, 12px gap) with the same 960x540 fixture slide, one active card, hover on card 2. The grid composition is a harness fixture; the card anatomy (p-2, gap-2, rounded-md, text-xs, shadow-xs -> shadow-sm, sidebar-accent hover/active, white rounded-sm preview) is upstream. Loading/error card states are covered by the PPTX chrome story (OfficeSkeleton/error copy are intentional #161 additions) and are not part of this matrix.",
       "states": [
@@ -989,7 +984,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "layout-blocks",
@@ -1062,7 +1057,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "e-signature",
@@ -1125,7 +1120,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "document-splits",
@@ -1206,7 +1201,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-toolbar",
@@ -1254,9 +1249,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-sheet-tabs",
@@ -1296,9 +1290,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-status-bar",
@@ -1320,9 +1313,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     }
   ],
   "coreSubset": {
@@ -1336,7 +1328,14 @@
       "file-upload",
       "file-thumbnail",
       "pdf-toolbar",
-      "pdf-sidebar"
+      "pdf-sidebar",
+      "docx-toolbar",
+      "docx-sidebar",
+      "pptx-toolbar",
+      "pptx-sorter",
+      "xlsx-toolbar",
+      "xlsx-sheet-tabs",
+      "xlsx-status-bar"
     ]
   },
   "baselines": {
@@ -1360,7 +1359,7 @@
       "ready": "Only surfaces with gateStatus=blocking block; pending surfaces stay report-only (CI).",
       "off": "Never exit non-zero; artifact mode (`--report-only`)."
     },
-    "prMode": "ready",
+    "prMode": "all",
     "finalMode": "all"
   }
 }

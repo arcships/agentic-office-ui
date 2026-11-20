@@ -9,8 +9,8 @@
 | Job | 触发 | 做什么 | 现在是否阻断 |
 |---|---|---|---|
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
-| `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是，但只对 `gateStatus: blocking` 的 surface |
-| `ui-parity-nightly` | nightly / dispatch | 全矩阵（20 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
+| `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是（`--gate-mode all`） |
+| `ui-parity-nightly` | nightly / dispatch | 全矩阵（25 surface × 4 viewport × 2 theme） | 是（`--gate-mode all`） |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，allowlist 之外的发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
@@ -66,40 +66,48 @@ pnpm ui:baseline:verify
 `tools/parity-fixtures/manifest.json` 每个 surface 有两个字段：
 
 - `core: true` → 进 PR 子集；`core: false` 只在 nightly 全矩阵跑。
-- `gateStatus: blocking | pending` → `--gate-mode ready` 时是否阻断；`gatePendingIssue` 指向负责 issue。
+- `gateStatus: blocking | pending`：最终门禁用 `--gate-mode all`，所有被采集的 surface 都阻断；
+  `pending` 只用于登记尚未接入的 surface（`gatePendingIssue` 指向负责 issue），本地可用
+  `--gate-mode ready` 临时放宽。
 
 | Surface | core | gateStatus | 现状 |
 |---|---|---|---|
-| `button`, `select`, `dialog`, `tooltip` | ✅ | blocking | 参考页 vs 对照页 0px / 0 像素；有基线 |
-| `file-upload`, `file-thumbnail` | ✅ | blocking | #163 已收敛（含 AA 残差）；有基线 |
+| `button`, `input`, `select`, `dialog`, `tooltip` | ✅ | blocking | #157 全部 0px / 0 像素；有基线 |
+| `file-upload`, `file-thumbnail` | ✅ | blocking | #163 已收敛；19 个 `pass-with-AA`（单通道 1/255，低于 0.1% 阈值）；有基线 |
 | `pdf-toolbar`, `pdf-sidebar` | ✅ | blocking | #162 40/40、24/24 像素 0；有基线 |
-| `document-sidebar` | ❌ | blocking（#158） | inline open/closed/skeleton + overlay open/closed，40/40 像素 0；有基线 |
-| `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking（#158） | 共 64/64 像素 0（含长消息换行卡片）；有基线 |
-| `input` | ✅ | pending（#157） | 4 个 `focus/light` case 有 52px、单通道 1/255 残差；不阻断 |
-| `docx-toolbar`, `docx-sidebar` | ❌ | pending（#159） | 参考/对照仍有真实差距；不阻断 |
-| `document-blocks` | ❌ | pending（#164） | 只有 fixtures，参考侧不可渲染 |
+| `docx-toolbar`, `docx-sidebar` | ✅ | blocking | #159 32/32 + 24/24 像素 0；有基线，PR 即阻断 |
+| `pptx-toolbar`, `pptx-sorter` | ✅ | blocking | #161 40/40 + 24/24 像素 0；有基线，PR 即阻断 |
+| `document-sidebar` | ❌ | blocking | #158 inline open/closed/skeleton + overlay open/closed，40/40 像素 0；有基线 |
+| `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking | #158 共 64/64 像素 0（含长消息换行卡片）；有基线 |
+| `bounding-box-citations`, `layout-blocks`, `e-signature`, `document-splits` | ❌ | blocking | #164 232/232 像素 0；有基线（nightly 阻断） |
+| `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ | blocking | #160 64/64 像素 0；有基线，PR 即阻断 |
+| `pptx-presenter` | ❌ | pending（#161） | 上游无 presenter 布局（`referenceStatus: unreachable`），由组件测试覆盖 |
+
+25 个可渲染 surface 已全部 `blocking` 并提交基线；16 个进 PR 子集（全部 primitive、file、PDF、
+DOCX/PPTX/XLSX chrome），9 个 chrome/block surface 只在 nightly 全矩阵跑。`pptx-presenter` 是
+登记在案的无上游布局 surface，不参与像素计数，也是唯一的 pending。
 
 ## 5. 最终开关
 
-1. **临时严格模式**：`workflow_dispatch` 勾选 `strict: true` → 两个 parity job 都以 `--gate-mode all` 运行，
-   pending surface 也会让 job 变红。用于确认“还差多少”。
-2. **正式切换**（每个 issue 收尾时分别做，不必等全部）：
-   - 该 surface 的参考/对照通过后，把 `gateStatus` 改成 `blocking`（删掉 `gatePendingIssue`）；
-   - 需要进 PR 子集的再加 `core: true`；
+1. **当前形态（2026-11-20 起）**：所有可渲染 surface 已 `blocking`，`manifest.gate.prMode` 为
+   `all`，workflow 两个 parity job 都直接传 `--gate-mode all`。PR 核心子集与 nightly 全矩阵
+   都以严格模式阻断；`strict` dispatch 输入已删除。合并 #158b 后的全矩阵实测：
+   **864 case / 845 `pass` + 19 个 file-upload AA / 0 `fail`**，基线 432 张、4 条审批。
+2. **以后新增 surface 时**：
+   - 参考/对照通过后，把 `gateStatus` 改成 `blocking`（删掉 `gatePendingIssue`）；
+   - 需要进 PR 子集的再加 `core: true`；否则只在 nightly 全矩阵里阻断；
    - `pnpm ui:baseline capture --only <id> --approve ...` 补基线；
-   - `pnpm ui:baseline:verify` + `pnpm ui:parity -- --only <id> --baseline --gate-mode ready` 必须 PASS；
+   - `pnpm ui:baseline:verify` + `pnpm ui:parity -- --only <id> --baseline --gate-mode all` 必须 PASS；
    - 更新本文档 §4 与 [component map](../components/ui-component-map.md)。
-3. **全部 surface 就绪后**：把 `manifest.gate.prMode` 从 `ready` 改成 `all`，
-   把 workflow 里的 `--gate-mode "${{ inputs.strict && 'all' || 'ready' }}"` 改成 `--gate-mode all`，
-   并删除 `strict` 输入。这就是最终形态。
+3. **回退到宽松模式（仅限本地排查）**：显式传 `--gate-mode ready`，pending surface 只报告。
 
 ## 6. 本地命令
 
 ```bash
-pnpm ui:parity                     # 全矩阵 + 参考对照；默认 --gate-mode all（现状会把 pending 的 delta 也当失败）
+pnpm ui:parity                     # 全矩阵 + 参考对照；默认 --gate-mode all（最终门禁形态）
 pnpm ui:parity:report              # 同上，永远 exit 0（artifact 模式）
-pnpm ui:parity:core                # PR 子集 + 基线比对 + --gate-mode ready（CI 等价命令）
-pnpm ui:parity:full                # 全矩阵 + 基线比对 + --gate-mode ready（nightly 等价命令）
+pnpm ui:parity:core                # PR 子集 + 基线比对 + --gate-mode all（CI 等价命令）
+pnpm ui:parity:full                # 全矩阵 + 基线比对 + --gate-mode all（nightly 等价命令）
 pnpm ui:parity:self-check          # 参考页自己跟自己比，验证采集链路确定
 pnpm ui:baseline:status            # 基线现状
 pnpm ui:baseline:verify            # 基线契约（CI 用）
@@ -117,12 +125,12 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（`PYTHON=/tmp/bb-venv/bi
 
 | 例外 | 位置 | 负责 |
 |---|---|---|
-| `input` focus/light 52px 残差 | parity 报告 | #157 |
-| `docx-toolbar` / `docx-sidebar` 真实 delta | parity 报告 | #159 |
+| `pptx-presenter` 无上游布局 | parity 报告（unreachable） | #161（组件测试覆盖） |
+| `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` loading 无可访问名（`visibility: hidden`） | `tests/a11y/allowlist.json` | #157 |
 | `button` destructive 对比度 3.8:1（继承上游 token） | `tests/a11y/allowlist.json` | #157 |
 | `pdf-sidebar` 缩略图列表无焦点环 | `tests/a11y/allowlist.json` | #162 |
-| 977 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
+| 1,015 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
 
 除这些已登记项外，任何新增视觉漂移、裸值或无无障碍回归都会在 PR 阶段失败。
 

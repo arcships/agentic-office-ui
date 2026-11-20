@@ -208,7 +208,7 @@ pnpm ui:parity -- --only pptx-toolbar,pptx-sorter,pptx-presenter
 | `pptx-sorter` | default/hover/selected | 4×2×3 = 24 | 24 pass | 0px | 0% |
 | `pptx-presenter` | — | — | unreachable（§4） | — | — |
 
-矩阵阈值未修改（`maxChannelDelta: 2`、`maxDiffPixelRatio: 0.001`、0px 几何）。两个 surface 目前是 `gateStatus: "pending"`（`gatePendingIssue: "#161"`）：像素已经为 0，但 #165 的 committed baseline/approval 仍待补；`pptx-presenter` 以 `referenceStatus: "unreachable"` 出现在 report 的 unreachable 表，不参与 pass/fail 计数。
+矩阵阈值未修改（`maxChannelDelta: 2`、`maxDiffPixelRatio: 0.001`、0px 几何）。#165 在合并后的 0.8 树上复跑同一命令仍为 **64/64 pass、0 AA**，随后把 `pptx-toolbar` / `pptx-sorter` 切为 `gateStatus: "blocking"` 并提交对照侧基线（8 state × 2 viewport × 2 theme = 32 张），两条都进 PR 子集。`pptx-presenter` 以 `referenceStatus: "unreachable"` 出现在 report 的 unreachable 表，不参与 pass/fail 计数，保持 `pending`。
 
 ### 7.2 响应式 story
 
