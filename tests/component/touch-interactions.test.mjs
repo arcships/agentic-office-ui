@@ -26,6 +26,7 @@ const XLSX_TOOLBAR = source("packages/vue-xlsx/src/components/XlsxToolbar.vue");
 const XLSX_RIBBON = source("packages/vue-xlsx/src/components/XlsxRibbon.vue");
 const XLSX_FORMULA_BAR = source("packages/vue-xlsx/src/components/XlsxFormulaBar.vue");
 const XLSX_SHEET_TABS = source("packages/vue-xlsx/src/components/XlsxSheetTabs.vue");
+const UI_STYLES = source("packages/vue-ui/src/styles/ui.css");
 
 function assertPointerLifecycle(file, label) {
   assert.match(file, /createTouchGestureTracker/, `${label} uses the shared touch tracker`);
@@ -101,7 +102,9 @@ test("composite XlsxViewer gains gesture zoom, long press and pointercancel reco
 });
 
 test("context menus close on outside pointer down, not on the trailing click of a long press", () => {
-  assert.match(XLSX_MENU, /class="xlsx-contextmenu-backdrop"[\s\S]*?@pointerdown="close"/);
+  // XLSX delegates dismissal to the modal Reka menu; DOCX keeps its own backdrop.
+  assert.match(XLSX_MENU, /OfficeDropdownMenu/);
+  assert.match(XLSX_MENU, /:modal="true"/);
   assert.match(DOCX_MENU, /class="docx-context-menu-backdrop"[\s\S]*?@pointerdown="close"/);
   assert.match(XLSX_MENU, /defineExpose\(\{ openAt, close, openForChart, openForDrawing \}\)/);
 });
@@ -112,7 +115,6 @@ test("touch hit targets reach 44px on coarse pointers", () => {
     [XLSX_RIBBON, "xlsx ribbon"],
     [XLSX_FORMULA_BAR, "xlsx formula bar"],
     [XLSX_SHEET_TABS, "xlsx sheet tabs"],
-    [XLSX_MENU, "xlsx context menu"],
     [DOCX_TOOLBAR, "docx editor toolbar"],
     [DOCX_VIEWER_TOOLBAR, "docx viewer toolbar"],
     [DOCX_MENU, "docx context menu"],
@@ -123,4 +125,9 @@ test("touch hit targets reach 44px on coarse pointers", () => {
     assert.match(file, /@media \(pointer: coarse\)/, `${label} has a coarse-pointer rule`);
     assert.match(file, /44px/, `${label} sizes touch targets to 44px`);
   }
+  assert.match(
+    UI_STYLES,
+    /@media \(pointer: coarse\)[\s\S]*?\.office-menu__item[\s\S]*?min-height: var\(--office-ui-touch-target\)/,
+    "the shared Reka menu owns the XLSX 44px target",
+  );
 });
