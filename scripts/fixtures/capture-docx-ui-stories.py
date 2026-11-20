@@ -187,31 +187,12 @@ def toolbar_metrics(page, story: Story) -> dict[str, object]:
           const toolbar = document.querySelector(selector);
           if (!toolbar) return null;
           const rect = toolbar.getBoundingClientRect();
-          const controls = Array.from(toolbar.querySelectorAll('button, input, select, [role="group"]'))
-            .map(element => ({
-              tag: element.tagName.toLowerCase(),
-              testid: element.getAttribute('data-testid') || '',
-              cls: String(element.className || '').slice(0, 80),
-              height: Math.round(element.getBoundingClientRect().height * 100) / 100,
-              style: (() => {
-                const computed = getComputedStyle(element);
-                return {
-                  boxSizing: computed.boxSizing,
-                  height: computed.height,
-                  minHeight: computed.minHeight,
-                  paddingBlock: computed.paddingBlock,
-                  borderBlock: computed.borderBlock,
-                  heightSm: computed.getPropertyValue('--office-ui-height-sm'),
-                  controlSm: computed.getPropertyValue('--office-control-height-sm'),
-                  heightXs: computed.getPropertyValue('--office-ui-height-xs'),
-                };
-              })(),
-            }));
+          const controls = Array.from(toolbar.querySelectorAll('button, input, select'))
+            .map(element => Math.round(element.getBoundingClientRect().height * 100) / 100);
           const sidebar = document.querySelector('[data-testid="docx-thumbnail-panel"]');
           return {
             height: Math.round(rect.height * 100) / 100,
-            maxControlHeight: controls.length ? Math.max(...controls.map(item => item.height)) : 0,
-            tallControls: controls.filter(item => item.height > 32),
+            maxControlHeight: controls.length ? Math.max(...controls) : 0,
             scrollWidth: toolbar.scrollWidth,
             clientWidth: toolbar.clientWidth,
             sidebar: sidebar ? {
@@ -253,7 +234,7 @@ def main() -> int:
 
     port = free_port()
     base_url = f"http://127.0.0.1:{port}"
-    log_path = output / "preview.log"
+    log_path = report / "preview.log"
     log = log_path.open("wb")
     preview = subprocess.Popen(
         ["pnpm", "--filter", "demo", "preview", "--host", "127.0.0.1", "--port", str(port)],

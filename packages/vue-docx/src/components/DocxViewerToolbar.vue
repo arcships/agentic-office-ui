@@ -126,7 +126,7 @@
         <div class="docx-viewer-toolbar__search" role="search">
           <input
             ref="searchInputRef"
-            class="office-input office-input--sm docx-viewer-toolbar__search-input"
+            class="office-ui office-input office-input--sm docx-viewer-toolbar__search-input"
             data-testid="docx-search-input"
             type="search"
             :value="searchQuery"
@@ -229,7 +229,7 @@
         <label class="docx-viewer-toolbar__revision" :title="m.docx.toolbar.revisionDisplay">
           <select
             data-testid="docx-revision-display"
-            class="office-zoom-control__native docx-viewer-toolbar__revision-select"
+            class="office-ui office-zoom-control__native docx-viewer-toolbar__revision-select"
             :value="revisionDisplay"
             :aria-label="m.docx.toolbar.revisionDisplay"
             :disabled="disabled"
@@ -422,6 +422,7 @@ defineExpose({
 .docx-viewer-toolbar :deep(button),
 .docx-viewer-toolbar :deep(input),
 .docx-viewer-toolbar :deep(select) {
+  min-height: 0;
   min-block-size: 0;
 }
 
@@ -464,8 +465,8 @@ defineExpose({
 .docx-viewer-toolbar__segments {
   flex-wrap: nowrap;
   gap: var(--office-ui-space-0-5);
-  padding: var(--office-ui-space-0-5);
-  border: var(--office-border-width) solid var(--office-border);
+  padding: 0;
+  border: 0;
   border-radius: var(--office-radius-md);
 }
 
@@ -603,6 +604,7 @@ defineExpose({
   .docx-viewer-toolbar :deep(button),
   .docx-viewer-toolbar :deep(input),
   .docx-viewer-toolbar :deep(select) {
+    min-height: 44px;
     min-block-size: 44px;
   }
   .docx-viewer-toolbar__search-option {

@@ -218,7 +218,7 @@ const canZoomIn = computed(() => {
       />
       <select
         v-else
-        class="office-zoom-control__native"
+        class="office-ui office-zoom-control__native"
         :value="zoom"
         :title="nativeSelectTitle"
         :aria-label="props.label ?? m.common.zoom.level"

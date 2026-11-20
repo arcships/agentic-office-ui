@@ -76,6 +76,7 @@ const classes = computed(() =>
 )
 const inputClasses = computed(() =>
   officeClass(
+    "office-ui",
     "office-input",
     "office-input--sm",
     "office-page-control__input",
@@ -179,9 +180,12 @@ function resolveInput(): HTMLInputElement | null {
   const hasElement = typeof HTMLInputElement !== "undefined"
   if (hasElement && instance instanceof HTMLInputElement) return instance
   const root = (instance as { $el?: unknown }).$el
-  return hasElement && root instanceof HTMLInputElement
-    ? (root as HTMLInputElement)
-    : null
+  if (hasElement && root instanceof HTMLInputElement) return root
+  if (root && typeof (root as { querySelector?: unknown }).querySelector === "function") {
+    return (root as { querySelector: (selector: string) => HTMLInputElement | null })
+      .querySelector("input")
+  }
+  return null
 }
 
 defineExpose({

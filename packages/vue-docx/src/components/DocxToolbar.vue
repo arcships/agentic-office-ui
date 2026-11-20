@@ -59,7 +59,7 @@
           <label class="docx-toolbar-revision" :title="m.docx.toolbar.revisionDisplay">
             <select
               data-testid="editor-revision-display"
-              class="docx-toolbar-select docx-toolbar-select-sm"
+              class="office-ui docx-toolbar-select docx-toolbar-select-sm"
               :value="controller.revisionDisplay"
               :aria-label="m.docx.toolbar.revisionDisplay"
               @change="onRevisionDisplayChange"
@@ -202,7 +202,7 @@
         <!-- Font family -->
         <OfficeToolbarGroup gap="sm">
           <select
-            class="docx-toolbar-select"
+            class="office-ui docx-toolbar-select"
             :value="selectedRunStyle?.fontFamily ?? ''"
             @change="onFontFamilyChange"
             :title="m.docx.editor.fontFamily"
@@ -217,7 +217,7 @@
             <option value="Courier New">Courier New</option>
           </select>
           <select
-            class="docx-toolbar-select docx-toolbar-select-sm"
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
             :value="selectedRunStyle?.fontSizePt ?? ''"
             @change="onFontSizeChange"
             :title="m.docx.editor.fontSize"
@@ -492,7 +492,7 @@
         <OfficeToolbarGroup gap="sm">
           <select
             data-testid="editor-columns"
-            class="docx-toolbar-select docx-toolbar-select-sm"
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
             :value="pageSetup.columns.value.count"
             :title="m.docx.editor.columns"
             :aria-label="m.docx.editor.columns"
@@ -513,7 +513,7 @@
         <!-- Line spacing -->
         <OfficeToolbarGroup gap="sm">
           <select
-            class="docx-toolbar-select docx-toolbar-select-sm"
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
             :value="lineSpacingValue"
             @change="onLineSpacingChange"
             :title="m.docx.editor.lineSpacing"
@@ -539,7 +539,7 @@
           @pointerleave="onStylePickerLeave"
         >
           <select
-            class="docx-toolbar-select"
+            class="office-ui docx-toolbar-select"
             data-testid="editor-paragraph-style"
             :value="controller.selectedParagraphStyleId ?? ''"
             @change="onStyleChange"
@@ -578,7 +578,7 @@
         <!-- Borders -->
         <OfficeToolbarGroup gap="sm">
           <select
-            class="docx-toolbar-select"
+            class="office-ui docx-toolbar-select"
             :value="activeBorderPresetValue"
             @change="onBorderPresetChange"
             :title="m.docx.editor.borders"
@@ -1219,6 +1219,7 @@ function onImport(): void {
 .docx-toolbar-shell :deep(button),
 .docx-toolbar-shell :deep(input),
 .docx-toolbar-shell :deep(select) {
+  min-height: 0;
   min-block-size: 0;
 }
 .docx-toolbar-shell--dark {
@@ -1388,6 +1389,7 @@ function onImport(): void {
   .docx-toolbar-shell :deep(button),
   .docx-toolbar-shell :deep(input),
   .docx-toolbar-shell :deep(select) {
+    min-height: 44px;
     min-block-size: 44px;
   }
   .docx-toolbar-action,

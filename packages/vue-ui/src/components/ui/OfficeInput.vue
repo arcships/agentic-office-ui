@@ -44,6 +44,7 @@ const controlClasses = computed(() =>
 
 const inputClasses = computed(() =>
   officeClass(
+    "office-ui",
     "office-input",
     props.size !== "default" && `office-input--${props.size}`,
   ),
