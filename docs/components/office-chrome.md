@@ -354,9 +354,8 @@ pnpm --filter @arcships/vue-ui build
   open/close、zh-CN。
 - 合同测试：Extend 几何、token-only CSS、公开导出、i18n 键、gzip 预算和 public
   API fingerprint。
-- 包体积：`dist/index.js` 43,965 B gzip + `style.css` 11,559 B gzip，相对 #157 前
-  基线增加 36,389 B，在 36,864 B 预算内（#159 的 inline search 模式已记录在
-  `scripts/ci/vue-ui-primitives-size-budget.json`）。
+- 包体积：`dist/index.js` 43,408 B gzip + `style.css` 11,559 B gzip，相对 #157 前
+  基线增加 35,827 B，仍在 35,840 B 预算内。
 - `public-api-contract.json`：`@arcships/vue-ui` fingerprint 从 199/`8a1aff85…`
   更新为 233/`1479c668…`；`@arcships/office-interaction` 因新增导出类型
   `OfficeChromeMessages` 从 154/`e1b91beb…` 更新为 155/`5732cb82…`。

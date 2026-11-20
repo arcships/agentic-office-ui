@@ -290,6 +290,8 @@ export interface OfficeDocxMessages {
     /** Fit-to-viewport toggles. */
     fitWidth: string
     fitPage: string
+    /** Trigger for the compact toolbar overflow menu. */
+    moreActions: string
     lightThemeAction: string
     darkThemeAction: string
     lightDocument: string
@@ -1707,6 +1709,7 @@ export const officeMessagesEn: OfficeMessages = {
       viewModeSpread: "Two-page spread",
       fitWidth: "Fit width",
       fitPage: "Fit page",
+      moreActions: "More toolbar actions",
       lightThemeAction: "Use light document theme",
       darkThemeAction: "Use dark document theme",
       lightDocument: "Light document",
@@ -2999,6 +3002,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       viewModeSpread: "双页",
       fitWidth: "适应宽度",
       fitPage: "适应页面",
+      moreActions: "更多工具栏操作",
       lightThemeAction: "使用浅色文档主题",
       darkThemeAction: "使用深色文档主题",
       lightDocument: "浅色文档",

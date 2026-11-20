@@ -256,6 +256,10 @@
   min-inline-size: 5rem;
 }
 
+.office-search-popover--inline .office-search-popover__fields {
+  display: contents;
+}
+
 .office-search-popover--inline .office-search-popover__row {
   display: contents;
 }

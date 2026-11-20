@@ -52,8 +52,8 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 2026-11-20 在 `fix/159` 上采集（`page-sizes.docx`）：
 
 - viewer 1440：toolbar 48px，最大控件 28px；
-- viewer 390：toolbar 85px（leading + 两行 actions），无横向溢出，sidebar overlay；
-- viewer 768：toolbar 113px（leading + 多行 actions），无横向溢出，sidebar overlay；
+- viewer 390：toolbar 85px（compact 控件在 356px 容器内换行两次），无横向溢出，sidebar overlay；
+- viewer 768：toolbar 48px（compact overflow），无横向溢出，sidebar overlay；
 - editor 1440：topbar + formatting bar 合计 117px，sidebar inline 160px；
 - editor 390：toolbar 346px（多行 formatter），无横向溢出，sidebar overlay。
 
@@ -64,7 +64,7 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 | Surface | Reference | Subject | States |
 |---|---|---|---|
 | `docx-toolbar` | vendored `DocxToolbar` / `DocxPageNumberControl` | `DocxViewerToolbar` | default / hover / focus / disabled |
-| `docx-sidebar` | vendored `DocumentViewerThumbnailSidebar` | `DocumentViewerSidebar` + fixture `FileThumbnail` children | open / closed / skeleton |
+| `docx-sidebar` | vendored `DocumentViewerThumbnailSidebar` | 真实 `DocxThumbnailPanel` + `DocumentViewerSidebar` + 真实 DOCX canvas 缩略图 | open / closed / skeleton |
 
 运行：
 
@@ -77,18 +77,23 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity -- \
 commit / MIT / copyright 头并登记在 `vendor/NOTICE.md`；#155 harness 合同测试与
 fixture 同步更新。该命令当前**真实 FAIL**（没有伪造 pass），精确 delta：
 
-- `docx-toolbar`：32 cases；1440 下几何完全一致（48px，`deltas=[]`），
-  light 像素差 9.16%–10.15%；1280/768/390 下 Vue toolbar 比 reference 多保留
-  search / edit / theme / upload / download 控件，换行高度分别为
-  81/113/233px（reference 48/48/89px）。全矩阵平均像素差 12.53%。
-- `docx-sidebar`：24 cases；几何全矩阵 PASS（160px；open 292px、skeleton 240px），
-  像素差 open 15.7%、closed 4.1%、skeleton 47.7%，平均 22.62%。closed 的边框
-  已在共享 sidebar 中修为 `border-inline-end-width: 0`。
+- `docx-toolbar`：32 cases，**几何全矩阵 PASS**（1440/1280 单行 48px；768 单行
+  48px；390 响应式换行 89px，与 reference 一致）。像素差：1440 9.19%–16.08%
+  （默认 toolbar 保留可见 search/edit/theme/upload/download）；1280 2.14%–4.66%；
+  768 3.66%–7.98%；390 5.18%–12.77%；全矩阵平均 7.91%。宽度 <1360px 时非参考
+  控件收进真实 overflow dropdown，工具栏保持单行 48px。
+- `docx-sidebar`：24 cases，几何全矩阵 PASS（160px；open 292px、skeleton 240px），
+  像素差 open 64.0%–71.8%、closed 9.08%、skeleton 49.4%–51.3%，平均 42.52%。
+  subject 现在是真实 `DocxThumbnailPanel` 和真实 canvas 缩略图，不再使用 fixture
+  FileThumbnail 代替。closed 的边框已在共享 sidebar 中修为
+  `border-inline-end-width: 0`。
 
 报告：`output/ui-parity/report.json` / `report.html`（未提交，由命令生成）。
-剩余 delta 属于有意的产品差异：上游 toolbar 将文件动作收进 dropdown，DOCX 保留
-可见 search/edit/theme/upload/download；sidebar 的 fixture 子项是 FileThumbnail
-卡片，真实 DOCX canvas 缩略图由本 story 覆盖；skeleton 的卡片数量/文案不同。
+剩余 delta 属于有意的产品差异：1440 宽屏保留可见 search/edit/theme/upload/download
+控件；窄于 1360px 时这些控件进入真实 overflow dropdown，所以 1280/768/390 的
+几何与 reference 一致，但 1440 仍保留可发现的完整控制集；sidebar 的 reference
+使用 fixture FileThumbnail 卡片，subject 是真实 DOCX canvas 缩略图，因此像素差
+主要来自缩略图内容本身；skeleton 的卡片数量/文案也不同。
 未接入 axe-core（#165）；键盘/焦点行为由 component/blackbox 测试覆盖。
 
 ## UX-DOCX-004 square-wrap 排查
