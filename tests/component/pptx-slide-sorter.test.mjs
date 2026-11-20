@@ -132,7 +132,7 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
     "the current slide stays selected when the sorter opens",
   );
   assert.equal(
-    findByTestId(mounted.root, "pptx-view-mode-sorter").props["aria-pressed"],
+    String(findByTestId(mounted.root, "pptx-view-mode-sorter").props["aria-pressed"]),
     "true",
   );
   assert.deepEqual(mounted.warnings, []);
