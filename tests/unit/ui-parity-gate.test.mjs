@@ -103,6 +103,9 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "document-blocks:#164",
     "document-sidebar:#158",
     "input:#157",
+    "xlsx-sheet-tabs:#160",
+    "xlsx-status-bar:#160",
+    "xlsx-toolbar:#160",
   ].sort());
 });
 

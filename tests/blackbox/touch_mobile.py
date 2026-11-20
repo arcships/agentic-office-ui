@@ -313,7 +313,6 @@ TARGETS: tuple[TargetSpec, ...] = (
             ".xlsx-toolbar__icon-button",
             ".xlsx-toolbar__zoom-select",
             ".xlsx-ribbon__icon-button",
-            ".xlsx-sheettabs__nav-btn",
         ),
     ),
     TargetSpec(

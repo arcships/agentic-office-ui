@@ -247,6 +247,7 @@
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
       :panel-id="controller.activeSheet ? gridId : undefined"
+      :show-sheet-actions="showSheetActions"
     />
     <XlsxStatusBar
       v-if="showStatusBar && controller.activeSheet"
@@ -328,6 +329,13 @@ const props = withDefaults(
      */
     showSheetTabs?: boolean;
     /**
+     * Renders Excel's extra sheet controls (previous/next arrows, add and remove
+     * buttons) next to the tab strip. Off by default: the pinned Extend strip
+     * only shows the tabs and scrolls horizontally, and the same commands live
+     * in the tab context menu (`xlsx-insert-sheet` / `xlsx-delete-sheet`).
+     */
+    showSheetActions?: boolean;
+    /**
      * Renders the selection status bar under the sheet tabs. It shows the
      * selected cell/range, non-empty and numeric counts, sum, average, min and
      * max, and marks filtered or budget-truncated selections.
@@ -374,6 +382,7 @@ const props = withDefaults(
     showFormulaBar: true,
     showImages: true,
     showSheetTabs: true,
+    showSheetActions: false,
     showStatusBar: true,
     showUpload: false,
     enableGestureZoom: true,

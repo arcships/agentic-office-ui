@@ -205,6 +205,28 @@
       @keydown.esc="closeTabMenu"
     >
       <button
+        v-if="!isReadOnly"
+        type="button"
+        class="xlsx-sheettabs__menu-item"
+        data-testid="xlsx-insert-sheet"
+        role="menuitem"
+        @click="insertSheetFromMenu"
+      >
+        {{ m.xlsx.sheetTabs.add }}
+      </button>
+      <button
+        v-if="!isReadOnly"
+        type="button"
+        class="xlsx-sheettabs__menu-item"
+        data-testid="xlsx-delete-sheet"
+        role="menuitem"
+        :disabled="!canRemoveActiveSheet"
+        @click="deleteSheetFromMenu"
+      >
+        {{ m.xlsx.sheetTabs.remove }}
+      </button>
+      <div class="xlsx-sheettabs__menu-separator" role="separator" />
+      <button
         type="button"
         class="xlsx-sheettabs__menu-item"
         data-testid="xlsx-rename-sheet"
@@ -889,6 +911,22 @@ function renameFromMenu() {
   if (tab) startRename(tab, index);
 }
 
+/**
+ * The default strip no longer renders Excel's add/remove buttons (#160), so the
+ * tab menu carries the same commands; `showSheetActions` restores the buttons.
+ */
+function insertSheetFromMenu() {
+  closeTabMenu();
+  if (isReadOnly.value) return;
+  props.controller.addSheet();
+}
+
+function deleteSheetFromMenu() {
+  closeTabMenu();
+  if (isReadOnly.value || !canRemoveActiveSheet.value) return;
+  props.controller.removeActiveSheet();
+}
+
 function removeActiveSheet() {
   if (!canRemoveActiveSheet.value || isReadOnly.value) return;
   props.controller.removeActiveSheet();
@@ -1267,10 +1305,10 @@ onUnmounted(() => {
 }
 
 .xlsx-sheettabs__rename-error {
-  background: #b91c1c;
-  border-radius: 4px;
-  color: #ffffff;
-  font-size: 11px;
+  /* The bubble paints its own colours through `renameErrorStyle`; this block
+   * only owns the box so the token layer stays the single colour source. */
+  border-radius: var(--office-radius-sm);
+  font-size: var(--office-text-xs);
   max-width: 260px;
   padding: 4px 8px;
   white-space: normal;
@@ -1287,15 +1325,22 @@ onUnmounted(() => {
   min-width: 140px;
 }
 
+/* Separates the sheet insert/delete group from rename/hide/unhide. */
+.xlsx-sheettabs__menu-separator {
+  block-size: var(--office-border-width);
+  margin: 4px 0;
+  background: var(--office-border);
+}
+
 .xlsx-sheettabs__menu-item {
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--office-radius-sm);
   color: inherit;
   cursor: pointer;
   display: block;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--office-text-xs);
   padding: 6px 10px;
   text-align: left;
   width: 100%;
@@ -1318,7 +1363,7 @@ onUnmounted(() => {
 }
 
 .xlsx-sheettabs__thumbnail canvas {
-  border-radius: 6px;
+  border-radius: var(--office-radius-sm);
   display: block;
   height: auto;
   width: 100%;
@@ -1329,12 +1374,12 @@ onUnmounted(() => {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--office-radius-sm);
   color: inherit;
   cursor: pointer;
   display: flex;
   font-family: inherit;
-  font-size: 16px;
+  font-size: var(--office-text-base);
   height: 28px;
   justify-content: center;
   width: 28px;
@@ -1354,12 +1399,12 @@ onUnmounted(() => {
   align-items: center;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--office-radius-sm);
   color: inherit;
   cursor: pointer;
   display: flex;
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--office-text-base);
   height: 28px;
   justify-content: center;
   width: 24px;

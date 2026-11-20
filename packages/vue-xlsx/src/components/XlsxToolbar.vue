@@ -728,7 +728,7 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
 .xlsx-toolbar__search-panel label {
   display: flex;
   flex-direction: column;
-  font-size: var(--office-text-xs, 0.75rem);
+  font-size: var(--office-text-xs);
   font-weight: 600;
   gap: 6px;
 }
@@ -758,7 +758,7 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: var(--office-radius-sm, 0.375rem);
+  border-radius: var(--office-radius-sm);
   color: inherit;
   cursor: pointer;
   display: flex;
@@ -776,14 +776,14 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
 
 .xlsx-toolbar__search-result strong {
   flex: 0 0 96px;
-  font-size: var(--office-text-xs, 0.75rem);
+  font-size: var(--office-text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .xlsx-toolbar__search-result span {
-  font-size: var(--office-text-xs, 0.75rem);
+  font-size: var(--office-text-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -806,7 +806,7 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   align-items: center;
   display: flex;
   flex-direction: row;
-  font-size: var(--office-text-xs, 0.75rem);
+  font-size: var(--office-text-xs);
   gap: 5px;
 }
 
@@ -839,7 +839,7 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   border-radius: var(--office-radius-lg, 0.625rem);
   background: var(--office-popover, #fff);
   color: var(--office-popover-foreground, #18181b);
-  box-shadow: var(--office-shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
+  box-shadow: var(--office-shadow-md);
 }
 
 .xlsx-toolbar__menu-label {
@@ -849,13 +849,13 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   gap: 2px;
   padding: 6px 8px;
   color: var(--office-muted-foreground, #52525b);
-  font-size: var(--office-text-xs, 0.75rem);
+  font-size: var(--office-text-xs);
 }
 
 .xlsx-toolbar__menu-file {
   overflow: hidden;
   color: var(--office-foreground, #18181b);
-  font-size: var(--office-text-sm, 0.875rem);
+  font-size: var(--office-text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -873,11 +873,11 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
   inline-size: 100%;
   padding: 6px 8px;
   border: 0;
-  border-radius: var(--office-radius-sm, 0.375rem);
+  border-radius: var(--office-radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: var(--office-text-sm, 0.875rem);
+  font-size: var(--office-text-sm);
   text-align: start;
   cursor: pointer;
 }
@@ -901,8 +901,8 @@ defineExpose({ openSearch, closeSearch, openActions, closeActions });
 .xlsx-toolbar__export-warning {
   margin: 0;
   padding: 6px 8px;
-  color: var(--office-warning-foreground, #b45309);
-  font-size: var(--office-text-xs, 0.75rem);
+  color: var(--office-warning-foreground);
+  font-size: var(--office-text-xs);
 }
 
 /*

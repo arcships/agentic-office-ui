@@ -55,6 +55,9 @@ SOFTWARE.
 | `extend/layout-blocks-panel.tsx` | `apps/v4/components/extend/layout-blocks-panel.tsx` | `@tanstack/react-virtual` and the Base UI ScrollArea replaced by flow/scroll divs with the same classes; loading/error/markdown states are harness extensions |
 | `extend/signature-fields.tsx` | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | `SignatureFieldsPanel` only; PDF viewer and `signature_pad` dialog dropped; `showPreview`, loading and error are harness extensions |
 | `extend/document-splits.tsx` | `apps/v4/components/extend/document-splits.tsx` | Static split cards and thumbnails; `@dnd-kit` wrappers dropped (drag/drop is covered by Vue interaction tests); ScrollArea replaced; loading/error/empty are harness extensions |
+| `extend/xlsx-toolbar.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` | `WorkbookToolbar` + tooltip/search/actions triggers only; engine hooks become props; popups dropped (#160) |
+| `extend/xlsx-sheet-tabs.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` + registry `tabs.tsx` / `components/ui/scroll-area.tsx` | `WorkbookSheetTabsInner` without the hover thumbnail portal; Base UI Tabs/ScrollArea replaced by static elements with the same classes (#160) |
+| `extend/xlsx-status-bar.tsx` | `apps/v4/components/extend/file-system.tsx` | the `aria-live` status strip; the pinned XLSX viewer has no status bar (#160) |
 | `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
 | `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |
 | `../lib/cn.ts` | `apps/v4/lib/utils.ts` | `siteConfig`/`absoluteUrl` dropped |

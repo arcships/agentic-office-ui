@@ -100,16 +100,22 @@ def toolbar_metrics(page: Page) -> dict[str, Any]:
         """() => {
           const toolbar = document.querySelector('[data-testid="xlsx-toolbar"]');
           const ribbon = document.querySelector('[data-testid="xlsx-format-toolbar"]');
-          const leading = toolbar.querySelector('.office-toolbar__leading').getBoundingClientRect();
-          const trailing = toolbar.querySelector('.office-toolbar__trailing').getBoundingClientRect();
+          // #160: the upstream row has no leading cluster (it stays hidden while
+          // empty), so "wrapped" means the control cluster does not start on the
+          // row's own content edge any more.
+          const cluster = toolbar.querySelector('.xlsx-toolbar__zoom, .office-toolbar__trailing');
           const box = (element) => {
             const rect = element.getBoundingClientRect();
             return { height: rect.height, width: rect.width };
           };
+          const toolbarRect = toolbar.getBoundingClientRect();
+          const clusterRect = cluster ? cluster.getBoundingClientRect() : null;
+          const paddingTop = parseFloat(getComputedStyle(toolbar).paddingTop) || 0;
           return {
             toolbar: box(toolbar),
             ribbon: box(ribbon),
-            wrapped: trailing.top > leading.top + 1,
+            wrapped: Boolean(clusterRect) && clusterRect.top > toolbarRect.top + paddingTop + 4,
+            rowControls: toolbar.querySelectorAll('button, select').length,
             toolbarOverflow: toolbar.scrollWidth - toolbar.clientWidth,
             ribbonOverflow: ribbon.scrollWidth - ribbon.clientWidth,
             toolbarVerticalOverflow: toolbar.scrollHeight - toolbar.clientHeight,
@@ -274,9 +280,14 @@ def capture_case(
         assert layout["displayRows"] >= 200, f"{prefix}: grid still renders its rows {layout}"
 
         if name == "390x844":
-            assert chrome["wrapped"], f"{prefix}: toolbar wraps at 390px {chrome}"
+            # The upstream row is zoom + search + actions; it fits one line at
+            # every viewport, including 390px (no `wrapped`).
+            assert not chrome["wrapped"], f"{prefix}: toolbar stays on one row {chrome}"
         else:
             assert not chrome["wrapped"], f"{prefix}: toolbar stays on one row {chrome}"
+        assert chrome["rowControls"] >= 4, (
+            f"{prefix}: the row keeps its zoom/search/actions controls {chrome}"
+        )
 
         keyboard = menu_keyboard_flow(page, str(theme_out / f"{prefix}-xlsx-context-menu.png"))
         assert keyboard["firstItem"]["role"] == "menuitem", (
