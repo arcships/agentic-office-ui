@@ -92,10 +92,17 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `file-upload` | default(empty)、hover、focus、dragging、rejected(error)、file-selected | ✅ `FileUpload.vue` |
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
 | `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
+| `pdf-sidebar` | open、closed、skeleton(loading) | ✅ `PdfThumbnailStrip.vue` + 共享 `DocumentViewerSidebar`（24/24 pass） |
+| `docx-toolbar` | default、hover、focus、disabled | ✅ `DocxViewerToolbar`（#159，32/32 pass） |
+| `docx-sidebar` | open、closed、skeleton(loading) | ✅ `DocxThumbnailPanel`（#159，24/24 pass） |
+| `document-sidebar` | open、closed、skeleton(loading)、overlay-open、overlay-closed | ✅ `DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`（40/40 pass；160px rail、inline 与 overlay 两种布局） |
+| `office-empty-state` | default、action | ✅ `OfficeEmptyState.vue`（16/16 pass；对照 `PdfEditorEmptyState`） |
+| `office-error-state` | default、message、wrapped | ✅ `OfficeErrorState.vue`（24/24 pass；对照 viewer error card） |
+| `office-loading-state` | default、hidden | ✅ `OfficeLoadingState.vue`（16/16 pass；对照 `ViewerLoadingSurface`） |
+| `office-status-bar` | default | ✅ `OfficeStatusBar.vue`（8/8 pass；对照上游 footer 契约组合） |
 | `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
 | `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
 | `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
-| `document-sidebar` | open、closed、skeleton(loading) | ❌ 无侧栏（#158）→ 仅参考基线；#163 记录 seam |
 | `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
 | `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
 | `e-signature` | unsigned、signed、exporting、preview、loading、error | ✅ `ESignatureFields.vue`（字段面板；232/232 pass） |
@@ -169,7 +176,12 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
   （`#160`），补提交基线后再切 `blocking`。`xlsx-ribbon` / 公式行仍无对照（上游 editor 的格式行
   来自私有包，且控件集合不同），结论与细节见
   [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
-- `document-sidebar` 只保留参考基线：规范组件由 #158 在
+- `document-sidebar` 在 #158 重新打开后补齐对照侧：`DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`
+  与 vendored `DocumentViewerThumbnailSidebar` 对齐，5 个状态（inline open/closed/skeleton、overlay
+  open/closed）× 4 viewport × 2 theme = 40/40 `pass`，0 px、几何 0 px。
+- `office-empty-state` / `office-error-state` / `office-loading-state` / `office-status-bar` 是 #158
+  新增的 state surface：对照分别是 `PdfEditorEmptyState`、viewer error card、`ViewerLoadingSurface`
+  与上游 footer 类名组合，共 64/64 `pass`（0 px、几何 0 px）。
   `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
 - `pptx-toolbar` / `pptx-sorter` 已收敛到 vendored 上游标记：40 + 24 个 case
   全部 pass，0 像素差、0 几何差（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。

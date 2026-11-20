@@ -191,19 +191,47 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 `role="alert"`，两者都带图标和本地化前缀。`start` / `end` slot 可替换左右区域。
 根节点是 `<footer>`，带 `aria-label`（默认 `common.chrome.statusBar`）。
 
+视觉尺寸（#158 对齐上游 footer 契约，8/8 像素一致）：
+
+| 项 | 值 | 上游来源 |
+|---|---|---|
+| 行高 | 33px（`py-2` 8+8 + `text-xs` 16 + `border-t` 1） | `border-t px-3 py-2 text-xs` |
+| 内边距 | `8px 12px` | `px-3 py-2` |
+| 背景 | `color-mix(in oklab, var(--office-muted) 40%, transparent)` | `bg-muted/40`（file-system footer、xlsx sheet tab 条） |
+| 字号 | 12 / 16，`muted-foreground` | `text-xs text-muted-foreground` |
+| 间距 | 行 4px / 列 8px | `gap-y-1 gap-x-2` |
+
+Extend 没有独立的 status bar 组件：`file-system.tsx` 的 `aria-live` footer、
+`xlsx-viewer.tsx` 的 sheet tab 条和 `pdf-editor-panels.tsx` 的提示行都使用上面这组类名，
+`OfficeStatusBar` 就是这组 footer chrome 的共用实现。
+
 ### 3.7 `OfficeEmptyState` / `OfficeErrorState` / `OfficeLoadingState`
 
-三个状态共享 `.office-state` 视觉（居中、图标、标题、描述、操作区），支持
-`compact` 和 `class`。
+三个组件与上游三种内联状态一一对应（Extend 没有共享状态组件，每个 viewer 自己写）：
+
+| 组件 | 上游对照 | 形状 | 像素证据 |
+|---|---|---|---|
+| `OfficeEmptyState` | `PdfEditorEmptyState`（`pdf-editor-shared.tsx`） | 居中列，`gap-2 px-4 py-10`；40px `rounded-full bg-muted` glyph；标题 `text-sm font-medium`；描述 `max-w-56 text-xs`；操作区 `mt-2` | `office-empty-state` 16/16 |
+| `OfficeErrorState` | `xlsx-viewer.tsx` 的 `loadError` 卡片 | `max-w-md rounded-lg border bg-background p-4 text-sm`；标题 `font-medium`；说明 `mt-1` muted（不限制宽度，按卡片宽度换行）；操作 `mt-4` | `office-error-state` 24/24 |
+| `OfficeLoadingState` | `ViewerLoadingSurface`（`docx-viewer.tsx`/`xlsx-viewer.tsx`） | `grid min-h-52 place-items-center`；16px spinner | `office-loading-state` 16/16 |
 
 | 组件 | 关键 props | 可访问性 / 事件 |
 |---|---|---|
-| `OfficeEmptyState` | `title`、`description`、`icon`（默认 `folder-open`） | `role="group"` + labelledby/describedby；`actions` slot |
-| `OfficeErrorState` | `title`、`description`、`error`、`icon`（`triangle-alert`）、`showRetry`、`retryLabel` | `role="alert"`；默认 Retry 按钮发 `retry` |
-| `OfficeLoadingState` | `title`、`description`、`progress`（0–100）、`showSpinner` | `role="status" aria-live="polite" aria-busy="true"`；`progress` 时输出 `role="progressbar"` |
+| `OfficeEmptyState` | `title`、`description`、`icon`（可选，默认无 glyph）、`compact` | `role="group"` + labelledby/describedby；`actions` slot |
+| `OfficeErrorState` | `title`、`description`、`error`、`icon`（可选，默认无 glyph）、`showRetry`、`retryLabel`、`compact` | `role="alert"`；默认 Retry 按钮发 `retry` |
+| `OfficeLoadingState` | `title`、`description`、`progress`（0–100）、`showSpinner`、`compact` | `role="status" aria-live="polite" aria-busy="true"`；`progress` 时输出 `role="progressbar"` |
 
 `ErrorState` 的描述优先级：`description` → `error` → 目录默认文案。
 `LoadingState` 的进度条宽度只由 `progress` 决定，可重复截图。
+
+默认渲染与上游一致，扩展能力全部是**可选**的：
+
+- `icon` / `#icon` 默认不渲染（上游 empty/error 卡片没有 glyph），传入时才出现；
+  empty 的 glyph 是 40px 圆底 + 20px 图标，error 的 glyph 是标题上方 16px 图标。
+- 标题/描述为空字符串时不渲染对应节点，并同步去掉 `aria-labelledby` / `aria-describedby`，
+  不会留下悬空引用。例如 `OfficeLoadingState title="" description=""` 就是上游
+  `ViewerLoadingSurface`（只有 spinner），`show-spinner=false` 时退化为空白居中区。
+- `compact` 只收紧 padding（`--office-ui-state-padding-block/inline`），不改布局。
 
 ### 3.8 `DocumentViewerSidebar`
 
@@ -338,6 +366,32 @@ light/dark 共 8 例，全部 PASS、0 console error）：
 `accessibility` 字段记录手工扫描结果（无未命名按钮/表单、无重复 id、无空 live
 region）。
 
+### 7.1 Extend 像素对照（#158 重开补证）
+
+`pnpm ui:parity`（Chromium headless，DPR 2，1440/1280/768/390 × light/dark）在
+2026-11-20 本分支的重跑结果：
+
+| surface | 状态 | case | 结果 |
+|---|---|---|---|
+| `document-sidebar` | open、closed、skeleton、overlay-open、overlay-closed | 40 | **40/40 `pass`**，0 diff px、几何 0 px |
+| `office-empty-state` | default、action | 16 | **16/16 `pass`** |
+| `office-error-state` | default、message、wrapped | 24 | **24/24 `pass`** |
+| `office-loading-state` | default、hidden | 16 | **16/16 `pass`** |
+| `office-status-bar` | default | 8 | **8/8 `pass`** |
+
+- `document-sidebar` 对照 vendored `DocumentViewerThumbnailSidebar`：160px rail、
+  inline 时 `-ml-40` 收起、overlay 时 `-translate-x-full` + `shadow-lg`、
+  `p-4` skeleton，全部 0 px。
+- `office-*` 对照 `PdfEditorEmptyState` / viewer error card / `ViewerLoadingSurface` /
+  footer 类名组合；卡片内边距、边框、10px 圆角、字号行高都由几何比较同时验证。
+- 所有新增 surface 均为 `gateStatus: blocking`，不再有 `pendingIssue` 豁免。
+- 全矩阵（20 surface × 4 viewport × 2 theme）同一轮：**736 case / 717 `pass` +
+  19 `pass-with-antialiasing`（存量 file-upload dark）+ 0 `fail`**，`--gate-mode ready` PASS。
+
+axe-core（WCAG 2.0/2.1 A + AA，light + dark）与键盘 smoke 覆盖
+`pdf-toolbar`、`docx-toolbar`、`document-sidebar`、`office-*`：**0 violation、
+0 keyboard failure**（详见 `tests/a11y/config.json`）。
+
 ## 8. 测试与 CI
 
 新增并被 `scripts/ci/run-suite.mjs` 注册：
@@ -350,12 +404,13 @@ pnpm --filter @arcships/vue-ui build
 ```
 
 - 组件测试：toolbar 结构、icon button 状态、page/zoom/search 键盘、status 与
-  empty/error/loading、sidebar auto/inline/overlay、ResizeObserver、skeleton、
-  open/close、zh-CN。
-- 合同测试：Extend 几何、token-only CSS、公开导出、i18n 键、gzip 预算和 public
-  API fingerprint。
-- 包体积：`dist/index.js` 43,391 B gzip + `style.css` 11,567 B gzip，相对 #157 前
-  基线增加 35,818 B，仍在 35,840 B 预算内。
+  empty/error/loading（含 icon 可选、空文本不渲染、无悬空 ARIA 引用）、sidebar
+  auto/inline/overlay、ResizeObserver、skeleton、open/close、zh-CN。
+- 合同测试：Extend 几何、token-only CSS（无字面颜色/半径）、公开导出、i18n 键、
+  gzip 预算和 public API fingerprint。
+- 包体积（本分支实测，`gzipSync(level 9)`）：`dist/index.js` 53,386 B gzip +
+  `dist/style.css` 15,672 B gzip = **69,058 B**；预算 = baseline 55,346 B +
+  35,840 B，剩余 22,128 B。
 - `public-api-contract.json`：`@arcships/vue-ui` fingerprint 从 199/`8a1aff85…`
   更新为 233/`1479c668…`；`@arcships/office-interaction` 因新增导出类型
   `OfficeChromeMessages` 从 154/`e1b91beb…` 更新为 155/`5732cb82…`。

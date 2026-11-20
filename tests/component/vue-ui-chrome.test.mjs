@@ -761,7 +761,30 @@ test("EmptyState uses catalog defaults and exposes an actions slot", async (t) =
   assert.match(state.textContent, /No document open/)
   assert.match(state.textContent, /Open a file to get started/)
   assert.equal(byTestId("empty-action").textContent, "Open")
+  // The upstream `PdfEditorEmptyState` is icon-free unless the host passes a
+  // glyph, so the default render has no icon container at all.
+  assert.equal(state.querySelector(".office-state__icon"), null)
+})
+
+test("EmptyState renders an optional glyph and empty text on request", async (t) => {
+  const { cleanup } = mount(OfficeEmptyState, {
+    props: {
+      description: "",
+      icon: "folder-open",
+    },
+  })
+  t.after(cleanup)
+  await flush(0)
+
+  const state = byTestId("office-empty-state")
   assert.ok(state.querySelector(".office-state__icon svg"))
+  assert.match(state.textContent, /No document open/)
+  assert.equal(state.querySelector(".office-state__description"), null)
+  assert.equal(
+    state.getAttribute("aria-describedby"),
+    null,
+    "a skipped description must not leave a dangling aria-describedby",
+  )
 })
 
 test("EmptyState accepts a custom title, description and compact layout", async (t) => {

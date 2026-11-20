@@ -735,11 +735,12 @@
       "id": "document-sidebar",
       "title": "DocumentViewerSidebar",
       "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
-      "subjectComponent": null,
-      "subjectStatus": "missing",
-      "pendingIssue": "#158",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue + DocumentViewerSidebarSkeleton.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-document-sidebar-frame]",
+      "subjectTargetSelector": "[data-document-sidebar-frame]",
       "cellWidth": 220,
-      "notes": "Reference baseline only: the canonical DocumentViewerSidebar is being implemented by #158 (packages/vue-ui/src/components/chrome/). #163 documents the integration seam and does not duplicate it.",
+      "notes": "Both sides render the pinned Extend `DocumentViewerThumbnailSidebar` as a 160px `w-40` rail inside the same 240px frame: two fixture page cards (80x112 `FileThumbnail` + `text-xs` page number), 8px list padding, 12px list gap, and the upstream `p-4` one-card loading skeleton. States cover inline open/closed/skeleton plus the overlay open/closed pair (absolute 160px rail over a 196px `muted` document surface, `-translate-x-full` when closed, `shadow-lg` edge). The fixture strip is viewer state rather than a sidebar primitive, so #163 documents the integration seam and each viewer keeps its own thumbnails.",
       "states": [
         {
           "id": "open",
@@ -764,11 +765,150 @@
           "interaction": {
             "type": "none"
           }
+        },
+        {
+          "id": "overlay-open",
+          "label": "open (overlay)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "overlay-closed",
+          "label": "closed (overlay)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
         }
       ],
       "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#158"
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-empty-state",
+      "title": "OfficeEmptyState",
+      "referenceComponent": "apps/v4/components/extend/pdf-editor-shared.tsx (PdfEditorEmptyState)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeEmptyState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-empty-state]",
+      "subjectTargetSelector": "[data-slot=empty-state]",
+      "cellWidth": 320,
+      "notes": "`PdfEditorEmptyState` is the only reusable empty state in the pinned Extend tree: centered column, `gap-2 px-4 py-10`, optional 40px `rounded-full bg-muted` glyph, `text-sm font-medium` title, `max-w-56 text-xs` description and an `mt-2` action row. The glyph is omitted on both sides (icon artwork is an OfficeIcon/Hugeicons concern covered by the icon unit tests), so the cells compare layout, typography and the default catalog copy. `action` adds the upstream outline/sm button in the `mt-2` slot.",
+      "states": [
+        {
+          "id": "default",
+          "label": "title + description",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "action",
+          "label": "with action",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-error-state",
+      "title": "OfficeErrorState",
+      "referenceComponent": "apps/v4/components/extend/xlsx-viewer.tsx (loadError card inside `grid place-items-center bg-muted/30 p-4`)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeErrorState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-error-card]",
+      "subjectTargetSelector": "[data-slot=error-state]",
+      "cellWidth": 360,
+      "notes": "Both sides render the pinned viewer error card inside the upstream centered host: `max-w-md rounded-lg border bg-background p-4 text-sm`, `font-medium` title, `mt-1 text-muted-foreground` message and an `mt-4` outline/sm action. The card is the target, so padding, the 1px border, the 10px radius and the 14/20 type are compared geometrically too. The upstream card has no glyph; OfficeErrorState's `icon` prop is opt-in. `message` drops the action row (`showRetry=false`).",
+      "states": [
+        {
+          "id": "default",
+          "label": "card with retry",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "message",
+          "label": "card without action",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "wrapped",
+          "label": "wrapped message",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-loading-state",
+      "title": "OfficeLoadingState",
+      "referenceComponent": "apps/v4/components/extend/docx-viewer.tsx + xlsx-viewer.tsx (ViewerLoadingSurface)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeLoadingState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-loading-surface]",
+      "subjectTargetSelector": "[data-slot=loading-state]",
+      "cellWidth": 320,
+      "notes": "`ViewerLoadingSurface` is `grid h-full min-h-52 place-items-center bg-transparent` with the 16px spinner. A 320x208 frame makes `h-full` and the subject's 13rem min-height resolve to the same box, and the state root is the target, so the 208px min-height, the centered placement and the spinner size are compared. The subject reaches the upstream surface by passing empty title/description; `hidden` covers the upstream `showSpinner={false}` branch. Titled loading states are covered by the component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "spinner",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hidden",
+          "label": "spinner hidden",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-status-bar",
+      "title": "OfficeStatusBar",
+      "referenceComponent": "apps/v4/components/extend/file-system.tsx footer + xlsx-viewer.tsx sheet tabs + pdf-editor-panels.tsx hint rows (composed footer contract)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeStatusBar.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-status-bar-frame]",
+      "subjectTargetSelector": "[data-slot=status-bar]",
+      "cellWidth": 360,
+      "notes": "Extend has no standalone status bar: viewers append footer strips with `border-t`, `bg-muted/40`, `px-3 py-2`, `text-xs text-muted-foreground` (file-system.tsx `aria-live` footer, xlsx-viewer.tsx sheet-tab strip, pdf-editor-panels.tsx hint rows). The reference composes those documented footer classes with the page/status/file content OfficeStatusBar renders, so the diff pins the shared footer metrics (33px row, 12/16 type, muted palette, left/right split, 4px/8px gaps) instead of a single upstream class list.",
+      "states": [
+        {
+          "id": "default",
+          "label": "page + status + file",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
     },
     {
       "id": "bounding-box-citations",

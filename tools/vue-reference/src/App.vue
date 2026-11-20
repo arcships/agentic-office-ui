@@ -5,6 +5,7 @@ import ParitySurface from "./parity/ParitySurface.vue";
 import ButtonSurface from "./surfaces/ButtonSurface.vue";
 import BoundingBoxCitationsSurface from "./surfaces/BoundingBoxCitationsSurface.vue";
 import DialogSurface from "./surfaces/DialogSurface.vue";
+import DocumentSidebarSurface from "./surfaces/DocumentSidebarSurface.vue";
 import DocumentSplitsSurface from "./surfaces/DocumentSplitsSurface.vue";
 import ESignatureSurface from "./surfaces/ESignatureSurface.vue";
 import LayoutBlocksSurface from "./surfaces/LayoutBlocksSurface.vue";
@@ -14,6 +15,10 @@ import FileThumbnailSurface from "./surfaces/FileThumbnailSurface.vue";
 import FileUploadSurface from "./surfaces/FileUploadSurface.vue";
 import InputSurface from "./surfaces/InputSurface.vue";
 import MissingSurface from "./surfaces/MissingSurface.vue";
+import OfficeEmptyStateSurface from "./surfaces/OfficeEmptyStateSurface.vue";
+import OfficeErrorStateSurface from "./surfaces/OfficeErrorStateSurface.vue";
+import OfficeLoadingStateSurface from "./surfaces/OfficeLoadingStateSurface.vue";
+import OfficeStatusBarSurface from "./surfaces/OfficeStatusBarSurface.vue";
 import PdfSidebarSurface from "./surfaces/PdfSidebarSurface.vue";
 import PdfToolbarSurface from "./surfaces/PdfToolbarSurface.vue";
 import PptxSorterSurface from "./surfaces/PptxSorterSurface.vue";
@@ -113,6 +118,26 @@ function subjectStatus(surface: Surface): "available" | "missing" {
       v-else-if="surface.id === 'docx-sidebar'"
       :cell-width="surface.cellWidth"
       :theme="theme"
+    />
+    <DocumentSidebarSurface
+      v-else-if="surface.id === 'document-sidebar'"
+      :cell-width="surface.cellWidth"
+    />
+    <OfficeEmptyStateSurface
+      v-else-if="surface.id === 'office-empty-state'"
+      :cell-width="surface.cellWidth"
+    />
+    <OfficeErrorStateSurface
+      v-else-if="surface.id === 'office-error-state'"
+      :cell-width="surface.cellWidth"
+    />
+    <OfficeLoadingStateSurface
+      v-else-if="surface.id === 'office-loading-state'"
+      :cell-width="surface.cellWidth"
+    />
+    <OfficeStatusBarSurface
+      v-else-if="surface.id === 'office-status-bar'"
+      :cell-width="surface.cellWidth"
     />
     <BoundingBoxCitationsSurface
       v-else-if="surface.id === 'bounding-box-citations'"

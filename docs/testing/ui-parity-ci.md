@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是，但只对 `gateStatus: blocking` 的 surface |
-| `ui-parity-nightly` | nightly / dispatch | 全矩阵（13 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
+| `ui-parity-nightly` | nightly / dispatch | 全矩阵（20 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，allowlist 之外的发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
@@ -73,9 +73,10 @@ pnpm ui:baseline:verify
 | `button`, `select`, `dialog`, `tooltip` | ✅ | blocking | 参考页 vs 对照页 0px / 0 像素；有基线 |
 | `file-upload`, `file-thumbnail` | ✅ | blocking | #163 已收敛（含 AA 残差）；有基线 |
 | `pdf-toolbar`, `pdf-sidebar` | ✅ | blocking | #162 40/40、24/24 像素 0；有基线 |
+| `document-sidebar` | ❌ | blocking（#158） | inline open/closed/skeleton + overlay open/closed，40/40 像素 0；有基线 |
+| `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking（#158） | 共 64/64 像素 0（含长消息换行卡片）；有基线 |
 | `input` | ✅ | pending（#157） | 4 个 `focus/light` case 有 52px、单通道 1/255 残差；不阻断 |
 | `docx-toolbar`, `docx-sidebar` | ❌ | pending（#159） | 参考/对照仍有真实差距；不阻断 |
-| `document-sidebar` | ❌ | pending（#158） | 只有参考基线（Vue 侧 `subjectStatus: missing`） |
 | `document-blocks` | ❌ | pending（#164） | 只有 fixtures，参考侧不可渲染 |
 
 ## 5. 最终开关
@@ -118,7 +119,6 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（`PYTHON=/tmp/bb-venv/bi
 |---|---|---|
 | `input` focus/light 52px 残差 | parity 报告 | #157 |
 | `docx-toolbar` / `docx-sidebar` 真实 delta | parity 报告 | #159 |
-| `document-sidebar` 无对照组件 | parity 报告（reference-only） | #158 |
 | `button` loading 无可访问名（`visibility: hidden`） | `tests/a11y/allowlist.json` | #157 |
 | `button` destructive 对比度 3.8:1（继承上游 token） | `tests/a11y/allowlist.json` | #157 |
 | `pdf-sidebar` 缩略图列表无焦点环 | `tests/a11y/allowlist.json` | #162 |

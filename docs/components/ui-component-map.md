@@ -35,7 +35,7 @@
 | `apps/v4/components/ui/badge.tsx` | adapted | `OfficeBadge` | — | — | toolbar/状态区使用 |
 | `apps/v4/components/ui/card.tsx` | adapted | `OfficeCard` | — | — | 静态容器 |
 | `apps/v4/components/ui/spinner.tsx` | adapted | `OfficeSpinner`（`Spinner` 委托） | `button`（loading） | 随 Button | loading 旋转器 |
-| `apps/v4/components/ui/skeleton.tsx` | adapted | `OfficeSkeleton` | `document-sidebar`（skeleton） | ⏳ #158 | 参考侧已采集 |
+| `apps/v4/components/ui/skeleton.tsx` | adapted | `OfficeSkeleton` | `document-sidebar`（skeleton） | ✅ blocking（#158） | 参考侧与对照侧同像素 |
 | `apps/v4/components/ui/separator.tsx` | adapted | `OfficeSeparator` | — | — | toolbar 分组分隔线 |
 | `apps/v4/components/ui/popover.tsx` | adapted | `OfficePopover` | — | — | 宿主自定义浮层 |
 | `apps/v4/components/ui/dropdown-menu.tsx` | adapted | `OfficeDropdownMenu` | — | — | 菜单项由 `OfficeMenuItems` 渲染 |
@@ -45,7 +45,7 @@
 | `apps/v4/components/ui/toggle.tsx` | adapted | `OfficeToggle` | — | — | 工具按钮按下态 |
 | `apps/v4/components/ui/scroll-area.tsx` | adapted | `OfficeScrollArea` | — | — | 侧栏/列表滚动容器 |
 | `apps/v4/components/ui/sonner.tsx` | adapted | `OfficeToastProvider` / `OfficeToastViewport` | — | — | 视觉沿用 token，行为来自 reka-ui Toast |
-| `apps/v4/components/ui/alert.tsx` | reference-only | `OfficeErrorState` | `pdf-toolbar`（empty/error） | 随 surface | 信息层级参考，内容宿主可配置 |
+| `apps/v4/components/ui/alert.tsx` | reference-only | `OfficeErrorState` | `office-error-state` | ✅ blocking | 信息层级参考，内容宿主可配置 |
 
 ## 2. 共享 Office chrome（#158）
 
@@ -54,8 +54,11 @@
 | `apps/v4/components/extend/pdf-viewer.tsx`（toolbar 行） | reference-only | `OfficeToolbar` + `OfficeToolbarGroup` + `OfficeToolbarSeparator` | `pdf-toolbar` | ✅ blocking | 40/40 像素一致（#162） |
 | `apps/v4/components/extend/pdf-viewer.tsx`（page/zoom） | reference-only | `OfficePageControl` / `OfficeZoomControl` | `pdf-toolbar`, `docx-toolbar` | 见 surface | 页码与缩放输入 |
 | `apps/v4/components/extend/pdf-viewer.tsx`（search） | reference-only | `OfficeSearchPopover` / `OfficeFindBar` | `docx-toolbar` | ⏳ #159 | 搜索浮层与 find bar |
-| `apps/v4/components/extend/document-viewer-sidebar.tsx` | reference-only | `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | `pdf-sidebar`, `document-sidebar` | `pdf-sidebar` ✅ blocking；`document-sidebar` ⏳ #158 | 160px rail，inline/overlay |
-| `apps/v4/components/extend/pdf-viewer.tsx`（状态区） | reference-only | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeStatusBar` | `pdf-toolbar`, `document-sidebar` | 见 surface | 空/加载/状态条 |
+| `apps/v4/components/extend/document-viewer-sidebar.tsx` | reference-only | `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | `pdf-sidebar`, `document-sidebar` | ✅ blocking（40/40，#158） | 160px rail，inline/overlay，closed 用 `-ml-40` / `-translate-x-full` |
+| `apps/v4/components/extend/pdf-editor-shared.tsx`（`PdfEditorEmptyState`） | reference-only | `OfficeEmptyState` | `office-empty-state` | ✅ blocking（16/16，#158） | glyph 可选，`gap-2 px-4 py-10`，`max-w-56 text-xs` 描述 |
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`loadError` 卡片） | reference-only | `OfficeErrorState` | `office-error-state` | ✅ blocking（24/24，#158） | `max-w-md rounded-lg border p-4 text-sm` + `mt-4` action；长消息按卡片宽度换行 |
+| `apps/v4/components/extend/docx-viewer.tsx` / `xlsx-viewer.tsx`（`ViewerLoadingSurface`） | reference-only | `OfficeLoadingState` | `office-loading-state` | ✅ blocking（16/16，#158） | `grid min-h-52 place-items-center` + 16px spinner |
+| `apps/v4/components/extend/pdf-viewer.tsx`（footer 区） | reference-only | `OfficeStatusBar` | `office-status-bar` | ✅ blocking（8/8，#158） | `border-t bg-muted/40 px-3 py-2 text-xs`；左侧页码/状态、右侧文件名 |
 
 ## 3. 文件组件（#163）
 
@@ -80,10 +83,10 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 
 | 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
 |---|---|---|---|---|---|
-| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | reference-only | `BoundingBoxCitations` | `document-blocks` | ⏳ #164 | 引用框叠加层 |
-| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | reference-only | `LayoutBlocks` | `document-blocks` | ⏳ #164 | Block 布局容器 |
-| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | reference-only | `SignaturePad` | — | — | 画布组件，边框/背景已 token 化 |
-| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | reference-only | 未实现（#164 评估） | — | — | 登记来源，避免以后从头找 |
+| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | reference-only | `BoundingBoxCitations` | `bounding-box-citations` | ✅ 232/232 | 引用框叠加层 |
+| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | reference-only | `LayoutBlocks` | `layout-blocks` | ✅ 232/232 | Block 布局容器 |
+| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | reference-only | `ESignatureFields`（字段面板）、`SignaturePad`（画布） | `e-signature` | ✅ 232/232（字段面板） | 画布组件边框/背景已 token 化 |
+| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | reference-only | `DocumentSplits` | `document-splits` | ✅ 232/232 | 拆分结果列表；拖拽由组件测试覆盖 |
 | `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | 未实现（#164 后置） | — | — | 同上 |
 | Extend 选区/标注 blocks | reference-only | `OfficeRegionSelector` / `OfficeRegionAnnotator` / `OfficeObjectOutlineLayer` | — | — | 规范坐标选区原语，见[组件手册](README.md) |
 
