@@ -655,6 +655,41 @@ test("SearchPopover toggles match options and localizes through the Office catal
   ])
 })
 
+test("SearchPopover inline renders permanent controls with host test ids", async (t) => {
+  const events = []
+  const { cleanup } = mountRoot(() =>
+    h(OfficeSearchPopover, {
+      inline: true,
+      modelValue: "quarter",
+      resultCount: 4,
+      activeIndex: 1,
+      statusText: "2/4",
+      showOptions: true,
+      inputType: "search",
+      testIdPrefix: "docx-search",
+      onPrevious: () => events.push("previous"),
+      onNext: () => events.push("next"),
+      "onUpdate:caseSensitive": (value) => events.push(["case", value]),
+    }),
+  )
+  t.after(cleanup)
+  await flush(0)
+
+  assert.equal(byTestId("office-search-trigger"), null, "inline mode has no trigger")
+  const input = byTestId("docx-search-input")
+  assert.ok(input, "inline mode keeps the host input test id")
+  assert.equal(input.type, "search")
+  assert.equal(byTestId("docx-search-status").textContent.trim(), "2/4")
+  assert.equal(byTestId("docx-search-popover").className.includes("office-search-popover--inline"), true)
+  assert.equal(byTestId("docx-search-popover").getAttribute("role"), "search")
+
+  click(byTestId("docx-search-next"))
+  click(byTestId("docx-search-previous"))
+  click(byTestId("docx-search-case-sensitive"))
+  await flush(0)
+  assert.deepEqual(events, ["next", "previous", ["case", true]])
+})
+
 // ── Status bar ────────────────────────────────────────────────────────────
 
 test("StatusBar renders page, status, file, warning and error regions", async (t) => {

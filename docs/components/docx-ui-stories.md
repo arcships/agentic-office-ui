@@ -59,16 +59,61 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 
 ## 与 #155 parity harness 的关系
 
-本轮没有扩展 `tools/parity-fixtures/manifest.json` 的 surface（`docx-toolbar` /
-`docx-sidebar` 需要同时新增 React reference 与 Vue subject fixture）。因此没有可运行
-的 `pnpm ui:parity -- --only docx-...` surface。作为替代，本脚本用同一固定 Extend
-commit 的 48px toolbar / 160px sidebar / 28/32px icon / 768px overlay 合同做结构
-断言，并保留截图供人工 diff。剩余 delta 记录在
-[office-chrome.md](./office-chrome.md#10-docx-迁移issue-159)：
+本 issue 已扩展 `tools/parity-fixtures/manifest.json`：
 
-- 上游把文件动作收进 dropdown；DOCX 仍显示 theme/upload/download 独立按钮。
-- 上游搜索是 popover；DOCX 仍是常驻内联搜索，以保留 `Ctrl/Cmd+F` 和现有测试契约。
-- 未接入 axe-core（#165）；键盘/焦点行为由 component/blackbox 测试覆盖。
+| Surface | Reference | Subject | States |
+|---|---|---|---|
+| `docx-toolbar` | vendored `DocxToolbar` / `DocxPageNumberControl` | `DocxViewerToolbar` | default / hover / focus / disabled |
+| `docx-sidebar` | vendored `DocumentViewerThumbnailSidebar` | `DocumentViewerSidebar` + fixture `FileThumbnail` children | open / closed / skeleton |
+
+运行：
+
+```bash
+PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity -- \
+  --only docx-toolbar,docx-sidebar
+```
+
+参考侧新增 `tools/extend-reference/src/vendor/extend/docx-toolbar.tsx`，带 pinned
+commit / MIT / copyright 头并登记在 `vendor/NOTICE.md`；#155 harness 合同测试与
+fixture 同步更新。该命令当前**真实 FAIL**（没有伪造 pass），精确 delta：
+
+- `docx-toolbar`：32 cases；1440 下几何完全一致（48px，`deltas=[]`），
+  light 像素差 9.16%–10.15%；1280/768/390 下 Vue toolbar 比 reference 多保留
+  search / edit / theme / upload / download 控件，换行高度分别为
+  81/113/233px（reference 48/48/89px）。全矩阵平均像素差 12.53%。
+- `docx-sidebar`：24 cases；几何全矩阵 PASS（160px；open 292px、skeleton 240px），
+  像素差 open 15.7%、closed 4.1%、skeleton 47.7%，平均 22.62%。closed 的边框
+  已在共享 sidebar 中修为 `border-inline-end-width: 0`。
+
+报告：`output/ui-parity/report.json` / `report.html`（未提交，由命令生成）。
+剩余 delta 属于有意的产品差异：上游 toolbar 将文件动作收进 dropdown，DOCX 保留
+可见 search/edit/theme/upload/download；sidebar 的 fixture 子项是 FileThumbnail
+卡片，真实 DOCX canvas 缩略图由本 story 覆盖；skeleton 的卡片数量/文案不同。
+未接入 axe-core（#165）；键盘/焦点行为由 component/blackbox 测试覆盖。
+
+## UX-DOCX-004 square-wrap 排查
+
+`tests/blackbox/ux_parity.py` 的 `UX-DOCX-004` 在当前分支和迁移前基线都失败：
+
+| 结果 | Commit | 失败 |
+|---|---|---|
+| `/tmp/b08-159-base` | `fa7b45a6`（#159 合并前） | `besideTextRects: []`，`top/bottom 555.5/733.5` |
+| `fix/159` | `2142fea9` + 本 issue 收尾 | 同一断言，`top/bottom 534.5/712.5` |
+
+两次失败信息完全同构（`collidingTextRects: []` / `besideTextRects: []`），且
+`fa7b45a6..HEAD` 没有修改文档布局/渲染路径：
+
+```text
+packages/vue-docx/src/components/DocxDocumentSurface.vue
+packages/vue-docx/src/components/DocxPageSurface.vue
+packages/vue-docx/src/components/DocxParagraphHost.vue
+packages/vue-docx/src/components/DocxImageLayer.vue
+packages/docx-core/src/**
+```
+
+以上 diff 为空；本迁移只改 toolbar、thumbnail shell、gutter/link/dialog 外壳和
+viewer/editor 状态包裹层。因此 `UX-DOCX-004` 是既有 square-wrap 布局几何问题，
+不是本次 chrome 迁移引入；验收不把它作为 #159 回归。
 
 ## 验证结果（2026-11-20，fix/159）
 
@@ -83,7 +128,8 @@ commit 的 48px toolbar / 160px sidebar / 28/32px icon / 768px overlay 合同做
 | `tests/blackbox/docx_export_bytes.py` | PASS |
 | `tests/blackbox/docx_annotations.py` | PASS |
 | `tests/blackbox/fidelity_content.py` | PASS |
-| `tests/blackbox/ux_parity.py` | `UX-DOCX-001/002/003` PASS；`UX-DOCX-004` 仍因本机 square-wrap 几何基线失败（非 chrome 改动）；upstream reference capture BLOCKED |
+| `tests/blackbox/ux_parity.py` | `UX-DOCX-001/002/003` PASS；`UX-DOCX-004` 在基线 `fa7b45a6` 与当前分支均失败（见上节）；upstream reference capture BLOCKED |
+| `pnpm ui:parity -- --only docx-toolbar,docx-sidebar` | 56 cases FAIL（未伪造通过）；几何/像素精确 delta 见上节，报告 `output/ui-parity/report.json` |
 | `node scripts/ci/verify-docs.mjs` | PASS（262 checks） |
 | `node scripts/ci/verify-public-api.mjs` | PASS |
 | `node scripts/ci/verify-attribution.mjs` | PASS |

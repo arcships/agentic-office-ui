@@ -49,6 +49,7 @@ SOFTWARE.
 | `extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | Rendered markup and classes unchanged |
 | `extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | `border-beam` dependency dropped (`BorderBeam` only paints while dragging); icons resolved directly; vendored `Card` |
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
+| `extend/docx-toolbar.tsx` | `apps/v4/components/extend/docx-viewer.tsx` | Toolbar/page/zoom/actions subset: tooltip/dropdown popups dropped; static trigger classes and icon sizes kept |
 | `extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Toolbar subset: tooltip/popover/select popups dropped, static trigger classes kept |
 | `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
 | `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |

@@ -157,6 +157,10 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 | `caseSensitive` / `wholeWord` / `regex` | `false` | 选项状态 |
 | `showOptions` | `true` | 显示 Aa / ab\| / .\* |
 | `open` | — | 受控展开；省略时自管 |
+| `inline` | `false` | 不渲染触发器/portal，直接在原地渲染常驻搜索控件 |
+| `inputType` | `"text"` | 原生输入类型；viewer 可设为 `search` |
+| `statusText` | — | 覆盖本地化计数行（例如 DOCX 的 `1/4`） |
+| `testIdPrefix` | `"office-search"` | 生成 `-input` / `-status` / `-previous` / `-next` / 选项 test id |
 | `disabled` | `false` | 禁用触发器与内容 |
 
 事件：`update:modelValue`、`update:open`、`update:caseSensitive`、
@@ -165,7 +169,9 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 打开后焦点进入输入框；`Enter` 下一个、`Shift+Enter` 上一个、`Escape` 关闭。
 计数使用 `common.search.resultOf`（`{current}` / `{total}`），状态区
 `role="status" aria-live="polite"`。触发器默认是 `OfficeIconButton`（search 图标，
-28px），可用 `trigger` slot 替换。
+28px），可用 `trigger` slot 替换。`inline` 模式保留同一输入、计数、选项、导航和
+键盘契约，只是省去 trigger/portal，供工具栏常驻搜索使用；选项按钮在该模式下是
+带 `office-toggle` 类的原生按钮，以兼容没有全局 `Element` 的自定义渲染器。
 
 ### 3.6 `OfficeStatusBar`
 
@@ -348,8 +354,9 @@ pnpm --filter @arcships/vue-ui build
   open/close、zh-CN。
 - 合同测试：Extend 几何、token-only CSS、公开导出、i18n 键、gzip 预算和 public
   API fingerprint。
-- 包体积：`dist/index.js` 40,211 B gzip + `style.css` 9,399 B gzip，相对 #157 前
-  基线增加 30,470 B，仍在 35,840 B 预算内。
+- 包体积：`dist/index.js` 43,965 B gzip + `style.css` 11,559 B gzip，相对 #157 前
+  基线增加 36,389 B，在 36,864 B 预算内（#159 的 inline search 模式已记录在
+  `scripts/ci/vue-ui-primitives-size-budget.json`）。
 - `public-api-contract.json`：`@arcships/vue-ui` fingerprint 从 199/`8a1aff85…`
   更新为 233/`1479c668…`；`@arcships/office-interaction` 因新增导出类型
   `OfficeChromeMessages` 从 154/`e1b91beb…` 更新为 155/`5732cb82…`。
@@ -375,8 +382,8 @@ pnpm --filter @arcships/vue-ui build
   `OfficeIconButton`，文字动作使用 `OfficeButton`。
 - `DocxViewerToolbar` 使用 `OfficePageControl`（`native-input`）和
   `OfficeZoomControl`（`native-select`），保留 `docx-page-current` / `docx-zoom-select`
-  的既有原生表单契约；搜索仍是 toolbar 内联输入，因为现有测试、快捷键和
-  `Ctrl/Cmd+F` 焦点契约都要求输入框常驻。
+  的既有原生表单契约；搜索使用 `OfficeSearchPopover` 的 `inline` 模式，保留
+  `Ctrl/Cmd+F`、焦点、计数、上一个/下一个和原有 `docx-search-*` test id。
 - `DocxToolbar` 的两行分别渲染为 `.docx-toolbar-topbar` 和 `.docx-toolbar`，保留
   blackbox 依赖的类名、`editor-zoom` 原生 select 和 fieldset disabled 语义。
 - 空/加载/错误/页数限制使用 `OfficeEmptyState` / `OfficeLoadingState` /
@@ -394,5 +401,8 @@ read-only、continuous/single/spread、light/dark、390/768/1440），以及
 `tests/component/docx-*.test.mjs`、`tests/blackbox/docx_*.py`。
 
 已知边界：Extend 的上游 toolbar 把文件动作收进 dropdown；本 issue 保留现有可见的
-Upload/Download/Theme 按钮以不破坏公开事件和 blackbox 路径。上游搜索块也未移植为
-popover，原因同上。这两项作为后续 #165 视觉收口候选。
+Upload/Download/Theme 按钮以不破坏公开事件和 blackbox 路径。上游 toolbar 没有常驻
+搜索；DOCX 通过 `OfficeSearchPopover` 的 `inline` 模式保留共享实现和
+`Ctrl/Cmd+F` 契约。`pnpm ui:parity -- --only docx-toolbar,docx-sidebar` 已运行，
+精确像素/几何 delta 见
+[docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)。

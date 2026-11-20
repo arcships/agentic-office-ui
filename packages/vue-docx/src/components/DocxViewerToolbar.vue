@@ -123,83 +123,30 @@
           </OfficeButton>
         </OfficeToolbarGroup>
 
-        <div class="docx-viewer-toolbar__search" role="search">
-          <input
-            ref="searchInputRef"
-            class="office-ui office-input office-input--sm docx-viewer-toolbar__search-input"
-            data-testid="docx-search-input"
-            type="search"
-            :value="searchQuery"
-            :placeholder="m.docx.toolbar.searchPlaceholder"
-            :aria-label="m.docx.toolbar.searchPlaceholder"
-            :disabled="disabled"
-            @input="onSearchInput"
-            @compositionstart="searchComposing = true"
-            @compositionend="onSearchCompositionEnd"
-            @keydown.enter.prevent="onSearchEnter"
-            @keydown.esc.prevent="emit('searchClose')"
-          />
-          <OfficeButton
-            variant="outline"
-            size="xs"
-            class="docx-viewer-toolbar__search-option"
-            data-testid="docx-search-case-sensitive"
-            :aria-label="m.common.search.caseSensitive"
-            :title="m.common.search.caseSensitive"
-            :aria-pressed="searchCaseSensitive"
-            :disabled="disabled"
-            @click="emit('update:searchCaseSensitive', !searchCaseSensitive)"
-          >Aa</OfficeButton>
-          <OfficeButton
-            variant="outline"
-            size="xs"
-            class="docx-viewer-toolbar__search-option"
-            data-testid="docx-search-whole-word"
-            :aria-label="m.common.search.wholeWord"
-            :title="m.common.search.wholeWord"
-            :aria-pressed="searchWholeWord"
-            :disabled="disabled"
-            @click="emit('update:searchWholeWord', !searchWholeWord)"
-          >ab|</OfficeButton>
-          <OfficeButton
-            variant="outline"
-            size="xs"
-            class="docx-viewer-toolbar__search-option"
-            data-testid="docx-search-regex"
-            :aria-label="m.common.search.regex"
-            :title="m.common.search.regex"
-            :aria-pressed="searchRegex"
-            :disabled="disabled"
-            @click="emit('update:searchRegex', !searchRegex)"
-          >.*</OfficeButton>
-          <span
-            class="docx-viewer-toolbar__search-status"
-            data-testid="docx-search-status"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
-          <OfficeIconButton
-            variant="outline"
-            size="icon-sm"
-            class="docx-viewer-toolbar__icon-button"
-            :label="m.common.search.previous"
-            icon="chevron-left"
-            data-testid="docx-search-previous"
-            :disabled="disabled || !searchResultCount"
-            @click="emit('searchPrevious')"
-          />
-          <OfficeIconButton
-            variant="outline"
-            size="icon-sm"
-            class="docx-viewer-toolbar__icon-button"
-            :label="m.common.search.next"
-            icon="chevron-right"
-            data-testid="docx-search-next"
-            :disabled="disabled || !searchResultCount"
-            @click="emit('searchNext')"
-          />
-        </div>
+        <OfficeSearchPopover
+          ref="searchPopoverRef"
+          class="docx-viewer-toolbar__search"
+          inline
+          :model-value="searchQuery"
+          :result-count="searchResultCount"
+          :active-index="searchResultIndex"
+          :status-text="searchStatusText"
+          :case-sensitive="searchCaseSensitive"
+          :whole-word="searchWholeWord"
+          :regex="searchRegex"
+          :show-options="true"
+          :disabled="disabled"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          input-type="search"
+          test-id-prefix="docx-search"
+          @update:model-value="emit('update:searchQuery', $event)"
+          @update:case-sensitive="emit('update:searchCaseSensitive', $event)"
+          @update:whole-word="emit('update:searchWholeWord', $event)"
+          @update:regex="emit('update:searchRegex', $event)"
+          @previous="emit('searchPrevious')"
+          @next="emit('searchNext')"
+          @close="emit('searchClose')"
+        />
 
         <OfficeZoomControl
           :model-value="zoom"
@@ -301,6 +248,7 @@ import {
   OfficeIcon,
   OfficeIconButton,
   OfficePageControl,
+  OfficeSearchPopover,
   OfficeToolbar,
   OfficeToolbarGroup,
   OfficeToolbarSeparator,
@@ -376,8 +324,14 @@ const commentsTitle = computed(() => {
     : m.value.docx.toolbar.commentsShow
   return formatOfficeMessage(template, { count: props.commentCount })
 })
-const searchInputRef = ref<HTMLInputElement>()
-const searchComposing = ref(false)
+const searchPopoverRef = ref<InstanceType<typeof OfficeSearchPopover>>()
+const searchStatusText = computed(() =>
+  props.searchResultCount
+    ? `${props.searchResultIndex + 1}/${props.searchResultCount}`
+    : props.searchQuery
+      ? "0/0"
+      : "",
+)
 
 function onRevisionDisplayChange(event: Event): void {
   const value = (event.target as HTMLSelectElement).value
@@ -386,26 +340,8 @@ function onRevisionDisplayChange(event: Event): void {
   }
 }
 
-function searchValue(event: Event): string {
-  return (event.target as HTMLInputElement).value
-}
-
-function onSearchInput(event: Event): void {
-  if (!searchComposing.value) emit("update:searchQuery", searchValue(event))
-}
-
-function onSearchCompositionEnd(event: CompositionEvent): void {
-  searchComposing.value = false
-  emit("update:searchQuery", searchValue(event))
-}
-
-function onSearchEnter(event: KeyboardEvent): void {
-  if (event.shiftKey) emit("searchPrevious")
-  else emit("searchNext")
-}
-
 defineExpose({
-  focusSearch: () => searchInputRef.value?.focus(),
+  focusSearch: () => searchPopoverRef.value?.focus(),
 })
 </script>
 
@@ -414,6 +350,17 @@ defineExpose({
   --office-ui-toolbar-min-height: 3rem;
   --office-ui-toolbar-padding-block: var(--office-ui-space-2);
   --office-ui-toolbar-padding-inline: var(--office-ui-space-3);
+  font-size: var(--office-text-base, 1rem);
+}
+
+/* Match Extend's sm control row: 28px controls + 16px vertical padding + 1px
+ * border stays inside the 48px min-height. */
+.docx-viewer-toolbar :deep(.office-input),
+.docx-viewer-toolbar :deep(.office-page-control__input),
+.docx-viewer-toolbar :deep(.office-zoom-control__native),
+.docx-viewer-toolbar__revision-select {
+  height: var(--office-ui-height-xs, 1.75rem);
+  min-height: var(--office-ui-height-xs, 1.75rem);
 }
 
 /* The verification demo applies a host-wide 36px min-height to page buttons.
@@ -490,30 +437,17 @@ defineExpose({
   min-inline-size: 0;
 }
 
-.docx-viewer-toolbar__search-input {
+.docx-viewer-toolbar__search :deep(.office-input-control) {
+  flex: 0 1 8.25rem;
   inline-size: 8.25rem;
   min-inline-size: 5rem;
 }
 
-.docx-viewer-toolbar__search-option {
+.docx-viewer-toolbar__search :deep(.office-search-popover__option) {
   min-inline-size: var(--office-ui-height-xs);
   padding-inline: var(--office-ui-space-1);
   font-size: var(--office-text-xs);
   font-weight: 600;
-}
-
-.docx-viewer-toolbar__search-option[aria-pressed="true"] {
-  background: var(--office-accent);
-  border-color: var(--office-ring);
-  color: var(--office-foreground);
-}
-
-.docx-viewer-toolbar__search-status {
-  color: var(--office-muted-foreground);
-  font-size: var(--office-text-xs);
-  font-variant-numeric: tabular-nums;
-  min-inline-size: 2rem;
-  text-align: center;
 }
 
 .docx-viewer-toolbar__toggle-button {
@@ -591,7 +525,7 @@ defineExpose({
     overflow-x: auto;
     flex-wrap: nowrap;
   }
-  .docx-viewer-toolbar__search-input {
+  .docx-viewer-toolbar__search :deep(.office-input-control) {
     inline-size: 6.5rem;
     min-inline-size: 4.5rem;
   }
@@ -607,7 +541,7 @@ defineExpose({
     min-height: 44px;
     min-block-size: 44px;
   }
-  .docx-viewer-toolbar__search-option {
+  .docx-viewer-toolbar__search :deep(.office-search-popover__option) {
     min-inline-size: 44px;
   }
 }

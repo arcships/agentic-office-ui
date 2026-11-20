@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "suite": "docx-ui-stories",
   "issue": 159,
-  "capturedAt": "2026-11-20T04:01:10.913129+00:00",
+  "capturedAt": "2026-11-20T04:31:29.763156+00:00",
   "sample": "page-sizes.docx",
   "browser": "chromium",
   "stories": [
@@ -22,7 +22,7 @@
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-1440.webp",
-      "sha256": "f74f8fd69b8fce66d87ad6cc9c1f5b2128f8cc8088696962c23e4e81a6f7864d"
+      "sha256": "8550703163c782406ec0a01d00f1c2e455b2cdfb6d04a6fab0704857d61e0c33"
     },
     {
       "id": "viewer-single-dark-1440",
@@ -40,7 +40,7 @@
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-single-dark-1440.webp",
-      "sha256": "bf4e9114bf4221580b638366d20a57fb3640b32a54d6482b21b4afa43487646a"
+      "sha256": "fe3855bc97078f715a3e0922dcad7651ad8dbef308cf255098c5b5b57b2c116e"
     },
     {
       "id": "viewer-spread-light-1440",
@@ -58,7 +58,7 @@
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-spread-light-1440.webp",
-      "sha256": "f9cd4400cda8f0a35d4152032b38e23ca0c86853baa47939508f8befee4e7c4c"
+      "sha256": "c4cdb06debcea296ce5a1b3de8bb1ec7698e53dece5b342c41dc1319d911478f"
     },
     {
       "id": "viewer-continuous-light-390-overlay",
@@ -80,7 +80,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-390-overlay.webp",
-      "sha256": "64ccc5af5bcec247317243c4e72d285556d340c16273567ee9263d7f02f85057"
+      "sha256": "f48418b31209ac85b24bf41d455d15ddf65d6b923d7a5d0421b1c96d27daac0d"
     },
     {
       "id": "viewer-continuous-dark-768-overlay",
@@ -102,7 +102,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-dark-768-overlay.webp",
-      "sha256": "8b81c098e74dd7a28501870708c2d69c6bf567f02bc9b615c1af99f8a0d4b11d"
+      "sha256": "9ff18699fa7f178afa988edfd540e20b962fccd8f953f9e01a38c100e45781f2"
     },
     {
       "id": "editor-light-1440",
