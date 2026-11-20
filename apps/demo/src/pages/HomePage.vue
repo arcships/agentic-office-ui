@@ -51,7 +51,7 @@ const navItems = [
   { path: "/pptx-headless", title: "PPTX 最小组合", desc: "组合文档、播放和舞台三个公开接口", status: "Ready", statusClass: "ready" },
   { path: "/pdf-surface", title: "PDF Surface", desc: "连续 PDF 页面：用字符几何选择文字，或引用页面与区域。", status: "Ready", statusClass: "ready" },
   { path: "/pdf-viewer", title: "PDF Viewer", desc: "View PDF with zoom, search, and thumbnails", status: "Ready", statusClass: "ready" },
-  { path: "/components", title: "Components", desc: "Signature, FileUpload, BoundingBox, LayoutBlocks", status: "Ready", statusClass: "ready" },
+  { path: "/components", title: "Components", desc: "Signature, FileUpload, BoundingBox, LayoutBlocks, DocumentSplits", status: "Ready", statusClass: "ready" },
   { path: "/file-components", title: "File components", desc: "Extend-aligned FileUpload and FileThumbnail story with light/dark, drag, loading, error and file-list states", status: "Ready", statusClass: "ready" },
   { path: "/runtime-limits", title: "Runtime Limits", desc: "Configure public DOCX/XLSX resource limits and inspect structured errors", status: "Ready", statusClass: "ready" },
   { path: "/runtime-worker", title: "Worker Lifecycle", desc: "Verify public XLSX Worker timeout, cancellation, termination, and recovery", status: "Ready", statusClass: "ready" },

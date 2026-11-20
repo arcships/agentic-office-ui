@@ -17,6 +17,27 @@ export interface SignaturePadProps {
   penColor?: string
   backgroundColor?: string
   className?: string
+  /** Draw on a canvas or type a signature. Defaults to `draw`. */
+  mode?: "draw" | "typed"
+  /** Controlled value: data URL for `draw`, text for `typed`. */
+  modelValue?: string | null
+  /** Initial data URL for draw mode. */
+  defaultValue?: string | null
+  /** Typed-mode placeholder copy. Defaults to the localized message. */
+  placeholder?: string
+  /** Render the clear / cancel / confirm row. Defaults to true. */
+  showControls?: boolean
+  showClear?: boolean
+  showCancel?: boolean
+  showConfirm?: boolean
+  /** Force the confirm action off (e.g. while a host dialog validates). */
+  confirmDisabled?: boolean
+  disabled?: boolean
+  /** Draw the dashed signature guide around the canvas. */
+  guide?: boolean
+  loading?: boolean
+  error?: string
+  ariaLabel?: string
 }
 
 /** Built-in upload glyph or a host-supplied icon component. */
@@ -95,6 +116,10 @@ export interface FileThumbnailProps {
   showTypeGlyph?: boolean
   /** Render the file name and type under the preview (inline row layout). */
   showMeta?: boolean
+  /** Stretch the root to the parent box (Finder/thumbnail-strip layouts). */
+  fill?: boolean
+  /** Let the preview fill the parent height instead of a square tile. */
+  previewFill?: boolean
   /** Image alt text. Defaults to the file name. */
   alt?: string
 }
@@ -108,17 +133,106 @@ export interface BoundingBoxField {
   confidence?: number
 }
 
+/** JSON value accepted by the Extend review-field contract. */
+export type OfficeJsonPrimitive = string | number | boolean | null
+export type OfficeJsonValue =
+  | OfficeJsonPrimitive
+  | OfficeJsonObject
+  | OfficeJsonArray
+export interface OfficeJsonObject {
+  [key: string]: OfficeJsonValue
+}
+export type OfficeJsonArray = OfficeJsonValue[]
+
+export type BoundingBoxReviewSchemaType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "object"
+  | "array"
+
+export interface BoundingBoxReviewFieldSchema {
+  type: BoundingBoxReviewSchemaType
+  title?: string
+  description?: string
+  enum?: Array<string | number>
+  properties?: Record<string, BoundingBoxReviewFieldSchema>
+  items?: BoundingBoxReviewFieldSchema
+}
+
+export interface BoundingBoxHighlightArea {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+export interface BoundingBoxReviewLocation {
+  page: number
+  area: BoundingBoxHighlightArea
+}
+
+/** Extend `HumanReviewPanel` field shape (page highlight + actual/expected). */
+export interface BoundingBoxReviewField {
+  key: string
+  schema: BoundingBoxReviewFieldSchema
+  actual: OfficeJsonValue
+  expected: OfficeJsonValue
+  location?: BoundingBoxReviewLocation
+  metadataPath?: string
+}
+
 export interface BoundingBoxCitationsProps {
-  file: string
-  fields: BoundingBoxField[]
+  /** Page image or PDF URL. Required for the legacy page-card mode. */
+  file?: string
+  /** Legacy per-page field cards. */
+  fields?: BoundingBoxField[]
+  /** Extend review fields; enables the review-panel mode when present. */
+  reviewFields?: BoundingBoxReviewField[]
+  /** Page image used behind the highlight overlay in review mode. */
+  pageImage?: string
+  /** Intrinsic page size used to position `location` percentages. */
+  pageWidth?: number
+  pageHeight?: number
+  /** Controlled active review field. */
+  activeFieldKey?: string
+  /** Show the editable Expected column. Defaults to true. */
+  showExpected?: boolean
+  /** Controlled expected-draft values keyed by field key. */
+  expectedValues?: Record<string, OfficeJsonValue>
+  /** Render the review values read-only. */
+  readOnly?: boolean
+  /** `split` renders the page + panel; `panel` renders the side list alone. */
+  view?: "split" | "panel"
+  loading?: boolean
+  error?: string
+  emptyMessage?: string
   className?: string
 }
+
+export type LayoutBlockType =
+  | "heading"
+  | "paragraph"
+  | "list"
+  | "table"
+  | "figure"
+  | "header"
+  | "footer"
+  | "page_number"
 
 export interface LayoutBlock {
   id: string
   bbox: [number, number, number, number]
+  /** Legacy free-form kind. Mapped to `type` when `type` is omitted. */
   kind: string
+  /** Extend layout-block type. */
+  type?: LayoutBlockType
+  /** Optional badge label override. */
+  label?: string
   text?: string
+  /** 1-indexed page for the panel page chip. */
+  page?: number
   confidence?: number
   parentId?: string
 }
@@ -130,8 +244,80 @@ export interface ParsedOcrOutput {
 }
 
 export interface LayoutBlocksProps {
-  file: string
-  output: ParsedOcrOutput
+  /** Page image or PDF URL. */
+  file?: string
+  /** Legacy parsed OCR payload. */
+  output?: ParsedOcrOutput
+  /** Extend block list; wins over `output.blocks`. */
+  blocks?: LayoutBlock[]
+  /** Image rendered behind the block overlay in split mode. */
+  pageImage?: string
+  /** Intrinsic page width used for overlay percentages when `blocks` is used. */
+  pageWidth?: number
+  /** Intrinsic page height used for overlay percentages when `blocks` is used. */
+  pageHeight?: number
+  activeBlockId?: string
+  /** `split` renders page + panel; `panel` renders the block list alone. */
+  view?: "split" | "panel"
+  heading?: string
+  emptyMessage?: string
+  /** Render `text` as sanitized inline markdown. */
+  renderMarkdown?: boolean
+  loading?: boolean
+  error?: string
+  ariaLabel?: string
+  className?: string
+}
+
+export interface ESignatureFieldBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ESignatureField {
+  id: string
+  label: string
+  page: number
+  bbox: ESignatureFieldBox
+  imageDataUrl?: string
+}
+
+export interface ESignatureFieldsProps {
+  fields: ESignatureField[]
+  /** Enable the export action (a signed field and a source file exist). */
+  canExport?: boolean
+  exporting?: boolean
+  /** Render the signed image above the field actions. */
+  showPreview?: boolean
+  title?: string
+  description?: string
+  loading?: boolean
+  error?: string
+  className?: string
+}
+
+export type DocumentSplitPageId = `page-${number}`
+
+export interface DocumentSplit {
+  id: string
+  title: string
+  pages: DocumentSplitPageId[]
+}
+export interface DocumentSplitsProps {
+  splits: DocumentSplit[]
+  /** Page thumbnails keyed by page id (`page-1`). */
+  thumbnailImages?: Record<string, string>
+  /** Draw the left frame divider used by the Extend PDF shell. */
+  withFrameDivider?: boolean
+  /** Hide the add-split action. */
+  hideAddSplit?: boolean
+  /** Disable remove for every split (in addition to the single-split guard). */
+  disableRemove?: boolean
+  loading?: boolean
+  error?: string
+  emptyMessage?: string
   className?: string
 }
 

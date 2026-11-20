@@ -2,7 +2,11 @@ import manifest from "../../parity-fixtures/manifest.json";
 import type { ParityTheme } from "./parity/ParitySurface";
 import { ParitySurface } from "./parity/ParitySurface";
 import { ButtonSurface } from "./surfaces/ButtonSurface";
+import { BoundingBoxCitationsSurface } from "./surfaces/BoundingBoxCitationsSurface";
 import { DialogSurface } from "./surfaces/DialogSurface";
+import { DocumentSplitsSurface } from "./surfaces/DocumentSplitsSurface";
+import { ESignatureSurface } from "./surfaces/ESignatureSurface";
+import { LayoutBlocksSurface } from "./surfaces/LayoutBlocksSurface";
 import { DocxSidebarSurface } from "./surfaces/DocxSidebarSurface";
 import { DocxToolbarSurface } from "./surfaces/DocxToolbarSurface";
 import { DocumentSidebarSurface } from "./surfaces/DocumentSidebarSurface";
@@ -32,6 +36,10 @@ const renderers: Record<
   "docx-toolbar": DocxToolbarSurface,
   "docx-sidebar": DocxSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,
+  "bounding-box-citations": BoundingBoxCitationsSurface,
+  "layout-blocks": LayoutBlocksSurface,
+  "e-signature": ESignatureSurface,
+  "document-splits": DocumentSplitsSurface,
 };
 
 function hasReference(surface: Surface): boolean {

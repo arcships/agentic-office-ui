@@ -31,6 +31,8 @@ const props = withDefaults(defineProps<FileThumbnailProps>(), {
   hasError: false,
   showTypeGlyph: false,
   showMeta: false,
+  fill: false,
+  previewFill: false,
   alt: undefined,
 })
 
@@ -55,9 +57,14 @@ const sizeValue = computed(() => {
   return props.size
 })
 
-const rootClasses = computed(() => ["file-thumbnail", "office-ui", props.className])
+const rootClasses = computed(() => [
+  "file-thumbnail",
+  "office-ui",
+  props.fill ? "file-thumbnail--fill" : "",
+  props.className,
+])
 
-const rootStyle = computed(() => ({ width: sizeValue.value }))
+const rootStyle = computed(() => (props.fill ? undefined : { width: sizeValue.value }))
 
 const previewStyle = computed(() =>
   props.previewAspectRatio ? { aspectRatio: String(props.previewAspectRatio) } : undefined,
@@ -219,7 +226,11 @@ onBeforeUnmount(cancelReveal)
 <template>
   <div :class="rootClasses" :style="rootStyle" data-slot="file-thumbnail">
     <div
-      :class="['file-thumbnail__preview', props.previewClassName]"
+      :class="[
+        'file-thumbnail__preview',
+        props.previewFill ? 'file-thumbnail__preview--fill' : '',
+        props.previewClassName,
+      ]"
       :style="previewStyle"
       data-slot="file-thumbnail-preview"
     >
@@ -291,6 +302,14 @@ onBeforeUnmount(cancelReveal)
   overflow: hidden;
   background: var(--office-muted);
   contain: layout paint;
+}
+.file-thumbnail--fill {
+  width: 100%;
+  height: 100%;
+}
+.file-thumbnail__preview--fill {
+  width: auto;
+  height: 100%;
 }
 .file-thumbnail__image {
   position: absolute;

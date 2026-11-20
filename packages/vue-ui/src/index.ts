@@ -10,6 +10,7 @@ import "./styles/chrome.css"
 
 // Signature pad
 export { default as SignaturePad } from "./components/SignaturePad.vue"
+export { default as ESignatureFields } from "./components/ESignatureFields.vue"
 
 // File upload
 export { default as FileUpload } from "./components/FileUpload.vue"
@@ -22,6 +23,9 @@ export { default as BoundingBoxCitations } from "./components/BoundingBoxCitatio
 
 // Layout blocks
 export { default as LayoutBlocks } from "./components/LayoutBlocks.vue"
+
+// Document splits
+export { default as DocumentSplits } from "./components/DocumentSplits.vue"
 
 // Base UI
 export { default as Spinner } from "./components/Spinner.vue"

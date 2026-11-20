@@ -2,9 +2,9 @@
   "issue": 157,
   "description": "Budget for the reka-ui primitive layer added to @arcships/vue-ui.",
   "measurement": "gzipSync(level 9) over packages/vue-ui/dist/index.js + dist/style.css",
-  "baselineCommit": "2d1204d (feat/0.8 with #156 merged, before #157)",
-  "baselineGzipBytes": 19140,
-  "baselineNote": "Vite 6 build report on the merge base: dist/index.js 15.60 kB gzip + dist/style.css 3.54 kB gzip.",
+  "baselineCommit": "6b1c8367 (feat/0.8 before #164 document blocks)",
+  "baselineGzipBytes": 55346,
+  "baselineNote": "Vite 6 build report at 6b1c8367: dist/index.js 44.11 kB gzip + dist/style.css 11.67 kB gzip.",
   "budgetBytes": 35840,
-  "budgetNote": "Issue #157: new gzip <= 35 KB excluding icon payload. Icons stay external via @lucide/vue and OfficeIcon."
+  "budgetNote": "Issue #157: the reka-ui primitive layer added <= 35 KB over the pre-#157 merge base. The measurement covers the whole vue-ui package, so the baseline is re-pinned to the integration commit before each batch component issue; #164 (document blocks) added 13.1 KB gzip, inside the same 35 KB headroom. Icons stay external via @lucide/vue and OfficeIcon."
 }

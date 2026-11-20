@@ -23,6 +23,10 @@
 | `src/vendor/extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | adapted |
 | `src/vendor/extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | copied |
 | `src/vendor/extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | adapted |
+| `src/vendor/extend/bounding-box-citations.tsx` | `apps/v4/components/extend/bounding-box-citations.tsx` | adapted (#164) |
+| `src/vendor/extend/layout-blocks-panel.tsx` | `apps/v4/components/extend/layout-blocks-panel.tsx` | adapted (#164) |
+| `src/vendor/extend/signature-fields.tsx` | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | adapted (#164) |
+| `src/vendor/extend/document-splits.tsx` | `apps/v4/components/extend/document-splits.tsx` | adapted (#164) |
 | `src/styles/extend-globals.css` | `apps/v4/app/globals.css` | adapted (import graph only) |
 | `src/styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | copied (provenance header added) |
 | `src/lib/cn.ts` | `apps/v4/lib/utils.ts` | adapted |

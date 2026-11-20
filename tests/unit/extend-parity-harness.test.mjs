@@ -60,7 +60,10 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "docx-toolbar",
       "docx-sidebar",
       "document-sidebar",
-      "document-blocks",
+      "bounding-box-citations",
+      "layout-blocks",
+      "e-signature",
+      "document-splits",
     ],
   );
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");

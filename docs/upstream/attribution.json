@@ -627,29 +627,33 @@
       "upstreamFile": "apps/v4/components/extend/bounding-box-citations.tsx",
       "purpose": "Citation overlay, boxes, and sidebar list.",
       "target": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "HumanReviewPanel Form cards, scalar fields and highlight; the JSON tab (pierre/diffs) and array/object grid editors stay reference-only."
     },
     {
       "upstreamFile": "apps/v4/components/extend/layout-blocks.tsx",
       "purpose": "Layout blocks viewer with OCR blocks and PDF overlay.",
       "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Panel behaviour, block overlay geometry and block type styling; the PDF viewer composition lives in the host shell."
     },
     {
       "upstreamFile": "apps/v4/components/extend/layout-blocks-panel.tsx",
       "purpose": "Layout block list, confidence display, and markdown view.",
       "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Card list, confidence badges, page chips, empty/loading/error states and the safe markdown subset."
     },
     {
       "upstreamFile": "apps/v4/components/extend/document-splits.tsx",
       "purpose": "Split range selection and result list.",
       "target": "packages/vue-ui/src/components/DocumentSplits.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Split cards, page thumbnails, add/remove, drag/drop and keyboard reordering."
     },
     {
       "upstreamFile": "apps/v4/components/extend/file-system.tsx",
@@ -657,7 +661,7 @@
       "target": "packages/vue-ui/src/components/FileSystem.vue",
       "status": "reference-only",
       "issues": ["#164"],
-      "notes": "Deferred in #164; the status changes if it is picked up."
+      "notes": "Deferred in #164 after assessment: the upstream file is 5,381 LOC and depends on the full Finder-style file model, preview cards, breadcrumb navigation and document preview cards that no 0.8 surface consumes. Evidence is recorded in docs/components/document-blocks.md."
     },
     {
       "upstreamFile": "apps/v4/components/extend/document-preview-card.tsx",
@@ -697,7 +701,7 @@
       "target": "",
       "status": "not-used",
       "issues": ["#164"],
-      "notes": "Deferred by #164 after evaluation."
+      "notes": "Deferred in #164 after assessment: 2,703 LOC schema editor (nested field/type editing, validation, extraction preview) with no host consumer in 0.8; recorded in docs/components/document-blocks.md."
     },
     {
       "upstreamFile": "apps/v4/components/extend/ui-toast.tsx",
@@ -728,29 +732,41 @@
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/bounding-box-citations-block.tsx",
       "purpose": "Citations block demo composition.",
       "target": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: review panel + page highlight; the PDF viewer is a host slot."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/layout-blocks-block.tsx",
       "purpose": "Layout blocks demo composition.",
       "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: page overlay + OCR block panel."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/document-splits-block.tsx",
       "purpose": "Document splits demo composition.",
       "target": "packages/vue-ui/src/components/DocumentSplits.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: DocumentSplits panel with host-selected page callbacks."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx",
       "purpose": "E-signature flow and typed and drawn signature preview.",
       "target": "packages/vue-ui/src/components/SignaturePad.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Draw/typed SignaturePad canvas with clear, confirm and mobile pointer input."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx",
+      "purpose": "E-signature field panel with signed/unsigned state and export action.",
+      "target": "packages/vue-ui/src/components/ESignatureFields.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Right-hand signature field panel; the drawn canvas dialog is SignaturePad.vue."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/file-system-block.tsx",
@@ -770,8 +786,9 @@
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/docx-layout-blocks.tsx",
       "purpose": "DOCX layout blocks block composition.",
       "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
-      "status": "reference-only",
-      "issues": ["#164"]
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "The #viewer slot accepts a DOCX surface; the block panel is shared."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/excel-editor.tsx",

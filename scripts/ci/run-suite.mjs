@@ -272,6 +272,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
       "tests/component/file-components.test.mjs",
+      "tests/component/document-blocks.test.mjs",
       "tests/component/file-drop-import.test.mjs",
       "tests/component/pdf-page-lifecycle.test.mjs",
       "tests/component/i18n-source.test.mjs",
