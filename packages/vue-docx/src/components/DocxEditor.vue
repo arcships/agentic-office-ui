@@ -5,6 +5,8 @@
     :class="[className, { 'docx-editor-viewer--dark': isDarkTheme }]"
     :style="minHeightStyle"
     data-testid="docx-editor"
+    :data-office-theme="isDarkTheme ? 'dark' : 'light'"
+    data-office-density="comfortable"
     @keydown="onKeydown"
     @dblclick="onEditorDoubleClick"
     @pointerover="onEditorPointerOver"
@@ -113,7 +115,12 @@
         :data-error-actual="pageLimitError.actual"
         :data-error-allowed="pageLimitError.allowed"
       >
-        {{ pageLimitError.message }}
+        <OfficeErrorState
+          compact
+          :title="m.docx.viewer.errorTitle"
+          :description="pageLimitError.message"
+          :show-retry="false"
+        />
       </div>
     </div>
 
@@ -188,17 +195,21 @@
 
     <!-- Status bar -->
     <OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" />
-    <div class="docx-editor-statusbar">
-      <span class="docx-editor-statusbar-page">
-        {{ pageIndicator }}
-      </span>
-      <span class="docx-editor-statusbar-status" data-testid="editor-status">
-        {{ localizedStatus }}
-      </span>
-      <span v-if="controller.fileName" class="docx-editor-statusbar-file" data-testid="editor-file-name">
-        {{ controller.fileName }}
-      </span>
-    </div>
+    <OfficeStatusBar class="docx-editor-statusbar">
+      <template #start>
+        <span class="docx-editor-statusbar-page">
+          {{ pageIndicator }}
+        </span>
+        <span class="office-status-bar__status" data-testid="editor-status">
+          {{ localizedStatus }}
+        </span>
+      </template>
+      <template #end>
+        <span v-if="controller.fileName" class="office-status-bar__file" data-testid="editor-file-name">
+          <span class="office-status-bar__file-name">{{ controller.fileName }}</span>
+        </span>
+      </template>
+    </OfficeStatusBar>
   </div>
 </template>
 
@@ -221,6 +232,7 @@ import {
   resolveDocxImageWrapState,
 } from "@arcships/docx-core"
 import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeErrorState, OfficeStatusBar } from "@arcships/vue-ui"
 import { OfficeFindBar } from "@arcships/vue-ui"
 import { useDocxEditor } from "../composables/useDocxEditor"
 import { useDocxFindReplace } from "../composables/useDocxFindReplace"
@@ -1021,6 +1033,7 @@ defineExpose({
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 .docx-editor-limit-error {
   align-items: center;

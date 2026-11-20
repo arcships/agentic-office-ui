@@ -1,0 +1,478 @@
+{
+  "schemaVersion": 1,
+  "suite": "docx-ui-stories",
+  "issue": 159,
+  "capturedAt": "2026-11-20T02:48:02.798225+00:00",
+  "sample": "page-sizes.docx",
+  "browser": "chromium",
+  "stories": [
+    {
+      "id": "viewer-continuous-light-1440",
+      "route": "/docx-viewer",
+      "viewport": "1440x900",
+      "theme": "light",
+      "viewMode": "continuous",
+      "thumbnails": false,
+      "readOnly": false,
+      "toolbar": {
+        "height": 59,
+        "maxControlHeight": 42,
+        "tallControls": [
+          {
+            "tag": "div",
+            "testid": "office-toolbar-group",
+            "cls": "office-toolbar__group office-toolbar__group--gap-sm office-toolbar__group--align",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "auto",
+              "paddingBlock": "0px",
+              "borderBlock": "0px none oklch(0.269 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-sidebar-toggle",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "div",
+            "testid": "office-page-control",
+            "cls": "office-ui office-page-control docx-viewer-toolbar__page",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "auto",
+              "paddingBlock": "0px",
+              "borderBlock": "0px none oklch(0.269 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "input",
+            "testid": "docx-page-current",
+            "cls": "office-input office-input--sm office-page-control__input",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "div",
+            "testid": "office-toolbar-group",
+            "cls": "office-toolbar__group office-toolbar__group--gap-sm office-toolbar__group--align",
+            "height": 42,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "42px",
+              "minHeight": "auto",
+              "paddingBlock": "0px",
+              "borderBlock": "0px none oklch(0.269 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "div",
+            "testid": "office-toolbar-group",
+            "cls": "office-toolbar__group office-toolbar__group--gap-sm office-toolbar__group--align",
+            "height": 42,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "42px",
+              "minHeight": "auto",
+              "paddingBlock": "2px",
+              "borderBlock": "1px solid oklab(0 0 0 / 0.08)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-view-mode-continuous",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-view-mode-single",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-view-mode-spread",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "div",
+            "testid": "office-toolbar-group",
+            "cls": "office-toolbar__group office-toolbar__group--gap-sm office-toolbar__group--align",
+            "height": 42,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "42px",
+              "minHeight": "auto",
+              "paddingBlock": "2px",
+              "borderBlock": "1px solid oklab(0 0 0 / 0.08)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-fit-width",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-fit-page",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm docx-viewer-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "input",
+            "testid": "docx-search-input",
+            "cls": "office-input office-input--sm docx-viewer-toolbar__search-input",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-search-case-sensitive",
+            "cls": "office-ui office-button office-button--outline office-button--xs docx-viewer-too",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-search-whole-word",
+            "cls": "office-ui office-button office-button--outline office-button--xs docx-viewer-too",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-search-regex",
+            "cls": "office-ui office-button office-button--outline office-button--xs docx-viewer-too",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-search-previous",
+            "cls": "office-ui office-button office-button--outline office-button--icon-sm office-ico",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-search-next",
+            "cls": "office-ui office-button office-button--outline office-button--icon-sm office-ico",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "div",
+            "testid": "office-zoom-control",
+            "cls": "office-ui office-zoom-control",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "auto",
+              "paddingBlock": "0px",
+              "borderBlock": "0px none oklch(0.269 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "office-zoom-out",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm office-icon-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "select",
+            "testid": "docx-zoom-select",
+            "cls": "office-zoom-control__native",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "office-zoom-in",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm office-icon-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-show-tracked-changes",
+            "cls": "office-ui office-button office-button--outline office-button--sm docx-viewer-too",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "select",
+            "testid": "docx-revision-display",
+            "cls": "office-zoom-control__native docx-viewer-toolbar__revision-select",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-show-comments",
+            "cls": "office-ui office-button office-button--outline office-button--sm docx-viewer-too",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-theme-toggle",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm office-icon-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-upload",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm office-icon-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          },
+          {
+            "tag": "button",
+            "testid": "docx-download",
+            "cls": "office-ui office-button office-button--ghost office-button--icon-sm office-icon-",
+            "height": 36,
+            "style": {
+              "boxSizing": "border-box",
+              "height": "36px",
+              "minHeight": "36px",
+              "paddingBlock": "7.2px",
+              "borderBlock": "1px solid oklch(0.922 0 0)",
+              "heightSm": "2rem",
+              "controlSm": "2rem",
+              "heightXs": "1.75rem"
+            }
+          }
+        ],
+        "scrollWidth": 1404,
+        "clientWidth": 1404,
+        "sidebar": null
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-1440.webp",
+      "sha256": "55659e29fa92be64dfc185eae87de8a33e18ae887863415d4ef44abdac1cd2d2"
+    }
+  ]
+}

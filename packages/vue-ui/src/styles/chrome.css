@@ -199,6 +199,36 @@
   min-inline-size: 0;
 }
 
+/* Native select variant: same trigger geometry as the Reka select. */
+.office-zoom-control__native {
+  inline-size: 100%;
+  min-inline-size: 0;
+  height: var(--office-ui-height-sm);
+  padding-inline: var(--office-ui-space-2)
+    calc(var(--office-ui-space-2) + var(--office-ui-space-3));
+  border: var(--office-border-width) solid var(--office-input);
+  border-radius: var(--office-radius-md);
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font: inherit;
+  font-size: var(--office-text-sm);
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--office-shadow-xs);
+  cursor: pointer;
+}
+
+.office-zoom-control__native:focus-visible {
+  border-color: var(--office-ring);
+  outline: var(--office-ring-width) solid
+    color-mix(in oklab, var(--office-ring) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width);
+}
+
+.office-zoom-control__native:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
 /* ── Search popover ─────────────────────────────────────────────────────── */
 
 .office-search-popover__content {
