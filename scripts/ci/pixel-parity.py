@@ -1155,7 +1155,12 @@ def main() -> int:
     self_check = args.self_check
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-lcd-text",
+                ],
+            )
             browser_version = browser.version
             log(f"chromium {browser_version}")
             for viewport in viewports:
