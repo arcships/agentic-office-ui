@@ -18,6 +18,7 @@ export type {
 export const PptxViewer = PptxViewerComponent
 export { default as PptxThumbnail } from "./PptxThumbnail.vue"
 export { default as PptxStage } from "./PptxStage.vue"
+export { default as PptxLinkMenu } from "./PptxLinkMenu.vue"
 export {
   PPTX_FILE_ACCEPT,
   PPTX_FILE_EXTENSIONS,
