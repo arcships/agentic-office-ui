@@ -170,31 +170,44 @@
     ],
     "layoutBlocks": [
       {
-        "id": "b1",
+        "id": "block-1",
         "type": "heading",
-        "text": "Payment terms"
+        "text": "MASTER SERVICES AGREEMENT",
+        "confidence": 0.98,
+        "page": 1
       },
       {
-        "id": "b2",
+        "id": "block-2",
         "type": "paragraph",
-        "text": "Invoices are due within 30 days of receipt."
+        "text": "Provider will deliver document intelligence and workflow automation for the customer's finance operations.",
+        "confidence": 0.89,
+        "page": 1
       },
       {
-        "id": "b3",
+        "id": "block-3",
         "type": "table",
-        "rows": 3,
-        "columns": 4
+        "text": "Service level targets and response windows for each severity level.",
+        "confidence": 0.77,
+        "page": 2
       },
       {
-        "id": "b4",
+        "id": "block-4",
         "type": "figure",
-        "text": "Figure 1 — Payment flow"
+        "text": "Figure 1 - Payment flow",
+        "confidence": 0.91,
+        "page": 2
       }
     ],
     "signature": {
       "label": "Authorized signature",
-      "name": "Dana Whitfield",
-      "date": "2026-11-17"
+      "page": 1,
+      "bbox": {
+        "x": 300,
+        "y": 504,
+        "width": 250,
+        "height": 58
+      },
+      "imageDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAA6CAYAAACZBESJAAACUklEQVR42u3dy47CMAxAUVqxZ8P/f+Fs+AJmMRoJjWCgbR5OfO4aShP71m764HQCAAAAAAAAAAAA8CFLjx+9XK73d5+53b4W4QHKsEaUfMvnAASs6L8C/1exHyVX2eN0XGJB9GKSv0o2SRan2xILon+URFsSZcvBAfVjo9sierXkIHv96r11bgk/Fk0X444mhAW6OjHZE5fH710u17vYJK/opaqxc/Z4MREfFf1UOuh/K48KEqsrEp/EotcItmQqE49aFVd8krXutZPqWRJpF/tK3vP30EH0lkF2c0dc6cieRPReSUX8WLK12gc50FD0SNe8s1f7aBW19P7sXQPIKPzUomduJSOP9ci+HT14Zz2dqCJ65AnMEugR7iY8sirvvoyOoo9yq+rsso82vp4P02Q58C+Sa64AW+k2Z89Ys06USo5nczXrTT5rZnkeH8qYNXFB9mJVZPSJmSGwniCTC9Ur+gwVZOQAE1w3VFX02RJs9PFo2fGKM8l/BBl1PKp57HhEOfguRwczSxUZcUxW2eOL3eopznfbXiTX9kkjOan3zH2pmO3ZjhcCDig7ycdvw/ds+0hunnsPGCTPOL+ftvil9meRWONUdZI72OzlLLFUGsSiRnzXT37Q21n67gPJgUaCZd8PjM1qCuJWdX9FBaimAMgOaN0BogOA9h1Q0QEQffDKbhYwIq7P7pA84186RcZ9BkSvkvi9E6uVgCO+gMMBJpjo2mAVDFBBgIJYjCM7iA6yg+jOkckOopMdIDrZgUa4TNPpXN0lMhA9kfCkRwu+ATiMGdq08K5VAAAAAElFTkSuQmCC"
     },
     "splits": [
       {
@@ -232,7 +245,186 @@
         "type": "pdf",
         "sizeBytes": 2416640
       }
-    ]
+    ],
+    "pageImage": "/samples/contract-page.png",
+    "pageWidth": 1000,
+    "pageHeight": 1330,
+    "boundingBoxCitations": {
+      "fields": [
+        {
+          "key": "vendor_name",
+          "schema": {
+            "type": "string",
+            "title": "Vendor name"
+          },
+          "actual": "Northwind Industrial Supplies",
+          "expected": "Northwind Industrial Supplies",
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 8,
+              "top": 9,
+              "width": 42,
+              "height": 4.5
+            }
+          },
+          "metadataPath": "vendor_name"
+        },
+        {
+          "key": "invoice_total",
+          "schema": {
+            "type": "number",
+            "title": "Invoice total"
+          },
+          "actual": 2882.58,
+          "expected": 2882.58,
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 62,
+              "top": 64,
+              "width": 30,
+              "height": 4
+            }
+          },
+          "metadataPath": "invoice_total"
+        },
+        {
+          "key": "payment_terms",
+          "schema": {
+            "type": "string",
+            "title": "Payment terms"
+          },
+          "actual": "Net 30",
+          "expected": "Net 30",
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 8,
+              "top": 88,
+              "width": 50,
+              "height": 4
+            }
+          },
+          "metadataPath": "payment_terms"
+        }
+      ],
+      "modifiedFieldKey": "payment_terms",
+      "modifiedExpected": "Net 45"
+    },
+    "layoutPageBlocks": [
+      {
+        "id": "block-1",
+        "type": "heading",
+        "text": "MASTER SERVICES AGREEMENT",
+        "confidence": 0.98,
+        "page": 1,
+        "bbox": [
+          90,
+          65,
+          640,
+          55
+        ]
+      },
+      {
+        "id": "block-2",
+        "type": "paragraph",
+        "text": "Provider will deliver document intelligence and workflow automation for the customer's finance operations.",
+        "confidence": 0.89,
+        "page": 1,
+        "bbox": [
+          90,
+          148,
+          820,
+          130
+        ]
+      },
+      {
+        "id": "block-3",
+        "type": "table",
+        "text": "Service level targets and response windows for each severity level.",
+        "confidence": 0.77,
+        "page": 2,
+        "bbox": [
+          90,
+          870,
+          820,
+          190
+        ]
+      },
+      {
+        "id": "block-4",
+        "type": "figure",
+        "text": "Figure 1 - Payment flow",
+        "confidence": 0.91,
+        "page": 2,
+        "bbox": [
+          90,
+          1195,
+          650,
+          60
+        ]
+      }
+    ],
+    "documentSplits": {
+      "thumbnailImage": "/samples/contract-page.png",
+      "splits": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2",
+            "page-3"
+          ]
+        },
+        {
+          "id": "split-2",
+          "title": "Model architecture",
+          "pages": [
+            "page-4",
+            "page-5",
+            "page-6",
+            "page-7"
+          ]
+        },
+        {
+          "id": "split-3",
+          "title": "Training and results",
+          "pages": [
+            "page-8",
+            "page-9",
+            "page-10"
+          ]
+        }
+      ],
+      "singleSplit": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2",
+            "page-3"
+          ]
+        }
+      ],
+      "emptyPagesSplit": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2"
+          ]
+        },
+        {
+          "id": "split-2",
+          "title": "Model architecture",
+          "pages": []
+        }
+      ]
+    }
   },
   "docxToolbar": {
     "activePage": 1,

@@ -3,7 +3,11 @@ import manifest from "../../parity-fixtures/manifest.json";
 import { readQuery } from "./fixtures";
 import ParitySurface from "./parity/ParitySurface.vue";
 import ButtonSurface from "./surfaces/ButtonSurface.vue";
+import BoundingBoxCitationsSurface from "./surfaces/BoundingBoxCitationsSurface.vue";
 import DialogSurface from "./surfaces/DialogSurface.vue";
+import DocumentSplitsSurface from "./surfaces/DocumentSplitsSurface.vue";
+import ESignatureSurface from "./surfaces/ESignatureSurface.vue";
+import LayoutBlocksSurface from "./surfaces/LayoutBlocksSurface.vue";
 import DocxSidebarSurface from "./surfaces/DocxSidebarSurface.vue";
 import DocxToolbarSurface from "./surfaces/DocxToolbarSurface.vue";
 import FileThumbnailSurface from "./surfaces/FileThumbnailSurface.vue";
@@ -87,6 +91,22 @@ function subjectStatus(surface: Surface): "available" | "missing" {
       v-else-if="surface.id === 'docx-sidebar'"
       :cell-width="surface.cellWidth"
       :theme="theme"
+    />
+    <BoundingBoxCitationsSurface
+      v-else-if="surface.id === 'bounding-box-citations'"
+      :cell-width="surface.cellWidth"
+    />
+    <LayoutBlocksSurface
+      v-else-if="surface.id === 'layout-blocks'"
+      :cell-width="surface.cellWidth"
+    />
+    <ESignatureSurface
+      v-else-if="surface.id === 'e-signature'"
+      :cell-width="surface.cellWidth"
+    />
+    <DocumentSplitsSurface
+      v-else-if="surface.id === 'document-splits'"
+      :cell-width="surface.cellWidth"
     />
     <p v-else>No Vue renderer for {{ surface.id }}.</p>
   </ParitySurface>

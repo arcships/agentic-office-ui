@@ -1524,6 +1524,15 @@ export interface OfficeMessages {
     boundingBox: {
       noFields: string
       imageAlt: string
+      formTab: string
+      jsonTab: string
+      actual: string
+      expected: string
+      revert: string
+      setNull: string
+      modified: string
+      loading: string
+      error: string
     }
     fileUpload: {
       prompt: string
@@ -1537,9 +1546,48 @@ export interface OfficeMessages {
     layoutBlocks: {
       noBlocks: string
       imageAlt: string
+      loading: string
+      error: string
+      markdown: string
     }
     signaturePad: {
       clear: string
+      cancel: string
+      confirm: string
+      drawn: string
+      typed: string
+      typePlaceholder: string
+      previewAlt: string
+      signed: string
+      unsigned: string
+      sign: string
+      edit: string
+      export: string
+      exporting: string
+      dialogTitle: string
+      dialogDescription: string
+      fieldsTitle: string
+      fieldsDescription: string
+      /** Template with `{width}`, `{height}` and `{page}` placeholders. */
+      sizeOnPage: string
+      loading: string
+      error: string
+    }
+    documentSplits: {
+      addSplit: string
+      dropPages: string
+      noPages: string
+      noSplits: string
+      loading: string
+      error: string
+      remove: string
+      reorder: string
+      /** Template with a `{pages}` placeholder. */
+      pageRange: string
+      /** Template with a `{number}` placeholder. */
+      splitFallback: string
+      /** Template with a `{number}` placeholder. */
+      pageTitle: string
     }
     fileThumbnail: {
       unknownType: string
@@ -2846,6 +2894,15 @@ export const officeMessagesEn: OfficeMessages = {
     boundingBox: {
       noFields: "No fields to display",
       imageAlt: "Citation source preview",
+      formTab: "Form",
+      jsonTab: "JSON",
+      actual: "Actual",
+      expected: "Expected",
+      revert: "Revert changes",
+      setNull: "Set to NULL",
+      modified: "Modified",
+      loading: "Loading review fields…",
+      error: "Review fields could not be loaded.",
     },
     fileUpload: {
       prompt: "Drag & drop files here, or click to select",
@@ -2857,11 +2914,46 @@ export const officeMessagesEn: OfficeMessages = {
       unknownType: "Unknown type",
     },
     layoutBlocks: {
-      noBlocks: "No layout blocks detected",
+      noBlocks: "No layout blocks found.",
       imageAlt: "Layout preview",
+      loading: "Loading layout blocks…",
+      error: "Layout blocks could not be loaded.",
+      markdown: "Markdown",
     },
     signaturePad: {
       clear: "Clear",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      drawn: "Draw",
+      typed: "Type",
+      typePlaceholder: "Type your full name",
+      previewAlt: "Signature preview",
+      signed: "Signed",
+      unsigned: "Unsigned",
+      sign: "Sign",
+      edit: "Edit",
+      export: "Export signed PDF",
+      exporting: "Exporting...",
+      dialogTitle: "Add signature",
+      dialogDescription: "Draw a signature to place it into the selected PDF field.",
+      fieldsTitle: "Signature fields",
+      fieldsDescription: "Review fields, collect signatures, and export a signed PDF.",
+      sizeOnPage: "{width} x {height} on page {page}",
+      loading: "Loading signature fields…",
+      error: "Signature fields could not be loaded.",
+    },
+    documentSplits: {
+      addSplit: "Add split",
+      dropPages: "Drop pages here",
+      noPages: "No pages",
+      noSplits: "No document splits yet.",
+      loading: "Loading document splits…",
+      error: "Document splits could not be loaded.",
+      remove: "Remove {title}",
+      reorder: "Reorder {title}",
+      pageRange: "Pages {pages}",
+      splitFallback: "Split {number}",
+      pageTitle: "Page {number}",
     },
     fileThumbnail: {
       unknownType: "Unknown type",
@@ -4157,6 +4249,15 @@ export const officeMessagesZhCN: OfficeMessages = {
     boundingBox: {
       noFields: "没有可显示的字段",
       imageAlt: "引用来源预览",
+      formTab: "表单",
+      jsonTab: "JSON",
+      actual: "实际值",
+      expected: "预期值",
+      revert: "撤销修改",
+      setNull: "设为 NULL",
+      modified: "已修改",
+      loading: "正在加载审核字段…",
+      error: "审核字段加载失败。",
     },
     fileUpload: {
       prompt: "将文件拖放到此处，或点击选择",
@@ -4168,11 +4269,46 @@ export const officeMessagesZhCN: OfficeMessages = {
       unknownType: "未知类型",
     },
     layoutBlocks: {
-      noBlocks: "未检测到布局块",
+      noBlocks: "未找到布局块。",
       imageAlt: "布局预览",
+      loading: "正在加载布局块…",
+      error: "布局块加载失败。",
+      markdown: "Markdown",
     },
     signaturePad: {
       clear: "清除",
+      cancel: "取消",
+      confirm: "确认",
+      drawn: "手写",
+      typed: "输入",
+      typePlaceholder: "输入完整姓名",
+      previewAlt: "签名预览",
+      signed: "已签名",
+      unsigned: "未签名",
+      sign: "签名",
+      edit: "编辑",
+      export: "导出已签名 PDF",
+      exporting: "正在导出...",
+      dialogTitle: "添加签名",
+      dialogDescription: "绘制签名并放入选中的 PDF 字段。",
+      fieldsTitle: "签名字段",
+      fieldsDescription: "检查字段、收集签名并导出已签名 PDF。",
+      sizeOnPage: "第 {page} 页，{width} x {height}",
+      loading: "正在加载签名字段…",
+      error: "签名字段加载失败。",
+    },
+    documentSplits: {
+      addSplit: "添加拆分",
+      dropPages: "将页面拖放到此处",
+      noPages: "无页面",
+      noSplits: "尚未创建文档拆分。",
+      loading: "正在加载文档拆分…",
+      error: "文档拆分加载失败。",
+      remove: "移除 {title}",
+      reorder: "重新排序 {title}",
+      pageRange: "第 {pages} 页",
+      splitFallback: "拆分 {number}",
+      pageTitle: "第 {number} 页",
     },
     fileThumbnail: {
       unknownType: "未知类型",

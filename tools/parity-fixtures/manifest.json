@@ -596,16 +596,230 @@
       ]
     },
     {
-      "id": "document-blocks",
-      "title": "Document blocks (fixtures)",
-      "referenceComponent": "apps/v4/components/extend/{bounding-box-citations,layout-blocks,document-splits,file-system,signature}.tsx",
-      "subjectComponent": null,
-      "subjectStatus": "missing",
-      "pendingIssue": "#164",
-      "cellWidth": 0,
-      "referenceStatus": "fixtures-only",
-      "notes": "Shared fixture data for citations / layout blocks / splits / file system / signature is committed in tools/parity-fixtures/fixtures.json. Rendering parity is tracked by #164.",
-      "states": []
+      "id": "bounding-box-citations",
+      "title": "Bounding box citations (HumanReviewPanel)",
+      "referenceComponent": "apps/v4/components/extend/bounding-box-citations.tsx (HumanReviewPanel, scalar Form cards)",
+      "subjectComponent": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-review-panel]",
+      "subjectTargetSelector": "[data-slot=bounding-box-panel]",
+      "cellWidth": 420,
+      "notes": "Form tab with scalar string/number review fields. The upstream JSON tab (pierre/diffs) and array/object grid editors are not vendored; loading/error/empty cells use the harness extension contract. Page highlight and split layout are covered by component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "form fields",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "hover",
+          "label": "hover field",
+          "matrixState": "hover",
+          "interaction": { "type": "hover", "selector": "[data-review-field-key='invoice_total']" }
+        },
+        {
+          "id": "focus",
+          "label": "focus field",
+          "matrixState": "focus",
+          "interaction": { "type": "focus", "selector": "[data-review-field-key='payment_terms']" }
+        },
+        {
+          "id": "selected",
+          "label": "active field",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "modified",
+          "label": "modified expected",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "empty",
+          "label": "no fields",
+          "matrixState": "empty",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "layout-blocks",
+      "title": "Layout blocks (OCR panel)",
+      "referenceComponent": "apps/v4/components/extend/layout-blocks-panel.tsx (LayoutBlocksPanel)",
+      "subjectComponent": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-layout-panel]",
+      "subjectTargetSelector": "[data-slot=layout-blocks-panel]",
+      "cellWidth": 420,
+      "notes": "Block list with type badge, confidence and page chip. The reference omits @tanstack/react-virtual (four fixture rows fit the 420px panel); loading/error states follow the shared harness extension contract. Markdown rendering is covered by component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "blocks",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "hover",
+          "label": "hover block",
+          "matrixState": "hover",
+          "interaction": { "type": "hover", "selector": "[data-layout-block-id='block-2']" }
+        },
+        {
+          "id": "focus",
+          "label": "focus block",
+          "matrixState": "focus",
+          "interaction": { "type": "focus", "selector": "[data-layout-block-id='block-3']" }
+        },
+        {
+          "id": "active",
+          "label": "active block",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "empty",
+          "label": "no blocks",
+          "matrixState": "empty",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "e-signature",
+      "title": "E-signature fields",
+      "referenceComponent": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx (SignatureFieldsPanel)",
+      "subjectComponent": "packages/vue-ui/src/components/ESignatureFields.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-signature-fields]",
+      "subjectTargetSelector": "[data-slot=e-signature-fields]",
+      "cellWidth": 420,
+      "notes": "Unsigned/signed/exporting field panel with the shared signature fixture. The padded signature image is identical on both sides. The drawn canvas dialog is non-deterministic and is covered by SignaturePad interaction tests instead; showPreview is a harness extension.",
+      "states": [
+        {
+          "id": "unsigned",
+          "label": "unsigned field",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "signed",
+          "label": "signed field",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "exporting",
+          "label": "exporting",
+          "matrixState": "loading",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "preview",
+          "label": "signature preview",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "document-splits",
+      "title": "Document splits",
+      "referenceComponent": "apps/v4/components/extend/document-splits.tsx (SplitGroupCard + list)",
+      "subjectComponent": "packages/vue-ui/src/components/DocumentSplits.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-document-splits]",
+      "subjectTargetSelector": "[data-slot=document-splits]",
+      "cellWidth": 460,
+      "notes": "Split result list with page thumbnails, counts and remove actions. The reference is a static adaptation (no @dnd-kit); drag, add/remove and keyboard reordering are covered by component tests. Empty-pages, empty, loading and error cells follow the shared harness extension contract.",
+      "states": [
+        {
+          "id": "default",
+          "label": "three splits",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "hover",
+          "label": "hover thumbnail",
+          "matrixState": "hover",
+          "interaction": { "type": "hover", "selector": "[data-page-id='page-1']" }
+        },
+        {
+          "id": "focus",
+          "label": "focus thumbnail",
+          "matrixState": "focus",
+          "interaction": { "type": "focus", "selector": "[data-page-id='page-1']" }
+        },
+        {
+          "id": "single",
+          "label": "single split",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "empty-pages",
+          "label": "empty split group",
+          "matrixState": "empty",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "empty",
+          "label": "no splits",
+          "matrixState": "empty",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": { "type": "none" }
+        }
+      ]
     }
   ]
 }
