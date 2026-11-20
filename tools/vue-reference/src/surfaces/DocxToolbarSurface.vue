@@ -1,4 +1,13 @@
 <script setup lang="ts">
+/**
+ * Issue #159 — DOCX toolbar subject.
+ *
+ * The production `DocxViewerToolbar` with its default (upstream) control set:
+ * thumbnails toggle, Page + page number + of N, zoom out/level/in, separator
+ * and the closed actions trigger. Every other command the product ships is in
+ * the actions menu or behind an opt-in prop, so this cell measures the same row
+ * as the pinned Extend reference.
+ */
 import { fixtures, type ParityTheme } from "../fixtures";
 import ParityCell from "../parity/ParityCell.vue";
 import DocxViewerToolbar from "../../../../packages/vue-docx/src/components/DocxViewerToolbar.vue";

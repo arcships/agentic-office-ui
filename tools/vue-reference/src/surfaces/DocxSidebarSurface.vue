@@ -1,4 +1,14 @@
 <script setup lang="ts">
+/**
+ * Issue #159 — DOCX thumbnail sidebar subject.
+ *
+ * Mirrors the reference surface: the production `DocxThumbnailPanel` rendered
+ * inside the same 160×292 frame, the same single-page fixture, the same page
+ * aspect ratio (200:300) and the upstream inline/overlay decision
+ * (`window.innerWidth >= 768`), so the rail, card, label and skeleton are
+ * compared one to one.
+ */
+import { computed } from "vue";
 import { fixtures, type ParityTheme } from "../fixtures";
 import ParityCell from "../parity/ParityCell.vue";
 import DocxThumbnailPanel from "../../../../packages/vue-docx/src/components/DocxThumbnailPanel.vue";
@@ -22,6 +32,9 @@ const layoutOptions = {
   minLineHeight: 20,
   paragraphSpacing: 6,
 };
+
+const inline = computed(() => window.innerWidth >= 768);
+const mode = computed(() => (inline.value ? "inline" : "overlay"));
 
 const states = [
   { state: "open", matrixState: "default", collapsed: false, loading: false },
@@ -51,11 +64,11 @@ const states = [
         :model="entry.loading ? undefined : model"
         :layout-options="layoutOptions"
         :default-collapsed="entry.collapsed"
+        :mode="mode"
         :show-toggle="false"
         :current-page="1"
-        :total-pages="entry.loading ? 0 : 2"
+        :total-pages="entry.loading ? 0 : 1"
         :is-dark="props.theme === 'dark'"
-        :style="entry.loading ? { borderInlineEndWidth: '0' } : undefined"
       />
     </div>
   </ParityCell>
