@@ -31,6 +31,7 @@ import http.server
 import importlib.metadata
 import json
 import platform
+import shutil
 import socketserver
 import sys
 import threading
@@ -335,6 +336,93 @@ def longest_run(mask: Image.Image, limit: int = 8) -> int:
     return best if mask.getbbox() is not None else 0
 
 
+REGION_CELL_PX = 16
+
+
+def diff_regions(
+    max_diff: Image.Image,
+    mask: Image.Image,
+    limit: int,
+    grid: int = REGION_CELL_PX,
+) -> list[dict]:
+    """Cluster the differing pixels into coarse regions, worst first.
+
+    A 16px grid keeps this cheap on a 4000px-tall capture: cells that contain
+    any differing pixel are connected (8-neighbourhood), then each cluster is
+    measured against the real pixel mask so the reported pixel count and peak
+    channel delta are exact.
+    """
+    if limit <= 0 or mask.getbbox() is None:
+        return []
+    width, height = mask.size
+    columns = max(1, (width + grid - 1) // grid)
+    rows = max(1, (height + grid - 1) // grid)
+    cells = mask.resize((columns, rows), Image.BOX).load()
+    seen = [[False] * columns for _ in range(rows)]
+    clusters: list[tuple[int, int, int, int]] = []
+    for start_y in range(rows):
+        for start_x in range(columns):
+            if seen[start_y][start_x] or not cells[start_x, start_y]:
+                continue
+            seen[start_y][start_x] = True
+            stack = [(start_x, start_y)]
+            min_x = max_x = start_x
+            min_y = max_y = start_y
+            while stack:
+                cell_x, cell_y = stack.pop()
+                min_x, max_x = min(min_x, cell_x), max(max_x, cell_x)
+                min_y, max_y = min(min_y, cell_y), max(max_y, cell_y)
+                for dx, dy in (
+                    (1, 0), (-1, 0), (0, 1), (0, -1),
+                    (1, 1), (1, -1), (-1, 1), (-1, -1),
+                ):
+                    next_x, next_y = cell_x + dx, cell_y + dy
+                    if (
+                        0 <= next_x < columns
+                        and 0 <= next_y < rows
+                        and not seen[next_y][next_x]
+                        and cells[next_x, next_y]
+                    ):
+                        seen[next_y][next_x] = True
+                        stack.append((next_x, next_y))
+            clusters.append((min_x, min_y, max_x, max_y))
+    if not clusters:
+        # A 16x16 BOX reduction of a single differing pixel rounds to 1, so
+        # this is a safety net rather than the normal path.
+        bbox = mask.getbbox()
+        clusters = [
+            (
+                bbox[0] // grid,
+                bbox[1] // grid,
+                max(0, (bbox[2] - 1) // grid),
+                max(0, (bbox[3] - 1) // grid),
+            )
+        ]
+
+    regions = []
+    for min_x, min_y, max_x, max_y in clusters:
+        box = (
+            min_x * grid,
+            min_y * grid,
+            min(width, (max_x + 1) * grid),
+            min(height, (max_y + 1) * grid),
+        )
+        pixels = mask.crop(box).histogram()[255]
+        peak = max_diff.crop(box).getextrema()[1]
+        regions.append(
+            {
+                "x": box[0],
+                "y": box[1],
+                "width": box[2] - box[0],
+                "height": box[3] - box[1],
+                "diffPixels": pixels,
+                "maxChannelDelta": peak,
+            }
+        )
+    regions.sort(key=lambda region: region["diffPixels"], reverse=True)
+    return regions[:limit]
+
+
 def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict) -> dict:
     diff = ImageChops.difference(reference, subject)
     red, green, blue, alpha = diff.split()
@@ -366,6 +454,11 @@ def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict)
             )
 
     status = "pass" if diff_pixels == 0 else ("fail" if reasons else "pass-with-antialiasing")
+    regions = diff_regions(
+        max_diff,
+        mask,
+        int(thresholds.get("topDiffRegions", 5)),
+    ) if diff_pixels else []
     return {
         "status": status,
         "reasons": reasons,
@@ -374,6 +467,8 @@ def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict)
         "maxChannelDelta": max_channel,
         "maxContiguousRunPx": run,
         "has3x3Block": has_3x3,
+        "regions": regions,
+        "regionGridPx": REGION_CELL_PX,
         "width": reference.size[0],
         "height": reference.size[1],
         "_diff": max_diff,
@@ -460,6 +555,50 @@ def compare_images(
     result = diff_metrics(reference, subject, thresholds)
     write_diff_artifacts(result, diff_path, heatmap_path, thresholds)
     return strip_private(result)
+
+
+# --------------------------------------------------------------------------
+# Committed baselines (tests/visual/extend)
+# --------------------------------------------------------------------------
+
+
+def baseline_relpath(surface_id: str, state_id: str, theme: str, viewport_id: str) -> str:
+    """`<component>/<state>/<theme>-<viewport>.png` — the committed naming scheme."""
+    return f"{surface_id}/{state_id}/{theme}-{viewport_id}.png"
+
+
+def compare_baseline(
+    baseline_path: Path,
+    subject_path: Path,
+    case_dir: Path,
+    out: Path,
+    thresholds: dict,
+) -> dict:
+    if not baseline_path.exists():
+        return {"status": "missing", "baseline": rel(baseline_path)}
+    result = compare_images(
+        baseline_path,
+        subject_path,
+        case_dir / "baseline-diff.png",
+        case_dir / "baseline-heatmap.png",
+        None,
+        thresholds,
+    )
+    status = result.pop("status")
+    entry = {"status": status, "baseline": rel(baseline_path), **result}
+    diff_file = case_dir / "baseline-diff.png"
+    heatmap_file = case_dir / "baseline-heatmap.png"
+    if diff_file.exists():
+        entry["screenshot"] = artifact_rel(diff_file, out)
+    if heatmap_file.exists():
+        entry["heatmap"] = artifact_rel(heatmap_file, out)
+    return entry
+
+
+def write_baseline(baseline_path: Path, subject_path: Path) -> dict:
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(subject_path, baseline_path)
+    return {"status": "written", "baseline": rel(baseline_path)}
 
 
 def compare_metrics(reference: dict, subject: dict, tolerance: float) -> dict:
@@ -730,16 +869,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subject-dir", default=str(ROOT / "tools/vue-reference/dist"))
     parser.add_argument("--tokens", default=str(ROOT / "docs/design/extend-tokens.json"))
     parser.add_argument("--out", default=str(ROOT / "output/ui-parity"))
-    parser.add_argument("--only", default=None, help="comma separated surface ids")
+    parser.add_argument("--only", default=None, help="comma separated surface ids (`core` expands to the PR subset)")
     parser.add_argument("--viewports", default=None, help="comma separated viewport ids")
     parser.add_argument("--themes", default=None, help="comma separated themes")
     parser.add_argument("--report-only", action="store_true", help="always exit 0")
+    parser.add_argument(
+        "--gate-mode",
+        choices=["all", "ready", "off"],
+        default=None,
+        help=(
+            "which parity failures fail the run: all (default), ready (only "
+            "gateStatus=blocking surfaces), off (artifact mode)"
+        ),
+    )
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="compare the subject captures with the committed baselines",
+    )
+    parser.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="write the subject captures into the baseline directory (use pnpm ui:baseline instead)",
+    )
+    parser.add_argument(
+        "--baseline-dir",
+        default=None,
+        help="baseline directory (default: manifest.baselines.directory)",
+    )
     parser.add_argument(
         "--self-check",
         action="store_true",
         help="capture the reference page twice and compare it with itself (harness determinism gate)",
     )
-    parser.add_argument("--capture-padding", type=int, default=12)
+    parser.add_argument("--capture-padding", type=int, default=None)
     return parser.parse_args()
 
 
@@ -1002,6 +1165,9 @@ def run_surface(
     out: Path,
     thresholds: dict,
     padding: int,
+    baseline_dir: Path | None = None,
+    baseline_mode: str = "off",
+    baseline_combos: set | None = None,
 ) -> list[dict]:
     cases: list[dict] = []
     subject_status = "available" if self_check else surface.get("subjectStatus", "available")
@@ -1068,6 +1234,27 @@ def run_surface(
                 side_errors=subject_errors,
             )
             case["subject"] = subject_capture
+
+            if (
+                baseline_dir is not None
+                and baseline_mode != "off"
+                and (viewport["id"], theme) in (baseline_combos or set())
+            ):
+                baseline_file = baseline_dir / baseline_relpath(
+                    surface["id"], state["id"], theme, viewport["id"]
+                )
+                if baseline_mode == "write":
+                    case["baseline"] = write_baseline(
+                        baseline_file, case_dir / "subject.png"
+                    )
+                else:
+                    case["baseline"] = compare_baseline(
+                        baseline_file,
+                        case_dir / "subject.png",
+                        case_dir,
+                        out,
+                        thresholds,
+                    )
 
             geometry = compare_metrics(
                 reference_capture["metrics"],

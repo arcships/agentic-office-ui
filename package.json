@@ -51,7 +51,10 @@
   "devDependencies": {
     "@arcships/office-runtime": "workspace:*",
     "@happy-dom/global-registrator": "^20",
+    "axe-core": "^4",
     "happy-dom": "^20",
+    "postcss-html": "^1",
+    "stylelint": "^16",
     "turbo": "^2.11.11"
   },
   "packageManager": "pnpm@9.0.6",

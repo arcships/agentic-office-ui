@@ -166,7 +166,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "input",
@@ -220,7 +222,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#157"
     },
     {
       "id": "select",
@@ -266,7 +271,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "dialog",
@@ -287,7 +294,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "tooltip",
@@ -309,7 +318,9 @@
             "selector": "[data-parity-tooltip-trigger]"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "file-upload",
@@ -375,7 +386,9 @@
             "file": "fileUpload.selectedFile"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "file-thumbnail",
@@ -418,7 +431,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "pdf-toolbar",
@@ -473,7 +488,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "pdf-sidebar",
@@ -510,7 +527,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "docx-toolbar",
@@ -557,7 +576,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#159"
     },
     {
       "id": "docx-sidebar",
@@ -594,7 +616,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#159"
     },
     {
       "id": "document-sidebar",
@@ -630,7 +655,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#158"
     },
     {
       "id": "document-blocks",
@@ -642,7 +670,49 @@
       "cellWidth": 0,
       "referenceStatus": "fixtures-only",
       "notes": "Shared fixture data for citations / layout blocks / splits / file system / signature is committed in tools/parity-fixtures/fixtures.json. Rendering parity is tracked by #164.",
-      "states": []
+      "states": [],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#164"
     }
-  ]
+  ],
+  "coreSubset": {
+    "description": "Surfaces the pull-request parity job captures. Everything else only runs in the nightly full matrix.",
+    "surfaces": [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "pdf-sidebar"
+    ]
+  },
+  "baselines": {
+    "directory": "tests/visual/extend",
+    "manifest": "tests/visual/extend/manifest.json",
+    "naming": "<surface>/<state>/<theme>-<viewport>.png",
+    "viewports": [
+      "1440x900",
+      "390x844"
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "capturePaddingPx": 12,
+    "description": "Committed subject baselines for gate-blocking surfaces. `pnpm ui:baseline` manages them; the approval flow lives in tests/visual/extend/README.md."
+  },
+  "gate": {
+    "modes": {
+      "all": "Every parity failure blocks (default; `pnpm ui:parity`).",
+      "ready": "Only surfaces with gateStatus=blocking block; pending surfaces stay report-only (CI).",
+      "off": "Never exit non-zero; artifact mode (`--report-only`)."
+    },
+    "prMode": "ready",
+    "finalMode": "all",
+    "topDiffRegions": 5
+  }
 }
