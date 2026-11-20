@@ -221,6 +221,12 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             has_text="OCR document page processing",
         )
         table_paragraph.wait_for(timeout=30_000)
+        # Loading another document closes the find popover; reopen it through
+        # the actions menu before searching the new document.
+        page.locator('[data-testid="docx-toolbar-actions"]').click()
+        page.locator('[data-testid="docx-actions-menu"]').wait_for(timeout=10_000)
+        page.locator('[data-testid="docx-find"]').click()
+        search.wait_for(timeout=10_000)
         search.fill("OCR document page processing")
         page.wait_for_function(
             """() => document.querySelector('[data-testid="docx-search-status"]')?.textContent !== '0/0'""",
