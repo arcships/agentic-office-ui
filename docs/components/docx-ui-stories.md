@@ -63,8 +63,8 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 
 | Surface | Reference | Subject | States |
 |---|---|---|---|
-| `docx-toolbar` | vendored `DocxToolbar` / `DocxPageNumberControl` | `DocxViewerToolbar` | default / hover / focus / disabled |
-| `docx-sidebar` | vendored `DocumentViewerThumbnailSidebar` | 真实 `DocxThumbnailPanel` + `DocumentViewerSidebar` + 真实 DOCX canvas 缩略图 | open / closed / skeleton |
+| `docx-toolbar` | Extend 风格 `DocxToolbarSurface`：与 subject 相同的文件/页/缩放/搜索/视图/修订/主题/上传下载控件，同一 `<1360px` overflow 断点 | `DocxViewerToolbar` | default / hover / focus / disabled |
+| `docx-sidebar` | `DocumentViewerThumbnailSidebar` + 与 subject 相同的单页真实 DOCX 页图、卡片尺寸/标签、header/计数和 3 项 skeleton | 真实 `DocxThumbnailPanel` + `DocumentViewerSidebar` + 真实 DOCX canvas 缩略图 | open / closed / skeleton |
 
 运行：
 
@@ -73,28 +73,27 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity -- \
   --only docx-toolbar,docx-sidebar
 ```
 
-参考侧新增 `tools/extend-reference/src/vendor/extend/docx-toolbar.tsx`，带 pinned
-commit / MIT / copyright 头并登记在 `vendor/NOTICE.md`；#155 harness 合同测试与
-fixture 同步更新。该命令当前**真实 FAIL**（没有伪造 pass），精确 delta：
+参考侧扩展了 `tools/extend-reference/src/surfaces/DocxToolbarSurface.tsx` 与
+`DocxSidebarSurface.tsx`：toolbar 补齐与 subject 相同的控制集、顺序和 `<1360px`
+overflow 断点；sidebar 使用相同的一张真实 DOCX 页图（`public/docx-sidebar-page-1.png`，
+由真实 `DocxThumbnailPanel` canvas 生成）、相同卡片 140×210、相同 label/active 样式、
+相同 “Pages” header/计数和相同 3 项 skeleton 结构。vendored 组件仍保留 pinned
+commit / MIT / copyright 头并登记在 `vendor/NOTICE.md`。
+
+该命令当前**真实 FAIL**（没有伪造 pass），精确 delta：
 
 - `docx-toolbar`：32 cases，**几何全矩阵 PASS**（1440/1280/768 单行 48px；390
-  响应式换行 89px，与 reference 高度一致）。像素差：1440 9.19%–16.08%（宽屏保留
-  可见 search/edit/theme/upload/download）；1280 2.20%–4.73%；768 3.77%–8.10%；
-  390 5.36%–12.81%；全矩阵平均 7.99%。宽度 <1360px 时 edit/theme/upload/download
-  等非参考控件收进真实 overflow dropdown；搜索保留为共享 popover 的 compact
-  trigger，因此 `Ctrl/Cmd+F`、touch target 和搜索能力不丢失。
-- `docx-sidebar`：24 cases，几何全矩阵 PASS（160px；open 292px、skeleton 240px），
-  像素差 open 64.0%–71.8%、closed 9.08%、skeleton 49.4%–51.3%，平均 42.52%。
-  subject 现在是真实 `DocxThumbnailPanel` 和真实 canvas 缩略图，不再使用 fixture
-  FileThumbnail 代替。closed 的边框已在共享 sidebar 中修为
-  `border-inline-end-width: 0`。
+  响应式换行 89px，与 reference 高度一致）。像素差：1440 11.82%–20.54%；1280
+  2.90%–6.32%；768 4.96%–10.82%；390 7.03%–15.99%；全矩阵平均 9.99%。剩余差异
+  集中在控件文字/图标字形与 1px 位置差（Extend Hugeicons vs Office Lucide、页控件
+  输入宽度、搜索选项/计数 pill 尺寸）。
+- `docx-sidebar`：24 cases，几何全矩阵 PASS；10 pass、2 pass-with-AA、12 fail，
+  平均 3.17%。closed 全 PASS；open 仅 0.50%–0.53%（header “Pages”/计数文字与 border
+  的亚像素抗锯齿）；skeleton 在 1440/768 light PASS，dark 18.8%–23.5%、390
+  11.3%–18.3%，原因是 subject 的 `office-skeleton` shimmer 动画取帧相位与 reference
+  静态块不同。
 
 报告：`output/ui-parity/report.json` / `report.html`（未提交，由命令生成）。
-剩余 delta 属于有意的产品差异：1440 宽屏保留可见 search/edit/theme/upload/download
-控件；窄于 1360px 时这些控件进入真实 overflow dropdown，所以 1280/768/390 的
-几何与 reference 一致，但 1440 仍保留可发现的完整控制集；sidebar 的 reference
-使用 fixture FileThumbnail 卡片，subject 是真实 DOCX canvas 缩略图，因此像素差
-主要来自缩略图内容本身；skeleton 的卡片数量/文案也不同。
 未接入 axe-core（#165）；键盘/焦点行为由 component/blackbox 测试覆盖。
 
 ## UX-DOCX-004 square-wrap 排查
