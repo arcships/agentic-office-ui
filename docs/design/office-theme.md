@@ -152,6 +152,7 @@ Extend 用 `var(--color-white)` 声明 card / popover；这两项必须写成 `w
 | `--office-shadow-xs` | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | 与 Extend `shadow-xs` 一致 |
 | `--office-shadow-sm` | `0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-sm` 一致 |
 | `--office-shadow-md` | `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-md` 一致 |
+| `--office-shadow-lg` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-lg` 一致（overlay sidebar 边缘） |
 
 ### 3.3 字体与字号
 

@@ -64,10 +64,6 @@
   --office-ui-empty-shadow:
     0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 0 transparent,
     0 0 0 0 transparent, 0 0 0 0 transparent;
-  /* Extend `shadow-lg` as used by the overlay sidebar. */
-  --office-ui-overlay-shadow:
-    0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
   --office-ui-ring-shadow:
     0 0 0 0 transparent, 0 0 0 0 transparent, 0 0 0 0 transparent,
     0 0 0 calc(var(--office-ring-width) + var(--office-border-width))

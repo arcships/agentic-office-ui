@@ -662,7 +662,7 @@
   inset-block: 0;
   inset-inline-start: 0;
   z-index: calc(var(--office-ui-z) - 10);
-  box-shadow: var(--office-ui-overlay-shadow);
+  box-shadow: var(--office-shadow-lg);
 }
 
 .office-document-sidebar[data-sidebar-open="false"] {

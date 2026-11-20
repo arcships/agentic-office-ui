@@ -66,6 +66,10 @@
   --office-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --office-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.1), 0 2px 4px -2px oklab(0 0 0 / 0.1);
+  /* Tailwind `shadow-lg` (overlay sidebar edge); theme-independent upstream. */
+  --office-shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   /* ── Icons ───────────────────────────────────────────────────────────── */
   --office-icon-size: 1rem;

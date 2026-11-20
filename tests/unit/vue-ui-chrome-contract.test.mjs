@@ -253,9 +253,11 @@ test("the state variants keep the upstream empty/error/loading shapes", () => {
   assert.match(error, /font-size:\s*var\(--office-text-sm\)/u)
   assert.match(error, /line-height:\s*var\(--office-leading-sm\)/u)
 
-  const errorActions = findBlock(code, ".office-state--error .office-state__actions")
-  assert.ok(errorActions)
-  assert.match(errorActions, /margin-block-start:\s*var\(--office-ui-space-4\)/u, "mt-4")
+  assert.match(
+    code,
+    /\.office-state--error \.office-state__actions \{\s*justify-content:\s*flex-start;\s*margin-block-start:\s*var\(--office-ui-space-4\)/u,
+    "the error action row is `mt-4`, start aligned",
+  )
 
   // Upstream `ViewerLoadingSurface`: `grid min-h-52 place-items-center`.
   const loading = findBlock(code, ".office-state--loading")
