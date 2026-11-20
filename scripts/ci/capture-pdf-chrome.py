@@ -138,7 +138,7 @@ def select_layout(page: Page, layout: str) -> None:
     wait_for_layout(page, layout)
 
 
-def assert_toolbar(page: Page, label: str, toolbar: Locator) -> dict[str, Any]:
+def assert_toolbar(page: Page, label: str, toolbar: Locator, touch: bool) -> dict[str, Any]:
     toolbar.wait_for()
     toolbar_box = box(toolbar)
     body_box = box(page.locator('[data-testid="pdf-document"]'))
@@ -185,6 +185,23 @@ def assert_toolbar(page: Page, label: str, toolbar: Locator) -> dict[str, Any]:
         assert toolbar_box["y"] + toolbar_box["height"] <= body_box["y"] + 1, (
             f"{label}: toolbar covers the pages {metrics}"
         )
+    if touch:
+        touch_targets: list[dict[str, Any]] = page.evaluate(
+            """() => [...document.querySelectorAll('[data-testid="pdf-toolbar"] button, [data-testid="pdf-toolbar"] select, [data-testid="pdf-toolbar"] input')]
+              .filter((element) => {
+                const style = getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+              })
+              .map((element) => {
+                const rect = element.getBoundingClientRect();
+                return { width: Math.round(rect.width), height: Math.round(rect.height), label: (element.getAttribute('aria-label') || element.innerText || element.tagName).trim().slice(0, 40) };
+              })"""
+        )
+        assert len(touch_targets) >= 3, f"{label}: too few touch controls {touch_targets}"
+        small = [item for item in touch_targets if item["width"] < 44 or item["height"] < 44]
+        assert not small, f"{label}: touch targets below 44px {small}"
+        metrics["touchTargets"] = len(touch_targets)
     return metrics
 
 
@@ -279,9 +296,9 @@ def assert_status_bar(page: Page, label: str) -> dict[str, Any]:
     return metrics
 
 
-def viewer_story(page: Page, out: Path, prefix: str) -> dict[str, Any]:
+def viewer_story(page: Page, out: Path, prefix: str, touch: bool) -> dict[str, Any]:
     toolbar = page.locator('[data-testid="pdf-toolbar"]')
-    toolbar_metrics = assert_toolbar(page, prefix, toolbar)
+    toolbar_metrics = assert_toolbar(page, prefix, toolbar, touch)
     sidebar = assert_sidebar(page, prefix, out, prefix)
     status = assert_status_bar(page, prefix)
 
@@ -401,7 +418,7 @@ def capture_case(
         inject_deterministic_css(page)
         wait_idle(page, 260)
         overflow = assert_no_page_overflow(page, prefix)
-        viewer = viewer_story(page, theme_out, prefix)
+        viewer = viewer_story(page, theme_out, prefix, touch)
 
         page.goto(f"{origin}?theme={theme}#/pdf-surface", wait_until="networkidle")
         page.locator('[data-testid="pdf-surface-load-sample"]').click()

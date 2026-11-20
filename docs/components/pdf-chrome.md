@@ -65,6 +65,8 @@
   `data-error-code`。加密状态额外带 `data-encrypted="true"` 和 `lock` 图标。
 - `show-status-bar` 在查看器/Surface 中渲染 `OfficeStatusBar`，包含页码、文件名和
   加载/错误状态；默认关闭，不改变既有高度。
+- `PdfSurface` 仍是最小嵌入 Surface：不新增内部 toolbar（宿主拥有搜索/缩放/翻页控件，
+  这是公开合同）；它的状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
 - 文本选择浮层只在浏览器挂载（Node/host renderer 无 DOM 时不挂载），复制走
   `navigator.clipboard.writeText`；`Escape`/关闭 popover 清空选择。
 
@@ -118,9 +120,9 @@ pnpm test:pdf:chrome
 
 最近一次结果：6/6 通过，0 console error；产物在 `output/pdf-chrome/`。
 在 touch/coarse 指针 profile 下（390、768 两个 viewport）：390x844 toolbar 211px（4 行，
-44px 命中区）、768x1024 115px（2 行）、1440x900 48px（1 行）；侧栏在 390/768 为
-overlay、1440 为 inline；状态栏 32px。非触摸的 parity/桌面测量在 390 为 125px、
-768 为 81px。
+44px 命中区，15 个可见控件）、768x1024 115px（2 行）、1440x900 48px（1 行）；侧栏在
+390/768 为 overlay、1440 为 inline；状态栏 32px。非触摸的 parity/桌面测量在 390 为
+125px、768 为 81px。
 
 ## 6. Extend 像素对照（`pnpm ui:parity -- --only pdf-toolbar`）
 
