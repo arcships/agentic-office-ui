@@ -68,12 +68,22 @@ export interface OfficeMenuItem {
   type?: "item"
   /** Stable id reported with `select` and used as the Vue key. */
   id?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
   label: string
   icon?: OfficeIconName
   /** Display-only keyboard hint, e.g. `⌘K`. */
   shortcut?: string
   disabled?: boolean
   variant?: "default" | "destructive"
+  /**
+   * Keep the menu open after this entry is selected. Multi-select menus
+   * (filters, property toggles) set this on their checkbox rows.
+   */
+  keepOpen?: boolean
   /** Called after the item is selected. */
   onSelect?: (item: OfficeMenuItem) => void
 }
@@ -82,11 +92,21 @@ export interface OfficeMenuItem {
 export interface OfficeMenuCheckboxItem {
   type: "checkbox"
   id?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
   label: string
   icon?: OfficeIconName
   shortcut?: string
   disabled?: boolean
   checked: boolean
+  /**
+   * Keep the menu open after this entry is selected. Multi-select menus
+   * (filters, property toggles) set this on their checkbox rows.
+   */
+  keepOpen?: boolean
   onSelect?: (item: OfficeMenuCheckboxItem) => void
 }
 
@@ -94,6 +114,11 @@ export interface OfficeMenuCheckboxItem {
 export interface OfficeMenuSeparator {
   type: "separator"
   id?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
 }
 
 /** A non-interactive heading inside a menu. */
@@ -101,6 +126,11 @@ export interface OfficeMenuLabel {
   type: "label"
   label: string
   id?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
 }
 
 /** A labelled group of menu entries. */
@@ -108,6 +138,11 @@ export interface OfficeMenuGroup {
   type: "group"
   label?: string
   id?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
   items: OfficeMenuEntry[]
 }
 
@@ -117,6 +152,13 @@ export interface OfficeMenuSubmenu {
   label: string
   icon?: OfficeIconName
   id?: string
+  /** `data-testid` for the nested submenu content (`role="menu"`). */
+  contentTestId?: string
+  /**
+   * Optional `data-testid` for the rendered element. Hosts that keep DOM
+   * contracts (viewer test ids) can pin one row without wrapping it.
+   */
+  testId?: string
   disabled?: boolean
   items: OfficeMenuEntry[]
 }

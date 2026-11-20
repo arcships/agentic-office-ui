@@ -154,28 +154,6 @@ function click(node, init = {}) {
   });
 }
 
-function openAutoFilterMenu(root, columnIndex = 0) {
-  const trigger = autoFilterTriggers(root).find(
-    (node) => Number(node.props["data-autofilter-column"]) === columnIndex,
-  );
-  assert.ok(trigger, `a trigger for column ${columnIndex}`);
-  click(trigger);
-}
-
-function menuNode() {
-  return findByTestId(teleportTarget(), "xlsx-autofilter-menu");
-}
-
-function menuValues(menu) {
-  return walk(menu).filter((node) =>
-    String(node.props?.["data-testid"] ?? "").startsWith("xlsx-autofilter-value-")
-  );
-}
-
-function changeChecked(input, checked) {
-  input.props.onChange({ target: { checked } });
-}
-
 function installDownloadCapture(t) {
   const downloads = [];
   const blobs = new Map();
@@ -291,170 +269,6 @@ test("sorting a worksheet AutoFilter range is undoable and records its range", a
     );
   } finally {
     app.unmount();
-  }
-});
-
-test("the grid draws one persistent ▾ per filtered header cell and the menu applies values", async () => {
-  const { app, controller } = await mountController(worksheetFilterBytes());
-  const gridMount = await mountGrid(controller);
-  try {
-    controller.setActiveSheetIndex(0);
-    await vue.nextTick();
-    assert.equal(gridMount.grid.props["data-auto-filter-range-count"], 1);
-    assert.equal(
-      gridMount.grid.props["data-auto-filter-trigger-count"],
-      4,
-      "every header column in the range gets its own trigger",
-    );
-    assert.equal(gridMount.grid.props["data-hidden-auto-filter-row-count"], 3);
-
-    openAutoFilterMenu(gridMount.root, 0);
-    await vue.nextTick();
-    const menu = menuNode();
-    assert.ok(menu, "the filter menu opens");
-    assert.match(textContent(menu), /Sort ascending/);
-    assert.match(textContent(menu), /Sort descending/);
-    assert.match(textContent(menu), /Filter by value/);
-    assert.match(textContent(menu), /Clear filter/);
-
-    const values = menuValues(menu);
-    assert.equal(values.length, 4);
-    changeChecked(findByTestId(menu, "xlsx-autofilter-select-all"), false);
-    await vue.nextTick();
-    const churn = menuValues(menuNode())[1];
-    assert.ok(churn, "the second option is Churn");
-    changeChecked(churn, true);
-    findByTestId(menuNode(), "xlsx-autofilter-apply").props.onClick();
-    await vue.nextTick();
-    assert.equal(menuNode(), undefined, "applying closes the menu");
-    assert.deepEqual(
-      controller.autoFilterStates[0].columns.map((column) => column.values),
-      [["Churn"]],
-    );
-    assert.deepEqual(controller.hiddenAutoFilterRows, [1, 2, 3]);
-
-    openAutoFilterMenu(gridMount.root, 0);
-    await vue.nextTick();
-    findByTestId(menuNode(), "xlsx-autofilter-clear").props.onClick();
-    await vue.nextTick();
-    assert.deepEqual(controller.hiddenAutoFilterRows, []);
-    assert.equal(gridMount.grid.props["data-hidden-auto-filter-row-count"], 0);
-  } finally {
-    gridMount.app.unmount();
-    app.unmount();
-  }
-});
-
-test("the menu supports Select all, blank values and Escape", async () => {
-  const bytes = patchSheetParts(sampleBytes("financial-model.xlsx"), (xml) =>
-    xml
-      .replace(/<c r="B4"[^>]*>[\s\S]*?<\/c>/, "")
-      .replace(
-        "</sheetData>",
-        '</sheetData><autoFilter ref="A1:D5"><filterColumn colId="1"><filters blank="1"><filter val="120"/><filter val="420"/></filters></filterColumn></autoFilter>',
-      )
-  );
-  const { app, controller } = await mountController(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-  );
-  const gridMount = await mountGrid(controller);
-  try {
-    controller.setActiveSheetIndex(0);
-    await vue.nextTick();
-    openAutoFilterMenu(gridMount.root, 1);
-    await vue.nextTick();
-    let menu = menuNode();
-    assert.match(textContent(menu), /\(Blanks\)/);
-
-    const selectAll = findByTestId(menu, "xlsx-autofilter-select-all");
-    assert.equal(
-      selectAll.props.checked,
-      false,
-      "the file's own filter does not preselect every value",
-    );
-    changeChecked(selectAll, true);
-    await vue.nextTick();
-    for (const input of menuValues(menuNode())) {
-      assert.equal(input.props.checked, true, "Select all checks every value");
-    }
-    findByTestId(menuNode(), "xlsx-autofilter-apply").props.onClick();
-    await vue.nextTick();
-    assert.deepEqual(
-      controller.hiddenAutoFilterRows,
-      [],
-      "Select all applies every value and restores the rows",
-    );
-
-    openAutoFilterMenu(gridMount.root, 1);
-    await vue.nextTick();
-    menuNode().props.onKeydown({ key: "Escape", preventDefault() {} });
-    await vue.nextTick();
-    assert.equal(menuNode(), undefined, "Escape closes the menu");
-
-    openAutoFilterMenu(gridMount.root, 1);
-    await vue.nextTick();
-    findByTestId(teleportTarget(), "xlsx-autofilter-backdrop").props.onPointerdown();
-    await vue.nextTick();
-    assert.equal(menuNode(), undefined, "the backdrop closes the menu");
-  } finally {
-    gridMount.app.unmount();
-    app.unmount();
-  }
-});
-
-test("sorting from the menu changes row order, is undoable and is refused in read-only", async () => {
-  const bytes = sampleBytes("sales-table.xlsx");
-  const { app, controller } = await mountController(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-    { fileName: "sales-table.xlsx" },
-  );
-  const gridMount = await mountGrid(controller);
-  try {
-    const originalFirst = controller.getCellDisplayValue({ row: 1, col: 0 });
-    assert.equal(controller.autoFilterRanges[0].reference, "A1:H181");
-    openAutoFilterMenu(gridMount.root, 0);
-    await vue.nextTick();
-    findByTestId(menuNode(), "xlsx-autofilter-sort-ascending").props.onClick();
-    await vue.nextTick();
-    assert.equal(menuNode(), undefined);
-    assert.equal(controller.getCellDisplayValue({ row: 1, col: 0 }), "APAC");
-    assert.deepEqual(controller.sortState, {
-      columnIndex: 0,
-      direction: "ascending",
-      rangeReference: "A1:H181",
-      tableName: "SalesRecords",
-    });
-
-    controller.undo();
-    await waitFor(
-      () => controller.getCellDisplayValue({ row: 1, col: 0 }) === originalFirst,
-      "one undo restores the row order",
-    );
-  } finally {
-    gridMount.app.unmount();
-    app.unmount();
-  }
-
-  const readOnlyMount = await mountController(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-    { fileName: "sales-table.xlsx", readOnly: true },
-  );
-  try {
-    const before = readOnlyMount.controller.getCellDisplayValue({ row: 1, col: 0 });
-    assert.equal(
-      readOnlyMount.controller.sortAutoFilter("A1:H181", 0, "ascending"),
-      false,
-      "a read-only sheet cannot sort",
-    );
-    assert.equal(readOnlyMount.controller.getCellDisplayValue({ row: 1, col: 0 }), before);
-    assert.equal(
-      readOnlyMount.controller.applyAutoFilterValues("A1:H181", 0, ["North"]),
-      true,
-      "filtering is view-only and stays available",
-    );
-    assert.ok(readOnlyMount.controller.hiddenAutoFilterRows.length > 0);
-  } finally {
-    readOnlyMount.app.unmount();
   }
 });
 
@@ -627,13 +441,9 @@ test("the table-header-menu slot replaces the trigger and receives filter contex
       ["0.06", "0.76", "255", "492"],
     );
 
-    click(custom[3]);
-    await vue.nextTick();
-    assert.ok(menuNode(), "the custom trigger opens the built-in menu");
-    findByTestId(menuNode(), "xlsx-autofilter-sort-descending").props.onClick();
-    await vue.nextTick();
-    assert.equal(slotProps.direction, "descending");
-    assert.equal(controller.sortState.direction, "descending");
+    // Opening the Reka panel itself is covered by the happy-dom suite
+    // (xlsx-menus.test.mjs); this test owns the slot/host contract only.
+    assert.equal(typeof slotProps.triggerProps.onClick, "function");
   } finally {
     mounted.app.unmount();
     app.unmount();

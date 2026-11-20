@@ -1,352 +1,45 @@
 <template>
-  <Teleport to="body">
-    <div
-      v-if="visible"
-      class="xlsx-contextmenu-backdrop"
-      @pointerdown="close"
-      @contextmenu.prevent="close"
-    />
-    <div
-      v-if="visible"
-      ref="menuRef"
-      class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu"
-      data-testid="xlsx-context-menu"
-      :data-menu-kind="menuKind"
-      :style="menuStyle"
-      role="menu"
-      :aria-label="m.xlsx.contextMenu.label"
-      @keydown="onMenuKeydown"
-    >
-      <template v-if="chartTarget">
-        <button
-          class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
-          data-testid="xlsx-context-chart-type"
-          role="menuitem"
-          aria-haspopup="menu"
-          :aria-expanded="chartTypeMenuOpen"
-          :disabled="isReadOnly"
-          @click="toggleChartTypeMenu"
-          @mouseenter="openChartTypeMenu"
-        >
-          <span>{{ m.xlsx.contextMenu.changeChartType }}</span>
-        </button>
-        <div
-          v-if="chartTypeMenuOpen"
-          class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu"
-          data-testid="xlsx-chart-type-menu"
-          role="menu"
-          :aria-label="m.xlsx.contextMenu.changeChartType"
-        >
-          <div v-for="family in chartFamilies" :key="family.family" class="xlsx-contextmenu__group">
-            <button
-              class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
-              role="menuitem"
-              aria-haspopup="menu"
-              :aria-expanded="openChartFamily === family.family"
-              :data-testid="`xlsx-chart-family-${family.family}`"
-              @click="openChartFamilyMenu(family.family)"
-              @mouseenter="openChartFamilyMenu(family.family)"
-            >
-              <span>{{ family.family }}</span>
-                </button>
-            <div
-              v-if="openChartFamily === family.family"
-              class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu xlsx-contextmenu__submenu--nested"
-              role="menu"
-              :aria-label="family.family"
-            >
-              <button
-                v-for="option in family.options"
-                :key="option.id"
-                class="office-menu__item xlsx-contextmenu__item"
-                role="menuitem"
-                :data-testid="`xlsx-chart-type-${option.id}`"
-                :disabled="isChartTypeUnavailable(option)"
-                @click="onChangeChartType(option.id)"
-              >
-                <span class="xlsx-contextmenu__check" aria-hidden="true">{{ isCurrentChartType(option) ? "✓" : "" }}</span>
-                <span>{{ option.label }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div class="office-menu__separator" role="separator" />
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
-        <div class="office-menu__separator" role="separator" />
-        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
-      </template>
-      <template v-else-if="drawingTarget">
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
-        </button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
-        <div class="office-menu__separator" role="separator" />
-        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
-      </template>
-      <template v-else>
-      <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" :disabled="isReadOnly" @click="onCut">
-        <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
-      </button>
-      <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-copy" role="menuitem" @click="onCopy">
-        <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
-      </button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-paste"
-        role="menuitem"
-        @click="onPaste"
-      >
-        <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
-      </button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
-        data-testid="xlsx-context-paste-special"
-        data-submenu="pasteSpecial"
-        role="menuitem"
-        aria-haspopup="menu"
-        :aria-expanded="submenu === 'pasteSpecial'"
-        @click="togglePasteSpecial"
-      >
-        <span>{{ m.xlsx.contextMenu.pasteSpecial }}</span>
-      </button>
-      <div
-        v-if="submenu === 'pasteSpecial'"
-        class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu"
-        data-testid="xlsx-context-paste-special-menu"
-        role="menu"
-      >
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-all" role="menuitem" @click="onPasteSpecial({ mode: 'all' })">{{ m.xlsx.contextMenu.pasteAll }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-values" role="menuitem" @click="onPasteSpecial({ mode: 'values' })">{{ m.xlsx.contextMenu.pasteValues }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-formats" role="menuitem" @click="onPasteSpecial({ mode: 'formats' })">{{ m.xlsx.contextMenu.pasteFormats }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-transpose" role="menuitem" @click="onPasteSpecial({ mode: 'all', transpose: true })">{{ m.xlsx.contextMenu.pasteTranspose }}</button>
-      </div>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-edit-cell"
-        role="menuitem"
-        @click="onEditCell"
-      >
-        <span>{{ m.xlsx.contextMenu.editCell }}</span><kbd class="office-menu__item-shortcut">F2</kbd>
-      </button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-clear"
-        role="menuitem"
-        @click="onClear"
-      >
-        <span>{{ m.xlsx.contextMenu.clear }}</span><kbd class="office-menu__item-shortcut">Del</kbd>
-      </button>
-      <button
-        v-if="!isReadOnly && menuKind === 'cell'"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-number-format"
-        role="menuitem"
-        @click="onAuthoring('numberFormat')"
-      >{{ m.xlsx.authoring.numberFormat.title }}</button>
-      <button
-        v-if="!isReadOnly && menuKind === 'cell'"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-names"
-        role="menuitem"
-        @click="onAuthoring('names')"
-      >{{ m.xlsx.authoring.names.title }}</button>
-      <template v-if="sortTarget && !isReadOnly">
-        <div class="office-menu__separator" role="separator" />
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-sort-ascending"
-          role="menuitem"
-          @click="onSort('ascending')"
-        >{{ m.xlsx.contextMenu.sortAscending }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-sort-descending"
-          role="menuitem"
-          @click="onSort('descending')"
-        >{{ m.xlsx.contextMenu.sortDescending }}</button>
-      </template>
-      <template v-if="!isReadOnly">
-        <div class="office-menu__separator" role="separator" />
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-insert-row-above"
-          role="menuitem"
-          @click="onInsertRow('above')"
-        >{{ m.xlsx.contextMenu.insertRowAbove }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-insert-row-below"
-          role="menuitem"
-          @click="onInsertRow('below')"
-        >{{ m.xlsx.contextMenu.insertRowBelow }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-delete-row"
-          role="menuitem"
-          @click="onDeleteRow"
-        >{{ m.xlsx.contextMenu.deleteRow }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-insert-column-left"
-          role="menuitem"
-          @click="onInsertColumn('left')"
-        >{{ m.xlsx.contextMenu.insertColumnLeft }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-insert-column-right"
-          role="menuitem"
-          @click="onInsertColumn('right')"
-        >{{ m.xlsx.contextMenu.insertColumnRight }}</button>
-        <button
-          class="office-menu__item xlsx-contextmenu__item"
-          data-testid="xlsx-context-delete-column"
-          role="menuitem"
-          @click="onDeleteColumn"
-        >{{ m.xlsx.contextMenu.deleteColumn }}</button>
-      </template>
-      <template v-if="menuKind === 'cell' && !isReadOnly">
-        <div class="office-menu__separator" role="separator" />
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge-center" role="menuitem" @click="onMergeCenter">{{ m.xlsx.contextMenu.mergeAndCenter }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge-across" role="menuitem" @click="onMergeAcross">{{ m.xlsx.contextMenu.mergeAcross }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge" role="menuitem" @click="onMergeCells">{{ m.xlsx.contextMenu.mergeCells }}</button>
-        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-unmerge" role="menuitem" @click="onUnmerge">{{ m.xlsx.contextMenu.unmerge }}</button>
-      </template>
-      <div class="office-menu__separator" role="separator" />
-      <button
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-select-row"
-        role="menuitemradio"
-        :aria-checked="selectionIsRow"
-        @click="onSelectRow"
-      >
-        <span>{{ m.xlsx.contextMenu.selectRow }}</span><span v-if="selectionIsRow" class="xlsx-contextmenu__checked">✓</span>
-      </button>
-      <button
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-select-column"
-        role="menuitemradio"
-        :aria-checked="selectionIsColumn"
-        @click="onSelectColumn"
-      >
-        <span>{{ m.xlsx.contextMenu.selectColumn }}</span><span v-if="selectionIsColumn" class="xlsx-contextmenu__checked">✓</span>
-      </button>
-      <button
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-select-all"
-        role="menuitemradio"
-        :aria-checked="selectionIsAll"
-        @click="onSelectAll"
-      >
-        <span>{{ m.xlsx.contextMenu.selectAll }}</span><span v-if="selectionIsAll" class="xlsx-contextmenu__checked">✓</span>
-      </button>
-      <div class="office-menu__separator" role="separator" />
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-comment"
-        role="menuitem"
-        @click="onAuthoring('comment')"
-      >{{ commentAtCell ? m.xlsx.authoring.context.editComment : m.xlsx.authoring.context.insertComment }}</button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-hyperlink"
-        role="menuitem"
-        @click="onAuthoring('hyperlink')"
-      >{{ hyperlinkAtCell ? m.xlsx.authoring.context.editHyperlink : m.xlsx.authoring.context.insertHyperlink }}</button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-chart"
-        role="menuitem"
-        @click="onAuthoring('chart')"
-      >{{ m.xlsx.authoring.context.insertChart }}</button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-conditional"
-        role="menuitem"
-        @click="onAuthoring('conditional')"
-      >{{ m.xlsx.authoring.context.conditional }}</button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-validation"
-        role="menuitem"
-        @click="onAuthoring('validation')"
-      >{{ m.xlsx.authoring.context.validation }}</button>
-      <button
-        v-if="!isReadOnly && !tableAtCell"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-table"
-        role="menuitem"
-        @click="onAuthoring('table')"
-      >{{ m.xlsx.authoring.context.createTable }}</button>
-      <button
-        v-if="!isReadOnly && tableAtCell"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-table-remove"
-        role="menuitem"
-        @click="onRemoveTable"
-      >{{ m.xlsx.authoring.context.removeTable }}</button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-freeze"
-        role="menuitem"
-        @click="onToggleFreeze"
-      >{{ isFrozen ? m.xlsx.authoring.context.unfreeze : m.xlsx.authoring.context.freezeHere }}</button>
-      <div class="office-menu__separator" role="separator" />
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-undo"
-        role="menuitem"
-        @click="onUndo"
-      >
-        <span>{{ m.xlsx.contextMenu.undo }}</span><kbd class="office-menu__item-shortcut">Ctrl+Z</kbd>
-      </button>
-      <button
-        v-if="!isReadOnly"
-        class="office-menu__item xlsx-contextmenu__item"
-        data-testid="xlsx-context-redo"
-        role="menuitem"
-        @click="onRedo"
-      >
-        <span>{{ m.xlsx.contextMenu.redo }}</span><kbd class="office-menu__item-shortcut">Ctrl+Y</kbd>
-      </button>
-      </template>
-    </div>
-  </Teleport>
+  <!--
+    The grid menu is a real `OfficeDropdownMenu` (Reka): the invisible anchor
+    below is positioned at the pointer, so the imperative `openAt(x, y)` API is
+    unchanged while content, submenus, typeahead, focus and dismissal come from
+    the shared primitive layer.
+  -->
+  <OfficeDropdownMenu
+    v-if="mounted"
+    :open="visible"
+    :modal="true"
+    :items="menuItems"
+    :content-test-id="'xlsx-context-menu'"
+    :content-data="{ 'data-menu-kind': menuKind }"
+    :menu-label="m.xlsx.contextMenu.label"
+    :content-class="'xlsx-contextmenu'"
+    :side-offset="-4"
+    :restore-focus="restoreFocusTarget"
+    @update:open="onMenuOpenChange"
+    @select="onMenuSelect"
+  >
+    <template #trigger>
+      <span
+        ref="anchorRef"
+        class="xlsx-contextmenu__anchor"
+        :style="anchorStyle"
+        aria-hidden="true"
+        tabindex="-1"
+      />
+    </template>
+  </OfficeDropdownMenu>
   <XlsxClipboardNotice :message="clipboardNotice" />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onUnmounted, watch, type CSSProperties } from "vue";
-import { useOfficeMenuKeyboard } from "@arcships/vue-ui";
+import { computed, onUnmounted, ref, watch, type CSSProperties } from "vue";
+import {
+  OfficeDropdownMenu,
+  type OfficeMenuCheckboxItem,
+  type OfficeMenuEntry,
+  type OfficeMenuItem,
+} from "@arcships/vue-ui";
 import type { ChartTypeOption, XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
 import { chartTypeFamilies, chartTypeUnavailable, matchesChartType } from "@arcships/xlsx-core";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
@@ -378,7 +71,13 @@ const emit = defineEmits<{
 }>();
 
 const visible = ref(false);
-const menuRef = ref<HTMLElement | null>(null);
+/**
+ * Reka menus need a real DOM, so the primitive mounts on the first open. A
+ * closed menu therefore costs nothing and the component stays inert until the
+ * grid actually asks for it.
+ */
+const mounted = ref(false);
+const anchorRef = ref<HTMLElement | null>(null);
 const m = useXlsxMessages();
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
@@ -387,8 +86,6 @@ const chartTargetId = ref<string | null>(null);
 /** Image or shape the menu was opened on, or `null`. */
 const drawingTargetId = ref<string | null>(null);
 const drawingTargetKind = ref<"image" | "shape" | null>(null);
-const chartTypeMenuOpen = ref(false);
-const openChartFamily = ref<string | null>(null);
 const chartFamilies = chartTypeFamilies();
 const chartTarget = computed(() => {
   props.controller.revision;
@@ -404,8 +101,11 @@ const drawingTarget = computed(() => {
 
 const menuKind = ref<"cell" | "row" | "column" | "corner">("cell");
 const headerIndex = ref(0);
-const submenu = ref<"pasteSpecial" | null>(null);
-const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
+// `isEditingLocked: false` must not mask a read-only workbook, so both flags
+// are checked explicitly instead of relying on nullish coalescing.
+const isReadOnly = computed(
+  () => props.controller.isEditingLocked === true || props.controller.readOnly === true,
+);
 const commentAtCell = computed(() => {
   props.controller.revision;
   return Boolean(props.controller.getCellComment?.());
@@ -448,23 +148,242 @@ const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => 
   failureMessage: () => m.value.xlsx.clipboard.copyFailed,
 });
 
-// Escape/Tab and arrow navigation come from the shared Office menu keyboard, so
-// the cell menu closes exactly like the DOCX context menu and returns focus to
-// the surface that opened it.
-const menuKeyboard = useOfficeMenuKeyboard({
-  menu: () => menuRef.value,
-  close: () => close(),
-  itemSelector: '[role="menuitem"]:not([disabled]):not([aria-disabled="true"]), [role="menuitemradio"]:not([disabled]):not([aria-disabled="true"])',
-  restoreTarget: () => props.targetElement ?? null,
-});
-
-const menuStyle = computed<CSSProperties>(() => ({
-  left: `${position.value.x}px`,
+const anchorStyle = computed<CSSProperties>(() => ({
+  blockSize: "0px",
+  inlineSize: "0px",
+  insetBlockStart: `${position.value.y}px`,
+  insetInlineStart: `${position.value.x}px`,
+  pointerEvents: "none",
   position: "fixed",
-  top: `${position.value.y}px`,
-  zIndex: "10000",
 }));
 
+/** Focus returns to the surface that opened the menu (the grid element). */
+function restoreFocusTarget(): HTMLElement | null {
+  return props.targetElement ?? null;
+}
+
+// ── Menu model ────────────────────────────────────────────────────────────
+function commandItem(
+  label: string,
+  testId: string,
+  run: () => void,
+  extra: Partial<OfficeMenuItem> = {},
+): OfficeMenuItem {
+  return { type: "item", id: testId, label, testId, onSelect: run, ...extra };
+}
+
+function checkItem(
+  label: string,
+  testId: string,
+  checked: boolean,
+  run: () => void,
+): OfficeMenuCheckboxItem {
+  return { type: "checkbox", id: testId, label, testId, checked, onSelect: run };
+}
+
+const separator = (): OfficeMenuEntry => ({ type: "separator" });
+
+function chartMenuItems(): OfficeMenuEntry[] {
+  const families: OfficeMenuEntry[] = chartFamilies.map((family) => ({
+    type: "sub",
+    id: `chart-family-${family.family}`,
+    testId: `xlsx-chart-family-${family.family}`,
+    contentTestId: `xlsx-chart-family-${family.family}-menu`,
+    label: family.family,
+    items: family.options.map((option) => checkItem(
+      option.label,
+      `xlsx-chart-type-${option.id}`,
+      isCurrentChartType(option),
+      () => onChangeChartType(option.id),
+    )).map((entry, index) => ({
+      ...entry,
+      disabled: isChartTypeUnavailable(family.options[index]),
+    })),
+  }));
+  return [
+    {
+      type: "sub",
+      id: "change-chart-type",
+      testId: "xlsx-context-chart-type",
+      contentTestId: "xlsx-chart-type-menu",
+      label: m.value.xlsx.contextMenu.changeChartType,
+      disabled: isReadOnly.value,
+      items: families,
+    },
+    separator(),
+    commandItem(m.value.xlsx.contextMenu.copy, "xlsx-context-drawing-copy", onDrawingCopy, { shortcut: SHORTCUT_COPY }),
+    commandItem(m.value.xlsx.contextMenu.cut, "xlsx-context-drawing-cut", onDrawingCut, {
+      disabled: isReadOnly.value,
+      shortcut: SHORTCUT_CUT,
+    }),
+    commandItem(m.value.xlsx.contextMenu.paste, "xlsx-context-drawing-paste", onDrawingPaste, {
+      disabled: isReadOnly.value,
+      shortcut: SHORTCUT_PASTE,
+    }),
+    commandItem(m.value.xlsx.contextMenu.duplicate, "xlsx-context-drawing-duplicate", onDrawingDuplicate, {
+      disabled: isReadOnly.value,
+    }),
+    commandItem(m.value.xlsx.contextMenu.delete, "xlsx-context-drawing-delete", onDrawingDelete, {
+      disabled: isReadOnly.value,
+    }),
+    separator(),
+    commandItem(m.value.xlsx.contextMenu.undo, "xlsx-context-undo", onUndo),
+    commandItem(m.value.xlsx.contextMenu.redo, "xlsx-context-redo", onRedo),
+  ];
+}
+
+function drawingMenuItems(): OfficeMenuEntry[] {
+  return [
+    commandItem(m.value.xlsx.contextMenu.copy, "xlsx-context-drawing-copy", onDrawingCopy, { shortcut: SHORTCUT_COPY }),
+    commandItem(m.value.xlsx.contextMenu.cut, "xlsx-context-drawing-cut", onDrawingCut, {
+      disabled: isReadOnly.value,
+      shortcut: SHORTCUT_CUT,
+    }),
+    commandItem(m.value.xlsx.contextMenu.paste, "xlsx-context-drawing-paste", onDrawingPaste, {
+      disabled: isReadOnly.value,
+      shortcut: SHORTCUT_PASTE,
+    }),
+    commandItem(m.value.xlsx.contextMenu.duplicate, "xlsx-context-drawing-duplicate", onDrawingDuplicate, {
+      disabled: isReadOnly.value,
+    }),
+    commandItem(m.value.xlsx.contextMenu.delete, "xlsx-context-drawing-delete", onDrawingDelete, {
+      disabled: isReadOnly.value,
+    }),
+    separator(),
+    commandItem(m.value.xlsx.contextMenu.undo, "xlsx-context-undo", onUndo),
+    commandItem(m.value.xlsx.contextMenu.redo, "xlsx-context-redo", onRedo),
+  ];
+}
+
+function cellMenuItems(): OfficeMenuEntry[] {
+  const entries: OfficeMenuEntry[] = [
+    commandItem(m.value.xlsx.contextMenu.cut, "xlsx-context-cut", onCut, {
+      disabled: isReadOnly.value,
+      shortcut: SHORTCUT_CUT,
+    }),
+    commandItem(m.value.xlsx.contextMenu.copy, "xlsx-context-copy", onCopy, { shortcut: SHORTCUT_COPY }),
+  ];
+  if (isReadOnly.value) {
+    entries.push(separator());
+  } else {
+    entries.push(
+      commandItem(m.value.xlsx.contextMenu.paste, "xlsx-context-paste", onPaste, { shortcut: SHORTCUT_PASTE }),
+      {
+        type: "sub",
+        id: "paste-special",
+        testId: "xlsx-context-paste-special",
+        contentTestId: "xlsx-context-paste-special-menu",
+        label: m.value.xlsx.contextMenu.pasteSpecial,
+        items: [
+          commandItem(m.value.xlsx.contextMenu.pasteAll, "xlsx-context-paste-all", () => onPasteSpecial({ mode: "all" })),
+          commandItem(m.value.xlsx.contextMenu.pasteValues, "xlsx-context-paste-values", () => onPasteSpecial({ mode: "values" })),
+          commandItem(m.value.xlsx.contextMenu.pasteFormats, "xlsx-context-paste-formats", () => onPasteSpecial({ mode: "formats" })),
+          commandItem(m.value.xlsx.contextMenu.pasteTranspose, "xlsx-context-paste-transpose", () => onPasteSpecial({ mode: "all", transpose: true })),
+        ],
+      },
+      commandItem(m.value.xlsx.contextMenu.editCell, "xlsx-context-edit-cell", onEditCell, { shortcut: "F2" }),
+      commandItem(m.value.xlsx.contextMenu.clear, "xlsx-context-clear", onClear, { shortcut: "Del" }),
+    );
+    if (menuKind.value === "cell") {
+      entries.push(
+        commandItem(m.value.xlsx.authoring.numberFormat.title, "xlsx-context-number-format", () => onAuthoring("numberFormat")),
+        commandItem(m.value.xlsx.authoring.names.title, "xlsx-context-names", () => onAuthoring("names")),
+      );
+    }
+  }
+  if (sortTarget.value && !isReadOnly.value) {
+    entries.push(
+      separator(),
+      commandItem(m.value.xlsx.contextMenu.sortAscending, "xlsx-sort-ascending", () => onSort("ascending")),
+      commandItem(m.value.xlsx.contextMenu.sortDescending, "xlsx-sort-descending", () => onSort("descending")),
+    );
+  }
+  if (!isReadOnly.value) {
+    entries.push(
+      separator(),
+      commandItem(m.value.xlsx.contextMenu.insertRowAbove, "xlsx-context-insert-row-above", () => onInsertRow("above")),
+      commandItem(m.value.xlsx.contextMenu.insertRowBelow, "xlsx-context-insert-row-below", () => onInsertRow("below")),
+      commandItem(m.value.xlsx.contextMenu.deleteRow, "xlsx-context-delete-row", onDeleteRow),
+      commandItem(m.value.xlsx.contextMenu.insertColumnLeft, "xlsx-context-insert-column-left", () => onInsertColumn("left")),
+      commandItem(m.value.xlsx.contextMenu.insertColumnRight, "xlsx-context-insert-column-right", () => onInsertColumn("right")),
+      commandItem(m.value.xlsx.contextMenu.deleteColumn, "xlsx-context-delete-column", onDeleteColumn),
+    );
+    if (menuKind.value === "cell") {
+      entries.push(
+        separator(),
+        commandItem(m.value.xlsx.contextMenu.mergeAndCenter, "xlsx-context-merge-center", onMergeCenter),
+        commandItem(m.value.xlsx.contextMenu.mergeAcross, "xlsx-context-merge-across", onMergeAcross),
+        commandItem(m.value.xlsx.contextMenu.mergeCells, "xlsx-context-merge", onMergeCells),
+        commandItem(m.value.xlsx.contextMenu.unmerge, "xlsx-context-unmerge", onUnmerge),
+      );
+    }
+  }
+  entries.push(
+    separator(),
+    checkItem(m.value.xlsx.contextMenu.selectRow, "xlsx-context-select-row", selectionIsRow.value, onSelectRow),
+    checkItem(m.value.xlsx.contextMenu.selectColumn, "xlsx-context-select-column", selectionIsColumn.value, onSelectColumn),
+    checkItem(m.value.xlsx.contextMenu.selectAll, "xlsx-context-select-all", selectionIsAll.value, onSelectAll),
+    separator(),
+  );
+  if (!isReadOnly.value) {
+    entries.push(
+      commandItem(
+        commentAtCell.value ? m.value.xlsx.authoring.context.editComment : m.value.xlsx.authoring.context.insertComment,
+        "xlsx-context-comment",
+        () => onAuthoring("comment"),
+      ),
+      commandItem(
+        hyperlinkAtCell.value ? m.value.xlsx.authoring.context.editHyperlink : m.value.xlsx.authoring.context.insertHyperlink,
+        "xlsx-context-hyperlink",
+        () => onAuthoring("hyperlink"),
+      ),
+      commandItem(m.value.xlsx.authoring.context.insertChart, "xlsx-context-chart", () => onAuthoring("chart")),
+      commandItem(m.value.xlsx.authoring.context.conditional, "xlsx-context-conditional", () => onAuthoring("conditional")),
+      commandItem(m.value.xlsx.authoring.context.validation, "xlsx-context-validation", () => onAuthoring("validation")),
+    );
+    if (tableAtCell.value) {
+      entries.push(commandItem(m.value.xlsx.authoring.context.removeTable, "xlsx-context-table-remove", onRemoveTable));
+    } else {
+      entries.push(commandItem(m.value.xlsx.authoring.context.createTable, "xlsx-context-table", () => onAuthoring("table")));
+    }
+    entries.push(commandItem(
+      isFrozen.value ? m.value.xlsx.authoring.context.unfreeze : m.value.xlsx.authoring.context.freezeHere,
+      "xlsx-context-freeze",
+      onToggleFreeze,
+    ));
+  } else {
+    // Read-only workbooks keep the discovery hooks for the remaining actions.
+    entries.push(
+      commandItem(m.value.xlsx.authoring.context.insertChart, "xlsx-context-chart", () => onAuthoring("chart"), { disabled: true }),
+      commandItem(m.value.xlsx.authoring.context.conditional, "xlsx-context-conditional", () => onAuthoring("conditional"), { disabled: true }),
+      commandItem(m.value.xlsx.authoring.context.validation, "xlsx-context-validation", () => onAuthoring("validation"), { disabled: true }),
+    );
+  }
+  if (!isReadOnly.value) {
+    entries.push(
+      separator(),
+      commandItem(m.value.xlsx.contextMenu.undo, "xlsx-context-undo", onUndo, { shortcut: "Ctrl+Z" }),
+      commandItem(m.value.xlsx.contextMenu.redo, "xlsx-context-redo", onRedo, { shortcut: "Ctrl+Y" }),
+    );
+  }
+  return entries;
+}
+
+const menuItems = computed<OfficeMenuEntry[]>(() => {
+  if (chartTarget.value) return chartMenuItems();
+  if (drawingTarget.value) return drawingMenuItems();
+  return cellMenuItems();
+});
+
+function onMenuOpenChange(value: boolean): void {
+  if (!value) close();
+}
+
+function onMenuSelect(_entry: OfficeMenuEntry, _event: Event): void {
+  // Reka closes the menu after a select; the commands already call close().
+}
+
+// ── Hit testing ───────────────────────────────────────────────────────────
 function resolveDisplayIndices(indices: number[] | undefined, count: number): number[] {
   if (!indices?.length) return Array.from({ length: count }, (_, index) => index);
   if (indices.length >= count) return indices.slice(0, count);
@@ -574,6 +493,13 @@ function resolveHeaderHit(
   return null;
 }
 
+// ── Open / close ──────────────────────────────────────────────────────────
+function showMenuAt(clientX: number, clientY: number): void {
+  position.value = { x: clientX, y: clientY };
+  mounted.value = true;
+  visible.value = true;
+}
+
 function onContextMenu(event: MouseEvent) {
   if (props.suppressContextMenu?.(event.clientX, event.clientY)) {
     event.preventDefault();
@@ -596,7 +522,6 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
   chartTargetId.value = null;
   drawingTargetId.value = null;
   drawingTargetKind.value = null;
-  closeChartTypeMenu();
   if (cell) {
     menuKind.value = "cell";
     headerIndex.value = cell.row;
@@ -611,11 +536,7 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
     sortTarget.value = table
       ? { columnIndex: cell.col - table.start.col, tableName: table.name }
       : null;
-    position.value = { x: clientX, y: clientY };
-    submenu.value = null;
-    menuKeyboard.captureInvoker();
-    visible.value = true;
-    void nextTick(() => menuKeyboard.focusFirst());
+    showMenuAt(clientX, clientY);
     return true;
   }
 
@@ -637,11 +558,7 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
   } else {
     props.controller.selectAll?.();
   }
-  position.value = { x: clientX, y: clientY };
-  submenu.value = null;
-  menuKeyboard.captureInvoker();
-  visible.value = true;
-  void nextTick(() => menuKeyboard.focusFirst());
+  showMenuAt(clientX, clientY);
   return true;
 }
 
@@ -657,11 +574,7 @@ function openForChart(chartId: string, clientX: number, clientY: number): boolea
   drawingTargetId.value = null;
   drawingTargetKind.value = null;
   sortTarget.value = null;
-  closeChartTypeMenu();
-  position.value = { x: clientX, y: clientY };
-  menuKeyboard.captureInvoker();
-  visible.value = true;
-  void nextTick(() => menuKeyboard.focusFirst());
+  showMenuAt(clientX, clientY);
   return true;
 }
 
@@ -682,32 +595,12 @@ function openForDrawing(
   drawingTargetId.value = drawingId;
   drawingTargetKind.value = kind;
   sortTarget.value = null;
-  closeChartTypeMenu();
-  position.value = { x: clientX, y: clientY };
-  menuKeyboard.captureInvoker();
-  visible.value = true;
-  void nextTick(() => menuKeyboard.focusFirst());
+  showMenuAt(clientX, clientY);
   return true;
 }
 
-function closeChartTypeMenu() {
-  chartTypeMenuOpen.value = false;
-  openChartFamily.value = null;
-}
 
-function toggleChartTypeMenu() {
-  if (chartTypeMenuOpen.value) closeChartTypeMenu();
-  else chartTypeMenuOpen.value = true;
-}
-
-function openChartTypeMenu() {
-  chartTypeMenuOpen.value = true;
-}
-
-function openChartFamilyMenu(family: string) {
-  openChartFamily.value = family;
-}
-
+// ── Chart type helpers ────────────────────────────────────────────────────
 function isCurrentChartType(option: ChartTypeOption): boolean {
   const chart = chartTarget.value;
   return chart ? matchesChartType(chart, option) : false;
@@ -725,15 +618,15 @@ function onChangeChartType(type: string) {
   close();
 }
 
-function close() {
+function close(): void {
   visible.value = false;
   sortTarget.value = null;
   chartTargetId.value = null;
   drawingTargetId.value = null;
   drawingTargetKind.value = null;
-  closeChartTypeMenu();
-  submenu.value = null;
 }
+
+// ── Commands ──────────────────────────────────────────────────────────────
 function onDrawingCopy() { void copySelection(); close(); }
 function onDrawingCut() { props.controller.cutSelection?.(); close(); }
 function onDrawingPaste() { void props.controller.pasteFromClipboard?.(); close(); }
@@ -822,80 +715,6 @@ function onSelectRow() { props.controller.selectRow?.(targetRow()); close(); }
 function onSelectColumn() { props.controller.selectColumn?.(targetColumn()); close(); }
 function onSelectAll() { props.controller.selectAll?.(); close(); }
 
-function togglePasteSpecial() {
-  submenu.value = submenu.value === "pasteSpecial" ? null : "pasteSpecial";
-  if (submenu.value) {
-    void nextTick(() => {
-      const first = menuRef.value?.querySelector?.("[data-testid='xlsx-context-paste-all']") as HTMLElement | null;
-      first?.focus?.();
-    });
-  }
-}
-
-function closeSubmenu() {
-  if (!submenu.value) return false;
-  submenu.value = null;
-  void nextTick(() => {
-    const parent = menuRef.value?.querySelector?.("[data-submenu='pasteSpecial']") as HTMLElement | null;
-    parent?.focus?.();
-  });
-  return true;
-}
-
-function menuItemElements() {
-  if (!menuRef.value || typeof menuRef.value.querySelectorAll !== "function") {
-    return [] as HTMLElement[];
-  }
-  return Array.from(
-    menuRef.value.querySelectorAll('[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])')
-  ) as HTMLElement[];
-}
-
-function onMenuKeydown(event: KeyboardEvent): void {
-  const focused = typeof document !== "undefined" ? document.activeElement as HTMLElement | null : null;
-  if (event.key === "ArrowRight") {
-    if (focused?.dataset?.submenu === "pasteSpecial") {
-      event.preventDefault();
-      event.stopPropagation();
-      submenu.value = "pasteSpecial";
-      void nextTick(() => {
-        const first = menuRef.value?.querySelector?.("[data-testid='xlsx-context-paste-all']") as HTMLElement | null;
-        first?.focus?.();
-      });
-    }
-    return;
-  }
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!closeSubmenu()) {
-      close();
-    }
-    return;
-  }
-  if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-    // Type-ahead: cycle through the visible items whose label starts with the
-    // typed character, matching native menu behavior.
-    const items = menuItemElements();
-    if (items.length > 0) {
-      const currentIndex = focused ? items.indexOf(focused) : -1;
-      const key = event.key.toLowerCase();
-      for (let offset = 1; offset <= items.length; offset += 1) {
-        const candidate = items[(currentIndex + offset + items.length) % items.length];
-        const label = (candidate?.textContent ?? "").trim().toLowerCase();
-        if (label.startsWith(key)) {
-          event.preventDefault();
-          event.stopPropagation();
-          candidate.focus?.();
-          break;
-        }
-      }
-    }
-    return;
-  }
-  menuKeyboard.onKeydown(event);
-}
-
 let boundTarget: HTMLElement | null = null;
 const boundHandler = (event: MouseEvent) => onContextMenu(event);
 
@@ -919,89 +738,13 @@ defineExpose({ openAt, close, openForChart, openForDrawing });
 
 <style scoped>
 /*
- * Menu surface: the shared `.office-menu__content` / `.office-menu__item`
- * contract (the classes `OfficeDropdownMenu` and `OfficeContextMenu` render)
- * plus the imperative positioning layer this grid needs. Highlighting comes
- * from hover/focus because these items are plain buttons rather than Reka
- * menu parts, which publish `data-highlighted`.
+ * The menu surface, items, separators, shortcuts and submenus come from
+ * `OfficeDropdownMenu` (Reka + the shared `.office-menu__*` contract). Only
+ * the invisible anchor that places the menu at the pointer is local.
  */
-.xlsx-contextmenu-backdrop {
-  inset: 0;
-  position: fixed;
-  z-index: 9999;
-}
-
-.xlsx-contextmenu {
-  min-inline-size: 160px;
-  position: fixed;
-}
-
-.xlsx-contextmenu__item {
+.xlsx-contextmenu__anchor {
   border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  inline-size: 100%;
-  justify-content: space-between;
-  text-align: start;
-}
-
-.xlsx-contextmenu__item:hover:not(:disabled),
-.xlsx-contextmenu__item:focus-visible:not(:disabled) {
-  background: var(--office-accent);
-  color: var(--office-accent-foreground);
-  outline: none;
-}
-
-.xlsx-contextmenu__item:disabled {
-  cursor: default;
-  opacity: 0.64;
-}
-
-.xlsx-contextmenu__item--submenu {
-  justify-content: space-between;
-  position: relative;
-}
-
-:where(.xlsx-contextmenu__check) {
-  display: inline-block;
-  min-inline-size: 12px;
-}
-
-:where(.xlsx-contextmenu__checked) {
-  color: var(--office-primary);
-  font-weight: 700;
-}
-
-.xlsx-contextmenu__item[role="menuitemradio"][aria-checked="true"] {
-  font-weight: 600;
-}
-
-.xlsx-contextmenu__shortcut {
-  color: var(--office-muted-foreground);
-  font-family: var(--office-font-mono);
-  font-size: var(--office-text-xs);
-}
-
-/* Submenus reuse the shared surface; only their placement is local. */
-.xlsx-contextmenu__submenu {
-  inset-block-start: 0;
-  inset-inline-start: calc(100% - 4px);
-  max-block-size: 70vh;
-  min-inline-size: 190px;
-  position: absolute;
-}
-
-.xlsx-contextmenu__submenu--nested {
-  z-index: 1;
-}
-
-.xlsx-contextmenu__group {
-  position: relative;
-}
-
-@media (pointer: coarse) {
-  .xlsx-contextmenu__item {
-    min-block-size: 44px;
-  }
+  margin: 0;
+  padding: 0;
 }
 </style>

@@ -171,51 +171,6 @@ async function mountLoadedController(options) {
   return { ...mounted, controller };
 }
 
-test("XLSX 右键菜单只监听当前网格，并在显示前选择命中单元格", () => {
-  const target = {
-    scrollLeft: 80,
-    scrollTop: 24,
-    getBoundingClientRect: () => ({ left: 100, top: 200 }),
-  };
-  const sheet = {
-    colWidths: [40, 80],
-    rowHeights: [20, 30],
-    defaultColWidthPx: 80,
-    defaultRowHeightPx: 24,
-    visibleCols: [0, 2],
-    visibleRows: [1, 4],
-  };
-  assert.deepEqual(
-    geometry.resolveGridCell(target, sheet, 100, 157, 245),
-    { col: 2, row: 4 },
-    "滚动后仍按可见行列映射到工作表坐标",
-  );
-  assert.equal(
-    geometry.resolveGridCell(target, sheet, 100, 60, 180),
-    null,
-    "表头外不应伪造单元格",
-  );
-
-  // Row 0 and column 1 are hidden in this fixture, so the freeze must land
-  // on the first *visible* row (1) and column (0).
-  const frozenSheet = {
-    ...sheet,
-    freezePanes: { row: 2, col: 2 },
-    colWidths: [40, 80, 80, 80],
-    visibleCols: [0, 2, 5, 7],
-  };
-  assert.deepEqual(
-    geometry.resolveGridCell(target, frozenSheet, 100, 178, 234),
-    { col: 0, row: 1 },
-    "冻结行列内的右键必须命中被钉住的行列，而不是滚到下面的行列",
-  );
-  assert.deepEqual(
-    geometry.resolveGridCell(target, frozenSheet, 100, 208, 245),
-    { col: 5, row: 4 },
-    "冻结存在时滚动窗格仍叠加滚动偏移",
-  );
-});
-
 test("XlsxViewer 把 Ribbon 的只读请求作为受控事件转发", async () => {
   const { XlsxViewer } = await importFromDemo("@arcships/vue-xlsx");
   const updates = [];

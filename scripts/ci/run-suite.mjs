@@ -377,6 +377,8 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/xlsx-sheet-tabs.test.mjs",
       "tests/component/xlsx-status-bar.test.mjs",
       "tests/component/xlsx-office-chrome.test.mjs",
+      "tests/component/xlsx-menus.test.mjs",
+      "tests/component/xlsx-authoring-dialog.test.mjs",
       "tests/component/xlsx-viewer-tab-surface.test.mjs",
       "tests/component/xlsx-sheet-visibility.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",

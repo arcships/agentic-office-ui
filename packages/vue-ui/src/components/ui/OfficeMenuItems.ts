@@ -142,13 +142,19 @@ function renderEntry(
       key,
       class: "office-menu__separator",
       "data-slot": "menu-separator",
+      "data-testid": entry.testId,
     })
   }
 
   if (entry.type === "label") {
     return h(
       parts.Label,
-      { key, class: "office-menu__label", "data-slot": "menu-label" },
+      {
+        key,
+        class: "office-menu__label",
+        "data-slot": "menu-label",
+        "data-testid": entry.testId,
+      },
       () => entry.label,
     )
   }
@@ -156,7 +162,12 @@ function renderEntry(
   if (entry.type === "group") {
     return h(
       parts.Group,
-      { key, class: "office-menu__group", "data-slot": "menu-group" },
+      {
+        key,
+        class: "office-menu__group",
+        "data-slot": "menu-group",
+        "data-testid": entry.testId,
+      },
       () => [
         entry.label
           ? h(
@@ -180,6 +191,7 @@ function renderEntry(
         {
           class: "office-menu__item office-menu__sub-trigger",
           "data-slot": "menu-sub-trigger",
+          "data-testid": entry.testId,
           disabled: entry.disabled,
         },
         () => [
@@ -192,6 +204,7 @@ function renderEntry(
         {
           class: "office-ui office-menu__content",
           "data-slot": "menu-sub-content",
+          "data-testid": entry.contentTestId,
           sideOffset: 4,
         },
         () =>
@@ -208,11 +221,15 @@ function renderEntry(
       parts.CheckboxItem,
       {
         key,
-        checked: entry.checked,
+        modelValue: entry.checked,
         class: "office-menu__item",
         "data-slot": "menu-checkbox-item",
+        "data-testid": entry.testId,
         disabled: entry.disabled,
-        onSelect: (event: Event) => options.onSelect(entry, event),
+        onSelect: (event: Event) => {
+          if (entry.keepOpen) event.preventDefault()
+          options.onSelect(entry, event)
+        },
       },
       () => [
         h(
@@ -236,8 +253,12 @@ function renderEntry(
       class: "office-menu__item",
       "data-slot": "menu-item",
       "data-variant": entry.variant ?? "default",
+      "data-testid": entry.testId,
       disabled: entry.disabled,
-      onSelect: (event: Event) => options.onSelect(entry, event),
+      onSelect: (event: Event) => {
+        if (entry.keepOpen) event.preventDefault()
+        options.onSelect(entry, event)
+      },
     },
     () => [
       renderIcon(entry),
