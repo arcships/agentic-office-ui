@@ -1261,6 +1261,14 @@ export interface OfficePptxMessages {
     hiddenSlide: string
     /** Accessible name of the viewer toolbar. */
     toolbar: string
+    /** Slide-counter label that precedes the number (upstream: "Slide"). */
+    slideLabel: string
+    /** Accessible name of the editable slide-number field. */
+    slideNumberInput: string
+    /** Accessible name of the slide number button; `{number}` placeholder. */
+    editSlideNumber: string
+    /** Trigger of the upstream-style actions menu in the toolbar. */
+    moreActions: string
     /** Browse layout control: single slide list, slide-sorter grid or present. */
     viewMode: string
     viewModeSingle: string
@@ -2698,6 +2706,10 @@ export const officeMessagesEn: OfficeMessages = {
       nextSlide: "Next slide",
       hiddenSlide: "Hidden slide",
       toolbar: "Presentation toolbar",
+      slideLabel: "Slide",
+      slideNumberInput: "Slide number",
+      editSlideNumber: "Current slide {number}. Edit slide number",
+      moreActions: "Open PowerPoint actions",
       viewMode: "Browse layout",
       viewModeSingle: "Single slide view",
       viewModeSorter: "Slide sorter",
@@ -4065,6 +4077,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       nextSlide: "下一页",
       hiddenSlide: "隐藏页",
       toolbar: "幻灯片工具栏",
+      slideLabel: "幻灯片",
+      slideNumberInput: "幻灯片编号",
+      editSlideNumber: "当前第 {number} 张幻灯片，可编辑编号",
+      moreActions: "打开 PowerPoint 操作菜单",
       viewMode: "浏览布局",
       viewModeSingle: "单页视图",
       viewModeSorter: "幻灯片浏览",

@@ -24,166 +24,61 @@
     @dragleave="onDragLeave"
     @drop="onDrop"
   >
-    <OfficeToolbar
+    <PptxViewerToolbar
       v-if="showToolbar && !isPresent"
       class="pptx-viewer__toolbar"
+      :active-slide-index="activeIndex"
+      :slide-count="slideCount"
+      :disabled="state !== 'ready'"
+      :sidebar-open="sidebarVisible"
+      :show-sidebar-toggle="showSidebar"
+      :hidden-slide="Boolean(activeSlide?.hidden)"
+      :zoom="zoom"
+      :zoom-options="PPTX_ZOOM_OPTIONS"
+      :show-view-mode="true"
+      :view-mode="isSorter ? 'sorter' : 'single'"
+      :show-present-toggle="showPresentToggle"
+      :show-notes-toggle="showNotesToggle"
+      :notes-open="notesOpen"
+      :show-fullscreen-control="showFullscreenControl"
+      :fullscreen="isFullscreen"
+      :show-search="showSearch"
+      :search-open="searchOpen"
       :label="m.pptx.viewer.toolbar"
+      @toggle-sidebar="toggleSidebar"
+      @select-slide="run(() => goTo($event))"
+      @update:zoom="run(() => setZoom($event))"
+      @update:view-mode="setViewMode"
+      @present="setPresentMode('present')"
+      @update:notes-open="setNotesOpen"
+      @toggle-fullscreen="void invoke(isFullscreen ? exitFullscreen : enterFullscreen)"
+      @toggle-search="toggleSearchBar"
+    />
+
+    <form
+      v-if="showSearch && searchOpen && !isPresent"
+      class="pptx-viewer__searchbar"
+      role="search"
+      @submit.prevent="runSearch"
     >
-      <OfficeToolbarGroup gap="sm" :wrap="false">
-        <OfficeIconButton
-          :label="m.pptx.viewer.previousSlide"
-          icon="chevron-left"
-          size="icon-sm"
-          :disabled="!canGoPrevious"
-          data-testid="pptx-previous-slide"
-          @click="run(() => goTo(activeIndex - 1))"
-        />
-        <OfficePageControl
-          :model-value="activeIndex + 1"
-          :total-pages="slideCount"
-          :disabled="state !== 'ready'"
-          data-testid="pptx-page-counter"
-          @update:model-value="onPageChange"
-        />
-        <OfficeIconButton
-          :label="m.pptx.viewer.nextSlide"
-          icon="chevron-right"
-          size="icon-sm"
-          :disabled="!canGoNext"
-          data-testid="pptx-next-slide"
-          @click="run(() => goTo(activeIndex + 1))"
-        />
-        <OfficeBadge
-          v-if="activeSlide?.hidden"
-          variant="secondary"
-          data-testid="pptx-hidden-badge"
-        >{{ m.pptx.viewer.hiddenSlide }}</OfficeBadge>
-      </OfficeToolbarGroup>
-
-      <OfficeToolbarSeparator />
-
-      <OfficeToolbarGroup
-        gap="sm"
-        :wrap="false"
-        :label="m.pptx.viewer.viewMode"
-      >
-        <OfficeIconButton
-          :label="m.pptx.viewer.viewModeSingle"
-          icon="file-text"
-          size="icon-sm"
-          :active="!isSorter && !isPresent"
-          :disabled="state !== 'ready'"
-          data-testid="pptx-view-mode-single"
-          @click="setViewMode('single')"
-        />
-        <OfficeIconButton
-          :label="m.pptx.viewer.viewModeSorter"
-          icon="layout-grid"
-          size="icon-sm"
-          :active="isSorter"
-          :disabled="state !== 'ready'"
-          data-testid="pptx-view-mode-sorter"
-          @click="setViewMode('sorter')"
-        />
-        <OfficeIconButton
-          v-if="showPresentToggle"
-          :label="m.pptx.viewer.viewModePresent"
-          icon="play"
-          size="icon-sm"
-          :disabled="state !== 'ready'"
-          data-testid="pptx-view-mode-present"
-          @click="setPresentMode('present')"
-        />
-      </OfficeToolbarGroup>
-
-      <OfficeIconButton
-        v-if="showNotesToggle"
-        :label="m.pptx.viewer.notesToggle"
-        icon="sticky-note"
-        size="icon-sm"
-        :active="notesOpen"
-        :disabled="state !== 'ready'"
-        data-testid="pptx-notes-toggle"
-        @click="toggleNotes"
+      <input
+        ref="searchInputRef"
+        v-model="searchQuery"
+        type="search"
+        :placeholder="m.pptx.viewer.searchPlaceholder"
+        :aria-label="m.pptx.viewer.searchPlaceholder"
+        data-testid="pptx-search-input"
+        @keydown.esc.prevent="closeSearch"
       />
-
-      <template #center>
-        <form v-if="showSearch" class="pptx-viewer__search" role="search" @submit.prevent="runSearch">
-          <input
-            ref="searchInputRef"
-            v-model="searchQuery"
-            type="search"
-            :placeholder="m.pptx.viewer.searchPlaceholder"
-            :aria-label="m.pptx.viewer.searchPlaceholder"
-            @keydown.esc.prevent="closeSearch"
-          />
-          <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">{{ m.pptx.viewer.search }}</button>
-          <span v-if="searchResults.length" class="pptx-viewer__search-count" aria-hidden="true">
-            {{ searchCursor + 1 }} / {{ searchResults.length }}
-          </span>
-          <OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" />
-          <button v-if="searchResults.length" type="button" :aria-label="m.common.search.previous" @click="run(() => moveSearch(-1))">↑</button>
-          <button v-if="searchResults.length" type="button" :aria-label="m.common.search.next" @click="run(() => moveSearch(1))">↓</button>
-        </form>
-      </template>
-
-      <template #trailing>
-        <OfficeToolbarGroup gap="sm" :wrap="false">
-          <!--
-            In a browser the toolbar uses the shared zoom control (presets plus
-            fit modes, Reka Select). The DOM-free component-test renderer gets
-            the equivalent icon-button cluster because Reka's Select needs a
-            real DOM; both paths call the same `setZoom()`.
-          -->
-          <OfficeZoomControl
-            v-if="canUseDom"
-            :model-value="zoom"
-            :min="50"
-            :max="200"
-            :options="[50, 75, 100, 125, 150, 200]"
-            :show-fit="false"
-            :disabled="state !== 'ready'"
-            @update:model-value="run(() => setZoom($event))"
-          />
-          <template v-else>
-            <OfficeIconButton
-              :label="m.common.zoom.out"
-              icon="minus"
-              size="icon-sm"
-              :disabled="state !== 'ready' || zoom <= 50"
-              data-testid="pptx-zoom-out"
-              @click="run(() => setZoom(zoom - 25))"
-            />
-            <OfficeButton
-              variant="outline"
-              size="sm"
-              class="pptx-viewer__zoom-value"
-              :aria-label="m.common.zoom.reset"
-              :disabled="state !== 'ready'"
-              data-testid="pptx-zoom-reset"
-              @click="run(() => setZoom(100))"
-            >{{ zoom }}%</OfficeButton>
-            <OfficeIconButton
-              :label="m.common.zoom.in"
-              icon="plus"
-              size="icon-sm"
-              :disabled="state !== 'ready' || zoom >= 200"
-              data-testid="pptx-zoom-in"
-              @click="run(() => setZoom(zoom + 25))"
-            />
-          </template>
-          <OfficeToolbarSeparator v-if="showFullscreenControl" />
-          <OfficeIconButton
-            v-if="showFullscreenControl"
-            :label="m.pptx.viewer.fullscreen"
-            :icon="isFullscreen ? 'minimize' : 'maximize'"
-            size="icon-sm"
-            data-testid="pptx-toolbar-fullscreen"
-            @click="void invoke(isFullscreen ? exitFullscreen : enterFullscreen)"
-          />
-        </OfficeToolbarGroup>
-      </template>
-    </OfficeToolbar>
+      <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">{{ m.pptx.viewer.search }}</button>
+      <span v-if="searchResults.length" class="pptx-viewer__search-count" aria-hidden="true">
+        {{ searchCursor + 1 }} / {{ searchResults.length }}
+      </span>
+      <OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" />
+      <button v-if="searchResults.length" type="button" :aria-label="m.common.search.previous" @click="run(() => moveSearch(-1))">↑</button>
+      <button v-if="searchResults.length" type="button" :aria-label="m.common.search.next" @click="run(() => moveSearch(1))">↓</button>
+      <button type="button" :aria-label="m.common.search.close" data-testid="pptx-search-close" @click="closeSearch">×</button>
+    </form>
 
     <div v-if="warnings.length" class="pptx-viewer__warnings" role="status" data-testid="pptx-warnings">
       <slot name="warnings" :warnings="warnings">
@@ -206,7 +101,7 @@
         :busy="state === 'loading'"
       />
       <aside
-        v-if="showSidebar && !isPresent && !isSorter && document"
+        v-if="sidebarVisible && !isPresent && !isSorter && document"
         ref="sidebarRef"
         class="pptx-viewer__sidebar"
         :aria-label="m.pptx.viewer.sidebar"
@@ -359,24 +254,28 @@
           data-testid="pptx-sorter-grid"
           :style="{ gridTemplateColumns: `repeat(${sorterColumns}, minmax(0, 1fr))` }"
         >
-          <OfficeCard
+          <PptxSlideCard
             v-for="slide in sorterSlides"
             :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
             class="pptx-viewer__sorter-item"
-            data-testid="pptx-sorter-item"
-            :data-slide-index="slide.index"
-            :data-active="slide.index === activeIndex ? 'true' : 'false'"
-            role="option"
-            :aria-selected="slide.index === activeIndex"
+            :index="slide.index"
+            :number="slide.number"
+            :active="slide.index === activeIndex"
+            :hidden="slide.hidden"
+            :hidden-label="m.pptx.thumbnail.hidden"
+            :aspect-ratio="slideAspectRatio"
+            :label="formatOfficeMessage(m.pptx.thumbnail.label, { number: slide.number })"
           >
             <PptxThumbnail
               :session="requireSession()"
               :slide="slide"
               :active="slide.index === activeIndex"
               :width="sorterThumbnailWidth"
+              :show-label="false"
+              tabindex="-1"
               @select="run(() => goTo($event))"
             />
-          </OfficeCard>
+          </PptxSlideCard>
         </div>
         <div
           class="pptx-viewer__sorter-spacer"
@@ -477,18 +376,10 @@ import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from ".
 import type { PptxStageContextMenu, PptxStageLinkActivate } from "./headless-types"
 import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useFileDrop, useViewerKeys, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
 import {
-  OfficeBadge,
   OfficeButton,
-  OfficeCard,
   OfficeEmptyState,
   OfficeErrorState,
-  OfficeIconButton,
   OfficeLoadingState,
-  OfficePageControl,
-  OfficeToolbar,
-  OfficeToolbarGroup,
-  OfficeToolbarSeparator,
-  OfficeZoomControl,
 } from "@arcships/vue-ui"
 import type { OfficeMenuEntry, ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
@@ -515,7 +406,9 @@ import {
 } from "./composables/thumbnail-observer"
 import PptxStage from "./PptxStage.vue"
 import PptxThumbnail from "./PptxThumbnail.vue"
+import PptxSlideCard from "./PptxSlideCard.vue"
 import PptxPresenterPanel from "./PptxPresenterPanel.vue"
+import PptxViewerToolbar from "./PptxViewerToolbar.vue"
 import PptxLinkMenu from "./PptxLinkMenu.vue"
 
 const props = withDefaults(defineProps<{
@@ -633,6 +526,8 @@ const THUMBNAIL_CHROME_PX = 48
 const THUMBNAIL_MIN_CANVAS_PX = 84
 const SIDEBAR_OVERSCAN_ROWS = 3
 const SIDEBAR_FALLBACK_VIEWPORT_PX = 640
+/** Upstream percentage presets; the viewer clamps its session zoom to 50–200. */
+const PPTX_ZOOM_OPTIONS = [50, 75, 100, 125, 150, 200]
 
 const m = providePptxMessages(() => props.locale, () => props.messages)
 
@@ -780,6 +675,9 @@ const SORTER_FALLBACK_COLUMNS = 3
 const SORTER_GRID_GAP_PX = 12
 const SORTER_OVERSCAN_ROWS = 1
 const SORTER_FALLBACK_VIEWPORT_PX = 640
+/** Upstream slide card: p-2 (8px each side) + gap-2 (8px) + label line (16px) + p-2. */
+const SORTER_CARD_PADDING_PX = 8
+const SORTER_CARD_CHROME_PX = SORTER_CARD_PADDING_PX * 2 + 8 + 16
 const internalViewMode = ref<"single" | "sorter">(
   props.defaultViewMode === "sorter" ? "sorter" : "single",
 )
@@ -798,11 +696,18 @@ const sorterScrollTop = ref(0)
 const sorterViewportHeight = ref(SORTER_FALLBACK_VIEWPORT_PX)
 const sorterViewportWidth = ref(0)
 const sorterItemWidth = computed(() => Math.max(120, props.thumbnailWidth))
-const sorterThumbnailWidth = computed(() => Math.max(96, sorterItemWidth.value - 16))
+const sorterThumbnailWidth = computed(() => Math.max(96, sorterItemWidth.value - SORTER_CARD_PADDING_PX * 2))
+/** Slide aspect ratio shared by the sorter card frame and the thumbnail canvas. */
+const slideAspectRatio = computed(() => {
+  const slideshow = document.value
+  if (!slideshow || !(slideshow.width > 0) || !(slideshow.height > 0)) return "16 / 9"
+  return `${slideshow.width} / ${slideshow.height}`
+})
 const sorterItemHeight = computed(() => {
   const slideshow = document.value
   const ratio = slideshow && slideshow.width > 0 ? slideshow.height / slideshow.width : 9 / 16
-  return Math.max(THUMBNAIL_MIN_CANVAS_PX, Math.round(sorterThumbnailWidth.value * ratio)) + THUMBNAIL_CHROME_PX
+  const frame = Math.max(THUMBNAIL_MIN_CANVAS_PX, Math.round(sorterThumbnailWidth.value * ratio))
+  return frame + SORTER_CARD_CHROME_PX
 })
 const sorterColumns = computed(() => {
   const width = sorterViewportWidth.value
@@ -961,6 +866,8 @@ const playback = usePptxPlayback(pptxDocument, {
 const { capability, controller, snapshot: playbackSnapshot } = playback
 
 const searchQuery = ref("")
+/** Upstream has no find control; the actions menu opens this row on demand. */
+const searchOpen = ref(false)
 const searchResults = computed(() => pptxDocument.searchState.value.matches)
 const searchCursor = computed(() => pptxDocument.searchState.value.activeIndex)
 const loadGeneration = ref(0)
@@ -980,9 +887,14 @@ const canGoNext = computed(() =>
 const notesOpen = ref(props.showNotes)
 watch(() => props.showNotes, (visible) => { notesOpen.value = visible })
 
+function setNotesOpen(open: boolean): void {
+  if (notesOpen.value === open) return
+  notesOpen.value = open
+  emit("update:showNotes", open)
+}
+
 function toggleNotes(): void {
-  notesOpen.value = !notesOpen.value
-  emit("update:showNotes", notesOpen.value)
+  setNotesOpen(!notesOpen.value)
 }
 
 const presenterVisible = computed(() =>
@@ -1000,6 +912,15 @@ const nextSlide = computed(() => {
 
 // Sidebar virtualization: keep the mounted thumbnail count proportional to the
 // visible rows instead of the deck length.
+// The upstream toolbar's first control toggles the rail; `show-sidebar` is the
+// initial/host-controlled value.
+const sidebarVisible = ref(props.showSidebar)
+watch(() => props.showSidebar, (visible) => { sidebarVisible.value = visible })
+
+function toggleSidebar(): void {
+  sidebarVisible.value = !sidebarVisible.value
+}
+
 const sidebarRef = ref<HTMLElement | null>(null)
 const sidebarScrollTop = ref(0)
 const sidebarViewportHeight = ref(SIDEBAR_FALLBACK_VIEWPORT_PX)
@@ -1424,8 +1345,19 @@ function clearSearch(): void {
 }
 
 function closeSearch(): void {
+  searchOpen.value = false
   clearSearch()
   viewerRef.value?.focus()
+}
+
+function toggleSearchBar(): void {
+  if (!props.showSearch) return
+  if (searchOpen.value) {
+    closeSearch()
+    return
+  }
+  searchOpen.value = true
+  void nextTick(() => searchInputRef.value?.focus())
 }
 
 async function goTo(index: number): Promise<void> {

@@ -16,6 +16,8 @@ import InputSurface from "./surfaces/InputSurface.vue";
 import MissingSurface from "./surfaces/MissingSurface.vue";
 import PdfSidebarSurface from "./surfaces/PdfSidebarSurface.vue";
 import PdfToolbarSurface from "./surfaces/PdfToolbarSurface.vue";
+import PptxSorterSurface from "./surfaces/PptxSorterSurface.vue";
+import PptxToolbarSurface from "./surfaces/PptxToolbarSurface.vue";
 import SelectSurface from "./surfaces/SelectSurface.vue";
 import TooltipSurface from "./surfaces/TooltipSurface.vue";
 
@@ -80,6 +82,16 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     />
     <PdfToolbarSurface
       v-else-if="surface.id === 'pdf-toolbar'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <PptxToolbarSurface
+      v-else-if="surface.id === 'pptx-toolbar'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <PptxSorterSurface
+      v-else-if="surface.id === 'pptx-sorter'"
       :cell-width="surface.cellWidth"
       :theme="theme"
     />

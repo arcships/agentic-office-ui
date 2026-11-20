@@ -31,6 +31,10 @@ export { default as OfficeToolbar } from "../../../../packages/vue-ui/src/compon
 export { default as OfficeToolbarGroup } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarGroup.vue";
 export { default as OfficeToolbarSeparator } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarSeparator.vue";
 export { default as OfficeBadge } from "../../../../packages/vue-ui/src/components/ui/OfficeBadge.vue";
+export { default as OfficeCard } from "../../../../packages/vue-ui/src/components/ui/OfficeCard.vue";
+export { default as OfficeSkeleton } from "../../../../packages/vue-ui/src/components/ui/OfficeSkeleton.vue";
+export { default as OfficeSeparator } from "../../../../packages/vue-ui/src/components/ui/OfficeSeparator.vue";
+export { default as OfficeScrollArea } from "../../../../packages/vue-ui/src/components/ui/OfficeScrollArea.vue";
 export { default as OfficeEmptyState } from "../../../../packages/vue-ui/src/components/chrome/OfficeEmptyState.vue";
 export { default as OfficeErrorState } from "../../../../packages/vue-ui/src/components/chrome/OfficeErrorState.vue";
 export { default as OfficeLoadingState } from "../../../../packages/vue-ui/src/components/chrome/OfficeLoadingState.vue";

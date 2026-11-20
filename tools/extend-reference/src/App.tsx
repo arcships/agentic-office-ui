@@ -15,6 +15,8 @@ import { FileUploadSurface } from "./surfaces/FileUploadSurface";
 import { InputSurface } from "./surfaces/InputSurface";
 import { PdfSidebarSurface } from "./surfaces/PdfSidebarSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
+import { PptxSorterSurface } from "./surfaces/PptxSorterSurface";
+import { PptxToolbarSurface } from "./surfaces/PptxToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
 import { TooltipSurface } from "./surfaces/TooltipSurface";
 
@@ -33,6 +35,8 @@ const renderers: Record<
   "file-thumbnail": FileThumbnailSurface,
   "pdf-toolbar": PdfToolbarSurface,
   "pdf-sidebar": PdfSidebarSurface,
+  "pptx-toolbar": PptxToolbarSurface,
+  "pptx-sorter": PptxSorterSurface,
   "docx-toolbar": DocxToolbarSurface,
   "docx-sidebar": DocxSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,

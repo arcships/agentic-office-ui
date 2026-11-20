@@ -436,5 +436,21 @@
     "showUpload": true,
     "showDownload": true,
     "isDark": false
+  },
+  "pptxToolbar": {
+    "activeSlideIndex": 2,
+    "slideCount": 12,
+    "zoomPercent": 100,
+    "sidebarOpen": false,
+    "showDownload": true,
+    "showUpload": true
+  },
+  "pptxSorter": {
+    "aspectRatio": 1.7777777777777777,
+    "width": 960,
+    "height": 540,
+    "thumbnailWidth": 132,
+    "cardCount": 6,
+    "columns": 3
   }
 }
