@@ -5,12 +5,35 @@
   "referenceUrl": "https://github.com/extend-hq/ui",
   "deviceScaleFactor": 2,
   "viewports": [
-    { "id": "1440x900", "label": "desktop", "width": 1440, "height": 900 },
-    { "id": "1280x720", "label": "laptop", "width": 1280, "height": 720 },
-    { "id": "768x1024", "label": "tablet", "width": 768, "height": 1024 },
-    { "id": "390x844", "label": "mobile", "width": 390, "height": 844 }
+    {
+      "id": "1440x900",
+      "label": "desktop",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "1280x720",
+      "label": "laptop",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": "768x1024",
+      "label": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "390x844",
+      "label": "mobile",
+      "width": 390,
+      "height": 844
+    }
   ],
-  "themes": ["light", "dark"],
+  "themes": [
+    "light",
+    "dark"
+  ],
   "thresholds": {
     "geometryTolerancePx": 0,
     "maxChannelDelta": 2,
@@ -28,20 +51,121 @@
       "cellWidth": 240,
       "notes": "Primitive layer #157. Reference and subject use the same copy, Geist font, variants, sizes and interaction states.",
       "states": [
-        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "hover", "label": "hover", "matrixState": "hover", "interaction": { "type": "hover", "selector": "button" } },
-        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "button" } },
-        { "id": "active", "label": "active", "matrixState": "active", "interaction": { "type": "press", "selector": "button" } },
-        { "id": "disabled", "label": "disabled", "matrixState": "disabled", "interaction": { "type": "none" } },
-        { "id": "loading", "label": "loading", "matrixState": "loading", "interaction": { "type": "none" } },
-        { "id": "outline", "label": "outline", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "secondary", "label": "secondary", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "ghost", "label": "ghost", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "destructive", "label": "destructive", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "link", "label": "link", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "size-sm", "label": "size sm", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "size-lg", "label": "size lg", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "icon-sm", "label": "icon sm", "matrixState": "default", "interaction": { "type": "none" } }
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "active",
+          "label": "active",
+          "matrixState": "active",
+          "interaction": {
+            "type": "press",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "outline",
+          "label": "outline",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "secondary",
+          "label": "secondary",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "ghost",
+          "label": "ghost",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "destructive",
+          "label": "destructive",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "link",
+          "label": "link",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-sm",
+          "label": "size sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-lg",
+          "label": "size lg",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "icon-sm",
+          "label": "icon sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -55,11 +179,47 @@
       "cellWidth": 300,
       "notes": "Primitive layer #157. The wrapper (border, radius, focus ring) is the measured target; the inner input keeps the reference height/padding contract.",
       "states": [
-        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "input" } },
-        { "id": "disabled", "label": "disabled", "matrixState": "disabled", "interaction": { "type": "none" } },
-        { "id": "invalid", "label": "invalid", "matrixState": "error", "interaction": { "type": "none" } },
-        { "id": "size-sm", "label": "size sm", "matrixState": "default", "interaction": { "type": "none" } }
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "input"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "invalid",
+          "label": "invalid",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-sm",
+          "label": "size sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -73,10 +233,39 @@
       "cellWidth": 320,
       "notes": "Primitive layer #157. Closed trigger, disabled and placeholder states; popup positioning stays covered by the component suite.",
       "states": [
-        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "[data-slot=select-trigger]" } },
-        { "id": "disabled", "label": "disabled", "matrixState": "disabled", "interaction": { "type": "none" } },
-        { "id": "placeholder", "label": "placeholder", "matrixState": "default", "interaction": { "type": "none" } }
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-slot=select-trigger]"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "placeholder",
+          "label": "placeholder",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -90,7 +279,14 @@
       "cellWidth": 560,
       "notes": "Primitive layer #157. Open dialog with the same header, empty panel, footer and close button as the reference.",
       "states": [
-        { "id": "open", "label": "open", "matrixState": "default", "interaction": { "type": "none" } }
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -104,7 +300,15 @@
       "cellWidth": 220,
       "notes": "Primitive layer #157. The visible bubble is the measured target; the trigger uses the same copy and hover interaction.",
       "states": [
-        { "id": "open", "label": "open", "matrixState": "hover", "interaction": { "type": "hover", "selector": "[data-parity-tooltip-trigger]" } }
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-parity-tooltip-trigger]"
+          }
+        }
       ]
     },
     {
@@ -116,12 +320,61 @@
       "cellWidth": 520,
       "notes": "Extend's icon cluster, drop-target chip and in-component file list are reproduced by the Vue FileUpload (opt-in file list, same geometry/colors).",
       "states": [
-        { "id": "default", "label": "default (empty)", "matrixState": "empty", "interaction": { "type": "none" } },
-        { "id": "hover", "label": "hover", "matrixState": "hover", "interaction": { "type": "hover", "selector": "[role='button']" } },
-        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "[role='button']" } },
-        { "id": "dragging", "label": "dragging", "matrixState": "active", "interaction": { "type": "dragenter", "selector": "[role='button']" } },
-        { "id": "rejected", "label": "rejected", "matrixState": "error", "interaction": { "type": "set-input-files", "selector": "input[type='file']", "file": "fileUpload.rejectedFile" } },
-        { "id": "file-selected", "label": "file selected", "matrixState": "default", "interaction": { "type": "set-input-files", "selector": "input[type='file']", "file": "fileUpload.selectedFile" } }
+        {
+          "id": "default",
+          "label": "default (empty)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "dragging",
+          "label": "dragging",
+          "matrixState": "active",
+          "interaction": {
+            "type": "dragenter",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "rejected",
+          "label": "rejected",
+          "matrixState": "error",
+          "interaction": {
+            "type": "set-input-files",
+            "selector": "input[type='file']",
+            "file": "fileUpload.rejectedFile"
+          }
+        },
+        {
+          "id": "file-selected",
+          "label": "file selected",
+          "matrixState": "default",
+          "interaction": {
+            "type": "set-input-files",
+            "selector": "input[type='file']",
+            "file": "fileUpload.selectedFile"
+          }
+        }
       ]
     },
     {
@@ -133,10 +386,38 @@
       "cellWidth": 220,
       "notes": "Extend's square preview card, blur-in reveal, loading overlay, error fallback and muted empty tile are reproduced by the Vue FileThumbnail.",
       "states": [
-        { "id": "default", "label": "empty fallback", "matrixState": "empty", "interaction": { "type": "none" } },
-        { "id": "loading", "label": "loading", "matrixState": "loading", "interaction": { "type": "none" } },
-        { "id": "error", "label": "error", "matrixState": "error", "interaction": { "type": "none" } },
-        { "id": "image", "label": "image preview", "matrixState": "default", "interaction": { "type": "none" } }
+        {
+          "id": "default",
+          "label": "empty fallback",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "image",
+          "label": "image preview",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -149,11 +430,133 @@
       "cellWidth": 960,
       "notes": "The reference toolbar's popover/dropdown/menu controls are vendored as static triggers with the same class strings; the Vue toolbar is the real viewer toolbar with a document loaded.",
       "states": [
-        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "hover", "label": "hover (sidebar toggle)", "matrixState": "hover", "interaction": { "type": "hover", "selector": "button" } },
-        { "id": "focus", "label": "focus (sidebar toggle)", "matrixState": "focus", "interaction": { "type": "focus", "selector": "button" } },
-        { "id": "active", "label": "active (sidebar toggle)", "matrixState": "active", "interaction": { "type": "press", "selector": "button" } },
-        { "id": "disabled", "label": "empty document (controls disabled)", "matrixState": "empty", "interaction": { "type": "none" } }
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (sidebar toggle)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (sidebar toggle)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "active",
+          "label": "active (sidebar toggle)",
+          "matrixState": "active",
+          "interaction": {
+            "type": "press",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "empty document (controls disabled)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "docx-toolbar",
+      "title": "DOCX toolbar",
+      "referenceComponent": "apps/v4/components/extend/docx-viewer.tsx (DocxToolbar)",
+      "subjectComponent": "packages/vue-docx/src/components/DocxViewerToolbar.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='docx-viewer-toolbar']",
+      "referenceTargetSelector": "[data-parity-docx-toolbar]",
+      "cellWidth": 1400,
+      "notes": "Extend's DOCX toolbar mounts the thumbnail toggle, page control, zoom cluster and file-actions menu; the Vue subject is the real DocxViewerToolbar with the DOCX design-system controls. Visible search, edit toggles and upload/download differ by design and are reported as delta.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (sidebar toggle)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (sidebar toggle)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled (empty document)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "docx-sidebar",
+      "title": "DOCX thumbnail sidebar",
+      "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
+      "subjectComponent": "packages/vue-docx/src/components/DocxThumbnailPanel.vue (real canvas thumbnails, DocumentViewerSidebar shell)",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='docx-thumbnail-panel']",
+      "referenceTargetSelector": "[data-document-thumbnail-sidebar]",
+      "cellWidth": 220,
+      "notes": "The reference uses the upstream DocumentViewerThumbnailSidebar with fixture FileThumbnail children; the subject is the real DocxThumbnailPanel rendering real DOCX canvas page thumbnails through DocumentViewerSidebar. Pixel delta therefore includes thumbnail rendering, not just the shell.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {
@@ -166,9 +569,30 @@
       "cellWidth": 220,
       "notes": "Reference baseline only: the canonical DocumentViewerSidebar is being implemented by #158 (packages/vue-ui/src/components/chrome/). #163 documents the integration seam and does not duplicate it.",
       "states": [
-        { "id": "open", "label": "open (inline)", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "closed", "label": "closed (inline)", "matrixState": "default", "interaction": { "type": "none" } },
-        { "id": "skeleton", "label": "skeleton", "matrixState": "loading", "interaction": { "type": "none" } }
+        {
+          "id": "open",
+          "label": "open (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        }
       ]
     },
     {

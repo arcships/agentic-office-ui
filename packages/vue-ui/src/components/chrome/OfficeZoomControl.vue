@@ -43,6 +43,8 @@ export interface OfficeZoomControlProps {
   selectTestId?: string
   /** Optional native `title` for the select; defaults to `label`. */
   selectTitle?: string
+  /** Extra classes merged on the native select. */
+  selectClass?: string
   /** Accessible name of the select; defaults to `common.zoom.level`. */
   label?: string
   /** Extra classes merged on the root. */
@@ -61,6 +63,7 @@ const props = withDefaults(defineProps<OfficeZoomControlProps>(), {
   nativeSelect: false,
   selectTestId: undefined,
   selectTitle: undefined,
+  selectClass: "",
   label: undefined,
   class: "",
 })
@@ -218,7 +221,7 @@ const canZoomIn = computed(() => {
       />
       <select
         v-else
-        class="office-ui office-zoom-control__native"
+        :class="officeClass('office-ui', 'office-zoom-control__native', props.selectClass)"
         :value="zoom"
         :title="nativeSelectTitle"
         :aria-label="props.label ?? m.common.zoom.level"

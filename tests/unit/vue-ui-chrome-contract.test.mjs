@@ -263,6 +263,16 @@ test("the public entries export every chrome component and the width composable"
   assert.equal(packageJson.exports["./style.css"], "./dist/style.css")
 })
 
+test("SearchPopover exposes an inline mode with stable host hooks", () => {
+  const source = read("packages/vue-ui/src/components/chrome/OfficeSearchPopover.vue")
+  assert.match(source, /inline\?: boolean/u)
+  assert.match(source, /testIdPrefix\?: string/u)
+  assert.match(source, /inputType\?: string/u)
+  assert.match(source, /statusText\?: string/u)
+  assert.match(source, /office-search-popover__fields/u)
+  assert.match(source, /office-toggle--outline/u)
+})
+
 test("the shared catalog ships chrome and zoom labels in English and zh-CN", () => {
   const i18n = read("packages/office-interaction/src/i18n.ts")
   for (const key of [

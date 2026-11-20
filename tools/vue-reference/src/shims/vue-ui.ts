@@ -24,3 +24,15 @@ export { default as OfficeSelect } from "../../../../packages/vue-ui/src/compone
 export { default as OfficeDialog } from "../../../../packages/vue-ui/src/components/ui/OfficeDialog.vue";
 export { default as OfficeTooltip } from "../../../../packages/vue-ui/src/components/ui/OfficeTooltip.vue";
 export { default as OfficeThemeProvider } from "../../../../packages/vue-ui/src/components/OfficeThemeProvider.vue";
+export { default as OfficeSearchPopover } from "../../../../packages/vue-ui/src/components/chrome/OfficeSearchPopover.vue";
+export { default as OfficePageControl } from "../../../../packages/vue-ui/src/components/chrome/OfficePageControl.vue";
+export { default as OfficeZoomControl } from "../../../../packages/vue-ui/src/components/chrome/OfficeZoomControl.vue";
+export { default as OfficeToolbar } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbar.vue";
+export { default as OfficeToolbarGroup } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarGroup.vue";
+export { default as OfficeToolbarSeparator } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarSeparator.vue";
+export { default as OfficeBadge } from "../../../../packages/vue-ui/src/components/ui/OfficeBadge.vue";
+export { default as DocumentViewerSidebar } from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue";
+export { default as FileThumbnail } from "../../../../packages/vue-ui/src/components/FileThumbnail.vue";
+export { default as OfficeIcon } from "../../../../packages/vue-ui/src/components/OfficeIcon.vue";
+export { default as OfficePopover } from "../../../../packages/vue-ui/src/components/ui/OfficePopover.vue";
+export { useElementWidth } from "../../../../packages/vue-ui/src/composables/element-width";

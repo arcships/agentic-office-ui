@@ -3,6 +3,7 @@ import type { ParityTheme } from "./parity/ParitySurface";
 import { ParitySurface } from "./parity/ParitySurface";
 import { ButtonSurface } from "./surfaces/ButtonSurface";
 import { DialogSurface } from "./surfaces/DialogSurface";
+import { DocxToolbarSurface } from "./surfaces/DocxToolbarSurface";
 import { DocumentSidebarSurface } from "./surfaces/DocumentSidebarSurface";
 import { FileThumbnailSurface } from "./surfaces/FileThumbnailSurface";
 import { FileUploadSurface } from "./surfaces/FileUploadSurface";
@@ -25,6 +26,8 @@ const renderers: Record<
   "file-upload": FileUploadSurface,
   "file-thumbnail": FileThumbnailSurface,
   "pdf-toolbar": PdfToolbarSurface,
+  "docx-toolbar": DocxToolbarSurface,
+  "docx-sidebar": DocumentSidebarSurface,
   "document-sidebar": DocumentSidebarSurface,
 };
 

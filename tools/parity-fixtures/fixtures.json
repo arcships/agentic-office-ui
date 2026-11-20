@@ -50,7 +50,11 @@
     "select": {
       "label": "Word document",
       "placeholder": "Choose a format",
-      "options": ["Word document", "PDF", "Presentation"]
+      "options": [
+        "Word document",
+        "PDF",
+        "Presentation"
+      ]
     },
     "dialog": {
       "trigger": "Open dialog",
@@ -111,9 +115,18 @@
     "multiple": true,
     "maxSizeBytes": 26214400,
     "acceptedFileTypes": [
-      { "label": "Image", "icon": "image" },
-      { "label": "PDF", "icon": "pdf" },
-      { "label": "Sheet", "icon": "sheet" }
+      {
+        "label": "Image",
+        "icon": "image"
+      },
+      {
+        "label": "PDF",
+        "icon": "pdf"
+      },
+      {
+        "label": "Sheet",
+        "icon": "sheet"
+      }
     ],
     "selectedFile": {
       "name": "quarterly-report.pdf",
@@ -142,14 +155,41 @@
   },
   "blocks": {
     "citations": [
-      { "id": "c1", "page": 2, "label": "Clause 4.2", "text": "The supplier shall deliver within 30 days." },
-      { "id": "c2", "page": 5, "label": "Clause 9.1", "text": "Liability is capped at the contract value." }
+      {
+        "id": "c1",
+        "page": 2,
+        "label": "Clause 4.2",
+        "text": "The supplier shall deliver within 30 days."
+      },
+      {
+        "id": "c2",
+        "page": 5,
+        "label": "Clause 9.1",
+        "text": "Liability is capped at the contract value."
+      }
     ],
     "layoutBlocks": [
-      { "id": "b1", "type": "heading", "text": "Payment terms" },
-      { "id": "b2", "type": "paragraph", "text": "Invoices are due within 30 days of receipt." },
-      { "id": "b3", "type": "table", "rows": 3, "columns": 4 },
-      { "id": "b4", "type": "figure", "text": "Figure 1 — Payment flow" }
+      {
+        "id": "b1",
+        "type": "heading",
+        "text": "Payment terms"
+      },
+      {
+        "id": "b2",
+        "type": "paragraph",
+        "text": "Invoices are due within 30 days of receipt."
+      },
+      {
+        "id": "b3",
+        "type": "table",
+        "rows": 3,
+        "columns": 4
+      },
+      {
+        "id": "b4",
+        "type": "figure",
+        "text": "Figure 1 — Payment flow"
+      }
     ],
     "signature": {
       "label": "Authorized signature",
@@ -157,14 +197,52 @@
       "date": "2026-11-17"
     },
     "splits": [
-      { "id": "s1", "pages": "1-4", "title": "Scope" },
-      { "id": "s2", "pages": "5-8", "title": "Obligations" },
-      { "id": "s3", "pages": "9-12", "title": "Signatures" }
+      {
+        "id": "s1",
+        "pages": "1-4",
+        "title": "Scope"
+      },
+      {
+        "id": "s2",
+        "pages": "5-8",
+        "title": "Obligations"
+      },
+      {
+        "id": "s3",
+        "pages": "9-12",
+        "title": "Signatures"
+      }
     ],
     "fileSystem": [
-      { "id": "f1", "name": "contracts", "type": "folder", "children": 3 },
-      { "id": "f2", "name": "legal-contract.docx", "type": "docx", "sizeBytes": 184320 },
-      { "id": "f3", "name": "quarterly-report.pdf", "type": "pdf", "sizeBytes": 2416640 }
+      {
+        "id": "f1",
+        "name": "contracts",
+        "type": "folder",
+        "children": 3
+      },
+      {
+        "id": "f2",
+        "name": "legal-contract.docx",
+        "type": "docx",
+        "sizeBytes": 184320
+      },
+      {
+        "id": "f3",
+        "name": "quarterly-report.pdf",
+        "type": "pdf",
+        "sizeBytes": 2416640
+      }
     ]
+  },
+  "docxToolbar": {
+    "activePage": 1,
+    "pageCount": 8,
+    "zoomPercent": 100,
+    "sidebarOpen": true,
+    "showComments": true,
+    "showTrackedChanges": true,
+    "showUpload": true,
+    "showDownload": true,
+    "isDark": false
   }
 }

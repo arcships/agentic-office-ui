@@ -15,7 +15,7 @@
             :title="m.docx.toolbar.pageThumbnails"
             @click="emit('toggleThumbnails')"
           >
-            <OfficeIcon name="panel-left" />
+            <OfficeIcon name="columns-2" />
           </OfficeButton>
           <span class="docx-toolbar-filename" :title="controller.fileName || 'document.docx'">
             {{ controller.fileName || "document.docx" }}
@@ -135,7 +135,7 @@
             :disabled="readOnly && !controller.viewOnlyReason"
             @click="controller.newDocument()"
           >
-            <OfficeIcon name="file-plus" />
+            <OfficeIcon name="file" />
             <span>{{ m.docx.editor.new }}</span>
           </OfficeButton>
           <OfficeButton
@@ -305,7 +305,7 @@
             :aria-pressed="selectedRunStyle?.verticalAlign === 'superscript'"
             @click="controller.toggleSuperscript()"
           >
-            <OfficeIcon name="superscript" />
+            <span aria-hidden="true">x²</span>
           </OfficeButton>
           <OfficeButton
             type="button"
@@ -318,7 +318,7 @@
             :aria-pressed="selectedRunStyle?.verticalAlign === 'subscript'"
             @click="controller.toggleSubscript()"
           >
-            <OfficeIcon name="subscript" />
+            <span aria-hidden="true">x₂</span>
           </OfficeButton>
         </OfficeToolbarGroup>
 
@@ -426,7 +426,7 @@
             :aria-pressed="paragraphAlignment === 'justify'"
             @click="controller.setAlignment('justify')"
           >
-            <OfficeIcon name="align-justify" />
+            <OfficeIcon name="align-left" />
           </OfficeButton>
         </OfficeToolbarGroup>
 
@@ -470,7 +470,7 @@
             :disabled="!canIncreaseListDepth"
             @click="controller.adjustSelectedListDepth(1)"
           >
-            <OfficeIcon name="indent-increase" />
+            <OfficeIcon name="arrow-right" />
           </OfficeButton>
           <OfficeButton
             data-testid="editor-outdent"
@@ -482,7 +482,7 @@
             :disabled="!canDecreaseListDepth"
             @click="controller.adjustSelectedListDepth(-1)"
           >
-            <OfficeIcon name="indent-decrease" />
+            <OfficeIcon name="arrow-left" />
           </OfficeButton>
         </OfficeToolbarGroup>
 
@@ -631,7 +631,7 @@
             :aria-label="m.docx.editor.addComment"
             @click="onAddComment"
           >
-            <OfficeIcon name="message-square-plus" />
+            <OfficeIcon name="file-text" />
           </OfficeButton>
         </OfficeToolbarGroup>
 

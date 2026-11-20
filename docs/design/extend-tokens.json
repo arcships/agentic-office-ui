@@ -1,6 +1,6 @@
 {
   "generatedBy": "node scripts/ci/extract-extend-tokens.mjs",
-  "generatedAt": "2026-11-19T18:36:13.511Z",
+  "generatedAt": "2026-11-20T04:14:05.453Z",
   "provenance": {
     "repo": "extend-hq/ui",
     "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
@@ -1537,10 +1537,6 @@
         {
           "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
           "fallback": "#fff"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#fff"
         }
       ],
       "currentRepoValue": "#fff"
@@ -1597,17 +1593,9 @@
         {
           "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
           "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileThumbnail.vue",
-          "fallback": "#111"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#111827"
         }
       ],
-      "currentRepoValue": "#111827 | #111"
+      "currentRepoValue": "#111827"
     },
     {
       "extendToken": "--card",
@@ -1841,25 +1829,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#111827"
-        }
-      ],
-      "currentRepoValue": "#111827"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--primary-foreground",
@@ -2056,10 +2027,6 @@
           "fallback": "#f5f5f5"
         },
         {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#f5f5f5"
-        },
-        {
           "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
           "fallback": "#f5f5f5"
         },
@@ -2128,15 +2095,15 @@
           "fallback": "#737373"
         },
         {
-          "file": "packages/vue-ui/src/components/FileThumbnail.vue",
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
           "fallback": "#737373"
         },
         {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
           "fallback": "#737373"
         },
         {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
           "fallback": "#737373"
         }
       ],
@@ -2188,13 +2155,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#f5f5f5"
-        }
-      ],
-      "currentRepoValue": "#f5f5f5"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--accent-foreground",
@@ -2287,13 +2249,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#ef4444"
-        }
-      ],
-      "currentRepoValue": "#ef4444"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--destructive-foreground",
@@ -2395,14 +2352,6 @@
         },
         {
           "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
           "fallback": "#e5e7eb"
         },
         {
@@ -2509,13 +2458,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/FileUpload.vue",
-          "fallback": "#3b82f6"
-        }
-      ],
-      "currentRepoValue": "#3b82f6"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--chart-1",
