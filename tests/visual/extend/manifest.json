@@ -100,9 +100,51 @@
         "skeleton"
       ],
       "files": 12
+    },
+    "document-sidebar": {
+      "subjectComponent": "packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue + DocumentViewerSidebarSkeleton.vue",
+      "states": [
+        "open",
+        "closed",
+        "skeleton",
+        "overlay-open",
+        "overlay-closed"
+      ],
+      "files": 20
+    },
+    "office-empty-state": {
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeEmptyState.vue",
+      "states": [
+        "default",
+        "action"
+      ],
+      "files": 8
+    },
+    "office-error-state": {
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeErrorState.vue",
+      "states": [
+        "default",
+        "message"
+      ],
+      "files": 8
+    },
+    "office-loading-state": {
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeLoadingState.vue",
+      "states": [
+        "default",
+        "hidden"
+      ],
+      "files": 8
+    },
+    "office-status-bar": {
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeStatusBar.vue",
+      "states": [
+        "default"
+      ],
+      "files": 4
     }
   },
-  "treeSha256": "aaed405b945a3e7e507a2988c4d8bd5b93df1216f730082784a99132b7b22607",
+  "treeSha256": "8b9b1ade3859c39fa074669e1d4f9ce07b8cb142f891de0416abf578074559e5",
   "files": [
     {
       "path": "button/active/dark-1440x900.png",
@@ -765,6 +807,226 @@
       "sha256": "fcc8645f430513010a7cf048b1a9eb2fccff58c83429252a35e0dfade087e3e5"
     },
     {
+      "path": "document-sidebar/closed/dark-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "closed",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 1768,
+      "sha256": "111bb2350b2e21c72e2c293f380b24531abcbeb5dceec6a93f6a47e87f11f037"
+    },
+    {
+      "path": "document-sidebar/closed/dark-390x844.png",
+      "surface": "document-sidebar",
+      "state": "closed",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 1768,
+      "sha256": "111bb2350b2e21c72e2c293f380b24531abcbeb5dceec6a93f6a47e87f11f037"
+    },
+    {
+      "path": "document-sidebar/closed/light-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "closed",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 1766,
+      "sha256": "c81abc31259b3d35169c95cc86b9bf7b7c4e7244ee738bb63d06f33ad1829bad"
+    },
+    {
+      "path": "document-sidebar/closed/light-390x844.png",
+      "surface": "document-sidebar",
+      "state": "closed",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 1766,
+      "sha256": "c81abc31259b3d35169c95cc86b9bf7b7c4e7244ee738bb63d06f33ad1829bad"
+    },
+    {
+      "path": "document-sidebar/open/dark-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "open",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 2767,
+      "sha256": "247e78d84d6814620fec6a29ceb7cc40e82951db763df95f730b45a3c486e132"
+    },
+    {
+      "path": "document-sidebar/open/dark-390x844.png",
+      "surface": "document-sidebar",
+      "state": "open",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 2767,
+      "sha256": "247e78d84d6814620fec6a29ceb7cc40e82951db763df95f730b45a3c486e132"
+    },
+    {
+      "path": "document-sidebar/open/light-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "open",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 2910,
+      "sha256": "c7a5a3089ae53673f265ade4178ac311f22d6d1a76e7b36e417e154124cd8b5f"
+    },
+    {
+      "path": "document-sidebar/open/light-390x844.png",
+      "surface": "document-sidebar",
+      "state": "open",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 2910,
+      "sha256": "c7a5a3089ae53673f265ade4178ac311f22d6d1a76e7b36e417e154124cd8b5f"
+    },
+    {
+      "path": "document-sidebar/overlay-closed/dark-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "overlay-closed",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 488,
+      "height": 528,
+      "bytes": 2082,
+      "sha256": "01cff6db1f880b8216d24a7934782434d3a876005174b54f0ae3d223c9f05b06"
+    },
+    {
+      "path": "document-sidebar/overlay-closed/dark-390x844.png",
+      "surface": "document-sidebar",
+      "state": "overlay-closed",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 488,
+      "height": 528,
+      "bytes": 2082,
+      "sha256": "01cff6db1f880b8216d24a7934782434d3a876005174b54f0ae3d223c9f05b06"
+    },
+    {
+      "path": "document-sidebar/overlay-closed/light-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "overlay-closed",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 488,
+      "height": 528,
+      "bytes": 2233,
+      "sha256": "0a077d28fbf8952fd022e61e6e08384db892684f2b9724859956eb4c3307fa1f"
+    },
+    {
+      "path": "document-sidebar/overlay-closed/light-390x844.png",
+      "surface": "document-sidebar",
+      "state": "overlay-closed",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 488,
+      "height": 528,
+      "bytes": 2233,
+      "sha256": "0a077d28fbf8952fd022e61e6e08384db892684f2b9724859956eb4c3307fa1f"
+    },
+    {
+      "path": "document-sidebar/overlay-open/dark-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "overlay-open",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 488,
+      "height": 528,
+      "bytes": 3072,
+      "sha256": "db3bd76910308d17376de72e07eefd45e0681539dedf1e78f7cbcb574c650882"
+    },
+    {
+      "path": "document-sidebar/overlay-open/dark-390x844.png",
+      "surface": "document-sidebar",
+      "state": "overlay-open",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 488,
+      "height": 528,
+      "bytes": 3072,
+      "sha256": "db3bd76910308d17376de72e07eefd45e0681539dedf1e78f7cbcb574c650882"
+    },
+    {
+      "path": "document-sidebar/overlay-open/light-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "overlay-open",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 488,
+      "height": 528,
+      "bytes": 3426,
+      "sha256": "a43f1d5651f248c78a6fbab11aebc8da443829c3da076b54cfcfc8eea5bc009d"
+    },
+    {
+      "path": "document-sidebar/overlay-open/light-390x844.png",
+      "surface": "document-sidebar",
+      "state": "overlay-open",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 488,
+      "height": 528,
+      "bytes": 3426,
+      "sha256": "a43f1d5651f248c78a6fbab11aebc8da443829c3da076b54cfcfc8eea5bc009d"
+    },
+    {
+      "path": "document-sidebar/skeleton/dark-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "skeleton",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 2540,
+      "sha256": "0679514d6d5ef012c793d329dd2c62b043f1c40a9fc647c6dbcf70261d935b42"
+    },
+    {
+      "path": "document-sidebar/skeleton/dark-390x844.png",
+      "surface": "document-sidebar",
+      "state": "skeleton",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 2540,
+      "sha256": "0679514d6d5ef012c793d329dd2c62b043f1c40a9fc647c6dbcf70261d935b42"
+    },
+    {
+      "path": "document-sidebar/skeleton/light-1440x900.png",
+      "surface": "document-sidebar",
+      "state": "skeleton",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 368,
+      "height": 528,
+      "bytes": 2524,
+      "sha256": "f5354f7bd95fd394c55aef1f62c5462f181617ed6a9cd674a2a29431a0d4e0fb"
+    },
+    {
+      "path": "document-sidebar/skeleton/light-390x844.png",
+      "surface": "document-sidebar",
+      "state": "skeleton",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 368,
+      "height": 528,
+      "bytes": 2524,
+      "sha256": "f5354f7bd95fd394c55aef1f62c5462f181617ed6a9cd674a2a29431a0d4e0fb"
+    },
+    {
       "path": "file-thumbnail/default/dark-1440x900.png",
       "surface": "file-thumbnail",
       "state": "default",
@@ -1203,6 +1465,314 @@
       "height": 576,
       "bytes": 28137,
       "sha256": "c7ba72e6f41dbd6b53cadd8a6fbb72ab2d7bc24cf26c2eec1f6211b5e790a5b5"
+    },
+    {
+      "path": "office-empty-state/action/dark-1440x900.png",
+      "surface": "office-empty-state",
+      "state": "action",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 384,
+      "bytes": 11360,
+      "sha256": "0ee1acc0faaabf72acda485390280710d122ea81c7eaf997716c0d6af304de67"
+    },
+    {
+      "path": "office-empty-state/action/dark-390x844.png",
+      "surface": "office-empty-state",
+      "state": "action",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 392,
+      "bytes": 11632,
+      "sha256": "e4e0c9a71417a03eab0c8c6cfa16d66e52e2f3c0a13ec2d0a405f9cc9897c68a"
+    },
+    {
+      "path": "office-empty-state/action/light-1440x900.png",
+      "surface": "office-empty-state",
+      "state": "action",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 384,
+      "bytes": 11496,
+      "sha256": "5fcdfe5df06e99d8c3299dc37c3a8f9b2f86991380ee85ae2a8f1ad1076922b7"
+    },
+    {
+      "path": "office-empty-state/action/light-390x844.png",
+      "surface": "office-empty-state",
+      "state": "action",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 392,
+      "bytes": 11799,
+      "sha256": "78b95318dadf5f0c28cbe4823e3294d4b962aa73579305ca596e6027b9b634ef"
+    },
+    {
+      "path": "office-empty-state/default/dark-1440x900.png",
+      "surface": "office-empty-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 296,
+      "bytes": 8084,
+      "sha256": "0bc123a148df720e60f7fdcf05f8f21ac8c8a3d13f52ac93e0920c8fdca3c660"
+    },
+    {
+      "path": "office-empty-state/default/dark-390x844.png",
+      "surface": "office-empty-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 296,
+      "bytes": 8084,
+      "sha256": "0bc123a148df720e60f7fdcf05f8f21ac8c8a3d13f52ac93e0920c8fdca3c660"
+    },
+    {
+      "path": "office-empty-state/default/light-1440x900.png",
+      "surface": "office-empty-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 296,
+      "bytes": 8178,
+      "sha256": "e6dbba24c25e89bc48d47dac8c44e451bcf40746c9a4dbefc19f1db3d97f036a"
+    },
+    {
+      "path": "office-empty-state/default/light-390x844.png",
+      "surface": "office-empty-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 296,
+      "bytes": 8178,
+      "sha256": "e6dbba24c25e89bc48d47dac8c44e451bcf40746c9a4dbefc19f1db3d97f036a"
+    },
+    {
+      "path": "office-error-state/default/dark-1440x900.png",
+      "surface": "office-error-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 512,
+      "height": 292,
+      "bytes": 13448,
+      "sha256": "e3700f95ed28c84a6644bd35e54ffb283673d30abed1e5b3d6bbc075927acd4d"
+    },
+    {
+      "path": "office-error-state/default/dark-390x844.png",
+      "surface": "office-error-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 512,
+      "height": 300,
+      "bytes": 13851,
+      "sha256": "bd45b0bdf7d6308865f58a6049ee89bbbe7ad15d9ee232d7a78d4902950f79ad"
+    },
+    {
+      "path": "office-error-state/default/light-1440x900.png",
+      "surface": "office-error-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 512,
+      "height": 292,
+      "bytes": 13806,
+      "sha256": "81fd8be620fa5bf849e0f072bbdd74c7787b6cca0985970429bc6dc16ae57b6e"
+    },
+    {
+      "path": "office-error-state/default/light-390x844.png",
+      "surface": "office-error-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 512,
+      "height": 300,
+      "bytes": 14151,
+      "sha256": "a574e11713071c95e6aa1dbfee844eb1c98176c021b1ac76367ccec31a894105"
+    },
+    {
+      "path": "office-error-state/message/dark-1440x900.png",
+      "surface": "office-error-state",
+      "state": "message",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 512,
+      "height": 204,
+      "bytes": 10001,
+      "sha256": "805e98616ac5da6338d5bba704390aa6318cc5f181fb3b7d4b3180f224fb4ff4"
+    },
+    {
+      "path": "office-error-state/message/dark-390x844.png",
+      "surface": "office-error-state",
+      "state": "message",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 512,
+      "height": 204,
+      "bytes": 9990,
+      "sha256": "9c62e04686094aadbbb754315a2ef8ca2afdaac82e038640ba60f70a35a937f7"
+    },
+    {
+      "path": "office-error-state/message/light-1440x900.png",
+      "surface": "office-error-state",
+      "state": "message",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 512,
+      "height": 204,
+      "bytes": 10263,
+      "sha256": "dc6d3987ee9f81f78502b6c6ac1043dac8d15de228e7836c41299ad4923b075a"
+    },
+    {
+      "path": "office-error-state/message/light-390x844.png",
+      "surface": "office-error-state",
+      "state": "message",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 512,
+      "height": 204,
+      "bytes": 10267,
+      "sha256": "a2595efcb7a0d97d42c12d938c392e2f4d0a3ec9ef4dd243b70f9c1603dfd2da"
+    },
+    {
+      "path": "office-loading-state/default/dark-1440x900.png",
+      "surface": "office-loading-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 464,
+      "bytes": 2827,
+      "sha256": "f90b6979e2297273cdc595fba82fdb14ac979ffcf9764d1539fc33cd2ca72f8f"
+    },
+    {
+      "path": "office-loading-state/default/dark-390x844.png",
+      "surface": "office-loading-state",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 464,
+      "bytes": 2827,
+      "sha256": "f90b6979e2297273cdc595fba82fdb14ac979ffcf9764d1539fc33cd2ca72f8f"
+    },
+    {
+      "path": "office-loading-state/default/light-1440x900.png",
+      "surface": "office-loading-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 464,
+      "bytes": 2790,
+      "sha256": "c478905c604a086734ad2931256b4feeb864bd52eb5af5c52a8cb7705d5c624e"
+    },
+    {
+      "path": "office-loading-state/default/light-390x844.png",
+      "surface": "office-loading-state",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 464,
+      "bytes": 2790,
+      "sha256": "c478905c604a086734ad2931256b4feeb864bd52eb5af5c52a8cb7705d5c624e"
+    },
+    {
+      "path": "office-loading-state/hidden/dark-1440x900.png",
+      "surface": "office-loading-state",
+      "state": "hidden",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 464,
+      "bytes": 1844,
+      "sha256": "4422c903f5f762fd6501596a9bcefd0fd14c7d0a10f3afa744340a9553e0b5dd"
+    },
+    {
+      "path": "office-loading-state/hidden/dark-390x844.png",
+      "surface": "office-loading-state",
+      "state": "hidden",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 464,
+      "bytes": 1844,
+      "sha256": "4422c903f5f762fd6501596a9bcefd0fd14c7d0a10f3afa744340a9553e0b5dd"
+    },
+    {
+      "path": "office-loading-state/hidden/light-1440x900.png",
+      "surface": "office-loading-state",
+      "state": "hidden",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 640,
+      "height": 464,
+      "bytes": 1843,
+      "sha256": "4fade5e171c83fc205822f5abc0f3bbd6df37b5cf53f2b5fe0d6c0a6ab25e411"
+    },
+    {
+      "path": "office-loading-state/hidden/light-390x844.png",
+      "surface": "office-loading-state",
+      "state": "hidden",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 640,
+      "height": 464,
+      "bytes": 1843,
+      "sha256": "4fade5e171c83fc205822f5abc0f3bbd6df37b5cf53f2b5fe0d6c0a6ab25e411"
+    },
+    {
+      "path": "office-status-bar/default/dark-1440x900.png",
+      "surface": "office-status-bar",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 720,
+      "height": 114,
+      "bytes": 5889,
+      "sha256": "d8013cf6f484f5c43d47d752410131e27f48c2dea23ce81c555f0756778eb0c9"
+    },
+    {
+      "path": "office-status-bar/default/dark-390x844.png",
+      "surface": "office-status-bar",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 114,
+      "bytes": 5827,
+      "sha256": "67c33daad91383bc53d0e7cbc95300df412b2f27bf0e330ff0cf86a0fff34b06"
+    },
+    {
+      "path": "office-status-bar/default/light-1440x900.png",
+      "surface": "office-status-bar",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 720,
+      "height": 114,
+      "bytes": 5940,
+      "sha256": "b741c4b24e901cb7f38d2c81951bb820383669ab9c052902a8dc2bf6df145d07"
+    },
+    {
+      "path": "office-status-bar/default/light-390x844.png",
+      "surface": "office-status-bar",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 114,
+      "bytes": 5891,
+      "sha256": "e3eb3a5475b62d80948ecf09b3f7bfb5cbe6575397b0e577a4b294bf81075469"
     },
     {
       "path": "pdf-sidebar/closed/dark-1440x900.png",
@@ -1789,6 +2359,18 @@
       "updated": 0,
       "removed": 0,
       "gitHead": "874461c16e0931d9927bf91bf25e7355b5cec7e3"
+    },
+    {
+      "date": "2026-11-20",
+      "reviewer": "dim-agent",
+      "issue": "#158",
+      "reason": "First baselines for the #158 shared chrome evidence: the generic DocumentViewerSidebar (inline open/closed/skeleton + overlay open/closed) and the upstream-aligned empty/error/loading/status-bar surfaces are pixel-equal to the pinned Extend reference; 48 files at 1440x900 and 390x844, light and dark.",
+      "treeSha256": "8b9b1ade3859c39fa074669e1d4f9ce07b8cb142f891de0416abf578074559e5",
+      "files": 200,
+      "added": 48,
+      "updated": 0,
+      "removed": 0,
+      "gitHead": "750f7b7fd16b423a62cdeb59f465b9a804361d1c"
     }
   ]
 }
