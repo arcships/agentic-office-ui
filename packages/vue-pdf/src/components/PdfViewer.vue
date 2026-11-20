@@ -52,6 +52,7 @@ import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import {
   DocumentViewerSidebar,
+  DocumentViewerSidebarSkeleton,
   OfficeButton,
   OfficeEmptyState,
   OfficeErrorState,
@@ -264,6 +265,10 @@ const statusBarStatus = computed(() => {
   if (viewerState.value === "error") return loadErrorMessage.value
   return ""
 })
+/** Thumbnails are still rasterizing; show the shared sidebar skeleton above them. */
+const thumbnailsLoading = computed(() =>
+  !!renderDocument.value && Object.keys(thumbnailUrls.value).length === 0
+)
 const pdfPageLabels = ref<readonly string[]>([])
 const currentSearchHit = computed(() => searchHits.value[searchHitIndex.value])
 const pageImageStyle = computed(() => {
@@ -1826,7 +1831,7 @@ defineExpose({
           </OfficeToolbarGroup>
           <select
             data-testid="pdf-page-layout"
-            class="pdf-page-layout"
+            class="office-ui pdf-page-layout"
             :value="pageLayoutMode"
             :disabled="controlsDisabled"
             :aria-label="m.pdf.viewer.pageLayout"
@@ -1854,7 +1859,7 @@ defineExpose({
             <select
               v-model.number="zoom"
               data-testid="pdf-zoom-select"
-              class="pdf-zoom-select"
+              class="office-ui pdf-zoom-select"
               :disabled="controlsDisabled"
               :aria-label="m.common.zoom.level"
             >
@@ -1886,7 +1891,7 @@ defineExpose({
               <input
                 ref="searchInputRef"
                 v-model="searchDraft"
-                class="office-input pdf-search__input"
+                class="office-ui office-input pdf-search__input"
                 type="search"
                 autocomplete="off"
                 spellcheck="false"
@@ -1985,12 +1990,12 @@ defineExpose({
       <DocumentViewerSidebar
         :open="showThumbnails"
         :close-on-escape="false"
-        :loading="numPages > 0 && Object.keys(thumbnailUrls).length === 0"
         :label="m.pdf.viewer.thumbnails"
         class="pdf-sidebar"
         data-testid="pdf-thumbnails-sidebar"
         @update:open="showThumbnails = $event"
       >
+        <DocumentViewerSidebarSkeleton v-if="thumbnailsLoading" :items="3" />
         <PdfThumbnailStrip
           :pageCount="numPages"
           :labels="pdfPageLabels"
@@ -2143,6 +2148,7 @@ defineExpose({
       </template>
       <div
         class="pdf-selection-popover__body"
+        data-testid="pdf-selection-popover"
         role="toolbar"
         :aria-label="m.pdf.viewer.selectionActions"
       >
@@ -2229,9 +2235,10 @@ defineExpose({
 }
 .pdf-page-layout,
 .pdf-zoom-select {
-  block-size: var(--office-control-height-sm);
+  block-size: var(--office-control-height-xs);
   box-sizing: border-box;
   min-block-size: 0;
+  min-height: 0;
   min-inline-size: 0;
   padding-block: 0;
   padding-inline: var(--office-ui-space-2);
@@ -2257,15 +2264,17 @@ defineExpose({
 .pdf-zoom-cluster { flex-wrap: nowrap; }
 .pdf-search { display: flex; align-items: center; gap: var(--office-ui-space-1); min-inline-size: 0; }
 .pdf-search__field {
-  block-size: var(--office-control-height-sm);
+  block-size: var(--office-control-height-xs);
   box-sizing: border-box;
   inline-size: 9.5rem;
   min-block-size: 0;
+  min-height: 0;
   min-inline-size: 0;
 }
 .pdf-search__input {
   block-size: 100%;
   min-block-size: 0;
+  min-height: 0;
   inline-size: 100%;
   padding-block: 0;
   line-height: 1.4;
@@ -2373,7 +2382,6 @@ defineExpose({
   .pdf-page-layout { max-inline-size: 7rem; }
 }
 @container pdf-viewer (max-width: 520px) {
-  .pdf-toolbar { padding-inline: var(--office-ui-space-2); }
   .pdf-file-name { display: none; }
   .pdf-page-layout { max-inline-size: 6rem; }
   /* Keep paging usable without three rows of navigation chrome. The first /
@@ -2387,7 +2395,6 @@ defineExpose({
   .search-result { flex: 1 1 100%; order: 4; }
 }
 @container pdf-viewer (max-width: 390px) {
-  .pdf-toolbar { gap: var(--office-ui-space-1); }
   .pdf-page-total { font-size: var(--office-text-xs); }
   .pdf-page-layout { max-inline-size: 4.75rem; }
   .pdf-zoom-select { inline-size: 5.25rem; }

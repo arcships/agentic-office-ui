@@ -254,6 +254,7 @@
       </template>
       <div
         class="pdf-surface__selection-body"
+        data-testid="pdf-surface-selection-popover"
         role="toolbar"
         :aria-label="m.pdf.viewer.selectionActions"
       >
@@ -287,10 +288,11 @@
       </template>
       <div
         class="pdf-surface__link-body"
+        data-testid="pdf-surface-link-card"
         role="group"
         :aria-label="m.pdf.viewer.linkActions"
       >
-        <span class="pdf-surface__link-url">{{ hoveredLinkUrl }}</span>
+        <span v-if="hoveredLinkUrl" class="pdf-surface__link-url">{{ hoveredLinkUrl }}</span>
         <OfficeButton
           variant="outline"
           size="sm"
@@ -436,7 +438,6 @@ import {
   OfficeLoadingState,
   OfficePopover,
   OfficeStatusBar,
-  OfficeTooltip,
   useViewerKeys,
 } from "@arcships/vue-ui"
 import type {
@@ -1799,9 +1800,17 @@ const linkAnchorStyle = computed<Record<string, string> | undefined>(() => {
   }
 })
 
-const hoveredLinkUrl = computed(() =>
-  hoveredLink.value?.annotation.url ? hoveredLink.value.annotation.url : ""
-)
+const hoveredLinkUrl = computed(() => {
+  const annotation = hoveredLink.value?.annotation
+  if (!annotation) return ""
+  if (annotation.url) return annotation.url
+  if (annotation.targetPageIndex !== undefined) {
+    return formatOfficeMessage(m.value.pdf.viewer.pageLabel, {
+      page: annotation.targetPageIndex + 1,
+    })
+  }
+  return ""
+})
 
 function onSelectionPopoverOpen(open: boolean): void {
   if (!open) clearSelection()
