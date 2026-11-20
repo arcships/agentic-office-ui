@@ -29,7 +29,7 @@
         v-if="isLoading"
         class="docx-thumbnail-skeleton"
         role="status"
-        :aria-label="m.docx.thumbnail.loading"
+        :aria-label="m.docx.viewer.loadingTitle"
         data-testid="docx-thumbnail-skeleton"
       >
         <div class="docx-thumbnail-skeleton__card">
@@ -37,16 +37,19 @@
         </div>
         <div class="docx-thumbnail-skeleton__caption" />
       </div>
-      <div v-else class="docx-thumbnail-track">
-        <div
-          v-if="topSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${topSpacerHeight}px` }"
-          aria-hidden="true"
-        />
+      <div
+        v-else
+        class="docx-thumbnail-track"
+        :style="{ height: `${railContentHeight + THUMBNAIL_LIST_PADDING * 2}px` }"
+      >
         <div
           v-for="pageIndex of renderedPageRange"
           :key="pageIndex"
+          class="docx-thumbnail-row"
+          :class="{ 'docx-thumbnail-row--active': pageIndex + 1 === currentPage }"
+          :style="{ transform: `translateY(${THUMBNAIL_LIST_PADDING + pageMetric(pageIndex).top}px)` }"
+        >
+        <div
           :id="optionId(pageIndex)"
           class="docx-thumbnail-item"
           :class="{
@@ -90,12 +93,7 @@
             {{ pageLabel(pageIndex) }}
           </span>
         </div>
-        <div
-          v-if="bottomSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${bottomSpacerHeight}px` }"
-          aria-hidden="true"
-        />
+        </div>
       </div>
     </div>
   </DocumentViewerSidebar>
@@ -459,6 +457,8 @@ const railContentHeight = computed(() => {
   const metrics = pageMetrics.value
   if (metrics.length === 0) return 0
   const last = metrics[metrics.length - 1]
+  // One full row stride keeps the track height equal to upstream's
+  // `virtualizer.getTotalSize()`.
   return last.top + last.height + THUMBNAIL_ITEM_EXTRA_HEIGHT
 })
 
@@ -517,7 +517,14 @@ function thumbnailCanvasWrapperStyle(pageIndex: number): Record<string, string> 
 }
 
 function thumbnailCanvasStyle(pageIndex: number): Record<string, string> {
-  return thumbnailCanvasWrapperStyle(pageIndex)
+  // Upstream's canvas fills its preview box (`!size-full`), so the browser
+  // scales the backing store 1:1 at DPR 2 instead of relying on explicit px.
+  const metric = pageMetric(pageIndex)
+  return {
+    inlineSize: `${metric.width}px`,
+    blockSize: `${metric.height}px`,
+    background: "#fff",
+  }
 }
 
 function thumbnailCanvasPixelWidth(): number {
@@ -582,14 +589,6 @@ const renderedPageRange = computed(() => {
   }
   return range
 })
-const topSpacerHeight = computed(() => pageMetrics.value[renderWindow.value.start]?.top ?? 0)
-const bottomSpacerHeight = computed(() => {
-  const window = renderWindow.value
-  const metrics = pageMetrics.value
-  if (window.end >= metrics.length) return 0
-  return Math.max(0, railContentHeight.value - (metrics[window.end]?.top ?? railContentHeight.value))
-})
-
 // ── Canvas refs ────────────────────────────────────────────────────
 const canvasRefs = new Map<number, HTMLCanvasElement>()
 /** Reactive mirror of each canvas' `data-thumbnail-state` for the card overlay. */
@@ -1186,15 +1185,21 @@ function onSidebarOpen(open: boolean): void {
 /* Upstream offsets the virtual track by `DOCX_THUMBNAIL_LIST_PADDING` (16px)
    on both edges; the loading skeleton is not padded. */
 .docx-thumbnail-track {
+  position: relative;
   box-sizing: border-box;
-  padding-block: 16px;
 }
 .docx-thumbnail-list:focus-visible {
   outline: none;
 }
-.docx-thumbnail-spacer {
-  inline-size: 1px;
-  pointer-events: none;
+/* Upstream row: `absolute top-0 right-3 left-3 pb-3` positioned by
+   `translateY(rowStart)`. The transform also keeps the nested canvas clip in
+   its own paint layer, exactly like the pinned reference. */
+.docx-thumbnail-row {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 12px;
+  padding-block-end: 12px;
+  contain: layout;
 }
 .docx-thumbnail-item {
   box-sizing: border-box;
@@ -1202,9 +1207,7 @@ function onSidebarOpen(open: boolean): void {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  inline-size: auto;
-  margin-inline: 12px;
-  margin-block-end: 12px;
+  inline-size: 100%;
   padding: 8px;
   border-radius: var(--office-radius-md);
   color: var(--office-muted-foreground);

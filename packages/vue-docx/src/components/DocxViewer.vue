@@ -39,6 +39,10 @@
       :sidebar-open="sidebarOpen"
       :show-upload="showUpload"
       :show-download="showDownload"
+      :show-file-name="toolbarFileName"
+      :show-search="toolbarSearch"
+      :show-view-controls="toolbarViewControls"
+      :show-review-controls="toolbarReviewControls"
       :show-tracked-changes="effectiveShowTrackedChanges"
       :revision-display="effectiveRevisionDisplay"
       :show-comments="effectiveShowComments"
@@ -225,6 +229,18 @@ const props = withDefaults(
     showToolbar?: boolean
     showUpload?: boolean
     showDownload?: boolean
+    /**
+     * Opt-in: keep the find field inline in the toolbar row. The default row
+     * matches the upstream Extend toolbar, where find lives in the actions
+     * menu and on Ctrl/Cmd+F.
+     */
+    toolbarSearch?: boolean
+    /** Opt-in: show the document file name in the toolbar row. */
+    toolbarFileName?: boolean
+    /** Opt-in: expose page-layout and fit commands in the actions menu. */
+    toolbarViewControls?: boolean
+    /** Opt-in: expose the review-display command in the actions menu. */
+    toolbarReviewControls?: boolean
     defaultThumbnailsOpen?: boolean
     defaultZoom?: number
     /** Optional minimum height; the viewer itself does not impose one. */
@@ -283,6 +299,10 @@ const props = withDefaults(
     defaultViewMode: "continuous" as import("../composables/docx-view-mode").DocxViewMode,
     fitMode: null,
     defaultFitMode: "none" as const,
+    toolbarSearch: false,
+    toolbarFileName: false,
+    toolbarViewControls: false,
+    toolbarReviewControls: false,
     locale: "en",
     messages: undefined,
   },

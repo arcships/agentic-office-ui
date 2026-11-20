@@ -15,8 +15,11 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import {
+  ArrowHorizontalIcon,
+  ArrowVerticalIcon,
   CircleMinusIcon,
   CirclePlusIcon,
+  Comment01Icon,
   FileDiffIcon,
   Moon02Icon,
   MoreHorizontalIcon,
@@ -124,6 +127,12 @@ const displayTotal = computed(() =>
   props.totalPages > 0 ? String(props.totalPages) : "-",
 )
 const zoomPercent = computed(() => Math.round(props.zoom))
+/** Upstream appends the current gesture zoom when it is not a preset. */
+const zoomSelectOptions = computed(() => {
+  const current = Math.round(props.zoom * 100) / 100
+  if (zoomOptions.includes(current)) return zoomOptions
+  return [...zoomOptions, current].sort((left, right) => left - right)
+})
 const canZoomOut = computed(
   () => !props.disabled && props.zoom > zoomOptions[0]!,
 )
@@ -171,14 +180,9 @@ function commitPageDraft(): void {
   if (next !== displayPage.value) emit("selectPage", next)
 }
 
-function onPageFocus(event: FocusEvent): void {
+function onPageFocus(event?: FocusEvent): void {
   pageFocused.value = true
-  ;(event.target as HTMLInputElement | null)?.select?.()
-}
-
-function onPageInput(event: Event): void {
-  pageFocused.value = true
-  pageDraft.value = (event.target as HTMLInputElement | null)?.value ?? ""
+  ;(event?.target as HTMLInputElement | null)?.select?.()
 }
 
 function onPageBlur(): void {
@@ -362,12 +366,12 @@ defineExpose({
             pattern="[0-9]*"
             min="1"
             :max="totalPages || 1"
-            :value="pageDraft"
+            v-model="pageDraft"
             :disabled="disabled || totalPages < 1"
+            @input="pageFocused = true"
             :aria-label="m.common.page.label"
             data-testid="docx-page-current"
             @focus="onPageFocus"
-            @input="onPageInput"
             @change="commitPageDraft"
             @blur="onPageBlur"
             @keydown="onPageKeydown"
@@ -410,7 +414,7 @@ defineExpose({
             data-testid="docx-zoom-select"
             @change="onZoomSelect"
           >
-            <option v-for="value in zoomOptions" :key="value" :value="value">
+            <option v-for="value in zoomSelectOptions" :key="value" :value="value">
               {{ value }}%
             </option>
           </select>
