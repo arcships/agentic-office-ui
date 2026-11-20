@@ -12,6 +12,7 @@
   "dependencies": {
     "@arcships/office-interaction": "workspace:*",
     "@arcships/office-runtime": "workspace:*",
+    "@arcships/xlsx-core": "workspace:*",
     "@fontsource-variable/geist": "^5.2.0",
     "@fontsource-variable/geist-mono": "^5.2.0",
     "@hugeicons/core-free-icons": "4.4.0",
