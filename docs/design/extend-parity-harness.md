@@ -84,14 +84,20 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 
 | Surface | 已定义状态 | Vue 对照 |
 |---|---|---|
-| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ✅ `OfficeButton.vue`（196/200 矩阵中全部 pass） |
-| `input` | default、focus、disabled、invalid、size-sm | ✅ `OfficeInput.vue`（focus/light 有 52 px / 1-255 抗锯齿残差） |
+| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ✅ `OfficeButton.vue`（112/112 pass） |
+| `input` | default、focus、disabled、invalid、size-sm | ✅ `OfficeInput.vue`（40/40 pass，#157b 已消掉 52px 残差） |
 | `select` | default、focus、disabled、placeholder | ✅ `OfficeSelect.vue` |
 | `dialog` | open（header/空 panel/footer/close） | ✅ `OfficeDialog.vue` |
 | `tooltip` | open（hover 触发） | ✅ `OfficeTooltip.vue` |
 | `file-upload` | default(empty)、hover、focus、dragging、rejected(error)、file-selected | ✅ `FileUpload.vue` |
 | `file-thumbnail` | default(empty)、loading、error、image | ✅ `FileThumbnail.vue` |
-| `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar |
+| `pdf-toolbar` | default、hover、focus、active、disabled(empty document) | ✅ `PdfViewer.vue` 的真实 toolbar（40/40） |
+| `pdf-sidebar` | open、closed、skeleton | ✅ `DocumentViewerSidebar` + `PdfThumbnailStrip`（24/24） |
+| `docx-toolbar` | default、hover、focus、disabled(empty document) | ✅ `DocxViewerToolbar.vue`（32/32 pass） |
+| `docx-sidebar` | open、closed、skeleton | ✅ `DocxThumbnailPanel.vue`（24/24 pass） |
+| `xlsx-toolbar` | default、hover、focus、disabled(empty workbook) | ✅ `XlsxToolbar.vue`（32/32 pass） |
+| `xlsx-sheet-tabs` | default、hover、focus | ✅ `XlsxSheetTabs.vue`（24/24 pass） |
+| `xlsx-status-bar` | default | ✅ `XlsxStatusBar.vue`（8/8 pass） |
 | `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
 | `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
 | `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
@@ -102,8 +108,9 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | `document-splits` | default、hover、focus、single、empty-pages、empty、loading、error | ✅ `DocumentSplits.vue`（232/232 pass） |
 
 截图前统一执行：`document.fonts.ready`、`prefers-reduced-motion: reduce`、注入
-`animation:none / transition:none`、`caret-color:transparent`。字体：Geist / Geist Mono
-（`@fontsource-variable/*`，与 `apps/v4/lib/fonts.ts` 同族）。
+`animation:none / transition:none`、`caret-color:transparent`；每张截图前还会把所有 `<img>` 的
+`loading` 改为 `eager`、等待 `decode()`（`settle_images`），避免视口外的 lazy 缩略图只在一侧加载造成
+假差异。字体：Geist / Geist Mono（`@fontsource-variable/*`，与 `apps/v4/lib/fonts.ts` 同族）。
 
 ## 6. 产物
 

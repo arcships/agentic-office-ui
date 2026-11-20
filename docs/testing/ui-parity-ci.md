@@ -97,11 +97,15 @@ DOCX/PPTX/XLSX chrome），4 个 document block 只在 nightly 全矩阵跑。`d
 3. **全部 surface 就绪后**：把 `manifest.gate.prMode` 从 `ready` 改成 `all`，
    把 workflow 里的 `--gate-mode "${{ inputs.strict && 'all' || 'ready' }}"` 改成 `--gate-mode all`，
    并删除 `strict` 输入。这就是最终形态。
+4. **当前就绪度（2026-11-20）**：`--gate-mode all --baseline` 全矩阵已在 0.8 分支验证
+   **PASS**（784 case：741 `pass` + 19 个 file-upload AA + 24 reference-only，0 fail）。
+   尚未正式翻转，因为 `document-sidebar`（#158）仍未接入；#158 合入并补基线后按第 3 步
+   完成最后两处改动即可。
 
 ## 6. 本地命令
 
 ```bash
-pnpm ui:parity                     # 全矩阵 + 参考对照；默认 --gate-mode all（现状会把 pending 的 delta 也当失败）
+pnpm ui:parity                     # 全矩阵 + 参考对照；默认 --gate-mode all（最终门禁形态）
 pnpm ui:parity:report              # 同上，永远 exit 0（artifact 模式）
 pnpm ui:parity:core                # PR 子集 + 基线比对 + --gate-mode ready（CI 等价命令）
 pnpm ui:parity:full                # 全矩阵 + 基线比对 + --gate-mode ready（nightly 等价命令）
