@@ -1,6 +1,6 @@
 {
   "generatedBy": "node scripts/ci/extract-extend-tokens.mjs",
-  "generatedAt": "2026-11-20T04:14:05.453Z",
+  "generatedAt": "2026-11-20T11:32:39.937Z",
   "provenance": {
     "repo": "extend-hq/ui",
     "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
@@ -1533,13 +1533,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#fff"
-        }
-      ],
-      "currentRepoValue": "#fff"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--foreground",
@@ -1585,17 +1580,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#111827"
-        }
-      ],
-      "currentRepoValue": "#111827"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--card",
@@ -2021,21 +2007,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#f5f5f5"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#f5f5f5"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#f5f5f5"
-        }
-      ],
-      "currentRepoValue": "#f5f5f5"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--muted-foreground",
@@ -2081,33 +2054,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        }
-      ],
-      "currentRepoValue": "#737373"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--accent",
@@ -2345,25 +2293,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#e5e7eb"
-        }
-      ],
-      "currentRepoValue": "#e5e7eb"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--input",
