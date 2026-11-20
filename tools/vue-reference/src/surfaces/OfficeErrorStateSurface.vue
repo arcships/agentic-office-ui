@@ -15,9 +15,13 @@ import ParityCell from "../parity/ParityCell.vue";
 defineProps<{ cellWidth: number }>();
 
 const states = [
-  { state: "default", matrixState: "error", showRetry: true },
-  { state: "message", matrixState: "error", showRetry: false },
+  { state: "default", matrixState: "error", showRetry: true, long: false },
+  { state: "message", matrixState: "error", showRetry: false, long: false },
+  { state: "wrapped", matrixState: "error", showRetry: true, long: true },
 ];
+
+const longDescription =
+  "The worker returned an unexpected result while rendering page 5 of the document. Check the file, then retry or download a fresh copy.";
 </script>
 
 <template>
@@ -29,7 +33,10 @@ const states = [
     :width="cellWidth"
   >
     <div class="office-error-frame">
-      <OfficeErrorState :show-retry="entry.showRetry" />
+      <OfficeErrorState
+        :show-retry="entry.showRetry"
+        :description="entry.long ? longDescription : undefined"
+      />
     </div>
   </ParityCell>
 </template>

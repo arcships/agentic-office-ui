@@ -18,11 +18,14 @@ import { WorkbookErrorCard } from "../vendor/extend/viewer-states";
 const copy = {
   title: "Unable to open this document",
   description: "Check the file and try again.",
+  longDescription:
+    "The worker returned an unexpected result while rendering page 5 of the document. Check the file, then retry or download a fresh copy.",
 };
 
 const states = [
-  { state: "default", matrixState: "error", showAction: true },
-  { state: "message", matrixState: "error", showAction: false },
+  { state: "default", matrixState: "error", showAction: true, long: false },
+  { state: "message", matrixState: "error", showAction: false, long: false },
+  { state: "wrapped", matrixState: "error", showAction: true, long: true },
 ];
 
 export function OfficeErrorStateSurface({ cellWidth }: { cellWidth: number }) {
@@ -37,7 +40,7 @@ export function OfficeErrorStateSurface({ cellWidth }: { cellWidth: number }) {
         >
           <div className="grid w-full place-items-center bg-muted/30 p-4">
             <WorkbookErrorCard
-              message={copy.description}
+              message={entry.long ? copy.longDescription : copy.description}
               showAction={entry.showAction}
               title={copy.title}
             />

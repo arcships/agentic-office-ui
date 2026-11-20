@@ -448,6 +448,15 @@
   font-family: inherit;
 }
 
+.office-state__title {
+  margin: 0;
+  color: var(--office-foreground);
+}
+
+.office-state__description {
+  color: var(--office-muted-foreground);
+}
+
 .office-state--compact {
   --office-ui-state-padding-block: var(--office-ui-space-4);
   --office-ui-state-padding-inline: var(--office-ui-space-4);
@@ -591,16 +600,6 @@
   color: var(--office-muted-foreground);
   font-size: var(--office-text-xs);
   line-height: var(--office-leading-xs);
-}
-
-.office-state__title {
-  margin: 0;
-  color: var(--office-foreground);
-}
-
-.office-state__description {
-  max-inline-size: var(--office-ui-state-description-max-width);
-  color: var(--office-muted-foreground);
 }
 
 .office-state--loading .office-state__actions {
