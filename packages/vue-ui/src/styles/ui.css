@@ -485,9 +485,14 @@
   min-inline-size: 0;
   border: var(--office-border-width) solid var(--office-input);
   border-radius: var(--office-radius-lg);
+  /* The reference field sits on `bg-popover`, whose light value is
+   * `var(--color-white)` (#fff). Keep the painted light colour identical to
+   * white: `oklch(1 0 0)` resolves to color(srgb .99987 1.00005 1.00007), and
+   * compositing the 1px border over that off-white rounds the rounded-corner
+   * anti-aliasing 1/255 darker than Extend (#157 input/focus/light). */
   background: var(--office-popover);
   background: light-dark(
-    var(--office-popover),
+    white,
     color-mix(in oklab, var(--office-input) 32%, transparent)
   );
   background-clip: padding-box;
