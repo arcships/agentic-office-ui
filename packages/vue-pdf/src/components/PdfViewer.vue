@@ -1102,7 +1102,7 @@ function clearSearchAndRestoreFocus(): void {
   searchAbort?.abort()
   searchAbort = undefined
   resetSearch()
-  viewerRef.value?.focus()
+  viewerRef.value?.focus({ preventScroll: true })
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {

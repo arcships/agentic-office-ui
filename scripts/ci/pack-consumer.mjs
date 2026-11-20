@@ -2,7 +2,9 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import {
+  closeSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -47,8 +49,52 @@ const logs = [];
 const browserResults = [];
 let resolvedDependencyVersions = null;
 let preview;
+let previewHandle;
 let result = "FAIL";
 let failure;
+
+/**
+ * Stop the preview and every child npm/vite spawned. `detached: true` puts the
+ * tree in its own process group, so signal the group and wait for exit; without
+ * the wait the group can outlive this process and keep the port bound.
+ */
+async function stopPreview() {
+  const child = preview;
+  if (!child) {
+    if (previewHandle !== undefined) {
+      try { closeSync(previewHandle); } catch { /* already closed */ }
+      previewHandle = undefined;
+    }
+    return;
+  }
+  if (child.exitCode === null) {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      try { child.kill("SIGTERM"); } catch { /* already gone */ }
+    }
+    await Promise.race([
+      once(child, "exit").catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 3_000)),
+    ]);
+  }
+  if (child.exitCode === null) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    }
+    await Promise.race([
+      once(child, "exit").catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1_000)),
+    ]);
+  }
+  if (previewHandle !== undefined) {
+    try { closeSync(previewHandle); } catch { /* already closed */ }
+    previewHandle = undefined;
+  }
+  preview = undefined;
+}
 
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
@@ -423,7 +469,7 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
     throw new Error(`PACK_CONSUMER_PORT must be an available user port; received ${process.env.PACK_CONSUMER_PORT}`);
   }
   const previewLog = path.join(output, "preview.log");
-  const previewHandle = await import("node:fs").then(({ openSync }) => openSync(previewLog, "w"));
+  previewHandle = await import("node:fs").then(({ openSync }) => openSync(previewLog, "w"));
   preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
     cwd: consumerDir,
     detached: true,
@@ -467,11 +513,9 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
 } catch (error) {
   failure = error instanceof Error ? error.stack || error.message : String(error);
 } finally {
-  if (preview && preview.exitCode === null) {
-    try { process.kill(-preview.pid, "SIGTERM"); } catch { preview.kill("SIGTERM"); }
-  }
+  await stopPreview();
   const cleanedPath = consumerDir;
-  if (process.env.KEEP_PACK_CONSUMER !== "1") rmSync(consumerDir, { recursive: true, force: true });
+  if (process.env.KEEP_PACK_CONSUMER !== "1") rmSync(cleanedPath, { recursive: true, force: true });
   writeFileSync(
     path.join(output, "summary.json"),
     `${JSON.stringify({
