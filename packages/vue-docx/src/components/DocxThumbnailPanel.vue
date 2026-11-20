@@ -1,64 +1,71 @@
 <template>
-  <div class="docx-thumbnail-panel" data-testid="docx-thumbnail-panel" :class="{ 'docx-thumbnail-panel--collapsed': collapsed, 'docx-thumbnail-panel--dark': isDark }">
-    <!-- Toggle button -->
-    <button v-if="showToggle" class="docx-thumbnail-toggle" @click="collapsed = !collapsed" :title="collapsed ? m.docx.thumbnail.show : m.docx.thumbnail.hide">
-      {{ collapsed ? '▶' : '◀' }}
-    </button>
-
-    <!-- Thumbnails container -->
-    <div v-if="!collapsed" class="docx-thumbnail-container">
+  <DocumentViewerSidebar
+    class="docx-thumbnail-panel"
+    :class="isDark ? 'docx-thumbnail-panel--dark' : undefined"
+    data-testid="docx-thumbnail-panel"
+    :open="!collapsed"
+    mode="auto"
+    :breakpoint="768"
+    :width="160"
+    :loading="pageCount < 1"
+    :label="m.docx.thumbnail.pages"
+    :data-office-theme="isDark ? 'dark' : 'light'"
+    data-office-density="comfortable"
+    @update:open="onSidebarOpen"
+  >
+    <template #header>
       <div class="docx-thumbnail-header">
         <span class="docx-thumbnail-title">{{ m.docx.thumbnail.pages }}</span>
         <span class="docx-thumbnail-count">{{ pageCount }}</span>
       </div>
+    </template>
 
-      <div ref="listRef" class="docx-thumbnail-list" @scroll.passive="onThumbnailScroll">
-        <div
-          v-if="topSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${topSpacerHeight}px` }"
-          aria-hidden="true"
-        />
-        <div
-          v-for="pageIndex of renderedPageRange"
-          :key="pageIndex"
-          class="docx-thumbnail-item"
-          :class="{
-            'docx-thumbnail-item--active': pageIndex + 1 === currentPage,
-            'docx-thumbnail-item--blank': isParityBlankPage(pageIndex),
-          }"
-          data-testid="docx-thumbnail"
-          :aria-current="pageIndex + 1 === currentPage ? 'page' : undefined"
-          :data-thumbnail-page-index="pageIndex"
-          :data-thumbnail-page-label="pageLabel(pageIndex)"
-          :data-thumbnail-parity-blank="isParityBlankPage(pageIndex) ? 'true' : 'false'"
-          @click="onSelectPage(pageIndex)"
-        >
-          <!-- Thumbnail canvas -->
-          <div class="docx-thumbnail-canvas-wrapper" :style="thumbnailCanvasWrapperStyle(pageIndex)">
-            <canvas
-              :ref="(el) => setCanvasRef(pageIndex, el as HTMLCanvasElement)"
-              :width="thumbnailCanvasPixelWidth()"
-              :height="thumbnailCanvasPixelHeight(pageIndex)"
-              :style="thumbnailCanvasStyle(pageIndex)"
-              class="docx-thumbnail-canvas"
-            />
-          </div>
-
-          <!-- Page number label: the number Word shows (per-section restart/format) -->
-          <div class="docx-thumbnail-label" data-testid="docx-thumbnail-label">
-            {{ pageLabel(pageIndex) }}
-          </div>
+    <div ref="listRef" class="docx-thumbnail-list" @scroll.passive="onThumbnailScroll">
+      <div
+        v-if="topSpacerHeight > 0"
+        class="docx-thumbnail-spacer"
+        :style="{ height: `${topSpacerHeight}px` }"
+        aria-hidden="true"
+      />
+      <div
+        v-for="pageIndex of renderedPageRange"
+        :key="pageIndex"
+        class="docx-thumbnail-item"
+        :class="{
+          'docx-thumbnail-item--active': pageIndex + 1 === currentPage,
+          'docx-thumbnail-item--blank': isParityBlankPage(pageIndex),
+        }"
+        data-testid="docx-thumbnail"
+        :aria-current="pageIndex + 1 === currentPage ? 'page' : undefined"
+        :data-thumbnail-page-index="pageIndex"
+        :data-thumbnail-page-label="pageLabel(pageIndex)"
+        :data-thumbnail-parity-blank="isParityBlankPage(pageIndex) ? 'true' : 'false'"
+        @click="onSelectPage(pageIndex)"
+      >
+        <!-- Thumbnail canvas -->
+        <div class="docx-thumbnail-canvas-wrapper" :style="thumbnailCanvasWrapperStyle(pageIndex)">
+          <canvas
+            :ref="(el) => setCanvasRef(pageIndex, el as HTMLCanvasElement)"
+            :width="thumbnailCanvasPixelWidth()"
+            :height="thumbnailCanvasPixelHeight(pageIndex)"
+            :style="thumbnailCanvasStyle(pageIndex)"
+            class="docx-thumbnail-canvas"
+          />
         </div>
-        <div
-          v-if="bottomSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${bottomSpacerHeight}px` }"
-          aria-hidden="true"
-        />
+
+        <!-- Page number label: the number Word shows (per-section restart/format) -->
+        <div class="docx-thumbnail-label" data-testid="docx-thumbnail-label">
+          {{ pageLabel(pageIndex) }}
+        </div>
       </div>
+      <div
+        v-if="bottomSpacerHeight > 0"
+        class="docx-thumbnail-spacer"
+        :style="{ height: `${bottomSpacerHeight}px` }"
+        aria-hidden="true"
+      />
     </div>
-  </div>
+  </DocumentViewerSidebar>
 </template>
 
 <script setup lang="ts">
@@ -93,6 +100,7 @@ import {
   ensureDocxViewerPageSurfaceRegistry,
   subscribeDocxViewerPageSurfaces,
 } from "../composables/page-surface-registry"
+import { DocumentViewerSidebar } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -1007,80 +1015,55 @@ function onThumbnailScroll(event: Event): void {
 function onSelectPage(pageIndex: number): void {
   emit("selectPage", pageIndex)
 }
+
+function onSidebarOpen(open: boolean): void {
+  collapsed.value = !open
+}
 </script>
 
 <style scoped>
 .docx-thumbnail-panel {
-  display: flex;
-  flex-shrink: 0;
-  background: #f9fafb;
-  border-right: 1px solid #e5e7eb;
-  position: relative;
-  transition: width 150ms ease;
+  --office-ui-sidebar-width: 10rem;
+  box-sizing: border-box;
 }
 .docx-thumbnail-panel--dark {
-  background: #18181b;
-  border-right-color: #3f3f46;
+  color-scheme: dark;
 }
-.docx-thumbnail-panel--dark .docx-thumbnail-header { border-bottom-color: #3f3f46; }
-.docx-thumbnail-panel--dark .docx-thumbnail-title { color: #f4f4f5; }
-.docx-thumbnail-panel--dark .docx-thumbnail-count { background: #27272a; color: #a1a1aa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-item:hover { background: #27272a; }
-.docx-thumbnail-panel--dark .docx-thumbnail-item--active { background: #1e3a8a; outline-color: #60a5fa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-label { color: #a1a1aa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-toggle { background: #3f3f46; color: #e4e4e7; }
-.docx-thumbnail-panel--dark .docx-thumbnail-toggle:hover { background: #52525b; }
-.docx-thumbnail-panel--collapsed {
-  width: 28px;
+.docx-thumbnail-panel :deep(.office-document-sidebar__header) {
+  padding: var(--office-ui-space-2, 8px) var(--office-ui-space-3, 12px);
 }
-.docx-thumbnail-toggle {
-  position: absolute;
-  right: 4px;
-  top: 8px;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: #e5e7eb;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 10px;
-  color: #6b7280;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.docx-thumbnail-panel :deep(.office-document-sidebar__body) {
+  overflow: hidden;
+  padding: 0;
 }
-.docx-thumbnail-toggle:hover {
-  background: #d1d5db;
-}
-.docx-thumbnail-container {
-  width: 170px;
-  display: flex;
-  flex-direction: column;
-}
+.docx-thumbnail-panel--dark .docx-thumbnail-title { color: var(--office-foreground, #f4f4f5); }
+.docx-thumbnail-panel--dark .docx-thumbnail-count { background: var(--office-muted, #27272a); color: var(--office-muted-foreground, #a1a1aa); }
+.docx-thumbnail-panel--dark .docx-thumbnail-item:hover { background: var(--office-accent, #27272a); }
+.docx-thumbnail-panel--dark .docx-thumbnail-item--active { background: var(--office-accent, #1e3a8a); outline-color: var(--office-ring, #60a5fa); }
+.docx-thumbnail-panel--dark .docx-thumbnail-label { color: var(--office-muted-foreground, #a1a1aa); }
 .docx-thumbnail-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  inline-size: 100%;
+  gap: var(--office-ui-space-2, 8px);
 }
 .docx-thumbnail-title {
-  font-size: 12px;
+  font-size: var(--office-text-xs, 12px);
   font-weight: 600;
-  color: #374151;
+  color: var(--office-sidebar-foreground, #374151);
 }
 .docx-thumbnail-count {
-  font-size: 11px;
-  color: #6b7280;
-  background: #e5e7eb;
-  border-radius: 10px;
+  font-size: var(--office-text-xs, 11px);
+  color: var(--office-muted-foreground, #6b7280);
+  background: var(--office-muted, #e5e7eb);
+  border-radius: var(--office-radius-2xl, 10px);
   padding: 1px 8px;
 }
 .docx-thumbnail-list {
-  flex: 1;
+  block-size: 100%;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--office-ui-space-1, 4px);
 }
 .docx-thumbnail-spacer {
   width: 1px;

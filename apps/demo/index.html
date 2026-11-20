@@ -63,7 +63,7 @@
     button, input, select, textarea { font: inherit; }
     button, select, input[type="file"]::file-selector-button { transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
     button:disabled, select:disabled, input:disabled { cursor: not-allowed !important; opacity: 0.5; }
-    .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea),
+    .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea):not(.office-ui),
     .page input[type="file"]::file-selector-button {
       min-height: 2.25rem;
       border: 1px solid var(--input);
@@ -74,16 +74,16 @@
       padding: 0.45rem 0.75rem;
     }
     @media (pointer: coarse) {
-      .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea) {
+      .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea):not(.office-ui) {
         min-height: 44px;
       }
     }
-    .page :is(button, select):hover:not(:disabled),
+    .page :is(button, select):not(.office-ui):hover:not(:disabled),
     .page input[type="file"]::file-selector-button:hover {
       background: var(--accent);
       color: var(--accent-foreground);
     }
-    .page select {
+    .page select:not(.office-ui) {
       appearance: none;
       background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
       background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
@@ -115,9 +115,9 @@
     .page :is(th, td) { border-color: var(--border) !important; }
     .page th { background: var(--muted); color: var(--muted-foreground); font-weight: 600; }
     a:focus-visible, a:focus,
-    button:focus-visible, button:focus,
-    select:focus-visible, select:focus,
-    input:focus-visible, input:focus,
+    button:not(.office-ui):focus-visible, button:not(.office-ui):focus,
+    select:not(.office-ui):focus-visible, select:not(.office-ui):focus,
+    input:not(.office-ui):focus-visible, input:not(.office-ui):focus,
     textarea:focus-visible, textarea:focus,
     [contenteditable="true"]:focus-visible, [contenteditable="true"]:focus {
       outline: 2px solid var(--ring);

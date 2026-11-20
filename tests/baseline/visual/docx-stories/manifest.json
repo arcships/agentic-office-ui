@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "suite": "docx-ui-stories",
+  "issue": 159,
+  "capturedAt": "2026-11-20T04:01:10.913129+00:00",
+  "sample": "page-sizes.docx",
+  "browser": "chromium",
+  "stories": [
+    {
+      "id": "viewer-continuous-light-1440",
+      "route": "/docx-viewer",
+      "viewport": "1440x900",
+      "theme": "light",
+      "viewMode": "continuous",
+      "thumbnails": false,
+      "readOnly": false,
+      "toolbar": {
+        "height": 48,
+        "maxControlHeight": 28,
+        "scrollWidth": 1404,
+        "clientWidth": 1404,
+        "sidebar": null
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-1440.webp",
+      "sha256": "f74f8fd69b8fce66d87ad6cc9c1f5b2128f8cc8088696962c23e4e81a6f7864d"
+    },
+    {
+      "id": "viewer-single-dark-1440",
+      "route": "/docx-viewer",
+      "viewport": "1440x900",
+      "theme": "dark",
+      "viewMode": "single",
+      "thumbnails": false,
+      "readOnly": false,
+      "toolbar": {
+        "height": 48,
+        "maxControlHeight": 28,
+        "scrollWidth": 1404,
+        "clientWidth": 1404,
+        "sidebar": null
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-single-dark-1440.webp",
+      "sha256": "bf4e9114bf4221580b638366d20a57fb3640b32a54d6482b21b4afa43487646a"
+    },
+    {
+      "id": "viewer-spread-light-1440",
+      "route": "/docx-viewer",
+      "viewport": "1440x900",
+      "theme": "light",
+      "viewMode": "spread",
+      "thumbnails": false,
+      "readOnly": false,
+      "toolbar": {
+        "height": 48,
+        "maxControlHeight": 28,
+        "scrollWidth": 1404,
+        "clientWidth": 1404,
+        "sidebar": null
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-spread-light-1440.webp",
+      "sha256": "f9cd4400cda8f0a35d4152032b38e23ca0c86853baa47939508f8befee4e7c4c"
+    },
+    {
+      "id": "viewer-continuous-light-390-overlay",
+      "route": "/docx-viewer",
+      "viewport": "390x844",
+      "theme": "light",
+      "viewMode": "continuous",
+      "thumbnails": true,
+      "readOnly": false,
+      "toolbar": {
+        "height": 85,
+        "maxControlHeight": 32,
+        "scrollWidth": 366,
+        "clientWidth": 366,
+        "sidebar": {
+          "mode": "overlay",
+          "open": "true",
+          "width": 160
+        }
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-390-overlay.webp",
+      "sha256": "64ccc5af5bcec247317243c4e72d285556d340c16273567ee9263d7f02f85057"
+    },
+    {
+      "id": "viewer-continuous-dark-768-overlay",
+      "route": "/docx-viewer",
+      "viewport": "768x1024",
+      "theme": "dark",
+      "viewMode": "continuous",
+      "thumbnails": true,
+      "readOnly": false,
+      "toolbar": {
+        "height": 113,
+        "maxControlHeight": 28,
+        "scrollWidth": 732,
+        "clientWidth": 732,
+        "sidebar": {
+          "mode": "overlay",
+          "open": "true",
+          "width": 160
+        }
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-dark-768-overlay.webp",
+      "sha256": "8b81c098e74dd7a28501870708c2d69c6bf567f02bc9b615c1af99f8a0d4b11d"
+    },
+    {
+      "id": "editor-light-1440",
+      "route": "/docx-editor",
+      "viewport": "1440x900",
+      "theme": "light",
+      "viewMode": null,
+      "thumbnails": true,
+      "readOnly": false,
+      "toolbar": {
+        "height": 117,
+        "maxControlHeight": 36,
+        "scrollWidth": 1406,
+        "clientWidth": 1406,
+        "sidebar": {
+          "mode": "inline",
+          "open": "true",
+          "width": 160
+        }
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/editor-light-1440.webp",
+      "sha256": "f0e48fa9ba21e35eba6931e67862a8ca60e1cff6491ab6584489ab23ebc51a8b"
+    },
+    {
+      "id": "editor-readonly-dark-1440",
+      "route": "/docx-editor",
+      "viewport": "1440x900",
+      "theme": "dark",
+      "viewMode": null,
+      "thumbnails": false,
+      "readOnly": true,
+      "toolbar": {
+        "height": 117,
+        "maxControlHeight": 36,
+        "scrollWidth": 1406,
+        "clientWidth": 1406,
+        "sidebar": null
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/editor-readonly-dark-1440.webp",
+      "sha256": "1c6d2225a8bdb91f7702ee9f400d954262c9234cea58f22172259138cbf606f5"
+    },
+    {
+      "id": "editor-light-390-overlay",
+      "route": "/docx-editor",
+      "viewport": "390x844",
+      "theme": "light",
+      "viewMode": null,
+      "thumbnails": true,
+      "readOnly": false,
+      "toolbar": {
+        "height": 346,
+        "maxControlHeight": 36,
+        "scrollWidth": 368,
+        "clientWidth": 368,
+        "sidebar": {
+          "mode": "overlay",
+          "open": "true",
+          "width": 160
+        }
+      },
+      "screenshot": "tests/baseline/visual/docx-stories/editor-light-390-overlay.webp",
+      "sha256": "3984b7b526a0afa59a2e1e0758808afc2c88916772b04295dca5d4dfac640a81"
+    }
+  ]
+}
