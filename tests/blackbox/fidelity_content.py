@@ -200,10 +200,11 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         expect("服务级别摘要" in footnote_text, "脚注正文未展示")
         expect("响应时间变更" in endnote_text, "尾注正文未展示")
         # Find lives in the DOCX actions menu on the upstream-shaped default
-        # row; Ctrl/Cmd+F opens the same find popover while the viewer has
-        # focus.
-        page.locator('[data-testid="docx-viewer"]').click()
-        page.keyboard.press("Control+f")
+        # row. Use the visible menu path in the browser suite; the keyboard
+        # shortcut is covered by the toolbar component tests.
+        page.locator('[data-testid="docx-toolbar-actions"]').click()
+        page.locator('[data-testid="docx-actions-menu"]').wait_for(timeout=10_000)
+        page.locator('[data-testid="docx-find"]').click()
         search = page.locator('[data-testid="docx-search-input"]')
         search.wait_for(timeout=10_000)
         search.fill("reviewed")
