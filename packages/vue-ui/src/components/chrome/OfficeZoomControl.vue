@@ -33,6 +33,16 @@ export interface OfficeZoomControlProps {
   disabled?: boolean
   /** Render the fit-width / fit-page presets in the select. */
   showFit?: boolean
+  /**
+   * Render a native `<select>` instead of the Reka select. Hosts that need a
+   * native form control (or that integrate with a renderer without component
+   * patches) keep the same zoom buttons and value semantics.
+   */
+  nativeSelect?: boolean
+  /** Optional `data-testid` for the native select. */
+  selectTestId?: string
+  /** Optional native `title` for the select; defaults to `label`. */
+  selectTitle?: string
   /** Accessible name of the select; defaults to `common.zoom.level`. */
   label?: string
   /** Extra classes merged on the root. */
@@ -48,6 +58,9 @@ const props = withDefaults(defineProps<OfficeZoomControlProps>(), {
   options: () => [50, 75, 100, 125, 150, 200],
   disabled: false,
   showFit: true,
+  nativeSelect: false,
+  selectTestId: undefined,
+  selectTitle: undefined,
   label: undefined,
   class: "",
 })
@@ -109,6 +122,10 @@ const selectValue = computed(() => {
   return String(zoom.value)
 })
 
+const nativeSelectTitle = computed(
+  () => props.selectTitle ?? props.label ?? m.value.common.zoom.level,
+)
+
 function clamp(value: number): number {
   const finite = Number.isFinite(value) ? value : 100
   return Math.min(Math.max(finite, props.min), props.max)
@@ -140,6 +157,11 @@ function onSelect(value: string): void {
   if (value === "fit-page") return setFit("page")
   if (value === "actual") return setZoom(100)
   const next = Number(value)
+  if (Number.isFinite(next)) setZoom(next)
+}
+
+function onNativeSelect(event: Event): void {
+  const next = Number((event.target as HTMLSelectElement).value)
   if (Number.isFinite(next)) setZoom(next)
 }
 
@@ -186,6 +208,7 @@ const canZoomIn = computed(() => {
       data-testid="office-zoom-select"
     >
       <OfficeSelect
+        v-if="!props.nativeSelect"
         :model-value="selectValue"
         :options="selectOptions"
         :aria-label="props.label ?? m.common.zoom.level"
@@ -193,6 +216,22 @@ const canZoomIn = computed(() => {
         :disabled="props.disabled"
         @update:model-value="onSelect"
       />
+      <select
+        v-else
+        class="office-ui office-zoom-control__native"
+        :value="zoom"
+        :title="nativeSelectTitle"
+        :aria-label="props.label ?? m.common.zoom.level"
+        :disabled="props.disabled ? true : undefined"
+        :data-testid="props.selectTestId ?? 'office-zoom-native-select'"
+        @change="onNativeSelect"
+      >
+        <option
+          v-for="value of percentOptions"
+          :key="value"
+          :value="value"
+        >{{ percentLabel(value) }}</option>
+      </select>
     </span>
     <OfficeIconButton
       :label="m.common.zoom.in"

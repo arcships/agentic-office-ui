@@ -6,6 +6,8 @@
     :style="minHeightStyle"
     data-testid="docx-viewer"
     :data-state="viewerState"
+    :data-office-theme="darkTheme ? 'dark' : 'light'"
+    data-office-density="comfortable"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
     :data-show-comments="String(effectiveShowComments)"
     :data-view-only="viewOnlyReason ? 'true' : undefined"
@@ -95,11 +97,11 @@
 
       <main class="docx-viewer__content">
         <div v-if="isLoading" class="docx-viewer-state" data-testid="docx-loading-state">
-          <div class="docx-viewer-loading-spinner" />
-          <div>
-            <strong>{{ m.docx.viewer.loadingTitle }}</strong>
-            <span>{{ m.docx.viewer.loadingDetail }}</span>
-          </div>
+          <OfficeLoadingState
+            compact
+            :title="m.docx.viewer.loadingTitle"
+            :description="m.docx.viewer.loadingDetail"
+          />
         </div>
 
         <div
@@ -112,26 +114,42 @@
           :data-error-actual="errorNumber(error, 'actual')"
           :data-error-allowed="errorNumber(error, 'allowed')"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 3 2.8 19h18.4L12 3Z" /><path d="M12 9v4M12 17h.01" />
-          </svg>
-          <div>
-            <strong>{{ m.docx.viewer.errorTitle }}</strong>
-            <span v-if="errorCode(error)" class="docx-viewer-error-code">{{ errorCode(error) }}</span>
-            <span>{{ error.message }}</span>
-            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">{{ m.docx.viewer.chooseAnother }}</button>
-          </div>
+          <OfficeErrorState
+            compact
+            :title="m.docx.viewer.errorTitle"
+            :show-retry="false"
+          >
+            <template v-if="errorCode(error)" #description>
+              <span class="docx-viewer-error-code">{{ errorCode(error) }}</span>
+              <span>{{ error.message }}</span>
+            </template>
+            <template #actions>
+              <OfficeButton
+                v-if="showUpload"
+                variant="outline"
+                size="sm"
+                @click="uploadInputRef?.click()"
+              >{{ m.docx.viewer.chooseAnother }}</OfficeButton>
+            </template>
+          </OfficeErrorState>
         </div>
 
         <div v-else-if="!renderableModel" class="docx-viewer-state docx-viewer-state--empty">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 2.8h8l4 4V21H6zM14 2.8V7h4" />
-          </svg>
-          <div>
-            <strong>{{ m.docx.viewer.emptyTitle }}</strong>
-            <span>{{ effectiveEmptyState }}</span>
-            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">{{ m.docx.viewer.chooseFile }}</button>
-          </div>
+          <OfficeEmptyState
+            compact
+            icon="file-text"
+            :title="m.docx.viewer.emptyTitle"
+            :description="effectiveEmptyState"
+          >
+            <template #actions>
+              <OfficeButton
+                v-if="showUpload"
+                variant="outline"
+                size="sm"
+                @click="uploadInputRef?.click()"
+              >{{ m.docx.viewer.chooseFile }}</OfficeButton>
+            </template>
+          </OfficeEmptyState>
         </div>
 
         <DocxDocumentSurface
@@ -179,7 +197,7 @@ import {
   DOCX_FILE_ACCEPT,
   isSupportedDocxFileName,
 } from "../composables/docx-file-types"
-import { OfficeLiveStatus, useViewerKeys } from "@arcships/vue-ui"
+import { OfficeLiveStatus, OfficeEmptyState, OfficeErrorState, OfficeLoadingState, OfficeButton, useViewerKeys } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
@@ -839,55 +857,19 @@ defineExpose({
   border-bottom-color: #7c2d12;
   color: #fdba74;
 }
-.docx-viewer__body { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.docx-viewer__body { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }
 .docx-viewer__content { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }
 .docx-viewer-state {
   align-items: center;
-  color: #71717a;
+  color: var(--office-muted-foreground, #71717a);
   display: flex;
   flex: 1;
-  gap: 14px;
   justify-content: center;
   min-height: 260px;
-  padding: 32px;
-  text-align: left;
+  padding: var(--office-ui-space-8, 32px);
 }
-.docx-viewer-state > div { display: flex; flex-direction: column; gap: 4px; max-width: 430px; }
-.docx-viewer-state strong { color: var(--docx-foreground); font-size: 14px; }
-.docx-viewer-state span { font-size: 13px; line-height: 1.5; }
-.docx-viewer-state svg {
-  fill: none;
-  height: 32px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-  width: 32px;
-}
-.docx-viewer-state button {
-  align-self: flex-start;
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 7px;
-  color: #18181b;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  margin-top: 8px;
-  min-height: 32px;
-  padding: 0 12px;
-}
-.docx-viewer-state--error { color: #b91c1c; }
-.docx-viewer-error-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
-.docx-viewer-loading-spinner {
-  animation: docx-viewer-spin .7s linear infinite;
-  border: 2px solid #d4d4d8;
-  border-radius: 50%;
-  border-top-color: #2563eb;
-  height: 24px;
-  width: 24px;
-}
-@keyframes docx-viewer-spin { to { transform: rotate(360deg); } }
+.docx-viewer-state--error { color: var(--office-destructive-foreground, #b91c1c); }
+.docx-viewer-error-code { display: block; font-family: var(--office-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-weight: 600; margin-bottom: var(--office-ui-space-1, 4px); }
 
 @media print {
   .docx-viewer {

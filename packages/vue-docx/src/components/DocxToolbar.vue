@@ -1,545 +1,712 @@
 <template>
   <div class="docx-toolbar-shell" :class="{ 'docx-toolbar-shell--dark': toolbarTheme === 'dark' }" data-testid="docx-editor-toolbar">
-    <div class="docx-toolbar-topbar">
-      <div class="docx-toolbar-topbar__leading">
-        <button
-          type="button"
-          class="docx-toolbar-btn"
-          :class="{ active: showThumbnails }"
-          :aria-label="m.docx.toolbar.sidebarToggle"
-          :aria-pressed="showThumbnails"
-          :title="m.docx.toolbar.pageThumbnails"
-          @click="emit('toggleThumbnails')"
-        >
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <path d="M8 4v16M5.5 8h.01M5.5 12h.01M5.5 16h.01" />
-          </svg>
-        </button>
-        <span class="docx-toolbar-filename" :title="controller.fileName || 'document.docx'">
-          {{ controller.fileName || "document.docx" }}
-        </span>
-        <div class="docx-toolbar-page-control">
-          <span>{{ m.common.page.label }}</span>
-          <input
-            :value="currentPage"
-            :aria-label="m.common.page.current"
-            inputmode="numeric"
-            :disabled="(totalPages ?? 0) < 1"
-            @change="onPageChange"
+    <OfficeThemeProvider :theme="toolbarTheme">
+    <OfficeToolbar class="docx-toolbar-topbar">
+      <template #leading>
+        <OfficeToolbarGroup gap="sm" class="docx-toolbar-topbar__leading">
+          <OfficeButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="showThumbnails ? 'active' : undefined"
+            data-testid="editor-toggle-thumbnails"
+            :aria-label="m.docx.toolbar.sidebarToggle"
+            :aria-pressed="showThumbnails"
+            :title="m.docx.toolbar.pageThumbnails"
+            @click="emit('toggleThumbnails')"
+          >
+            <OfficeIcon name="panel-left" />
+          </OfficeButton>
+          <span class="docx-toolbar-filename" :title="controller.fileName || 'document.docx'">
+            {{ controller.fileName || "document.docx" }}
+          </span>
+          <OfficePageControl
+            class="docx-toolbar-page-control"
+            :model-value="currentPage ?? 1"
+            :total-pages="totalPages ?? 0"
+            :native-input="true"
+            input-test-id="docx-editor-page-current"
+            @update:model-value="emit('selectPage', $event)"
           />
-          <span>{{ m.common.page.of }} {{ totalPages || "–" }}</span>
-        </div>
-      </div>
+        </OfficeToolbarGroup>
+      </template>
 
-      <div class="docx-toolbar-topbar__actions">
-        <slot name="find" />
-        <button
-          type="button"
-          class="docx-toolbar-btn"
-          data-testid="editor-find-toggle"
-          :class="{ active: findOpen }"
-          :aria-pressed="findOpen"
-          :aria-label="m.docx.editor.find"
-          :title="m.docx.editor.find"
-          @click="emit('toggleFind')"
-        >
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
-        </button>
-        <label class="docx-toolbar-toggle" :title="m.docx.toolbar.trackedChanges">
-          <input type="checkbox" :checked="controller.showTrackedChanges" @change="controller.toggleShowTrackedChanges()" />
-          <span>{{ m.docx.editor.edits }}</span>
-        </label>
-        <label class="docx-toolbar-zoom" :title="m.docx.toolbar.revisionDisplay">
-          <select
-            data-testid="editor-revision-display"
-            class="docx-toolbar-select docx-toolbar-select-sm"
-            :value="controller.revisionDisplay"
-            :aria-label="m.docx.toolbar.revisionDisplay"
-            @change="onRevisionDisplayChange"
+      <template #trailing>
+        <OfficeToolbarGroup gap="sm" class="docx-toolbar-topbar__actions">
+          <slot name="find" />
+          <OfficeButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            data-testid="editor-find-toggle"
+            :class="findOpen ? 'active' : undefined"
+            :aria-pressed="findOpen"
+            :aria-label="m.docx.editor.find"
+            :title="m.docx.editor.find"
+            @click="emit('toggleFind')"
           >
-            <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
-            <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
-            <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
-          </select>
-        </label>
-        <label class="docx-toolbar-toggle" :title="m.docx.toolbar.comments">
-          <input type="checkbox" :checked="controller.showComments" @change="controller.toggleShowComments()" />
-          <span>{{ m.docx.toolbar.comments }}</span>
-        </label>
-        <button
-          type="button"
-          class="docx-toolbar-action"
-          data-testid="editor-accept-all-changes"
-          :title="m.docx.editor.acceptAllTitle"
-          :disabled="readOnly || !hasTrackedChanges"
-          @click="controller.acceptAllTrackedChanges()"
-        >
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
-          <span>{{ m.docx.editor.acceptAll }}</span>
-        </button>
-        <button
-          type="button"
-          class="docx-toolbar-action"
-          data-testid="editor-reject-all-changes"
-          :title="m.docx.editor.rejectAllTitle"
-          :disabled="readOnly || !hasTrackedChanges"
-          @click="controller.rejectAllTrackedChanges()"
-        >
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          <span>{{ m.docx.editor.rejectAll }}</span>
-        </button>
-        <span v-if="readOnly" class="docx-toolbar-readonly">{{ m.common.readOnly }}</span>
-        <button type="button" class="docx-toolbar-btn" :title="m.docx.editor.toggleTheme" @click="controller.setDocumentTheme(controller.documentTheme === 'light' ? 'dark' : 'light')">
-          <svg v-if="controller.documentTheme === 'light'" class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
-          </svg>
-          <svg v-else class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2" />
-          </svg>
-        </button>
-        <span class="docx-toolbar-separator" />
-        <label class="docx-toolbar-zoom" :title="m.docx.editor.zoom">
-          <select
-            data-testid="editor-zoom"
-            class="docx-toolbar-select docx-toolbar-select-sm"
-            :value="zoomPercent"
-            @change="onZoomChange"
-            :title="m.docx.editor.zoom"
-            :aria-label="m.docx.editor.zoom"
+            <OfficeIcon name="search" />
+          </OfficeButton>
+          <OfficeButton
+            variant="outline"
+            size="sm"
+            class="docx-toolbar-toggle"
+            :aria-pressed="controller.showTrackedChanges"
+            :label="m.docx.editor.edits"
+            :title="m.docx.toolbar.trackedChanges"
+            @click="controller.toggleShowTrackedChanges()"
+          >{{ m.docx.editor.edits }}</OfficeButton>
+          <label class="docx-toolbar-revision" :title="m.docx.toolbar.revisionDisplay">
+            <select
+              data-testid="editor-revision-display"
+              class="office-ui docx-toolbar-select docx-toolbar-select-sm"
+              :value="controller.revisionDisplay"
+              :aria-label="m.docx.toolbar.revisionDisplay"
+              @change="onRevisionDisplayChange"
+            >
+              <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
+              <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
+              <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
+            </select>
+          </label>
+          <OfficeButton
+            variant="outline"
+            size="sm"
+            class="docx-toolbar-toggle"
+            :aria-pressed="controller.showComments"
+            :label="m.docx.toolbar.comments"
+            :title="m.docx.toolbar.comments"
+            @click="controller.toggleShowComments()"
+          >{{ m.docx.toolbar.comments }}</OfficeButton>
+          <OfficeButton
+            variant="outline"
+            size="xs"
+            class="docx-toolbar-action"
+            data-testid="editor-accept-all-changes"
+            :title="m.docx.editor.acceptAllTitle"
+            :disabled="readOnly || !hasTrackedChanges"
+            @click="controller.acceptAllTrackedChanges()"
           >
-            <option v-for="z of zoomSelectOptions" :key="z" :value="z">{{ z }}%</option>
+            <OfficeIcon name="check" />
+            <span>{{ m.docx.editor.acceptAll }}</span>
+          </OfficeButton>
+          <OfficeButton
+            variant="outline"
+            size="xs"
+            class="docx-toolbar-action"
+            data-testid="editor-reject-all-changes"
+            :title="m.docx.editor.rejectAllTitle"
+            :disabled="readOnly || !hasTrackedChanges"
+            @click="controller.rejectAllTrackedChanges()"
+          >
+            <OfficeIcon name="x" />
+            <span>{{ m.docx.editor.rejectAll }}</span>
+          </OfficeButton>
+          <OfficeBadge v-if="readOnly" variant="secondary" size="sm" class="docx-toolbar-readonly">
+            {{ m.common.readOnly }}
+          </OfficeBadge>
+          <OfficeIconButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :label="m.docx.editor.toggleTheme"
+            :title="m.docx.editor.toggleTheme"
+            :icon="controller.documentTheme === 'light' ? 'moon' : 'sun'"
+            @click="controller.setDocumentTheme(controller.documentTheme === 'light' ? 'dark' : 'light')"
+          />
+          <OfficeToolbarSeparator />
+          <OfficeZoomControl
+            :model-value="zoomPercent"
+            :options="zoomSelectOptions"
+            :show-fit="false"
+            :native-select="true"
+            select-test-id="editor-zoom"
+            :select-title="m.docx.editor.zoom"
+            :label="m.docx.editor.zoom"
+            @update:model-value="onZoomValue"
+          />
+          <OfficeButton
+            data-testid="editor-new"
+            type="button"
+            variant="outline"
+            size="sm"
+            class="docx-toolbar-action"
+            :title="m.docx.editor.newTitle"
+            :disabled="readOnly && !controller.viewOnlyReason"
+            @click="controller.newDocument()"
+          >
+            <OfficeIcon name="file-plus" />
+            <span>{{ m.docx.editor.new }}</span>
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-import"
+            type="button"
+            variant="outline"
+            size="sm"
+            class="docx-toolbar-action"
+            :title="m.docx.editor.importTitle"
+            :disabled="readOnly && !controller.viewOnlyReason"
+            @click="onImport"
+          >
+            <OfficeIcon name="upload" />
+            <span>{{ m.docx.editor.import }}</span>
+          </OfficeButton>
+          <!-- Export stays a native action: it never gets a disabled attribute,
+               even while the document is read-only. -->
+          <button
+            data-testid="editor-export"
+            type="button"
+            class="office-ui office-button office-button--default office-button--size-sm docx-toolbar-action docx-toolbar-action--primary"
+            :title="m.docx.editor.exportTitle"
+            @click="controller.exportDocx()"
+          >
+            <span class="office-button__content">
+              <OfficeIcon name="download" />
+              <span>{{ m.docx.editor.export }}</span>
+            </span>
+          </button>
+        </OfficeToolbarGroup>
+      </template>
+    </OfficeToolbar>
+
+    <fieldset class="docx-toolbar-shell__formatting" :disabled="readOnly">
+      <OfficeToolbar class="docx-toolbar">
+        <!-- Undo/Redo -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            data-testid="editor-undo"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :disabled="!controller.canUndo"
+            :title="m.docx.editor.undo"
+            @click="controller.undo()"
+          >
+            <OfficeIcon name="undo-2" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-redo"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :disabled="!controller.canRedo"
+            :title="m.docx.editor.redo"
+            @click="controller.redo()"
+          >
+            <OfficeIcon name="redo-2" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator />
+
+        <!-- Font family -->
+        <OfficeToolbarGroup gap="sm">
+          <select
+            class="office-ui docx-toolbar-select"
+            :value="selectedRunStyle?.fontFamily ?? ''"
+            @change="onFontFamilyChange"
+            :title="m.docx.editor.fontFamily"
+            :aria-label="m.docx.editor.fontFamily"
+          >
+            <option value="">{{ m.docx.editor.font }}</option>
+            <option value="Calibri">Calibri</option>
+            <option value="Arial">Arial</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Helvetica">Helvetica</option>
+            <option value="Courier New">Courier New</option>
           </select>
-        </label>
-        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="controller.newDocument()">
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M12.5 8.5v7" /></svg>
-          <span>{{ m.docx.editor.new }}</span>
-        </button>
-        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="onImport">
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 13v6h14v-6" /></svg>
-          <span>{{ m.docx.editor.import }}</span>
-        </button>
-        <button data-testid="editor-export" type="button" class="docx-toolbar-action docx-toolbar-action--primary" :title="m.docx.editor.exportTitle" @click="controller.exportDocx()">
-          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 19h14" /></svg>
-          <span>{{ m.docx.editor.export }}</span>
-        </button>
-      </div>
-    </div>
+          <select
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
+            :value="selectedRunStyle?.fontSizePt ?? ''"
+            @change="onFontSizeChange"
+            :title="m.docx.editor.fontSize"
+            :aria-label="m.docx.editor.fontSize"
+          >
+            <option value="">{{ m.docx.editor.size }}</option>
+            <option v-for="size of fontSizes" :key="size" :value="size">{{ size }}</option>
+          </select>
+        </OfficeToolbarGroup>
 
-    <fieldset class="docx-toolbar" :disabled="readOnly">
-    <!-- Undo/Redo -->
-    <div class="docx-toolbar-group">
-      <button data-testid="editor-undo" class="docx-toolbar-btn" :disabled="!controller.canUndo" :title="m.docx.editor.undo" @click="controller.undo()">
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" /></svg>
-      </button>
-      <button data-testid="editor-redo" class="docx-toolbar-btn" :disabled="!controller.canRedo" :title="m.docx.editor.redo" @click="controller.redo()">
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5M19 12h-8a6 6 0 0 0-6 6" /></svg>
-      </button>
-    </div>
+        <OfficeToolbarSeparator />
 
-    <div class="docx-toolbar-separator" />
+        <!-- Text style toggles -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            data-testid="editor-bold"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn docx-toolbar-btn--text"
+            :class="selectedRunStyle?.bold ? 'active' : undefined"
+            :title="m.docx.editor.bold"
+            :aria-label="m.docx.editor.bold"
+            :aria-pressed="Boolean(selectedRunStyle?.bold)"
+            @click="controller.toggleBold()"
+          >
+            <strong>B</strong>
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-italic"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn docx-toolbar-btn--text"
+            :class="selectedRunStyle?.italic ? 'active' : undefined"
+            :title="m.docx.editor.italic"
+            :aria-label="m.docx.editor.italic"
+            :aria-pressed="Boolean(selectedRunStyle?.italic)"
+            @click="controller.toggleItalic()"
+          >
+            <em>I</em>
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-underline"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn docx-toolbar-btn--text"
+            :class="selectedRunStyle?.underline ? 'active' : undefined"
+            :title="m.docx.editor.underline"
+            :aria-label="m.docx.editor.underline"
+            :aria-pressed="Boolean(selectedRunStyle?.underline)"
+            @click="controller.toggleUnderline()"
+          >
+            <u>U</u>
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-strike"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn docx-toolbar-btn--text"
+            :class="selectedRunStyle?.strike ? 'active' : undefined"
+            :title="m.docx.editor.strikethrough"
+            :aria-label="m.docx.editor.strikethrough"
+            :aria-pressed="Boolean(selectedRunStyle?.strike)"
+            @click="controller.toggleStrike()"
+          >
+            <s>S</s>
+          </OfficeButton>
+        </OfficeToolbarGroup>
 
-    <!-- Font family -->
-    <div class="docx-toolbar-group">
-      <select
-        class="docx-toolbar-select"
-        :value="selectedRunStyle?.fontFamily ?? ''"
-        @change="onFontFamilyChange"
-        :title="m.docx.editor.fontFamily"
-      >
-        <option value="">{{ m.docx.editor.font }}</option>
-        <option value="Calibri">Calibri</option>
-        <option value="Arial">Arial</option>
-        <option value="Times New Roman">Times New Roman</option>
-        <option value="Georgia">Georgia</option>
-        <option value="Helvetica">Helvetica</option>
-        <option value="Courier New">Courier New</option>
-      </select>
-    </div>
+        <OfficeToolbarSeparator />
 
-    <!-- Font size -->
-    <div class="docx-toolbar-group">
-      <select
-        class="docx-toolbar-select docx-toolbar-select-sm"
-        :value="selectedRunStyle?.fontSizePt ?? ''"
-        @change="onFontSizeChange"
-        :title="m.docx.editor.fontSize"
-      >
-        <option value="">{{ m.docx.editor.size }}</option>
-        <option v-for="size of fontSizes" :key="size" :value="size">{{ size }}</option>
-      </select>
-    </div>
+        <!-- Superscript / Subscript -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="selectedRunStyle?.verticalAlign === 'superscript' ? 'active' : undefined"
+            :title="m.docx.editor.superscript"
+            :aria-label="m.docx.editor.superscript"
+            :aria-pressed="selectedRunStyle?.verticalAlign === 'superscript'"
+            @click="controller.toggleSuperscript()"
+          >
+            <OfficeIcon name="superscript" />
+          </OfficeButton>
+          <OfficeButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="selectedRunStyle?.verticalAlign === 'subscript' ? 'active' : undefined"
+            :title="m.docx.editor.subscript"
+            :aria-label="m.docx.editor.subscript"
+            :aria-pressed="selectedRunStyle?.verticalAlign === 'subscript'"
+            @click="controller.toggleSubscript()"
+          >
+            <OfficeIcon name="subscript" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Text style toggles -->
-    <div class="docx-toolbar-group">
-      <button
-        data-testid="editor-bold"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.bold }"
-        :title="m.docx.editor.bold"
-        :aria-label="m.docx.editor.bold"
-        :aria-pressed="Boolean(selectedRunStyle?.bold)"
-        @click="controller.toggleBold()"
-      >
-        <strong>B</strong>
-      </button>
-      <button
-        data-testid="editor-italic"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.italic }"
-        :title="m.docx.editor.italic"
-        :aria-label="m.docx.editor.italic"
-        :aria-pressed="Boolean(selectedRunStyle?.italic)"
-        @click="controller.toggleItalic()"
-      >
-        <em>I</em>
-      </button>
-      <button
-        data-testid="editor-underline"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.underline }"
-        :title="m.docx.editor.underline"
-        :aria-label="m.docx.editor.underline"
-        :aria-pressed="Boolean(selectedRunStyle?.underline)"
-        @click="controller.toggleUnderline()"
-      >
-        <u>U</u>
-      </button>
-      <button
-        data-testid="editor-strike"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.strike }"
-        :title="m.docx.editor.strikethrough"
-        :aria-label="m.docx.editor.strikethrough"
-        :aria-pressed="Boolean(selectedRunStyle?.strike)"
-        @click="controller.toggleStrike()"
-      >
-        <s>S</s>
-      </button>
-    </div>
+        <!-- Text color + Highlight color -->
+        <OfficeToolbarGroup gap="sm">
+          <div class="docx-toolbar-color-picker" :title="m.docx.editor.textColor">
+            <input
+              type="color"
+              class="docx-toolbar-color-input"
+              :value="textColorValue"
+              :aria-label="m.docx.editor.textColor"
+              @input="onTextColorChange"
+            />
+            <span class="docx-toolbar-color-label">A</span>
+          </div>
+          <div class="docx-toolbar-color-picker" :title="m.docx.editor.highlightColor">
+            <input
+              type="color"
+              class="docx-toolbar-color-input"
+              :value="highlightColorValue"
+              :aria-label="m.docx.editor.highlightColor"
+              @input="onHighlightColorChange"
+            />
+            <span class="docx-toolbar-color-label docx-toolbar-highlight-label">H</span>
+          </div>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Superscript / Subscript -->
-    <div class="docx-toolbar-group">
-      <button
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.verticalAlign === 'superscript' }"
-        :title="m.docx.editor.superscript"
-        :aria-label="m.docx.editor.superscript"
-        :aria-pressed="selectedRunStyle?.verticalAlign === 'superscript'"
-        @click="controller.toggleSuperscript()"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 7 10M11 7 4 17M15 8c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
-      </button>
-      <button
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: selectedRunStyle?.verticalAlign === 'subscript' }"
-        :title="m.docx.editor.subscript"
-        :aria-label="m.docx.editor.subscript"
-        :aria-pressed="selectedRunStyle?.verticalAlign === 'subscript'"
-        @click="controller.toggleSubscript()"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 7 10M11 6 4 16M15 15c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
-      </button>
-    </div>
+        <!-- Hyperlink -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            data-testid="editor-link"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="controller.selectedLink ? 'active' : undefined"
+            :title="m.docx.editor.link"
+            :aria-label="m.docx.editor.link"
+            :aria-pressed="Boolean(controller.selectedLink)"
+            @click="onLinkClick"
+          >
+            <OfficeIcon name="link" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Text color + Highlight color -->
-    <div class="docx-toolbar-group">
-      <div class="docx-toolbar-color-picker" :title="m.docx.editor.textColor">
-        <input
-          type="color"
-          class="docx-toolbar-color-input"
-          :value="textColorValue"
-          :aria-label="m.docx.editor.textColor"
-          @input="onTextColorChange"
-        />
-        <span class="docx-toolbar-color-label">A</span>
-      </div>
-      <div class="docx-toolbar-color-picker" :title="m.docx.editor.highlightColor">
-        <input
-          type="color"
-          class="docx-toolbar-color-input"
-          :value="highlightColorValue"
-          :aria-label="m.docx.editor.highlightColor"
-          @input="onHighlightColorChange"
-        />
-        <span class="docx-toolbar-color-label docx-toolbar-highlight-label">H</span>
-      </div>
-    </div>
+        <!-- Alignment -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            data-testid="editor-align-left"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="paragraphAlignment === 'left' ? 'active' : undefined"
+            :title="m.docx.editor.alignLeft"
+            :aria-label="m.docx.editor.alignLeft"
+            :aria-pressed="paragraphAlignment === 'left'"
+            @click="controller.setAlignment('left')"
+          >
+            <OfficeIcon name="align-left" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-align-center"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="paragraphAlignment === 'center' ? 'active' : undefined"
+            :title="m.docx.editor.alignCenter"
+            :aria-label="m.docx.editor.alignCenter"
+            :aria-pressed="paragraphAlignment === 'center'"
+            @click="controller.setAlignment('center')"
+          >
+            <OfficeIcon name="align-center" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-align-right"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="paragraphAlignment === 'right' ? 'active' : undefined"
+            :title="m.docx.editor.alignRight"
+            :aria-label="m.docx.editor.alignRight"
+            :aria-pressed="paragraphAlignment === 'right'"
+            @click="controller.setAlignment('right')"
+          >
+            <OfficeIcon name="align-right" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-align-justify"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="paragraphAlignment === 'justify' ? 'active' : undefined"
+            :title="m.docx.editor.justify"
+            :aria-label="m.docx.editor.justify"
+            :aria-pressed="paragraphAlignment === 'justify'"
+            @click="controller.setAlignment('justify')"
+          >
+            <OfficeIcon name="align-justify" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Hyperlink -->
-    <div class="docx-toolbar-group">
-      <button
-        data-testid="editor-link"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: !!controller.selectedLink }"
-        :title="m.docx.editor.link"
-        :aria-label="m.docx.editor.link"
-        :aria-pressed="Boolean(controller.selectedLink)"
-        @click="onLinkClick"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9.5M7.3 16.7l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.7 7.3l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" /></svg>
-      </button>
-    </div>
+        <!-- Lists -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="controller.hasUnorderedList ? 'active' : undefined"
+            :title="m.docx.editor.bulletList"
+            :aria-label="m.docx.editor.bulletList"
+            :aria-pressed="controller.hasUnorderedList"
+            @click="controller.toggleList('unordered')"
+          >
+            <OfficeIcon name="list" />
+          </OfficeButton>
+          <OfficeButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="controller.hasOrderedList ? 'active' : undefined"
+            :title="m.docx.editor.numberedList"
+            :aria-label="m.docx.editor.numberedList"
+            :aria-pressed="controller.hasOrderedList"
+            @click="controller.toggleList('ordered')"
+          >
+            <OfficeIcon name="list-ordered" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-indent"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :title="m.docx.editor.increaseIndentTitle"
+            :aria-label="m.docx.editor.increaseIndent"
+            :disabled="!canIncreaseListDepth"
+            @click="controller.adjustSelectedListDepth(1)"
+          >
+            <OfficeIcon name="indent-increase" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-outdent"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :title="m.docx.editor.decreaseIndentTitle"
+            :aria-label="m.docx.editor.decreaseIndent"
+            :disabled="!canDecreaseListDepth"
+            @click="controller.adjustSelectedListDepth(-1)"
+          >
+            <OfficeIcon name="indent-decrease" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Alignment -->
-    <div class="docx-toolbar-group">
-      <button
-        data-testid="editor-align-left"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: paragraphAlignment === 'left' }"
-        :title="m.docx.editor.alignLeft"
-        :aria-label="m.docx.editor.alignLeft"
-        :aria-pressed="paragraphAlignment === 'left'"
-        @click="controller.setAlignment('left')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg>
-      </button>
-      <button
-        data-testid="editor-align-center"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: paragraphAlignment === 'center' }"
-        :title="m.docx.editor.alignCenter"
-        :aria-label="m.docx.editor.alignCenter"
-        :aria-pressed="paragraphAlignment === 'center'"
-        @click="controller.setAlignment('center')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg>
-      </button>
-      <button
-        data-testid="editor-align-right"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: paragraphAlignment === 'right' }"
-        :title="m.docx.editor.alignRight"
-        :aria-label="m.docx.editor.alignRight"
-        :aria-pressed="paragraphAlignment === 'right'"
-        @click="controller.setAlignment('right')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg>
-      </button>
-      <button
-        data-testid="editor-align-justify"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: paragraphAlignment === 'justify' }"
-        :title="m.docx.editor.justify"
-        :aria-label="m.docx.editor.justify"
-        :aria-pressed="paragraphAlignment === 'justify'"
-        @click="controller.setAlignment('justify')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-      </button>
-    </div>
+        <!-- Body columns of the caret's section -->
+        <OfficeToolbarGroup gap="sm">
+          <select
+            data-testid="editor-columns"
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
+            :value="pageSetup.columns.value.count"
+            :title="m.docx.editor.columns"
+            :aria-label="m.docx.editor.columns"
+            @change="onColumnsChange"
+          >
+            <option
+              v-for="option of columnOptions"
+              :key="option.count"
+              :value="option.count"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Lists -->
-    <div class="docx-toolbar-group">
-      <button
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: controller.hasUnorderedList }"
-        :title="m.docx.editor.bulletList"
-        :aria-label="m.docx.editor.bulletList"
-        :aria-pressed="controller.hasUnorderedList"
-        @click="controller.toggleList('unordered')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1" /><circle cx="5" cy="12" r="1" /><circle cx="5" cy="17" r="1" /><path d="M9 7h11M9 12h11M9 17h11" /></svg>
-      </button>
-      <button
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: controller.hasOrderedList }"
-        :title="m.docx.editor.numberedList"
-        :aria-label="m.docx.editor.numberedList"
-        :aria-pressed="controller.hasOrderedList"
-        @click="controller.toggleList('ordered')"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h1v4M3.5 9H6M3.5 13h2L3.5 17H6M10 7h10M10 15h10" /></svg>
-      </button>
-      <button
-        data-testid="editor-indent"
-        class="docx-toolbar-btn"
-        :title="m.docx.editor.increaseIndentTitle"
-        :aria-label="m.docx.editor.increaseIndent"
-        :disabled="!canIncreaseListDepth"
-        @click="controller.adjustSelectedListDepth(1)"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M9 6l-4 3 4 3" /></svg>
-      </button>
-      <button
-        data-testid="editor-outdent"
-        class="docx-toolbar-btn"
-        :title="m.docx.editor.decreaseIndentTitle"
-        :aria-label="m.docx.editor.decreaseIndent"
-        :disabled="!canDecreaseListDepth"
-        @click="controller.adjustSelectedListDepth(-1)"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M5 6l4 3-4 3" /></svg>
-      </button>
-    </div>
+        <!-- Line spacing -->
+        <OfficeToolbarGroup gap="sm">
+          <select
+            class="office-ui docx-toolbar-select docx-toolbar-select-sm"
+            :value="lineSpacingValue"
+            @change="onLineSpacingChange"
+            :title="m.docx.editor.lineSpacing"
+            :aria-label="m.docx.editor.lineSpacing"
+          >
+            <option value="1">1.00</option>
+            <option value="1.15">1.15</option>
+            <option value="1.2">1.20</option>
+            <option value="1.5">1.50</option>
+            <option value="2">2.00</option>
+            <option value="2.5">2.50</option>
+            <option value="3">3.00</option>
+          </select>
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
-
-    <!-- Body columns of the caret's section -->
-    <div class="docx-toolbar-group">
-      <select
-        data-testid="editor-columns"
-        class="docx-toolbar-select docx-toolbar-select-sm"
-        :value="pageSetup.columns.value.count"
-        :title="m.docx.editor.columns"
-        :aria-label="m.docx.editor.columns"
-        @change="onColumnsChange"
-      >
-        <option
-          v-for="option of columnOptions"
-          :key="option.count"
-          :value="option.count"
+        <!-- Heading styles -->
+        <OfficeToolbarGroup
+          ref="stylePickerEl"
+          gap="sm"
+          class="docx-toolbar-style-picker"
+          data-testid="editor-paragraph-style-picker"
+          @pointerenter="onStylePickerEnter"
+          @pointerleave="onStylePickerLeave"
         >
-          {{ option.label }}
-        </option>
-      </select>
-    </div>
+          <select
+            class="office-ui docx-toolbar-select"
+            data-testid="editor-paragraph-style"
+            :value="controller.selectedParagraphStyleId ?? ''"
+            @change="onStyleChange"
+            @mousedown="closeStylePreview"
+            @focus="closeStylePreview"
+            :title="m.docx.editor.paragraphStyle"
+            :aria-label="m.docx.editor.paragraphStyle"
+          >
+            <option value="">{{ m.docx.editor.normal }}</option>
+            <option
+              v-for="style of controller.availableParagraphStyles"
+              :key="style.id"
+              :value="style.id"
+            >
+              {{ style.name }}
+            </option>
+          </select>
+          <DocxStylePreviewPopover
+            v-if="showStylePreview !== false && stylePreviewOpen"
+            :open="stylePreviewOpen"
+            :styles="controller.availableParagraphStyles"
+            :preview-style-id="stylePreviewStyleId"
+            :document-theme="toolbarTheme"
+            :x="stylePreviewPosition.x"
+            :y="stylePreviewPosition.y"
+            @hover="stylePreviewStyleId = $event"
+            @select="onStylePreviewSelect"
+            @close="closeStylePreview"
+            @pointerenter="cancelStylePreviewClose"
+            @pointerleave="scheduleStylePreviewClose"
+          />
+        </OfficeToolbarGroup>
 
-    <div class="docx-toolbar-separator" />
+        <OfficeToolbarSeparator />
 
-    <!-- Line spacing -->
-    <div class="docx-toolbar-group">
-      <select
-        class="docx-toolbar-select docx-toolbar-select-sm"
-        :value="lineSpacingValue"
-        @change="onLineSpacingChange"
-        :title="m.docx.editor.lineSpacing"
-      >
-        <option value="1">1.00</option>
-        <option value="1.15">1.15</option>
-        <option value="1.2">1.20</option>
-        <option value="1.5">1.50</option>
-        <option value="2">2.00</option>
-        <option value="2.5">2.50</option>
-        <option value="3">3.00</option>
-      </select>
-    </div>
+        <!-- Borders -->
+        <OfficeToolbarGroup gap="sm">
+          <select
+            class="office-ui docx-toolbar-select"
+            :value="activeBorderPresetValue"
+            @change="onBorderPresetChange"
+            :title="m.docx.editor.borders"
+            :aria-label="m.docx.editor.borders"
+          >
+            <option value="">{{ m.docx.editor.borders }}</option>
+            <option v-for="preset of borderPresets" :key="preset.value" :value="preset.value">
+              {{ preset.label }}
+            </option>
+          </select>
+        </OfficeToolbarGroup>
 
-    <!-- Heading styles -->
-    <div
-      ref="stylePickerEl"
-      class="docx-toolbar-group docx-toolbar-style-picker"
-      data-testid="editor-paragraph-style-picker"
-      @pointerenter="onStylePickerEnter"
-      @pointerleave="onStylePickerLeave"
-    >
-      <select
-        class="docx-toolbar-select"
-        data-testid="editor-paragraph-style"
-        :value="controller.selectedParagraphStyleId ?? ''"
-        @change="onStyleChange"
-        @mousedown="closeStylePreview"
-        @focus="closeStylePreview"
-        :title="m.docx.editor.paragraphStyle"
-      >
-        <option value="">{{ m.docx.editor.normal }}</option>
-        <option
-          v-for="style of controller.availableParagraphStyles"
-          :key="style.id"
-          :value="style.id"
+        <OfficeToolbarSeparator />
+
+        <!-- Insert image + Insert table + New comment -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            data-testid="editor-insert-image"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :title="m.docx.editor.insertImage"
+            :aria-label="m.docx.editor.insertImage"
+            @click="onInsertImage"
+          >
+            <OfficeIcon name="image" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-insert-table"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :title="m.docx.editor.insertTable"
+            :aria-label="m.docx.editor.insertTable"
+            @click="controller.insertTable()"
+          >
+            <OfficeIcon name="table" />
+          </OfficeButton>
+          <OfficeButton
+            data-testid="editor-add-comment"
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="controller.commentComposer ? 'active' : undefined"
+            :disabled="readOnly || !canAddComment"
+            :title="m.docx.editor.addCommentTitle"
+            :aria-label="m.docx.editor.addComment"
+            @click="onAddComment"
+          >
+            <OfficeIcon name="message-square-plus" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator />
+
+        <!-- Page setup (margins / paper size / orientation) -->
+        <OfficeToolbarGroup gap="sm">
+          <OfficeButton
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            class="docx-toolbar-btn"
+            :class="pageSetupOpen ? 'active' : undefined"
+            data-testid="editor-page-setup"
+            :title="m.docx.pageSetup.open"
+            :aria-label="m.docx.pageSetup.open"
+            :aria-expanded="pageSetupOpen"
+            @click="pageSetupOpen = true"
+          >
+            <OfficeIcon name="settings" />
+          </OfficeButton>
+        </OfficeToolbarGroup>
+
+        <!-- Table structure commands for the selected cell/range -->
+        <OfficeToolbarGroup
+          v-if="selectedTableCell"
+          gap="sm"
+          class="docx-toolbar-group--table"
+          data-testid="editor-table-actions"
         >
-          {{ style.name }}
-        </option>
-      </select>
-      <DocxStylePreviewPopover
-        v-if="showStylePreview !== false && stylePreviewOpen"
-        :open="stylePreviewOpen"
-        :styles="controller.availableParagraphStyles"
-        :preview-style-id="stylePreviewStyleId"
-        :document-theme="toolbarTheme"
-        :x="stylePreviewPosition.x"
-        :y="stylePreviewPosition.y"
-        @hover="stylePreviewStyleId = $event"
-        @select="onStylePreviewSelect"
-        @close="closeStylePreview"
-        @pointerenter="cancelStylePreviewClose"
-        @pointerleave="scheduleStylePreviewClose"
-      />
-    </div>
-
-    <div class="docx-toolbar-separator" />
-
-    <!-- Borders -->
-    <div class="docx-toolbar-group">
-      <select
-        class="docx-toolbar-select"
-        :value="activeBorderPresetValue"
-        @change="onBorderPresetChange"
-        :title="m.docx.editor.borders"
-      >
-        <option value="">{{ m.docx.editor.borders }}</option>
-        <option v-for="preset of borderPresets" :key="preset.value" :value="preset.value">
-          {{ preset.label }}
-        </option>
-      </select>
-    </div>
-
-    <div class="docx-toolbar-separator" />
-
-    <!-- Insert image + Insert table + New comment -->
-    <div class="docx-toolbar-group">
-      <button data-testid="editor-insert-image" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></svg>
-      </button>
-      <button data-testid="editor-insert-table" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
-      </button>
-      <button
-        data-testid="editor-add-comment"
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: Boolean(controller.commentComposer) }"
-        :disabled="readOnly || !canAddComment"
-        :title="m.docx.editor.addCommentTitle"
-        :aria-label="m.docx.editor.addComment"
-        @click="onAddComment"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" /><path d="M8 11h8M8 15h5" /></svg>
-      </button>
-    </div>
-
-    <div class="docx-toolbar-separator" />
-
-    <!-- Page setup (margins / paper size / orientation) -->
-    <div class="docx-toolbar-group">
-      <button
-        type="button"
-        class="docx-toolbar-btn"
-        :class="{ active: pageSetupOpen }"
-        data-testid="editor-page-setup"
-        :title="m.docx.pageSetup.open"
-        :aria-label="m.docx.pageSetup.open"
-        :aria-expanded="pageSetupOpen"
-        @click="pageSetupOpen = true"
-      >
-        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM3 7h3M18 7h3M3 12h3M18 12h3M3 17h3M18 17h3" /></svg>
-      </button>
-    </div>
+          <OfficeButton data-testid="editor-table-row-above" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowAbove" @click="insertSelectedTableRow('above')">R↑</OfficeButton>
+          <OfficeButton data-testid="editor-table-row-below" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowBelow" @click="insertSelectedTableRow('below')">R↓</OfficeButton>
+          <OfficeButton data-testid="editor-table-column-left" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnLeft" @click="insertSelectedTableColumn('left')">C←</OfficeButton>
+          <OfficeButton data-testid="editor-table-column-right" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnRight" @click="insertSelectedTableColumn('right')">C→</OfficeButton>
+          <OfficeButton data-testid="editor-table-delete-row" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteRow" @click="deleteSelectedTableRow()">R×</OfficeButton>
+          <OfficeButton data-testid="editor-table-delete-column" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteColumn" @click="deleteSelectedTableColumn()">C×</OfficeButton>
+          <OfficeButton
+            data-testid="editor-table-merge"
+            variant="ghost"
+            size="xs"
+            class="docx-toolbar-btn"
+            :title="m.docx.contextMenu.mergeCells"
+            :disabled="!canMergeSelectedTableCells"
+            @click="mergeSelectedTableCells()"
+          >⧉</OfficeButton>
+          <OfficeButton
+            data-testid="editor-table-split"
+            variant="ghost"
+            size="xs"
+            class="docx-toolbar-btn"
+            :title="m.docx.contextMenu.splitCell"
+            :disabled="!canSplitSelectedTableCell"
+            @click="splitSelectedTableCell()"
+          >⧅</OfficeButton>
+          <OfficeButton
+            data-testid="editor-table-select-all"
+            variant="ghost"
+            size="xs"
+            class="docx-toolbar-btn"
+            :title="m.docx.contextMenu.selectTable"
+            @click="selectWholeTable()"
+          >▦</OfficeButton>
+          <OfficeButton
+            data-testid="editor-table-clear"
+            variant="ghost"
+            size="xs"
+            class="docx-toolbar-btn"
+            :title="m.docx.contextMenu.clearContents"
+            :disabled="!canClearSelectedTableCells"
+            @click="clearSelectedTableCells()"
+          >⌫</OfficeButton>
+          <OfficeButton data-testid="editor-table-delete" variant="ghost" size="xs" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteTable" @click="deleteSelectedTable()">T×</OfficeButton>
+        </OfficeToolbarGroup>
+      </OfficeToolbar>
+    </fieldset>
 
     <DocxPageSetupDialog
       v-if="pageSetupOpen"
@@ -553,51 +720,7 @@
       @update:section-index="pageSetup.selectSection($event)"
       @close="pageSetupOpen = false"
     />
-
-    <!-- Table structure commands for the selected cell/range -->
-    <div
-      v-if="selectedTableCell"
-      class="docx-toolbar-group docx-toolbar-group--table"
-      data-testid="editor-table-actions"
-    >
-      <button data-testid="editor-table-row-above" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowAbove" @click="insertSelectedTableRow('above')">R↑</button>
-      <button data-testid="editor-table-row-below" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowBelow" @click="insertSelectedTableRow('below')">R↓</button>
-      <button data-testid="editor-table-column-left" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnLeft" @click="insertSelectedTableColumn('left')">C←</button>
-      <button data-testid="editor-table-column-right" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnRight" @click="insertSelectedTableColumn('right')">C→</button>
-      <button data-testid="editor-table-delete-row" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteRow" @click="deleteSelectedTableRow()">R×</button>
-      <button data-testid="editor-table-delete-column" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteColumn" @click="deleteSelectedTableColumn()">C×</button>
-      <button
-        data-testid="editor-table-merge"
-        class="docx-toolbar-btn"
-        :title="m.docx.contextMenu.mergeCells"
-        :disabled="!canMergeSelectedTableCells"
-        @click="mergeSelectedTableCells()"
-      >⧉</button>
-      <button
-        data-testid="editor-table-split"
-        class="docx-toolbar-btn"
-        :title="m.docx.contextMenu.splitCell"
-        :disabled="!canSplitSelectedTableCell"
-        @click="splitSelectedTableCell()"
-      >⧅</button>
-      <button
-        data-testid="editor-table-select-all"
-        class="docx-toolbar-btn"
-        :title="m.docx.contextMenu.selectTable"
-        @click="selectWholeTable()"
-      >▦</button>
-      <button
-        data-testid="editor-table-clear"
-        class="docx-toolbar-btn"
-        :title="m.docx.contextMenu.clearContents"
-        :disabled="!canClearSelectedTableCells"
-        @click="clearSelectedTableCells()"
-      >⌫</button>
-      <button data-testid="editor-table-delete" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteTable" @click="deleteSelectedTable()">T×</button>
-    </div>
-
-
-    </fieldset>
+    </OfficeThemeProvider>
   </div>
 </template>
 
@@ -605,6 +728,18 @@
 import { computed, onUnmounted, ref, watch } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
+import {
+  OfficeBadge,
+  OfficeButton,
+  OfficeIcon,
+  OfficeIconButton,
+  OfficePageControl,
+  OfficeToolbar,
+  OfficeToolbarGroup,
+  OfficeToolbarSeparator,
+  OfficeThemeProvider,
+  OfficeZoomControl,
+} from "@arcships/vue-ui"
 import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useDocxMessages } from "../i18n"
@@ -644,11 +779,20 @@ const toolbarTheme = computed(() => props.theme ?? props.controller.documentThem
 // A native <select> cannot show what a style looks like: hovering the picker
 // opens a preview list whose sample text follows the hovered style. Clicking the
 // select (or an item) applies it; the select stays the keyboard/simple path.
-const stylePickerEl = ref<HTMLElement | undefined>()
+const stylePickerEl = ref<InstanceType<typeof OfficeToolbarGroup> | undefined>()
 const stylePreviewOpen = ref(false)
 const stylePreviewStyleId = ref<string | undefined>()
 const stylePreviewPosition = ref({ x: 0, y: 0 })
 let stylePreviewHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function stylePickerElement(): HTMLElement | undefined {
+  const instance = stylePickerEl.value as unknown
+  if (!instance) return undefined
+  const root = (instance as { $el?: unknown }).$el ?? instance
+  return typeof (root as HTMLElement).getBoundingClientRect === "function"
+    ? (root as HTMLElement)
+    : undefined
+}
 
 function cancelStylePreviewClose(): void {
   if (stylePreviewHideTimer !== undefined) clearTimeout(stylePreviewHideTimer)
@@ -667,7 +811,7 @@ function openStylePreview(): void {
   cancelStylePreviewClose()
   if (stylePreviewOpen.value) return
   stylePreviewStyleId.value = props.controller.selectedParagraphStyleId
-  const rect = stylePickerEl.value?.getBoundingClientRect?.()
+  const rect = stylePickerElement()?.getBoundingClientRect?.()
   if (rect) {
     stylePreviewPosition.value = {
       x: Math.round(rect.left),
@@ -769,9 +913,8 @@ const zoomSelectOptions = computed(() => {
 
 watch(() => props.zoom, (v) => { zoomPercent.value = v ?? 100 })
 
-function onZoomChange(event: Event): void {
-  const target = event.target as HTMLSelectElement
-  const value = Number(target.value)
+function onZoomValue(value: number): void {
+  if (!Number.isFinite(value)) return
   zoomPercent.value = value
   emit("update:zoom", value)
 }
@@ -781,13 +924,6 @@ function onRevisionDisplayChange(event: Event): void {
   if (value === "inline" || value === "balloons" || value === "none") {
     props.controller.setRevisionDisplay(value)
   }
-}
-
-function onPageChange(event: Event): void {
-  const value = Number((event.target as HTMLInputElement).value)
-  const total = Math.max(1, props.totalPages ?? 1)
-  if (!Number.isInteger(value)) return
-  emit("selectPage", Math.min(Math.max(value, 1), total))
 }
 
 // ── Derived values ──────────────────────────────────────────────────
@@ -1070,29 +1206,51 @@ function onImport(): void {
 
 <style scoped>
 .docx-toolbar-shell {
-  background: #fff;
-  border-bottom: 1px solid #e4e4e7;
-  color: #18181b;
+  background: var(--office-background, #fff);
+  border-bottom: 1px solid var(--office-border, #e4e4e7);
+  color: var(--office-foreground, #18181b);
   flex: 0 0 auto;
   min-width: 0;
 }
+
+/* Host pages may impose a global min-height on buttons/inputs. The editor
+ * toolbar owns the 28/32px control contract and opts into 44px only for
+ * coarse pointers. */
+.docx-toolbar-shell :deep(button),
+.docx-toolbar-shell :deep(input),
+.docx-toolbar-shell :deep(select) {
+  min-height: 0;
+  min-block-size: 0;
+}
+.docx-toolbar-shell--dark {
+  background: var(--office-background, #18181b);
+  border-bottom-color: var(--office-border, #3f3f46);
+  color: var(--office-foreground, #f4f4f5);
+}
 .docx-toolbar-topbar {
-  align-items: center;
-  border-bottom: 1px solid #e4e4e7;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  min-height: 44px;
-  padding: 6px 12px;
+  --office-ui-toolbar-min-height: 2.75rem;
+  --office-ui-toolbar-padding-block: var(--office-ui-space-1-5);
+  --office-ui-toolbar-padding-inline: var(--office-ui-space-3);
+  border-bottom: 1px solid var(--office-border, #e4e4e7);
 }
-.docx-toolbar-topbar__leading,
-.docx-toolbar-topbar__actions,
-.docx-toolbar-page-control {
-  align-items: center;
-  display: flex;
+.docx-toolbar-topbar :deep(.office-toolbar__leading),
+.docx-toolbar-topbar :deep(.office-toolbar__trailing) {
+  min-inline-size: 0;
 }
-.docx-toolbar-topbar__leading { gap: 9px; min-width: 0; }
-.docx-toolbar-topbar__actions { gap: 4px; }
+.docx-toolbar-topbar :deep(.office-toolbar__trailing) {
+  flex: 0 1 auto;
+}
+.docx-toolbar-topbar__leading {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  gap: var(--office-ui-space-2);
+}
+.docx-toolbar-topbar__actions {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  max-inline-size: 100%;
+  row-gap: var(--office-ui-space-1);
+}
 .docx-toolbar-filename {
   font-size: 13px;
   font-weight: 600;
@@ -1102,148 +1260,88 @@ function onImport(): void {
   white-space: nowrap;
 }
 .docx-toolbar-page-control {
-  color: #52525b;
-  font-size: 12px;
-  gap: 5px;
-  white-space: nowrap;
+  flex: 0 0 auto;
 }
-.docx-toolbar-page-control input {
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  color: #18181b;
-  font: inherit;
-  height: 28px;
-  padding: 0 4px;
-  text-align: center;
-  width: 38px;
-}
-.docx-toolbar-action {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 7px;
-  color: #27272a;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-}
-.docx-toolbar-action:hover { background: #f4f4f5; }
-.docx-toolbar-action--primary { background: #18181b; border-color: #18181b; color: #fff; }
-.docx-toolbar-action--primary:hover { background: #27272a; }
-.docx-toolbar-icon {
-  fill: none;
-  height: 16px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-  width: 16px;
-}
-.docx-toolbar-readonly {
-  background: #f4f4f5;
-  border-radius: 999px;
-  color: #71717a;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 8px;
-}
-.docx-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
-  background: #fff;
+.docx-toolbar-shell__formatting {
   border: 0;
-  border-bottom: 0;
-  overflow-x: visible;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  row-gap: 4px;
   margin: 0;
   min-inline-size: 0;
+  padding: 0;
 }
-.docx-toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex-shrink: 0;
+.docx-toolbar {
+  --office-ui-toolbar-min-height: 0;
+  --office-ui-toolbar-padding-block: var(--office-ui-space-1-5);
+  --office-ui-toolbar-padding-inline: var(--office-ui-space-3);
+  --office-ui-toolbar-gap: var(--office-ui-space-0-5);
+  border-block-end: 0;
+  background: var(--office-background, #fff);
+  row-gap: var(--office-ui-space-1);
 }
 .docx-toolbar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: none;
-  border-radius: 4px;
-  cursor: pointer;
+  color: var(--office-muted-foreground, #374151);
+}
+.docx-toolbar-btn:hover:not(:disabled) {
+  color: var(--office-foreground, #18181b);
+}
+.docx-toolbar-btn.active,
+.docx-toolbar-btn[aria-pressed="true"] {
+  background: var(--office-accent, #e5e7eb);
+  color: var(--office-foreground, #2563eb);
+}
+.docx-toolbar-btn--text {
   font-size: 13px;
-  color: #374151;
 }
-.docx-toolbar-btn:hover {
-  background: #f3f4f6;
+.docx-toolbar-action {
+  gap: var(--office-ui-space-1);
+  white-space: nowrap;
 }
-.docx-toolbar-btn.active {
-  background: #e5e7eb;
-  color: #2563eb;
+.docx-toolbar-action--primary {
+  background: var(--office-primary, #18181b);
+  border-color: var(--office-primary, #18181b);
+  color: var(--office-primary-foreground, #fff);
 }
-.docx-toolbar-btn:disabled {
-  opacity: 0.3;
-  cursor: default;
+.docx-toolbar-action--primary:hover {
+  background: color-mix(in oklab, var(--office-primary, #18181b) 90%, transparent);
 }
-.docx-toolbar-btn:focus-visible,
-.docx-toolbar-action:focus-visible,
-.docx-toolbar-select:focus-visible,
-.docx-toolbar-page-control input:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-.docx-toolbar-separator {
-  width: 1px;
-  height: 24px;
-  background: #e5e7eb;
-  margin: 0 4px;
-  flex-shrink: 0;
+.docx-toolbar-readonly {
+  flex: 0 0 auto;
 }
 .docx-toolbar-select {
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  font-size: 13px;
-  background: #fff;
+  height: var(--office-ui-height-sm, 2rem);
+  padding: 0 var(--office-ui-space-2, 0.5rem);
+  border: 1px solid var(--office-input, #e5e7eb);
+  border-radius: var(--office-radius-md, 4px);
+  background: var(--office-background, #fff);
+  color: var(--office-foreground, #18181b);
+  font: inherit;
+  font-size: var(--office-text-sm, 13px);
   cursor: pointer;
 }
 .docx-toolbar-select-sm {
   width: 60px;
-  padding: 0 4px;
+  padding: 0 var(--office-ui-space-1, 0.25rem);
 }
-.docx-toolbar-spacer {
-  flex: 1;
+.docx-toolbar-select:focus-visible {
+  outline: var(--office-ring-width, 2px) solid var(--office-ring, #2563eb);
+  outline-offset: var(--office-ring-offset-width, 2px);
 }
-.docx-toolbar-zoom {
+.docx-toolbar-revision {
   align-items: center;
-  display: flex;
+  display: inline-flex;
+  min-inline-size: 0;
 }
 .docx-toolbar-color-picker {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: var(--office-ui-height-sm, 2rem);
+  height: var(--office-ui-height-sm, 2rem);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--office-radius-md, 4px);
   cursor: pointer;
 }
 .docx-toolbar-color-picker:hover {
-  background: #f3f4f6;
+  background: var(--office-accent, #f3f4f6);
 }
 .docx-toolbar-color-input {
   position: absolute;
@@ -1256,102 +1354,49 @@ function onImport(): void {
 .docx-toolbar-color-label {
   font-size: 14px;
   font-weight: 700;
-  color: #374151;
+  color: var(--office-foreground, #374151);
   pointer-events: none;
 }
 .docx-toolbar-highlight-label {
   font-size: 12px;
 }
-.docx-toolbar-toggle {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.docx-toolbar-toggle input {
-  appearance: none;
-  background: #d4d4d8;
-  border-radius: 999px;
-  cursor: pointer;
-  height: 16px;
-  margin: 0;
+.docx-toolbar-style-picker {
   position: relative;
-  transition: background .15s ease;
-  width: 28px;
 }
-.docx-toolbar-toggle input::after {
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .2);
-  content: "";
-  height: 12px;
-  left: 2px;
-  position: absolute;
-  top: 2px;
-  transition: transform .15s ease;
-  width: 12px;
-}
-.docx-toolbar-toggle input:checked { background: #2563eb; }
-.docx-toolbar-toggle input:checked::after { transform: translateX(12px); }
-.docx-toolbar-toggle:hover {
-  background: #f3f4f6;
-}
-.docx-toolbar-toggle-label {
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.docx-toolbar-shell--dark {
-  background: #18181b;
-  border-bottom-color: #3f3f46;
-  color: #f4f4f5;
-}
-.docx-toolbar-shell--dark .docx-toolbar-topbar { border-bottom-color: #3f3f46; }
-.docx-toolbar-shell--dark .docx-toolbar { background: #18181b; }
-.docx-toolbar-shell--dark .docx-toolbar-page-control { color: #a1a1aa; }
-.docx-toolbar-shell--dark .docx-toolbar-page-control input,
-.docx-toolbar-shell--dark .docx-toolbar-action,
-.docx-toolbar-shell--dark .docx-toolbar-select {
-  background: #27272a;
-  border-color: #3f3f46;
-  color: #f4f4f5;
-}
-.docx-toolbar-shell--dark .docx-toolbar-action:hover,
-.docx-toolbar-shell--dark .docx-toolbar-btn:hover,
-.docx-toolbar-shell--dark .docx-toolbar-color-picker:hover,
-.docx-toolbar-shell--dark .docx-toolbar-toggle:hover { background: #27272a; }
-.docx-toolbar-shell--dark .docx-toolbar-action--primary { background: #f4f4f5; border-color: #f4f4f5; color: #18181b; }
-.docx-toolbar-shell--dark .docx-toolbar-action--primary:hover { background: #d4d4d8; }
-.docx-toolbar-shell--dark .docx-toolbar-btn { color: #d4d4d8; }
-.docx-toolbar-shell--dark .docx-toolbar-btn.active { background: #3f3f46; color: #93c5fd; }
-.docx-toolbar-shell--dark .docx-toolbar-separator { background: #3f3f46; }
-.docx-toolbar-shell--dark .docx-toolbar-readonly { background: #27272a; color: #a1a1aa; }
-.docx-toolbar-shell--dark .docx-toolbar-color-label { color: #d4d4d8; }
-.docx-toolbar-shell--dark .docx-toolbar-toggle-label { color: #a1a1aa; }
 
 @container docx-shell (max-width: 900px) {
-  .docx-toolbar-topbar { align-items: stretch; flex-direction: column; gap: 5px; }
-  .docx-toolbar-topbar__actions { justify-content: flex-end; overflow-x: auto; }
+  .docx-toolbar-topbar__leading,
+  .docx-toolbar-topbar__actions {
+    flex: 1 1 100%;
+  }
+  .docx-toolbar-topbar :deep(.office-toolbar__trailing) {
+    flex: 1 1 100%;
+  }
+  .docx-toolbar-topbar__actions {
+    justify-content: flex-end;
+    overflow-x: auto;
+  }
   .docx-toolbar-filename { flex: 1; max-width: none; }
 }
 
 @container docx-shell (max-width: 560px) {
-  .docx-toolbar-topbar__actions .docx-toolbar-toggle { display: none; }
+  .docx-toolbar-topbar__actions .office-toggle { display: none; }
   .docx-toolbar-action span { display: none; }
-  .docx-toolbar-action { padding: 0; width: 32px; }
+  .docx-toolbar-action { padding: 0; width: var(--office-ui-height-sm, 2rem); }
 }
 
 @media (pointer: coarse) {
+  .docx-toolbar-shell :deep(button),
+  .docx-toolbar-shell :deep(input),
+  .docx-toolbar-shell :deep(select) {
+    min-height: 44px;
+    min-block-size: 44px;
+  }
   .docx-toolbar-action,
   .docx-toolbar-select,
-  .docx-toolbar-page-control input {
+  .docx-toolbar-page-control {
     min-height: 44px;
     min-width: 44px;
   }
-  .docx-toolbar-toggle { min-height: 44px; }
 }
 </style>

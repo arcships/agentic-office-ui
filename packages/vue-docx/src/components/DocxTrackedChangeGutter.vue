@@ -2,6 +2,8 @@
   <div
     v-if="positioned.length > 0 || composer"
     class="docx-tracked-change-gutter"
+    :data-office-theme="documentTheme"
+    data-office-density="comfortable"
     :class="{
       'docx-tracked-change-gutter--drawer': drawerMode,
       'docx-tracked-change-gutter--drawer-closed': drawerMode && !drawerOpen,
@@ -32,12 +34,12 @@
       <span class="docx-gutter-drawer-tab-count">{{ positioned.length }}</span>
       <span class="docx-gutter-drawer-tab-label">{{ drawerOpen ? m.docx.gutter.comments : "" }}</span>
     </button>
-    <div
+    <OfficeCard
       v-for="entry of visibleCards"
       :key="entry.annotation.id"
-      :ref="(element) => registerCardElement(entry.annotation.id, element)"
+      :ref="(element) => registerCardElement(entry.annotation.id, cardElement(element))"
       class="docx-gutter-card"
-      :class="cardClasses(entry)"
+      :class="cardClasses(entry).join(' ')"
       :style="cardStyle(entry)"
       :data-docx-gutter-card-id="entry.annotation.id"
       :data-docx-gutter-card-index="entry.annotation.ordinal"
@@ -185,7 +187,7 @@
           {{ formatDate(dateOf(entry)) }}
         </div>
       </template>
-    </div>
+    </OfficeCard>
 
     <!--
       A new comment has no gutter card yet, so its editor sits at the top of
@@ -253,6 +255,7 @@ import {
   annotationGutterPaneStyle,
 } from "./gutter-metrics"
 import { formatOfficeDate } from "@arcships/office-interaction"
+import { OfficeCard } from "@arcships/vue-ui"
 import { useDocxLocale, useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -656,6 +659,13 @@ function registerCardElement(annotationId: string, element: unknown): void {
   cardElements.delete(annotationId)
 }
 
+/** A component ref points at the component instance; measure its root. */
+function cardElement(element: unknown): unknown {
+  if (!element || typeof element !== "object") return element
+  if (isMeasurableElement(element)) return element
+  return (element as { $el?: unknown }).$el
+}
+
 function measureCards(): void {
   for (const [annotationId, element] of cardElements) {
     emit("cardHeight", annotationId, element.offsetHeight)
@@ -704,7 +714,8 @@ watch(
   z-index: 8;
 }
 .docx-gutter-card {
-  background: #f9fafb;
+  background: var(--office-card, #f9fafb);
+  border: 0;
   border-left: 3px solid #d1d5db;
   border-radius: 4px;
   box-sizing: border-box;
@@ -715,6 +726,9 @@ watch(
   padding: 6px 8px;
   position: absolute;
   right: 0;
+}
+.docx-gutter-card :deep(.office-card__content) {
+  padding: 0;
 }
 .docx-gutter-card:focus-visible {
   outline: 2px solid #2563eb;

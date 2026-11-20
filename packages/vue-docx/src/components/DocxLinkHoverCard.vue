@@ -1,7 +1,9 @@
 <template>
-  <div
+  <OfficeCard
     class="docx-link-card"
-    :class="{ 'docx-link-card--dark': documentTheme === 'dark' }"
+    :class="documentTheme === 'dark' ? 'docx-link-card--dark' : undefined"
+    :data-office-theme="documentTheme"
+    data-office-density="comfortable"
     role="dialog"
     :aria-label="m.docx.linkCard.label"
     data-testid="docx-link-card"
@@ -18,7 +20,7 @@
           ref="inputEl"
           v-model="draft"
           type="text"
-          class="docx-link-card__input"
+          class="office-input office-input--sm docx-link-card__input"
           :placeholder="m.docx.linkCard.urlPlaceholder"
           :aria-label="m.docx.linkCard.url"
           data-testid="docx-link-card-input"
@@ -26,22 +28,25 @@
         />
       </label>
       <div class="docx-link-card__actions">
-        <button
+        <OfficeButton
           type="button"
+          size="xs"
           class="docx-link-card__action docx-link-card__action--primary"
           data-testid="docx-link-card-save"
           @click="save"
         >
           {{ m.docx.linkCard.save }}
-        </button>
-        <button
+        </OfficeButton>
+        <OfficeButton
           type="button"
+          variant="outline"
+          size="xs"
           class="docx-link-card__action"
           data-testid="docx-link-card-cancel"
           @click="cancel"
         >
           {{ m.docx.linkCard.cancel }}
-        </button>
+        </OfficeButton>
       </div>
     </template>
     <template v-else>
@@ -49,42 +54,49 @@
         {{ displayHref }}
       </span>
       <div class="docx-link-card__actions">
-        <button
+        <OfficeButton
           type="button"
+          variant="outline"
+          size="xs"
           class="docx-link-card__action"
           data-testid="docx-link-card-open"
           :title="m.docx.linkCard.open"
           @click="emit('open', href)"
         >
           {{ m.docx.linkCard.open }}
-        </button>
-        <button
+        </OfficeButton>
+        <OfficeButton
           v-if="editable"
           type="button"
+          variant="outline"
+          size="xs"
           class="docx-link-card__action"
           data-testid="docx-link-card-edit"
           :title="m.docx.linkCard.edit"
           @click="startEdit"
         >
           {{ m.docx.linkCard.edit }}
-        </button>
-        <button
+        </OfficeButton>
+        <OfficeButton
           v-if="editable"
           type="button"
+          variant="ghost"
+          size="xs"
           class="docx-link-card__action docx-link-card__action--danger"
           data-testid="docx-link-card-remove"
           :title="m.docx.linkCard.remove"
           @click="emit('remove', href)"
         >
           {{ m.docx.linkCard.remove }}
-        </button>
+        </OfficeButton>
       </div>
     </template>
-  </div>
+  </OfficeCard>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue"
+import { OfficeButton, OfficeCard } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
 
 const props = withDefaults(
@@ -167,16 +179,17 @@ defineExpose({ startEdit, save, cancel, editing })
 
 <style scoped>
 .docx-link-card {
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
-  color: #111827;
   display: flex;
   flex-direction: column;
   gap: 6px;
   max-width: 22rem;
   padding: 8px 10px;
+}
+.docx-link-card :deep(.office-card__content) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
 }
 .docx-link-card__url {
   color: #1d4ed8;
@@ -191,24 +204,15 @@ defineExpose({ startEdit, save, cancel, editing })
   gap: 6px;
 }
 .docx-link-card__action {
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  color: #374151;
-  cursor: pointer;
-  font-size: 12px;
-  padding: 3px 8px;
-}
-.docx-link-card__action:hover {
-  background: #e5e7eb;
+  min-block-size: var(--office-ui-height-xs, 28px);
 }
 .docx-link-card__action--primary {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
 }
 .docx-link-card__action--danger {
-  color: #b91c1c;
+  color: var(--office-destructive-foreground, #b91c1c);
 }
 .docx-link-card__field {
   display: flex;
@@ -228,9 +232,9 @@ defineExpose({ startEdit, save, cancel, editing })
   width: 100%;
 }
 .docx-link-card--dark {
-  background: #18181b;
-  border-color: #3f3f46;
-  color: #f4f4f5;
+  background: var(--office-card, #18181b);
+  border-color: var(--office-border, #3f3f46);
+  color: var(--office-card-foreground, #f4f4f5);
 }
 .docx-link-card--dark .docx-link-card__url {
   color: #93c5fd;

@@ -204,19 +204,19 @@ test("IconButton keeps ghost/active/disabled states and 28/32px size classes", a
 
   const active = byTestId("icon-active")
   assert.match(active.className, /office-button--ghost/)
-  assert.match(active.className, /office-button--icon\b/)
+  assert.match(active.className, /office-button--size-icon\b/)
   assert.equal(active.getAttribute("aria-pressed"), "true")
   assert.equal(active.dataset.active, "true")
   assert.equal(active.getAttribute("aria-label"), "More")
 
   const small = byTestId("icon-small")
-  assert.match(small.className, /office-button--icon-sm/)
+  assert.match(small.className, /office-button--size-icon-sm/)
   assert.equal(small.hasAttribute("aria-pressed"), false)
 
   const disabled = byTestId("icon-disabled")
   assert.equal(disabled.disabled, true)
   assert.equal(disabled.getAttribute("data-disabled"), "true")
-  assert.match(disabled.className, /office-button--icon\b/)
+  assert.match(disabled.className, /office-button--size-icon\b/)
 })
 
 // ── Page control ──────────────────────────────────────────────────────────
@@ -341,6 +341,36 @@ test("PageControl disables its input for an empty document", async (t) => {
   assert.equal(byTestId("office-page-total").textContent.trim(), "of –")
 })
 
+test("PageControl can render a native input with a host test id", async (t) => {
+  const page = ref(2)
+  const changes = []
+  const { cleanup } = mountRoot(() =>
+    h(OfficePageControl, {
+      modelValue: page.value,
+      "onUpdate:modelValue": (value) => {
+        page.value = value
+        changes.push(value)
+      },
+      totalPages: 10,
+      nativeInput: true,
+      inputTestId: "docx-page-current",
+    }),
+  )
+  t.after(cleanup)
+  await flush(0)
+
+  const input = byTestId("docx-page-current")
+  assert.ok(input, "the native input keeps the host-provided test id")
+  assert.equal(input.value, "2")
+  assert.equal(byTestId("office-page-input"), null)
+
+  setInputValue(input, "7")
+  keydown(input, "Enter")
+  await flush(0)
+  assert.deepEqual(changes, [7])
+  assert.equal(page.value, 7)
+})
+
 // ── Zoom control ─────────────────────────────────────────────────────────
 
 test("ZoomControl steps through presets and emits controlled zoom/fit changes", async (t) => {
@@ -442,6 +472,42 @@ test("ZoomControl supports uncontrolled use and the disabled state", async (t) =
   assert.equal(disabled.querySelector('[data-testid="office-zoom-out"]').disabled, true)
   assert.equal(disabled.querySelector('[data-testid="office-zoom-in"]').disabled, true)
   assert.equal(disabled.querySelector('[role="combobox"]').disabled, true)
+})
+
+test("ZoomControl can render a native select with a host test id", async (t) => {
+  const zoom = ref(100)
+  const changes = []
+  const { cleanup } = mountRoot(() =>
+    h(OfficeZoomControl, {
+      modelValue: zoom.value,
+      "onUpdate:modelValue": (value) => {
+        zoom.value = value
+        changes.push(value)
+      },
+      options: [50, 100, 200],
+      nativeSelect: true,
+      selectTestId: "docx-zoom-select",
+      selectTitle: "Zoom",
+    }),
+  )
+  t.after(cleanup)
+  await flush(0)
+
+  const select = byTestId("docx-zoom-select")
+  assert.ok(select, "the native select keeps the host-provided test id")
+  assert.equal(select.tagName, "SELECT")
+  assert.equal(select.title, "Zoom")
+  assert.equal(select.value, "100")
+  assert.deepEqual(
+    [...select.options].map((option) => Number(option.value)),
+    [50, 100, 200],
+  )
+
+  select.value = "200"
+  select.dispatchEvent(new Event("change", { bubbles: true }))
+  await flush(0)
+  assert.deepEqual(changes, [200])
+  assert.equal(zoom.value, 200)
 })
 
 // ── Search popover ────────────────────────────────────────────────────────
