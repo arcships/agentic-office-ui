@@ -78,6 +78,12 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
+      # Component CSS may not introduce bare hex/radius/font-size/shadow/
+      # transition values; the frozen pre-0.8 debt lives in
+      # tests/style/component-style-baseline.json (#165).
+      - name: Lint component styles against the token layer
+        run: pnpm lint:style
+
       # Typecheck plus every workspace build: the unit suite inspects
       # apps/demo/dist to verify published chunk separation.
       - name: Build workspace packages and demo apps

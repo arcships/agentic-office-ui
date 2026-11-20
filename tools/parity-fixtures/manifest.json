@@ -39,7 +39,8 @@
     "maxChannelDelta": 2,
     "maxDiffPixelRatio": 0.001,
     "maxContiguousDiffPx": 4,
-    "heatmapAmplification": 16
+    "heatmapAmplification": 16,
+    "topDiffRegions": 5
   },
   "surfaces": [
     {
@@ -712,7 +713,6 @@
       "off": "Never exit non-zero; artifact mode (`--report-only`)."
     },
     "prMode": "ready",
-    "finalMode": "all",
-    "topDiffRegions": 5
+    "finalMode": "all"
   }
 }

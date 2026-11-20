@@ -4,6 +4,11 @@
 
 如果现成组件布局不满足需求，请查看[自定义组件指南](../custom-components/README.md)和[组合函数手册](../composables/README.md)。
 
+> 想找“某个 Extend 上游组件在本仓库对应谁、挂在哪条视觉基线上”看
+> [Extend 组件对照表](ui-component-map.md)；想把旧的裸 hex/px 写法换成 token 看
+> [样式迁移指南](../guide/ui-style-migration.md)；CI 门禁与基线审批看
+> [UI 门禁](../testing/ui-parity-ci.md)；发布前逐项确认看 [发布 checklist](../plan/release-checklist.md)。
+
 ## Office 组件
 
 | 组件 | 包 | 用途 | 详细指南 |

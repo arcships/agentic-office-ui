@@ -117,7 +117,8 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 | `--office-info` | blue-500 | blue-500 | `--info` |
 | `--office-info-foreground` | blue-700 | blue-400 | `--info-foreground` |
 
-附加 token：`--office-chart-1..5`（blue-300/500/600/700/800）、`--office-surface`、
+附加 token：`--office-chart-1`、`--office-chart-2`、`--office-chart-3`、`--office-chart-4`、
+`--office-chart-5`（blue-300/500/600/700/800）、`--office-surface`、
 `--office-surface-foreground`、`--office-selection`、`--office-selection-foreground`。
 参考色值使用 Tailwind v4 的 OKLCH 表示；`--alpha(x / n%)` 统一展开为
 `color-mix(in oklab, x n%, transparent)`，不依赖 Tailwind 运行时。
@@ -139,6 +140,7 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 | `--office-border-width` | `1px` | 默认描边 |
 | `--office-shadow-xs` | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | 与 Extend `shadow-xs` 一致 |
 | `--office-shadow-sm` | `0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-sm` 一致 |
+| `--office-shadow-md` | `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-md` 一致 |
 
 ### 3.3 字体与字号
 

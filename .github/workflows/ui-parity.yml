@@ -1,23 +1,56 @@
 name: UI parity (Extend reference)
 
-# Runs the #155 pixel-parity harness against the pinned extend-hq/ui reference
-# components and uploads the report. The capture job is intentionally not a
-# required check yet: Button (#157), the PDF chrome (#158/#162) and the file
-# components (#163) still report their real delta. #165 flips the gate on by
-# running `pnpm ui:parity` (non-zero on threshold failures) as a required job.
+# Visual and accessibility gates for the Extend UI alignment (#165).
+#
+# Gate behaviour:
+#   - `ui-contracts`      style-token guards + committed-baseline approval contract.
+#   - `ui-parity-core`    pull-request core subset against the pinned reference AND
+#                         the committed baselines. Only surfaces marked
+#                         `gateStatus: blocking` in tools/parity-fixtures/manifest.json
+#                         can fail this job; `pending` surfaces (#157 input,
+#                         #159 docx chrome) are captured and reported, not gating.
+#   - `ui-parity-nightly` the full 4-viewport × light/dark matrix, nightly and on
+#                         dispatch, with the same gate mode.
+#   - `ui-a11y`           axe-core WCAG A/AA + keyboard smoke for the core components.
+#
+# `ui-parity-strict` is the final switch: dispatch with `strict: true` to run
+# `--gate-mode all`, which puts the pending surfaces in the gate too. Once every
+# surface is green, flip `gateStatus`/`prMode` in the manifest and drop the
+# dispatch input from the command (docs/testing/ui-parity-ci.md).
+#
+# Everything is diffed against `tests/visual/extend/**`; those PNGs are only
+# updated through `pnpm ui:baseline capture --approve ...` (see
+# tests/visual/extend/README.md). `ui-contracts` fails when a baseline changed
+# without a matching approval record.
 on:
   workflow_dispatch:
+    inputs:
+      strict:
+        description: "Run the final strict gate (--gate-mode all, pending surfaces included)"
+        type: boolean
+        default: false
   pull_request:
     paths:
       - "tools/**"
-      - "packages/vue-ui/src/styles/**"
-      - "packages/vue-ui/src/components/**"
-      - "packages/vue-pdf/src/components/**"
+      - "packages/*/src/**"
+      - "tests/visual/**"
+      - "tests/style/**"
+      - "tests/a11y/**"
       - "docs/design/**"
+      - "docs/testing/ui-parity-ci.md"
+      - "stylelint.config.mjs"
       - "scripts/ci/pixel-parity.mjs"
       - "scripts/ci/pixel-parity.py"
-      - "scripts/ci/extract-extend-tokens.mjs"
+      - "scripts/ci/reference-build.mjs"
+      - "scripts/ci/visual-baseline.mjs"
+      - "scripts/ci/a11y-check.mjs"
+      - "scripts/ci/a11y-check.py"
+      - "scripts/ci/lint-styles.mjs"
+      - "scripts/ci/extend-tokens.mjs"
       - ".github/workflows/ui-parity.yml"
+  schedule:
+    # Nightly full matrix, before the blackbox browser suites.
+    - cron: "30 17 * * *"
 
 permissions:
   contents: read
@@ -27,10 +60,63 @@ env:
   COREPACK_DEFAULT_TO_LATEST: "0"
 
 jobs:
-  ui-parity:
-    name: Extend reference pixel parity
+  ui-contracts:
+    name: UI style guards and baseline approvals
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable corepack for the pinned package manager
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      # New bare hex/radius/font-size/shadow/transition values in component CSS
+      # fail here; the frozen debt lives in tests/style/component-style-baseline.json.
+      - name: Lint component styles against the token layer
+        run: pnpm lint:style
+
+      # A baseline PNG may only change together with an approval record
+      # (pnpm ui:baseline capture --approve ...). Hand edits fail here.
+      - name: Verify the visual baseline approval contract
+        run: pnpm ui:baseline:verify
+
+      - name: Upload the style guard evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-style-guard
+          path: output/style-guard/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  ui-parity-core:
+    name: Extend parity (core subset)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -78,21 +164,162 @@ jobs:
       - name: Verify the Extend token report is current
         run: pnpm ui:tokens:check
 
-      # Report mode keeps the artifact available while the parity issues land.
-      # Replace with `pnpm ui:parity` (threshold gate) in #165.
-      - name: Capture the parity matrix
-        run: pnpm ui:parity:report
+      # `--gate-mode ready`: live reference parity and baseline diffs fail the
+      # job for gate-blocking surfaces only. Pending surfaces stay report-only
+      # until their issue flips `gateStatus` in the manifest. Dispatch with
+      # `strict: true` to run the final `all` gate.
+      - name: Capture and gate the core parity subset
+        run: >-
+          pnpm ui:parity -- --only "${UI_PARITY_SUBSET}"
+          --viewports "${UI_PARITY_VIEWPORTS}" --themes "${UI_PARITY_THEMES}"
+          --baseline --gate-mode "${{ inputs.strict && 'all' || 'ready' }}"
+          --skip-tokens
+        env:
+          UI_PARITY_SUBSET: core
+          UI_PARITY_VIEWPORTS: 1440x900,390x844
+          UI_PARITY_THEMES: light,dark
 
       # The reference page compared with itself must stay pixel-identical; this
       # catches font, animation or screenshot-timing regressions in the harness.
       - name: Verify the harness is deterministic
         run: pnpm ui:parity:self-check -- --no-build --viewports 1440x900 --themes light
 
-      - name: Upload the parity report
+      - name: Upload the parity report and diffs
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ui-parity-report
+          name: ui-parity-core-${{ github.sha }}
           path: output/ui-parity/
+          if-no-files-found: error
+          retention-days: 30
+
+  ui-parity-nightly:
+    name: Extend parity (full matrix)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable corepack for the pinned package manager
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install Python verification dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Install the Chromium browser
+        run: playwright install --with-deps chromium
+
+      - name: Verify the Extend token report is current
+        run: pnpm ui:tokens:check
+
+      # Full 4-viewport × light/dark matrix for every renderable surface.
+      # Baseline comparisons only cover the committed baseline matrix
+      # (1440x900 + 390x844 × light + dark); the rest is live parity.
+      - name: Capture and gate the full parity matrix
+        run: pnpm ui:parity -- --baseline --gate-mode "${{ inputs.strict && 'all' || 'ready' }}"
+
+      - name: Upload the full parity report and diffs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-parity-full-${{ github.sha }}
+          path: output/ui-parity/
+          if-no-files-found: error
+          retention-days: 30
+
+  ui-a11y:
+    name: Core component accessibility (axe + keyboard)
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable corepack for the pinned package manager
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install Python verification dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Install the Chromium browser
+        run: playwright install --with-deps chromium
+
+      # Builds the workspace packages the comparison app imports by name, then
+      # tools/vue-reference. axe-core is injected from node_modules.
+      - name: Build the comparison app
+        run: pnpm --filter @aou/vue-reference build
+
+      # Known findings are listed in tests/a11y/allowlist.json with an owner
+      # issue; anything new fails the job.
+      - name: Run axe-core and the keyboard smoke
+        run: pnpm test:a11y
+
+      - name: Upload the accessibility report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-a11y-${{ github.sha }}
+          path: output/a11y/
           if-no-files-found: error
           retention-days: 30

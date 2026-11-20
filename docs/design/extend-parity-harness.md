@@ -104,18 +104,36 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 `output/ui-parity/`（已 gitignore）：
 
 ```
-report.html                    # 人看：双方截图、diff、热力图、失败原因、token diff
-report.json                    # 机器读：cases[]、summary、tokens{...}
-SUMMARY.md                     # PR 摘要：按 surface 的通过/失败计数 + token 差异
+report.html                    # 人看：双方截图、diff、热力图、失败原因、top-N 差异区域、token diff
+report.json                    # 机器读：cases[]、summary、gate 模式、baselines、tokens{...}
+SUMMARY.md                     # PR 摘要：按 surface 的通过/失败计数、top-N 差异区域 + token 差异
 cases/<surface>/<viewport>/<theme>/<state>/
   reference.png  subject.png  diff.png  heatmap.png  compare.png
-  overlap-diff.png  overlap-heatmap.png     # 仅尺寸不一致时
+  baseline-diff.png  baseline-heatmap.png     # 与提交基线不一致时
+  overlap-diff.png  overlap-heatmap.png       # 仅尺寸不一致时
 ```
 
-CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 `report.json`）。
-该 job 现在只在 `pull_request` 路径命中或手动触发时运行，采集步骤用 `pnpm ui:parity:report`（不因
-阈值失败而卡住），并在之后跑 `ui:parity:self-check`（1440×900 / light）确认 harness 自身可重复。
-#165 把 `pnpm ui:parity`（退出码 gate）接成必需检查。
+CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-ci.md)。
+样式迁移与 token 用法见 [guide/ui-style-migration.md](../guide/ui-style-migration.md)，
+组件与 surface 的对应关系见 [components/ui-component-map.md](../components/ui-component-map.md)。
+
+历史 artifact 名 `ui-parity-report` 在 #165 拆成 `ui-parity-core-<sha>`（PR 核心子集）与
+`ui-parity-full-<sha>`（nightly 全矩阵），两者都包含同一份 `report.json` / `report.html` / `cases/**`。
+`.github/workflows/ui-parity.yml` 现在有四个 job：`ui-contracts`（样式 guard + 基线审批）、
+`ui-parity-core`（PR 核心子集 + 基线比对，`--gate-mode ready`）、`ui-parity-nightly`（全矩阵）、
+`ui-a11y`（axe-core + 键盘 smoke）。所有 job 上传 artifact（含 diff/heatmap/baseline diff）。
+`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（`input`/`docx-*`/
+`document-sidebar`/`document-blocks`）仍采集、仍报告，但不阻断。最终切换用 `strict: true`
+（`--gate-mode all`），正式切换步骤见门禁文档 §5。
+
+## 6.1 提交基线（#165）
+
+`tests/visual/extend/<surface>/<state>/<theme>-<viewport>.png` 是**对照侧**的版本化基线：
+`ui-parity` 采集结束后额外与它比对（`--baseline`），因此即使参考页没变，组件改坏也会失败。
+矩阵为 1440×900 + 390×844 × light + dark，只覆盖 `gateStatus: blocking` 的 surface。
+更新必须走 `pnpm ui:baseline capture --approve --reviewer/--issue/--reason`，
+`pnpm ui:baseline:verify` 在 CI 校验哈希与审批记录；细节见
+[tests/visual/extend/README.md](../../tests/visual/extend/README.md)。
 
 ## 7. 实施现状（2026-11-20，0.8 wave 2）
 
@@ -153,8 +171,10 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
 
 1. 在 `tools/extend-reference/src/surfaces/` 加参考渲染，并在 `App.tsx` 的 `renderers` 注册；需要新组件时先把最小上游文件 vendored 到 `src/vendor/`（MIT 头 + NOTICE + `UPSTREAM.md` + `attribution.json`）。
 2. 在 `tools/vue-reference/src/surfaces/` 加对照渲染，并在 `App.vue` 里接上；如果组件还没实现，把 manifest 标成 `subjectStatus: "missing"` + `pendingIssue`。
-3. 在 `tools/parity-fixtures/manifest.json` 增加 surface（`cellWidth`、`states`、交互、依赖 issue），共享文案/数据放 `fixtures.json`。
-4. 运行 `pnpm ui:parity -- --only <id>` 和 `node --test tests/unit/extend-parity-harness.test.mjs`。
+3. 在 `tools/parity-fixtures/manifest.json` 增加 surface（`cellWidth`、`states`、交互、依赖 issue），共享文案/数据放 `fixtures.json`；同时声明 `core`（是否进 PR 子集）与 `gateStatus`（`pending` + `gatePendingIssue`，或 `blocking`）。
+4. 在 [components/ui-component-map.md](../components/ui-component-map.md) 补一行，`pnpm ui:docs` 会检查。
+5. 运行 `pnpm ui:parity -- --only <id>` 和 `node --test tests/unit/ui-parity-gate.test.mjs`；surface 就绪后按
+   [ui-parity-ci.md §5](../testing/ui-parity-ci.md) 切成 `blocking` 并用 `pnpm ui:baseline capture --only <id>` 补基线。
 
 ## 9. 后续 issue 分工
 
@@ -165,4 +185,5 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
 - #158/#162：PDF chrome → 收敛 `pdf-toolbar` 的 2 行布局、padding、gap 与控件样式。
 - #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
 - #164：document blocks 渲染对照。
-- #165：把 `pnpm ui:parity` 变成必需 CI gate、补文本/非文本分区与 stylelint/axe。
+- #165：gate、基线、stylelint/axe、文档——已完成基础设施；pending surface 逐个切 `blocking`
+  （见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。

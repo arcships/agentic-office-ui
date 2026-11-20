@@ -15,11 +15,13 @@
 | [design/extend-parity-harness.md](design/extend-parity-harness.md) | Extend UI 对照 harness：矩阵、阈值、DOM 协议、产物与各 issue 的 delta（#155） |
 | [design/extend-tokens.md](design/extend-tokens.md) | `docs/design/extend-tokens.json` 的生成方式、解析规则与 `--office-*` 映射差异（#155） |
 | [components/ui-primitives.md](components/ui-primitives.md) | reka-ui primitive 层：Button/Input/Select/Menu/Dialog/Sheet/Tooltip/Tabs/Toast 的 props、键盘/ARIA 与 token 规则（0.8） |
+| [components/ui-component-map.md](components/ui-component-map.md) | Extend 上游组件 → 本仓库导出 → parity surface/基线的完整对照表（#165） |
 | [components/office-chrome.md](components/office-chrome.md) | 共享 Office chrome：toolbar、page/zoom/search、status、empty/error/loading 状态与 160px document sidebar（#158） |
 | [components/docx-ui-stories.md](components/docx-ui-stories.md) | DOCX viewer/editor chrome 的确定性截图 story、390/768/1440 与 inline/overlay 证据（#159） |
 | [components/file-components.md](components/file-components.md) | FileUpload / FileThumbnail 的 Extend 对齐合同、像素对照、story 与 DocumentViewerSidebar 集成 seam（#163） |
 | [components/pptx-chrome.md](components/pptx-chrome.md) | PPTX viewer/presenter/sorter 的共享 chrome、sorter/presenter 结构、右键菜单、状态与 390/768/1440 截图证据（#161） |
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
+| [testing/ui-parity-ci.md](testing/ui-parity-ci.md) | `ui-parity` / 样式 guard / axe 门禁：job、阈值、基线审批与最终开关（#165） |
 
 
 
@@ -35,6 +37,7 @@
 | [guide/viewer-keyboard.md](guide/viewer-keyboard.md) | DOCX/PDF/PPTX 共享键盘映射、各组件快捷键和焦点环 |
 | [guide/reference-selection.md](guide/reference-selection.md) | 四种 Surface 的统一选择模式、确认事件、expose 与宿主状态边界 |
 | [guide/surface-migration-guide.md](guide/surface-migration-guide.md) | 接入 0.5.3 最小 Surface 与手势缩放指南 |
+| [guide/ui-style-migration.md](guide/ui-style-migration.md) | 从裸 hex/px/阴影/transition 迁移到 `--office-*` token 的步骤、guard 与存量债务（#165） |
 | [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |
 | [api/README.md](api/README.md) | 组合函数、Runtime 和核心 API 导航 |
 | [composables/README.md](composables/README.md) | DOCX、XLSX 和 PPTX 组合函数手册 |
@@ -85,6 +88,7 @@
 | [../RELEASE_NOTES.md](../RELEASE_NOTES.md) | `0.5.4` 至 `0.2.0` 发布记录 |
 | [migration-0.3.md](migration-0.3.md) | 从 `0.2.0` 升级到 `0.3.0` 并接入 PPTX |
 | [migration-0.2.md](migration-0.2.md) | 从 `0.1.x` 升级到 `0.2.0` 的代码与资源迁移 |
+| [plan/release-checklist.md](plan/release-checklist.md) | 0.8 起唯一发布 checklist：UI 变更必须附 ui-parity / a11y / style guard 结果（#165） |
 | [testing/compatibility-matrix.md](testing/compatibility-matrix.md) | Node、Vue、Vite、TypeScript 和三种浏览器的声明与待验证矩阵 |
 
 ## 当前包状态

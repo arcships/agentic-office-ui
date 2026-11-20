@@ -66,6 +66,7 @@ const suites = {
       "tests/unit/viewer-keys.test.mjs",
       "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/extend-parity-harness.test.mjs",
+      "tests/unit/ui-parity-gate.test.mjs",
       "tests/unit/vue-ui-primitives-contract.test.mjs",
       "tests/unit/product-visual-matrix.test.mjs",
       "tests/unit/vue-ui-chrome-contract.test.mjs",
@@ -688,6 +689,15 @@ command("vue-component-behavior-5", process.execPath, [
         DOCS_EVIDENCE_DIR: path.join(suiteDir, "documentation-contract"),
       },
     }),
+    // #165: component map / token table / migration guide / release checklist
+    // and the gate docs must keep matching the code they describe.
+    command("ui-documentation-contract", process.execPath, [
+      "scripts/ci/verify-ui-docs.mjs",
+    ], {
+      env: {
+        UI_DOCS_EVIDENCE_DIR: path.join(suiteDir, "ui-documentation-contract"),
+      },
+    }),
     command("open-source-attribution", process.execPath, [
       "scripts/ci/verify-attribution.mjs",
     ], {
@@ -704,6 +714,15 @@ command("vue-component-behavior-5", process.execPath, [
   check: [
     command("typecheck", pnpm, ["typecheck"]),
     command("build", pnpm, ["-r", "build"]),
+    // #165 component style guards: new bare hex/radius/font-size/shadow/
+    // transition values in packages/*/src fail against the frozen baseline.
+    command("style-token-guard", process.execPath, [
+      "scripts/ci/lint-styles.mjs",
+    ], {
+      env: {
+        STYLE_GUARD_EVIDENCE_DIR: path.join(suiteDir, "style-token-guard"),
+      },
+    }),
     childSuite("unit", "test:unit"),
     childSuite("component", "test:component"),
     childSuite("blackbox", "test:blackbox"),
