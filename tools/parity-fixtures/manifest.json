@@ -478,13 +478,13 @@
     {
       "id": "docx-toolbar",
       "title": "DOCX toolbar",
-      "referenceComponent": "apps/v4/components/extend/docx-viewer.tsx (DocxToolbar)",
+      "referenceComponent": "tools/extend-reference/src/surfaces/DocxToolbarSurface.tsx (Extend-style full control set)",
       "subjectComponent": "packages/vue-docx/src/components/DocxViewerToolbar.vue",
       "subjectStatus": "available",
       "subjectTargetSelector": "[data-testid='docx-viewer-toolbar']",
       "referenceTargetSelector": "[data-parity-docx-toolbar]",
       "cellWidth": 1400,
-      "notes": "Extend's DOCX toolbar mounts the thumbnail toggle, page control, zoom cluster and file-actions menu; the Vue subject is the real DocxViewerToolbar with the DOCX design-system controls. Visible search, edit toggles and upload/download differ by design and are reported as delta.",
+      "notes": "Reference and subject expose the same file/page/zoom/search/view/revision/theme/upload/download controls and use the same <1360px overflow breakpoint. Remaining pixel delta is glyph/1px spacing, not a missing control set.",
       "states": [
         {
           "id": "default",
@@ -525,13 +525,13 @@
     {
       "id": "docx-sidebar",
       "title": "DOCX thumbnail sidebar",
-      "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
+      "referenceComponent": "tools/extend-reference/src/surfaces/DocxSidebarSurface.tsx + public/docx-sidebar-page-1.png",
       "subjectComponent": "packages/vue-docx/src/components/DocxThumbnailPanel.vue (real canvas thumbnails, DocumentViewerSidebar shell)",
       "subjectStatus": "available",
       "subjectTargetSelector": "[data-testid='docx-thumbnail-panel']",
       "referenceTargetSelector": "[data-document-thumbnail-sidebar]",
       "cellWidth": 220,
-      "notes": "The reference uses the upstream DocumentViewerThumbnailSidebar with fixture FileThumbnail children; the subject is the real DocxThumbnailPanel rendering real DOCX canvas page thumbnails through DocumentViewerSidebar. Pixel delta therefore includes thumbnail rendering, not just the shell.",
+      "notes": "Both sides render one real DOCX page image, the same 140x210 card, label, active state, Pages header/count and a 3-item skeleton. Pixel delta is header text antialiasing and skeleton shimmer phase.",
       "states": [
         {
           "id": "open",
