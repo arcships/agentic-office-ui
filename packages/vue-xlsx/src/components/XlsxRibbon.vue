@@ -156,6 +156,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.bold"
+            :aria-pressed="fontState.bold"
             :label="m.xlsx.ribbon.bold"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -164,6 +165,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.italic"
+            :aria-pressed="fontState.italic"
             :label="m.xlsx.ribbon.italic"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -172,6 +174,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.underline"
+            :aria-pressed="fontState.underline"
             :label="m.xlsx.ribbon.underline"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -180,6 +183,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.strikethrough"
+            :aria-pressed="fontState.strikethrough"
             :label="m.xlsx.ribbon.strikethrough"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -201,6 +205,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.horizontal === 'left'"
+            :aria-pressed="alignmentState.horizontal === 'left'"
             :label="m.xlsx.ribbon.alignLeft"
             icon="align-left"
             size="icon-sm"
@@ -210,6 +215,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.horizontal === 'center'"
+            :aria-pressed="alignmentState.horizontal === 'center'"
             :label="m.xlsx.ribbon.alignCenter"
             icon="align-center"
             size="icon-sm"
@@ -219,6 +225,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.horizontal === 'right'"
+            :aria-pressed="alignmentState.horizontal === 'right'"
             :label="m.xlsx.ribbon.alignRight"
             icon="align-right"
             size="icon-sm"
@@ -228,6 +235,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'top'"
+            :aria-pressed="alignmentState.vertical === 'top'"
             :label="m.xlsx.ribbon.alignTop"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -236,6 +244,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'center'"
+            :aria-pressed="alignmentState.vertical === 'center'"
             :label="m.xlsx.ribbon.alignMiddle"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -244,6 +253,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'bottom'"
+            :aria-pressed="alignmentState.vertical === 'bottom'"
             :label="m.xlsx.ribbon.alignBottom"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -252,6 +262,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.wrapText"
+            :aria-pressed="alignmentState.wrapText"
             :label="m.xlsx.ribbon.wrapText"
             size="icon-sm"
             :disabled="controlsDisabled"
@@ -405,6 +416,7 @@
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="isFrozen"
+            :aria-pressed="isFrozen"
             data-testid="xlsx-ribbon-freeze"
             :label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere"
             size="icon-sm"
@@ -829,8 +841,9 @@ function deleteColumn(): void {
   inline-size: 16px;
 }
 
-@container xlsx-viewer (max-width: 620px) {
-  /* Wrapped clusters stay scrollable instead of eating the grid height. */
+/* Tablet/narrow hosts: wrapped clusters stay scrollable (about four rows)
+ * instead of eating the grid height. */
+@container xlsx-viewer (max-width: 900px) {
   .xlsx-ribbon {
     max-block-size: 132px;
     overflow-y: auto;
