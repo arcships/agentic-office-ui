@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "suite": "docx-ui-stories",
   "issue": 159,
-  "capturedAt": "2026-11-20T05:00:07.819485+00:00",
+  "capturedAt": "2026-11-20T11:48:13.971422+00:00",
   "sample": "page-sizes.docx",
   "browser": "chromium",
   "stories": [
@@ -16,13 +16,13 @@
       "readOnly": false,
       "toolbar": {
         "height": 48,
-        "maxControlHeight": 28,
+        "maxControlHeight": 36,
         "scrollWidth": 1404,
         "clientWidth": 1404,
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-1440.webp",
-      "sha256": "903c65e585376211d4388785e76a11cdc04cb3221ba02c705570f945cd5cf8c4"
+      "sha256": "2f794f0dc34b597fd2a9318ba72a4d81ff743494ef154fbd9687ec7305922841"
     },
     {
       "id": "viewer-single-dark-1440",
@@ -34,13 +34,13 @@
       "readOnly": false,
       "toolbar": {
         "height": 48,
-        "maxControlHeight": 28,
+        "maxControlHeight": 36,
         "scrollWidth": 1404,
         "clientWidth": 1404,
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-single-dark-1440.webp",
-      "sha256": "3914be3dbd45e5611b080e537474f116be0c85baa59aa5045d5548b48dbad732"
+      "sha256": "dcd8fd8a724e3d1cc7e0df4c3f209420bf7a0402875f16f509e6d66706dae119"
     },
     {
       "id": "viewer-spread-light-1440",
@@ -52,13 +52,13 @@
       "readOnly": false,
       "toolbar": {
         "height": 48,
-        "maxControlHeight": 28,
+        "maxControlHeight": 36,
         "scrollWidth": 1404,
         "clientWidth": 1404,
         "sidebar": null
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-spread-light-1440.webp",
-      "sha256": "e2efdf3d6add31eb13a93443b1845e6b0641f7b7bd13559c00e15c1ca662477e"
+      "sha256": "ef72ebdbc76b40a66f08248eb943d4c72e57d4c777a521471f33e70c357fcde2"
     },
     {
       "id": "viewer-continuous-light-390-overlay",
@@ -70,7 +70,7 @@
       "readOnly": false,
       "toolbar": {
         "height": 85,
-        "maxControlHeight": 32,
+        "maxControlHeight": 36,
         "scrollWidth": 366,
         "clientWidth": 366,
         "sidebar": {
@@ -80,7 +80,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-light-390-overlay.webp",
-      "sha256": "3ca34a49d257a725765a039e8c6dc99a7bd2d64f36245465ddbe40fba4dc7dea"
+      "sha256": "4e22ed1d4a81d98cb0bd90f37e5dd449aae3377ca21b2b1e2519cbee18a73418"
     },
     {
       "id": "viewer-continuous-dark-768-overlay",
@@ -92,7 +92,7 @@
       "readOnly": false,
       "toolbar": {
         "height": 48,
-        "maxControlHeight": 28,
+        "maxControlHeight": 36,
         "scrollWidth": 732,
         "clientWidth": 732,
         "sidebar": {
@@ -102,7 +102,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/viewer-continuous-dark-768-overlay.webp",
-      "sha256": "bcb5800a0d0559f1a1642510532805b86aeda23405364cdbab312caba64b4f60"
+      "sha256": "83ba5e3659accd367717ef163c4824be7eb5f832a0aa6ed68fea175339ac168a"
     },
     {
       "id": "editor-light-1440",
@@ -124,7 +124,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/editor-light-1440.webp",
-      "sha256": "d2d3e9884be7b94ae6f2d04dcc20bd6acc10fb2fdf8cee0a08424a927d19c099"
+      "sha256": "6cf0abcea47151992fc38041cbe17532248c1d60893210ac314d993d4da7ddf4"
     },
     {
       "id": "editor-readonly-dark-1440",
@@ -164,7 +164,7 @@
         }
       },
       "screenshot": "tests/baseline/visual/docx-stories/editor-light-390-overlay.webp",
-      "sha256": "5bb6918df27373703e879413769e140f8a9b831fda97f3a16b1776710f86737a"
+      "sha256": "1d06ceca42449364069606d937639bb0646f026433ad16ca0c75f83de08c4155"
     }
   ]
 }

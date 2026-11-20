@@ -49,22 +49,32 @@ viewport、toolbar 外高、最大控件高度、横向 `scrollWidth/clientWidth
 
 ## 当前结果
 
-2026-11-20 在 `fix/159` 上采集（`page-sizes.docx`）：
+2026-11-20 在 `fix/159b` 上重新采集（`page-sizes.docx`，8 个 story 全部重写）：
 
-- viewer 1440：toolbar 48px，最大控件 28px；
-- viewer 390：toolbar 85px（compact 控件 + 搜索 trigger 在 356px 容器内换行），无横向溢出，sidebar overlay；
-- viewer 768：toolbar 48px（compact overflow），无横向溢出，sidebar overlay；
+- viewer 1440：toolbar 48px，最大控件 36px；
+- viewer 390：toolbar 85px（上游行在 356px 容器内换行），无横向溢出，sidebar overlay；
+  coarse pointer（真机/触摸模拟）下所有目标 ≥44px，toolbar 换行到 109px，仍无横向溢出；
+- viewer 768：toolbar 48px，无横向溢出，sidebar overlay；
 - editor 1440：topbar + formatting bar 合计 117px，sidebar inline 160px；
 - editor 390：toolbar 346px（多行 formatter），无横向溢出，sidebar overlay。
 
 ## 与 #155 parity harness 的关系
 
-本 issue 已扩展 `tools/parity-fixtures/manifest.json`：
+### 重开补齐（fix/159b，2026-11-20）
 
-| Surface | Reference | Subject | States |
+#159 第一次关闭时只接受了「几何对齐 + 控件集合一致」，像素差仍有 7.99%。重开后
+把参考面改成 pinned commit `70fe70c6` 的**真实上游 markup**，产品面同步：
+
+| Surface | Reference（改后） | Subject | States |
 |---|---|---|---|
-| `docx-toolbar` | Extend 风格 `DocxToolbarSurface`：与 subject 相同的文件/页/缩放/搜索/视图/修订/主题/上传下载控件，同一 `<1360px` overflow 断点 | `DocxViewerToolbar` | default / hover / focus / disabled |
-| `docx-sidebar` | `DocumentViewerThumbnailSidebar` + 与 subject 相同的单页真实 DOCX 页图、卡片尺寸/标签、header/计数和 3 项 skeleton | 真实 `DocxThumbnailPanel` + `DocumentViewerSidebar` + 真实 DOCX canvas 缩略图 | open / closed / skeleton |
+| `docx-toolbar` | `vendor/extend/docx-toolbar.tsx` = `docx-viewer.tsx` 的 `DocxToolbar`（缩略图开关 + Page/页码/of N + 缩放减/档位/加 + 分隔线 + 关闭的 `⋯` 动作菜单） | `DocxViewerToolbar` 默认行 | default / hover / focus / disabled |
+| `docx-sidebar` | `vendor/extend/docx-sidebar.tsx` = 上游 `DOCX pages` listbox：无 header、16px 轨迹留白、12px 行内缩进、92px `FileThumbnail` 页卡（同一张 2× 页图 canvas）、`text-xs` 页码、`bg-sidebar-accent` 选中态、`p-4` 骨架 | 真实 `DocxThumbnailPanel`（`DocumentViewerSidebar` + `FileThumbnail` + 真实 DOCX canvas） | open / closed / skeleton |
+
+删除的旧参考面内容（它们不是上游默认行）：文件名字段、内联搜索条、版式/适配分段、
+修订显示下拉、主题/上传/下载按钮，以及 sidebar 的 “Pages” header 和计数 pill。
+产品侧对应命令收进 `⋯` 动作菜单（Find / Comments / Edits / 主题 / 上传 / 下载）或
+改为默认关闭的可选 props（`showViewControls` / `showReviewControls` /
+`showFileName` / `showSearch`）。
 
 运行：
 
@@ -73,27 +83,28 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity -- \
   --only docx-toolbar,docx-sidebar
 ```
 
-参考侧扩展了 `tools/extend-reference/src/surfaces/DocxToolbarSurface.tsx` 与
-`DocxSidebarSurface.tsx`：toolbar 补齐与 subject 相同的控制集、顺序和 `<1360px`
-overflow 断点；sidebar 使用相同的一张真实 DOCX 页图（`public/docx-sidebar-page-1.png`，
-由真实 `DocxThumbnailPanel` canvas 生成）、相同卡片 140×210、相同 label/active 样式、
-相同 “Pages” header/计数和相同 3 项 skeleton 结构。vendored 组件仍保留 pinned
-commit / MIT / copyright 头并登记在 `vendor/NOTICE.md`。
+结果（`output/ui-parity-docx/report.json`，未提交）：
 
-该命令当前**真实 FAIL**（没有伪造 pass），精确 delta：
+| 指标 | 数值 |
+|---|---|
+| cases | 56（4 视口 × 2 主题 × 7 状态） |
+| 通过 | **56 / 56 PASS**，0 pass-with-AA，0 fail |
+| 最大 diff 像素 | **0** |
+| 最大 diff ratio | **0**（阈值 0.1%） |
+| 最大 channel delta | 0（阈值 2） |
+| 几何 delta | 0px（宽/高/偏移全矩阵一致） |
 
-- `docx-toolbar`：32 cases，**几何全矩阵 PASS**（1440/1280/768 单行 48px；390
-  响应式换行 89px，与 reference 高度一致）。像素差：1440 11.82%–20.54%；1280
-  2.90%–6.32%；768 4.96%–10.82%；390 7.03%–15.99%；全矩阵平均 9.99%。剩余差异
-  集中在控件文字/图标字形与 1px 位置差（Extend Hugeicons vs Office Lucide、页控件
-  输入宽度、搜索选项/计数 pill 尺寸）。
-- `docx-sidebar`：24 cases，几何全矩阵 PASS；10 pass、2 pass-with-AA、12 fail，
-  平均 3.17%。closed 全 PASS；open 仅 0.50%–0.53%（header “Pages”/计数文字与 border
-  的亚像素抗锯齿）；skeleton 在 1440/768 light PASS，dark 18.8%–23.5%、390
-  11.3%–18.3%，原因是 subject 的 `office-skeleton` shimmer 动画取帧相位与 reference
-  静态块不同。
+剩余非像素类差异（`styleDeltas`，不影响栅格化）：sidebar 根节点的 `display`
+（上游 block / 共享 shell flex）与 `boxShadow` 序列化文本（透明层数量），
+像素比较为 0。
 
-报告：`output/ui-parity/report.json` / `report.html`（未提交，由命令生成）。
+### 早前一轮（fix/159）的历史 delta
+
+第一次实现把「Extend 风格完整控件集」写进参考面，于是参考面和产品面一起偏离
+上游默认行。当时的报告是 toolbar 32 cases 几何 PASS / 像素平均 9.99%、sidebar
+24 cases 平均 3.17%。这一轮已由上面的上游参考面取代。
+
+报告文件（`output/ui-parity*/report.json` / `report.html`）由命令生成，不提交。
 未接入 axe-core（#165）；键盘/焦点行为由 component/blackbox 测试覆盖。
 
 ## UX-DOCX-004 square-wrap 排查
@@ -135,7 +146,7 @@ viewer/editor 状态包裹层。因此 `UX-DOCX-004` 是既有 square-wrap 布�
 | `tests/blackbox/fidelity_content.py` | PASS |
 | `tests/blackbox/touch_mobile.py` | PASS（20/20；390px DOCX toolbar 搜索/缩放/图标命中区 ≥44px） |
 | `tests/blackbox/ux_parity.py` | `UX-DOCX-001/002/003` PASS；`UX-DOCX-004` 在基线 `fa7b45a6` 与当前分支均失败（见上节）；upstream reference capture BLOCKED |
-| `pnpm ui:parity -- --only docx-toolbar,docx-sidebar` | 56 cases FAIL（未伪造通过）；几何/像素精确 delta 见上节，报告 `output/ui-parity/report.json` |
+| `pnpm ui:parity -- --only docx-toolbar,docx-sidebar`（fix/159b） | **56/56 PASS，diff 像素 0，几何 delta 0**；报告 `output/ui-parity-docx/report.json` |
 | `node scripts/ci/verify-docs.mjs` | PASS（262 checks） |
 | `node scripts/ci/verify-public-api.mjs` | PASS |
 | `node scripts/ci/verify-attribution.mjs` | PASS |

@@ -213,6 +213,9 @@ test("DOCX viewer switching modes keeps the current page", async () => {
             model,
             layoutOptions: VIEWER_LAYOUT,
             viewMode: viewMode.value,
+            // The upstream-shaped row keeps page-layout commands in the
+            // actions menu; hosts opt in with `toolbarViewControls`.
+            toolbarViewControls: true,
             "onUpdate:viewMode": (mode) => {
               viewMode.value = mode;
             },
@@ -227,6 +230,15 @@ test("DOCX viewer switching modes keeps the current page", async () => {
   const root = viewerRoot(mounted.root);
   const scroll = makeScrollable(root, { clientHeight: 400, scrollTop: 0 });
   await vue.nextTick();
+
+  async function chooseViewMode(testId) {
+    await findByTestId(mounted.root, "docx-toolbar-actions").props.onClick();
+    await vue.nextTick();
+    const item = findByTestId(mounted.root, testId);
+    assert.ok(item, `${testId} must be in the toolbar actions menu`);
+    await item.props.onClick();
+    await vue.nextTick();
+  }
 
   // Navigate to page 3 through the toolbar page field.
   const pageInput = findByTestId(mounted.root, "docx-page-current");
@@ -244,7 +256,7 @@ test("DOCX viewer switching modes keeps the current page", async () => {
   await vue.nextTick();
 
   // Switching to a spread keeps page 3 selected and scrolls to its row.
-  await findByTestId(mounted.root, "docx-view-mode-spread").props.onClick();
+  await chooseViewMode("docx-view-mode-spread");
   await waitFor(
     () => root.props["data-docx-view-mode"] === "spread",
     "spread mode applied",
@@ -260,7 +272,7 @@ test("DOCX viewer switching modes keeps the current page", async () => {
   );
 
   // Switching back to single page mode keeps page 3 as well.
-  await findByTestId(mounted.root, "docx-view-mode-single").props.onClick();
+  await chooseViewMode("docx-view-mode-single");
   await waitFor(
     () => root.props["data-docx-view-mode"] === "single",
     "single mode applied",

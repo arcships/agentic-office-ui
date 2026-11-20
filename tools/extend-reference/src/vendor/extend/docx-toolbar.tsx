@@ -5,50 +5,64 @@
  * Copyright (c) 2026 CrowdView Inc, dba Extend. Portions Copyright (c) 2023 shadcn.
  * Licensed under the MIT License; see ../NOTICE.md.
  *
- * Adaptation: the Radix/shadcn dropdown, tooltip and select popups are reduced
- * to their static triggers; the captured surface compares the closed toolbar.
- * Class strings, spacing, page-control markup and icon sizes are copied from
- * the pinned source so the reference pixels stay representative.
+ * Adaptations (all drop interactive popups, none change resting-state layout):
+ * - The hover-only tooltip primitive renders its trigger wrapper unchanged
+ *   (`<span class="inline-flex">`) and no tooltip content.
+ * - The zoom Select becomes the static SelectTrigger/SelectValue from the
+ *   vendored registry select, with the same `w-[104px] min-w-[104px]` classes.
+ * - The DOCX actions DropdownMenu trigger becomes a plain ghost icon button
+ *   with the same classes; the menu is not rendered because the parity matrix
+ *   never opens it.
+ * - The page-number control keeps the display (button) branch. The edit branch
+ *   and its Input are not vendored.
  */
-import * as React from "react";
+import type * as React from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   MinusSignCircleIcon,
   MoreHorizontalIcon,
   PlusSignCircleIcon,
   SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 
 import { Button } from "../ui/button";
 import { SelectTrigger, SelectValue } from "../ui/select";
 import { Separator } from "../ui/separator";
+
+function TooltipTriggerWrapper({ children }: { children: React.ReactNode }) {
+  return <span className="inline-flex">{children}</span>;
+}
+
+export interface DocxToolbarProps {
+  activePage: number;
+  controlsDisabled: boolean;
+  pageCount: number;
+  zoomPercent: number;
+}
 
 export function DocxToolbar({
   activePage,
   controlsDisabled,
   pageCount,
   zoomPercent,
-}: {
-  activePage: number;
-  controlsDisabled: boolean;
-  pageCount: number;
-  zoomPercent: number;
-}) {
+}: DocxToolbarProps): React.ReactElement {
   return (
     <div
       data-parity-docx-toolbar=""
       className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b bg-background px-3 py-2"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Toggle thumbnails"
-          disabled={controlsDisabled}
-        >
-          <HugeiconsIcon icon={SidebarLeftIcon} className="size-4" />
-        </Button>
+        <TooltipTriggerWrapper>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Toggle thumbnails"
+            disabled={controlsDisabled}
+          >
+            <HugeiconsIcon icon={SidebarLeftIcon} className="size-4" />
+          </Button>
+        </TooltipTriggerWrapper>
         <div className="flex items-center text-sm whitespace-nowrap text-primary">
           <span>Page</span>
           <Button
@@ -56,25 +70,27 @@ export function DocxToolbar({
             variant="ghost"
             size="sm"
             className="font-normal"
-            aria-label={`Current page ${activePage}. Edit page number`}
+            aria-label={`Current page ${pageCount ? activePage : 1}. Edit page number`}
             disabled={controlsDisabled || !pageCount}
           >
-            {activePage}
+            {pageCount ? activePage : 1}
           </Button>
           <span>of {pageCount || "-"}</span>
         </div>
       </div>
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
         <div className="flex flex-none items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={controlsDisabled || zoomPercent <= 50}
-            aria-label="Zoom out"
-          >
-            <HugeiconsIcon icon={MinusSignCircleIcon} className="size-4" />
-          </Button>
+          <TooltipTriggerWrapper>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={controlsDisabled || zoomPercent <= 50}
+              aria-label="Zoom out"
+            >
+              <HugeiconsIcon icon={MinusSignCircleIcon} className="size-4" />
+            </Button>
+          </TooltipTriggerWrapper>
           <SelectTrigger
             size="sm"
             className="w-[104px] min-w-[104px]"
@@ -83,23 +99,24 @@ export function DocxToolbar({
           >
             <SelectValue>{Math.round(zoomPercent)}%</SelectValue>
           </SelectTrigger>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={controlsDisabled || zoomPercent >= 200}
-            aria-label="Zoom in"
-          >
-            <HugeiconsIcon icon={PlusSignCircleIcon} className="size-4" />
-          </Button>
+          <TooltipTriggerWrapper>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={controlsDisabled || zoomPercent >= 200}
+              aria-label="Zoom in"
+            >
+              <HugeiconsIcon icon={PlusSignCircleIcon} className="size-4" />
+            </Button>
+          </TooltipTriggerWrapper>
         </div>
         <Separator orientation="vertical" className="mx-1 h-4 self-center" />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="Document actions"
-          disabled={controlsDisabled}
+          aria-label="Open DOCX actions"
         >
           <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4" />
         </Button>

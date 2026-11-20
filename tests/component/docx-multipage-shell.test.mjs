@@ -184,7 +184,10 @@ test("thumbnail rail uses per-page page sizes and keeps the current page window"
   await vue.nextTick();
 
   const items = nodesWithClass(mounted.root, "docx-thumbnail-item");
-  assert.equal(textContent(nodesWithClass(mounted.root, "docx-thumbnail-count")[0]), "40");
+  assert.equal(
+    Number(nodesWithClass(mounted.root, "docx-thumbnail-list")[0].props["data-page-count"]),
+    40,
+  );
   assert.equal(
     items[0].props["data-thumbnail-page-index"],
     19,
@@ -195,11 +198,12 @@ test("thumbnail rail uses per-page page sizes and keeps the current page window"
   assert.equal(textContent(active), "30");
 
   const canvases = walk(mounted.root).filter((node) => node.type === "canvas");
-  assert.equal(canvases[0].props.height, 181, "portrait page keeps its own aspect ratio");
-  assert.equal(canvases[6].props.height, 108, "landscape page is not squashed to portrait height");
+  assert.equal(canvases[0].props.height, 119, "portrait page keeps its own aspect ratio");
+  assert.equal(canvases[6].props.height, 71, "landscape page is not squashed to portrait height");
   assert.equal(
-    nodesWithClass(mounted.root, "docx-thumbnail-canvas-wrapper")[6].props.style.height,
-    "108px",
+    canvases[6].props.style.blockSize,
+    "71px",
+    "the landscape card renders at its own aspect ratio",
   );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
@@ -231,8 +235,8 @@ test("thumbnail rail derives per-page aspect ratios from section layout", async 
 
   const canvases = walk(mounted.root).filter((node) => node.type === "canvas");
   assert.equal(canvases.length, 2);
-  assert.equal(canvases[0].props.height, 210, "portrait section uses its own height");
-  assert.equal(canvases[1].props.height, 93, "landscape section uses its own height");
+  assert.equal(canvases[0].props.height, 138, "portrait section uses its own height");
+  assert.equal(canvases[1].props.height, 61, "landscape section uses its own height");
   mounted.app.unmount();
 });
 
@@ -250,8 +254,8 @@ test("thumbnail rail does not re-paginate when a controller owns the layout", as
   await vue.nextTick();
 
   assert.equal(
-    textContent(nodesWithClass(mounted.root, "docx-thumbnail-count")[0]),
-    "3",
+    nodesWithClass(mounted.root, "docx-thumbnail-list")[0].props["data-page-count"],
+    3,
     "the rail must wait for the viewer's shared page count instead of running its own layout",
   );
   assert.equal(nodesWithClass(mounted.root, "docx-thumbnail-item").length, 3);

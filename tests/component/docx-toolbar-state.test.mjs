@@ -147,6 +147,8 @@ test("DocxViewer shows gesture zoom in its toolbar and announces search status",
   const mounted = await mount(DocxViewer, {
     model: styledModel(),
     defaultZoom: 100,
+    // The find field is opt-in on the upstream-shaped default row.
+    toolbarSearch: true,
   });
 
   const scrollContainer = walk(mounted.root).find((node) =>
@@ -260,7 +262,10 @@ test("DocxViewerToolbar keeps a focused page draft while currentPage changes", a
 });
 
 test("DocxViewerToolbar exposes and toggles the search options", async () => {
-  const mounted = await mount(DocxViewer, { model: styledModel() });
+  // The default DOCX row is the upstream Extend row; the inline find field is
+  // an opt-in host surface (`toolbarSearch`), and Ctrl/Cmd+F opens the same
+  // find popover from the actions menu.
+  const mounted = await mount(DocxViewer, { model: styledModel(), toolbarSearch: true });
   const options = [
     ["docx-search-case-sensitive", "Match case"],
     ["docx-search-whole-word", "Match whole word"],
