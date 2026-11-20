@@ -138,7 +138,8 @@ import { OfficeIcon, OfficeThemeProvider } from "@arcships/vue-ui"
 
 `captureRegion()` 返回的 `url` 由调用方释放；`OfficeRegionAnnotator` 只为 `Blob` 类型的 `image` 创建 URL，并在替换/卸载时撤销。
 
-`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；`showFileList` 默认 `false`，开启后按 Extend 布局渲染大小/类型/Ready。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数，`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`（draw 数据地址或 `null`）、`update:modelValue`、`clear`、`cancel`、`confirm`；`ESignatureFields` 发出 `sign`、`edit`、`clear`、`export`。`BoundingBoxCitations` 在 legacy `field-click` 之外新增 `field-focus`、`update:activeFieldKey`、`update:expected`；`LayoutBlocks` 新增 `block-focus`、`update:activeBlockId`；`DocumentSplits` 发出 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。完整状态与 Extend 像素证据见 [Document blocks](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/document-blocks.md)。
+`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；默认值与 Extend 对齐：`accept` 为文档/图片白名单、`multiple=true`、`showFileList=true`（按 Extend 布局渲染大小/类型/Ready）。旧宿主可传 `accept=""`、`:multiple="false"`、`:show-file-list="false"` 恢复旧行为。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数；Extend 的默认 tile 没有 glyph/meta，因此这两个扩展默认保持 `false`。`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`。
+
 
 ## 文档
 

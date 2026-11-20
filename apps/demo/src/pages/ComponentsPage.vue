@@ -59,7 +59,6 @@
             <FileUpload
               accept=".pdf,.docx"
               :max-size="2 * 1024 * 1024"
-              show-file-list
               title="Click to upload or drop files"
               description="PDF or DOCX, up to 2 MB"
               @files-accepted="uploaded = $event"
@@ -84,20 +83,14 @@
           <FileThumbnail
             :file="{ name: 'large-contract.pdf', type: 'application/pdf' }"
             :size="96"
-            show-meta
-            show-type-glyph
           />
           <FileThumbnail
             :file="{ name: 'legal-contract.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }"
             :size="96"
-            show-meta
-            show-type-glyph
           />
           <FileThumbnail
             :file="{ name: 'financial-model.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }"
             :size="96"
-            show-meta
-            show-type-glyph
           />
           <FileThumbnail
             :file="{ name: 'contract-page.png', type: 'image/png' }"
@@ -108,8 +101,6 @@
           <FileThumbnail
             :file="{ name: 'very-long-unknown-document-name-without-known-type.bin', type: '' }"
             :size="96"
-            show-meta
-            show-type-glyph
           />
         </div>
       </section>
@@ -369,3 +360,4 @@ section { border: 1px solid var(--border); border-radius: var(--radius); padding
 .loading-card { display: inline-flex; align-items: center; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted-foreground); }
 @media (max-width: 820px) { .split { grid-template-columns: minmax(0, 1fr); } section { padding: 14px; } }
 </style>
+

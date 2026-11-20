@@ -55,14 +55,16 @@ export interface FileUploadAcceptedType {
 }
 
 export interface FileUploadProps {
+  /** Comma-separated accept list. Defaults to the Extend document/image list. */
   accept?: string
+  /** Allow more than one file. Defaults to `true` like the Extend reference. */
   multiple?: boolean
   maxSize?: number
   disabled?: boolean
   className?: string
-  /** Heading copy. Defaults to the localized upload prompt. */
+  /** Heading copy. Defaults to the localized upload title. */
   title?: string
-  /** Supporting copy under the heading; hidden when omitted. */
+  /** Supporting copy under the heading. Defaults to the localized description. */
   description?: string
   /** Drop-target chip copy when idle. */
   browseLabel?: string
@@ -70,7 +72,7 @@ export interface FileUploadProps {
   draggingLabel?: string
   /** Glyphs shown in the icon cluster. Defaults to Image / PDF / Sheet. */
   acceptedFileTypes?: FileUploadAcceptedType[]
-  /** Render the selected-file list under the drop zone. Defaults to false. */
+  /** Render the selected-file list under the drop zone. Defaults to `true`. */
   showFileList?: boolean
   /** Paint the optional animated border beam while dragging. */
   showBorderBeam?: boolean
@@ -112,9 +114,9 @@ export interface FileThumbnailProps {
   isLoading?: boolean
   /** Force the muted error/empty fallback. */
   hasError?: boolean
-  /** Render the file-type glyph in the fallback layer. */
+  /** Render the file-type glyph in the fallback layer (Vue extension; Extend has no glyph). */
   showTypeGlyph?: boolean
-  /** Render the file name and type under the preview (inline row layout). */
+  /** Render the file name and type under the preview (Vue extension, inline row layout). */
   showMeta?: boolean
   /** Stretch the root to the parent box (Finder/thumbnail-strip layouts). */
   fill?: boolean

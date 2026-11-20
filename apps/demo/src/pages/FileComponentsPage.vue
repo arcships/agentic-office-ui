@@ -124,8 +124,9 @@ onMounted(seedStories)
           <p class="lead">
             FileUpload and FileThumbnail aligned with the pinned Extend UI
             reference: tokenized radius, borders, muted surfaces and
-            interaction states, plus the file list, ready state and preview
-            reveal layers.
+            interaction states, plus the default file list, ready state and
+            preview reveal layers. `show-file-list` and `show-type-glyph`
+            remain available as opt-ins/opt-outs for host-managed layouts.
           </p>
         </div>
         <div class="controls">
@@ -152,7 +153,6 @@ onMounted(seedStories)
             <FileUpload
               ref="defaultRef"
               accept=".pdf,.docx,.png"
-              show-file-list
               :max-size="25 * 1024 * 1024"
               title="Click to upload or drop files"
               description="PDF, DOC/DOCX, XLSX, CSV, PNG, or JPG"
@@ -170,7 +170,6 @@ onMounted(seedStories)
             <h4>Dragging</h4>
             <FileUpload
               ref="dragRef"
-              show-file-list
               accept=".pdf,.png"
               title="Drop to add"
               description="The icon cluster lifts and the border switches to the active token."
@@ -191,7 +190,6 @@ onMounted(seedStories)
             <h4>File list / Ready</h4>
             <FileUpload
               ref="listRef"
-              show-file-list
               accept=".pdf,.docx,.png"
               title="Click to upload or drop files"
               description="Long names truncate without moving the Ready badge."
@@ -202,7 +200,6 @@ onMounted(seedStories)
             <h4>Rejected</h4>
             <FileUpload
               ref="errorRef"
-              show-file-list
               accept=".pdf,.docx,.png"
               title="Click to upload or drop files"
               description="Unsupported files stay out of the list."
@@ -210,6 +207,21 @@ onMounted(seedStories)
             <button class="story-button" type="button" @click="rejectFiles">
               Simulate rejected file
             </button>
+          </article>
+
+          <article class="story-card" data-testid="story-upload-opt-out">
+            <h4>Host-managed list (opt-out)</h4>
+            <FileUpload
+              accept=".pdf,.docx,.png"
+              :show-file-list="false"
+              title="Click to upload or drop files"
+              description="show-file-list=false keeps the pre-0.8 layout."
+            />
+            <p class="story-note">
+              The built-in list is on by default, matching Extend. Pass
+              <code>show-file-list="false"</code> when the host renders its own
+              list.
+            </p>
           </article>
         </div>
       </section>
@@ -406,6 +418,12 @@ h2 {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.story-note {
+  margin: 10px 0 0;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
 }
 .thumbnail-grid {
   display: grid;

@@ -1,9 +1,5 @@
-import { fixtures } from "../fixtures";
 import { ParityCell } from "../parity/ParitySurface";
 import { FileUpload } from "../vendor/extend/file-upload";
-
-const uploadCopy = fixtures.copy.fileUpload;
-const uploadFixture = fixtures.fileUpload;
 
 const states = [
   { state: "default", matrixState: "empty" },
@@ -24,16 +20,8 @@ export function FileUploadSurface({ cellWidth }: { cellWidth: number }) {
           state={entry.state}
           width={cellWidth}
         >
-          <FileUpload
-            acceptedFileTypes={uploadFixture.acceptedFileTypes}
-            accept={uploadFixture.accept}
-            browseLabel={uploadCopy.browseLabel}
-            description={uploadCopy.description}
-            draggingLabel={uploadCopy.draggingLabel}
-            multiple={uploadFixture.multiple}
-            showFileList
-            title={uploadCopy.title}
-          />
+          {/* No props: the cell measures the component's shipped defaults. */}
+          <FileUpload />
         </ParityCell>
       ))}
     </>

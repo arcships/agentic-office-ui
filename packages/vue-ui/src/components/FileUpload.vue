@@ -8,6 +8,10 @@ import {
   Upload01Icon,
 } from "@hugeicons/core-free-icons"
 import FileThumbnail from "./FileThumbnail.vue"
+import {
+  FILE_UPLOAD_DEFAULT_ACCEPT,
+  FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES,
+} from "./file-upload-defaults"
 import { HugeIcon, type HugeIconData } from "./HugeIcon"
 import { useOfficeUiMessages } from "../i18n"
 import type {
@@ -18,8 +22,8 @@ import type {
 } from "../types"
 
 const props = withDefaults(defineProps<FileUploadProps>(), {
-  accept: "",
-  multiple: false,
+  accept: FILE_UPLOAD_DEFAULT_ACCEPT,
+  multiple: true,
   maxSize: Infinity,
   disabled: false,
   className: "",
@@ -28,7 +32,7 @@ const props = withDefaults(defineProps<FileUploadProps>(), {
   browseLabel: undefined,
   draggingLabel: undefined,
   acceptedFileTypes: undefined,
-  showFileList: false,
+  showFileList: true,
   showBorderBeam: false,
   borderBeamTheme: "light",
 })
@@ -66,12 +70,6 @@ const HUGE_ICONS: Record<string, HugeIconData> = {
   sheet: FileSpreadsheetIcon,
 }
 
-const DEFAULT_ACCEPTED_TYPES: FileUploadAcceptedType[] = [
-  { icon: "image" },
-  { icon: "pdf" },
-  { icon: "sheet" },
-]
-
 const ICON_TRANSFORMS = [
   {
     idle: "translate(-78%, -50%) rotate(-8deg)",
@@ -88,11 +86,14 @@ const ICON_TRANSFORMS = [
 ]
 
 const resolvedAcceptedTypes = computed<ResolvedAcceptedType[]>(() => {
-  const types = props.acceptedFileTypes ?? DEFAULT_ACCEPTED_TYPES
+  const types = props.acceptedFileTypes ?? FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES
   return types.map((entry, index) => resolveAcceptedType(entry, index))
 })
 
-const displayTitle = computed(() => props.title ?? m.value.vueUi.fileUpload.prompt)
+const displayTitle = computed(() => props.title ?? m.value.vueUi.fileUpload.title)
+const displayDescription = computed(
+  () => props.description ?? m.value.vueUi.fileUpload.description,
+)
 const displayBrowseLabel = computed(
   () => props.browseLabel ?? m.value.vueUi.fileUpload.browse,
 )
@@ -111,7 +112,7 @@ function resolveAcceptedType(
   index: number,
 ): ResolvedAcceptedType {
   const icon = entry.icon
-  const fallback = DEFAULT_ACCEPTED_TYPES[index % DEFAULT_ACCEPTED_TYPES.length]?.icon
+  const fallback = FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES[index % FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES.length]?.icon
   const key = typeof icon === "string" ? icon : typeof fallback === "string" ? fallback : "image"
   if (icon && typeof icon !== "string") {
     return { label: entry.label, component: icon as Component }
@@ -322,8 +323,8 @@ onBeforeUnmount(() => revokePreviewUrls(selectedFiles.value))
       </div>
       <div class="file-upload__copy">
         <div class="file-upload__title">{{ displayTitle }}</div>
-        <div v-if="props.description" class="file-upload__description">
-          {{ props.description }}
+        <div v-if="displayDescription" class="file-upload__description">
+          {{ displayDescription }}
         </div>
         <div v-if="error" class="file-upload__rejection" role="alert">
           {{ error }}
