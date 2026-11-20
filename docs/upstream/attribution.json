@@ -821,11 +821,11 @@
     },
     {
       "upstreamFile": "apps/v4/components/ui/*.tsx",
-      "purpose": "Convention guard for the planned Office chrome directory.",
-      "target": "packages/vue-ui/src/components/office/",
-      "status": "adapted",
+      "purpose": "Convention guard for the shared Office chrome directory.",
+      "target": "packages/vue-ui/src/components/chrome/",
+      "status": "reference-only",
       "issues": ["#158"],
-      "notes": "Any Vue or CSS file in this directory follows Extend PDF and DOCX chrome measurements and must carry the header."
+      "notes": "The toolbar/sidebar/status/state components are independent implementations measured against Extend PDF/DOCX chrome and the --office-* tokens; no upstream code is copied, so they carry no source header. Pixel evidence lives in the document-sidebar and office-* surfaces."
     },
     {
       "upstreamFile": "apps/v4 vendored reference snapshot (components)",

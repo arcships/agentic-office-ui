@@ -145,12 +145,14 @@ Extend 用 `var(--color-white)` 声明 card / popover；这两项必须写成 `w
 | `--office-radius-2xl` | `calc(var(--office-radius) * 1.8)` | 18px |
 | `--office-radius-3xl` | `calc(var(--office-radius) * 2.2)` | 22px |
 | `--office-radius-4xl` | `calc(var(--office-radius) * 2.6)` | 26px |
+| `--office-radius-full` | `9999px` | `rounded-full`（empty state glyph、skeleton caption） |
 | `--office-ring-width` | `2px` | 焦点环宽度 |
 | `--office-ring-offset-width` | `1px` | 焦点环偏移 |
 | `--office-border-width` | `1px` | 默认描边 |
 | `--office-shadow-xs` | `0 1px 2px 0 rgb(0 0 0 / 0.05)` | 与 Extend `shadow-xs` 一致 |
 | `--office-shadow-sm` | `0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-sm` 一致 |
 | `--office-shadow-md` | `0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-md` 一致 |
+| `--office-shadow-lg` | `0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)` | 与 Extend `shadow-lg` 一致（overlay sidebar 边缘） |
 
 ### 3.3 字体与字号
 

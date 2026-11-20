@@ -154,7 +154,11 @@ test("the sidebar contract is 160px with inline/overlay animation and ResizeObse
   assert.match(sidebar, /margin-inline-start var\(--office-ui-sidebar-duration\) ease-out/u)
   assert.match(sidebar, /translate var\(--office-ui-sidebar-duration\) ease-out/u)
   assert.match(sidebar, /background:\s*var\(--office-sidebar\)/u)
-  assert.match(sidebar, /border-inline-end:\s*var\(--office-border-width\) solid var\(--office-sidebar-border\)/u)
+  // Upstream `border-r` resolves to the base `--border` (8% black) through the
+  // shadcn base layer, not `--sidebar-border` (6%). The pinned sidebar surfaces
+  // (pdf-sidebar, docx-sidebar, document-sidebar) are pixel-equal with this
+  // token; `--office-sidebar-border` stays for the header/footer separators.
+  assert.match(sidebar, /border-inline-end:\s*var\(--office-border-width\) solid var\(--office-border\)/u)
 
   assert.match(
     stripComments(chromeCss),
@@ -216,8 +220,73 @@ test("the chrome stylesheet stays token-only and ships no reset", () => {
   }
 })
 
-test("IconButton keeps the 28/32px desktop sizes and a 44px coarse hit area", () => {
-  const icon = findBlock(stripComments(uiCss), ".office-button--size-icon")
+test("the state variants keep the upstream empty/error/loading shapes", () => {
+  const code = stripComments(chromeCss)
+  // Upstream `PdfEditorEmptyState`: flex column, `gap-2`, `px-4 py-10`.
+  const empty = findBlock(code, ".office-state--empty")
+  assert.ok(empty, "missing .office-state--empty block")
+  assert.match(empty, /flex-direction:\s*column/u)
+  assert.match(empty, /gap:\s*var\(--office-ui-space-2\)/u, "gap-2 is 8px")
+  assert.match(
+    empty,
+    /padding:\s*var\(--office-ui-space-10\) var\(--office-ui-space-4\)/u,
+    "px-4 py-10",
+  )
+  assert.match(empty, /background:\s*transparent/u, "the grid host paints the surface")
+
+  const emptyIcon = findBlock(code, ".office-state--empty .office-state__icon")
+  assert.ok(emptyIcon)
+  assert.match(emptyIcon, /inline-size:\s*var\(--office-ui-space-10\)/u, "size-10 glyph box")
+  assert.match(emptyIcon, /border-radius:\s*var\(--office-radius-full\)/u, "rounded-full")
+
+  const emptyTitle = findBlock(code, ".office-state--empty .office-state__title")
+  assert.ok(emptyTitle)
+  assert.match(emptyTitle, /font-size:\s*var\(--office-text-sm\)/u)
+  assert.match(emptyTitle, /font-weight:\s*500/u, "font-medium")
+
+  // Upstream viewer error card: `max-w-md rounded-lg border p-4 text-sm`.
+  const error = findBlock(code, ".office-state--error")
+  assert.ok(error, "missing .office-state--error block")
+  assert.match(error, /max-inline-size:\s*var\(--office-ui-state-card-max-width\)/u)
+  assert.match(error, /border:\s*var\(--office-border-width\) solid var\(--office-border\)/u)
+  assert.match(error, /border-radius:\s*var\(--office-radius-lg\)/u)
+  assert.match(error, /font-size:\s*var\(--office-text-sm\)/u)
+  assert.match(error, /line-height:\s*var\(--office-leading-sm\)/u)
+
+  assert.match(
+    code,
+    /\.office-state--error \.office-state__actions \{\s*justify-content:\s*flex-start;\s*margin-block-start:\s*var\(--office-ui-space-4\)/u,
+    "the error action row is `mt-4`, start aligned",
+  )
+
+  // Upstream `ViewerLoadingSurface`: `grid min-h-52 place-items-center`.
+  const loading = findBlock(code, ".office-state--loading")
+  assert.ok(loading, "missing .office-state--loading block")
+  assert.match(loading, /display:\s*grid/u)
+  assert.match(loading, /place-items:\s*center/u)
+  assert.match(loading, /min-block-size:\s*var\(--office-ui-state-min-height\)/u, "min-h-52")
+  assert.match(loading, /background:\s*transparent/u)
+})
+
+test("the status bar keeps the upstream footer metrics", () => {
+  const status = findBlock(stripComments(chromeCss), ".office-status-bar")
+  assert.ok(status, "missing .office-status-bar block")
+  // `border-t px-3 py-2 text-xs text-muted-foreground`.
+  assert.match(status, /padding:\s*var\(--office-ui-space-2\) var\(--office-ui-space-3\)/u)
+  assert.match(status, /border-block-start:\s*var\(--office-border-width\) solid/u)
+  assert.match(status, /font-size:\s*var\(--office-text-xs\)/u)
+  assert.match(status, /line-height:\s*var\(--office-leading-xs\)/u)
+  assert.match(status, /color:\s*var\(--office-muted-foreground\)/u)
+  // `bg-muted/40`.
+  assert.match(
+    status,
+    /background:\s*color-mix\(in oklab, var\(--office-muted\) 40%, transparent\)/u,
+  )
+  assert.match(status, /gap:\s*var\(--office-ui-space-1\) var\(--office-ui-space-2\)/u, "gap-1/gap-2")
+  assert.match(status, /justify-content:\s*space-between/u, "page/status left, file right")
+})
+
+test("IconButton keeps the 28/32px desktop sizes and a 44px coarse hit area", () => {  const icon = findBlock(stripComments(uiCss), ".office-button--size-icon")
   const iconSmall = findBlock(stripComments(uiCss), ".office-button--size-icon-sm")
   assert.ok(icon)
   assert.ok(iconSmall)

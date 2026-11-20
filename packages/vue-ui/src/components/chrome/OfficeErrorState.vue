@@ -12,6 +12,11 @@ export interface OfficeErrorStateProps {
   description?: string
   /** Raw error message from the host; used as the description fallback. */
   error?: string
+  /**
+   * Optional glyph above the title. The upstream error card is icon-free, so
+   * this is off by default; pass an `OfficeIconName` (or the `icon` slot) to
+   * opt in.
+   */
   icon?: OfficeIconName
   /** Render the built-in retry button. */
   showRetry?: boolean
@@ -25,7 +30,7 @@ const props = withDefaults(defineProps<OfficeErrorStateProps>(), {
   title: undefined,
   description: undefined,
   error: undefined,
-  icon: "triangle-alert",
+  icon: undefined,
   showRetry: true,
   retryLabel: undefined,
   compact: false,
@@ -62,20 +67,29 @@ const descriptionText = computed(
   <div
     :class="classes"
     role="alert"
-    :aria-labelledby="titleId"
-    :aria-describedby="descriptionId"
+    :aria-labelledby="titleText ? titleId : undefined"
+    :aria-describedby="descriptionText ? descriptionId : undefined"
     data-slot="error-state"
     data-testid="office-error-state"
   >
-    <div class="office-state__icon" data-slot="state-icon">
+    <div
+      v-if="props.icon || $slots.icon"
+      class="office-state__icon"
+      data-slot="state-icon"
+    >
       <slot name="icon">
         <OfficeIcon :name="props.icon" />
       </slot>
     </div>
-    <p :id="titleId" class="office-state__title" data-slot="state-title">
+    <p v-if="titleText" :id="titleId" class="office-state__title" data-slot="state-title">
       {{ titleText }}
     </p>
-    <div :id="descriptionId" class="office-state__description" data-slot="state-description">
+    <div
+      v-if="descriptionText || $slots.default"
+      :id="descriptionId"
+      class="office-state__description"
+      data-slot="state-description"
+    >
       <slot>{{ descriptionText }}</slot>
     </div>
     <div
