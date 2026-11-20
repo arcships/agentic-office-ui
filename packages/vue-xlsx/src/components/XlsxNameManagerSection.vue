@@ -48,13 +48,13 @@
     <div class="xlsx-authoring__actions">
       <button
         type="button"
-        class="xlsx-authoring__button"
+        class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
         data-testid="xlsx-name-use-selection"
         @click="useSelection"
       >{{ m.xlsx.authoring.names.useSelection }}</button>
       <button
         type="button"
-        class="xlsx-authoring__button xlsx-authoring__button--primary"
+        class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
         data-testid="xlsx-name-save"
         :disabled="!name.trim() || !refersTo.trim()"
         @click="saveEntry"

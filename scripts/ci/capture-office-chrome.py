@@ -319,6 +319,63 @@ def page_flow(page: Page, prefix: str) -> dict[str, Any]:
     return {"typed": 5, "clamped": 12}
 
 
+def xlsx_story_flow(page: Page, out: Path, prefix: str) -> dict[str, Any]:
+    """Screenshot the XLSX toolbar/ribbon/status story and check its geometry.
+
+    Mirrors the shared-toolbar contract from ``assert_toolbar``: a 48px row, no
+    horizontal overflow, and the controls the toolbar/ribbon must keep. The
+    spreadsheet body below the chrome keeps the remaining height because the
+    toolbar is ``flex: 0 0 auto``.
+    """
+    story = page.locator('[data-testid="xlsx-chrome-story"]')
+    story.wait_for()
+    story.locator('[data-testid="xlsx-toolbar"]').wait_for()
+    story.locator('[data-testid="xlsx-format-toolbar"]').wait_for()
+    story.locator('[data-testid="xlsx-status-bar"]').wait_for()
+    metrics = page.evaluate(
+        """() => {
+          const story = document.querySelector('[data-testid="xlsx-chrome-story"]');
+          const toolbar = story.querySelector('[data-testid="xlsx-toolbar"]');
+          const ribbon = story.querySelector('[data-testid="xlsx-format-toolbar"]');
+          const status = story.querySelector('[data-testid="xlsx-status-bar"]');
+          const rect = (element) => {
+            const box = element.getBoundingClientRect();
+            return { height: box.height, width: box.width, top: box.top, bottom: box.bottom };
+          };
+          const leading = toolbar.querySelector('.office-toolbar__leading').getBoundingClientRect();
+          const trailing = toolbar.querySelector('.office-toolbar__trailing').getBoundingClientRect();
+          const unnamed = [...story.querySelectorAll('button')]
+            .filter((element) => {
+              const text = (element.innerText || '').trim();
+              return !text && !element.getAttribute('aria-label') && !element.getAttribute('title');
+            })
+            .map((element) => element.outerHTML.slice(0, 120));
+          return {
+            toolbar: rect(toolbar),
+            ribbon: rect(ribbon),
+            status: rect(status),
+            toolbarOverflow: toolbar.scrollWidth - toolbar.clientWidth,
+            ribbonOverflow: ribbon.scrollWidth - ribbon.clientWidth,
+            wrapped: trailing.top > leading.top + 1,
+            iconButtons: toolbar.querySelectorAll('.office-icon-button').length,
+            ribbonIconButtons: ribbon.querySelectorAll('.office-icon-button').length,
+            unnamedButtons: unnamed,
+          };
+        }"""
+    )
+    assert metrics["toolbar"]["height"] >= 48, f"{prefix}: xlsx toolbar height {metrics}"
+    assert metrics["toolbarOverflow"] <= 1, f"{prefix}: xlsx toolbar overflows {metrics}"
+    assert metrics["ribbonOverflow"] <= 1, f"{prefix}: xlsx ribbon overflows {metrics}"
+    assert metrics["iconButtons"] >= 5, f"{prefix}: xlsx toolbar icon controls {metrics}"
+    assert metrics["ribbonIconButtons"] >= 10, f"{prefix}: xlsx ribbon icon controls {metrics}"
+    assert not metrics["unnamedButtons"], f"{prefix}: xlsx unnamed buttons {metrics['unnamedButtons']}"
+    story.screenshot(path=str(out / f"{prefix}-xlsx-chrome.png"))
+    story.locator('[data-testid="xlsx-format-toolbar"]').screenshot(
+        path=str(out / f"{prefix}-xlsx-ribbon.png")
+    )
+    return metrics
+
+
 def sidebar_flow(page: Page, out: Path, prefix: str, mode: str) -> dict[str, Any]:
     shell = page.locator('[data-testid="office-chrome-shell"]')
     toggle = shell.locator('[data-testid="chrome-sidebar-toggle"]')
@@ -484,6 +541,10 @@ def capture_theme(
         page.locator('[data-testid="chrome-gallery-status"]').select_option("normal")
         wait_idle(page, 60)
 
+        # Spreadsheet chrome story (#160): toolbar + ribbon + status bar in the
+        # same themed subtree, one screenshot per viewport/theme.
+        story = xlsx_story_flow(page, theme_out, prefix)
+
         page.screenshot(path=str(theme_out / f"{prefix}-full-page.png"), full_page=True)
         deterministic.evaluate("(element) => element.remove()")
         return {
@@ -501,6 +562,7 @@ def capture_theme(
             "pageControl": page_control,
             "accessibility": accessibility,
             "pointer": pointer,
+            "xlsxStory": story,
         }
     finally:
         context.close()

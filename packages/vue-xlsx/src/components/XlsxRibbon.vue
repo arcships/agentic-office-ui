@@ -1,113 +1,446 @@
 <template>
-  <div class="xlsx-ribbon" :class="{ 'xlsx-ribbon--dark': isDark }" data-testid="xlsx-format-toolbar">
-    <fieldset class="xlsx-ribbon__controls" :disabled="isReadOnly || !hasWorkbook">
-      <div class="xlsx-ribbon__group">
-        <button data-testid="xlsx-undo" class="xlsx-ribbon__icon-button" :disabled="!controller.canUndo" :title="m.xlsx.ribbon.undo" :aria-label="m.xlsx.ribbon.undo" @click="controller.undo()">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" /></svg>
-        </button>
-        <button data-testid="xlsx-redo" class="xlsx-ribbon__icon-button" :disabled="!controller.canRedo" :title="m.xlsx.ribbon.redo" :aria-label="m.xlsx.ribbon.redo" @click="controller.redo()">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5M19 12h-8a6 6 0 0 0-6 6" /></svg>
-        </button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <button data-testid="xlsx-ribbon-cut" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.cut" @click="cutSelection">{{ m.xlsx.ribbon.cut }}</button>
-        <button data-testid="xlsx-ribbon-copy" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.copy" @click="copySelection">{{ m.xlsx.ribbon.copy }}</button>
-        <button data-testid="xlsx-ribbon-paste" class="xlsx-ribbon__action-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.paste" @click="controller.pasteFromClipboard()">{{ m.xlsx.ribbon.paste }}</button>
-        <button data-testid="xlsx-ribbon-paste-special" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.pasteSpecial" @click="emit('authoring', 'pasteSpecial')">{{ m.xlsx.ribbon.pasteSpecial }}</button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <button data-testid="xlsx-ribbon-insert-row-above" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowAbove" :aria-label="m.xlsx.ribbon.insertRowAbove" @click="insertRow('above')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 8v8M8 12h8" /></svg></button>
-        <button data-testid="xlsx-ribbon-insert-row-below" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowBelow" :aria-label="m.xlsx.ribbon.insertRowBelow" @click="insertRow('below')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 6v8M8 10h8" /></svg></button>
-        <button data-testid="xlsx-ribbon-delete-row" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteRow" :aria-label="m.xlsx.ribbon.deleteRow" @click="deleteRow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M8 12h8" /></svg></button>
-        <button data-testid="xlsx-ribbon-insert-column-left" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnLeft" :aria-label="m.xlsx.ribbon.insertColumnLeft" @click="insertColumn('left')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
-        <button data-testid="xlsx-ribbon-insert-column-right" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnRight" :aria-label="m.xlsx.ribbon.insertColumnRight" @click="insertColumn('right')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
-        <button data-testid="xlsx-ribbon-delete-column" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteColumn" :aria-label="m.xlsx.ribbon.deleteColumn" @click="deleteColumn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8" /></svg></button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <select :value="fontFamilyValue" :aria-label="m.xlsx.ribbon.fontFamily" :title="m.xlsx.ribbon.fontFamily" @change="setFontFamily">
-          <option value="Calibri">Calibri</option>
-          <option value="Aptos">Aptos</option>
-          <option value="Arial">Arial</option>
-          <option value="Georgia">Georgia</option>
-          <option value="Times New Roman">Times New Roman</option>
-          <option value="Courier New">Courier New</option>
-        </select>
-        <select :value="fontSizeValue" class="xlsx-ribbon__size" :aria-label="m.xlsx.ribbon.fontSize" :title="m.xlsx.ribbon.fontSize" @change="setFontSize">
-          <option v-if="!fontSizes.includes(fontSizeValue)" :value="fontSizeValue">{{ fontSizeValue }}</option>
-          <option v-for="size in fontSizes" :key="size" :value="size">{{ size }}</option>
-        </select>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.bold }" :aria-pressed="fontState.bold" :title="m.xlsx.ribbon.bold" :aria-label="m.xlsx.ribbon.bold" @click="applyFont({ bold: !fontState.bold })"><strong>B</strong></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.italic }" :aria-pressed="fontState.italic" :title="m.xlsx.ribbon.italic" :aria-label="m.xlsx.ribbon.italic" @click="applyFont({ italic: !fontState.italic })"><em>I</em></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.underline }" :aria-pressed="fontState.underline" :title="m.xlsx.ribbon.underline" :aria-label="m.xlsx.ribbon.underline" @click="applyFont({ underline: fontState.underline ? 'none' : 'single' })"><u>U</u></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.strikethrough }" :aria-pressed="fontState.strikethrough" :title="m.xlsx.ribbon.strikethrough" :aria-label="m.xlsx.ribbon.strikethrough" @click="applyFont({ strikethrough: !fontState.strikethrough })"><s>S</s></button>
-        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.textColor">
-          <span>A</span><i :style="{ backgroundColor: textColor }" />
-          <input v-model="textColor" type="color" :aria-label="m.xlsx.ribbon.textColor" @change="applyTextColor" />
-        </label>
-        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.fillColor">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 10 10-5 5-7-7zM14 6l2-2 4 4-2 2" /></svg><i :style="{ backgroundColor: fillColor }" />
-          <input v-model="fillColor" type="color" :aria-label="m.xlsx.ribbon.fillColor" @change="applyFillColor" />
-        </label>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'left' }" :aria-pressed="alignmentState.horizontal === 'left'" :title="m.xlsx.ribbon.alignLeft" :aria-label="m.xlsx.ribbon.alignLeft" @click="applyAlignment({ horizontal: 'left' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'center' }" :aria-pressed="alignmentState.horizontal === 'center'" :title="m.xlsx.ribbon.alignCenter" :aria-label="m.xlsx.ribbon.alignCenter" @click="applyAlignment({ horizontal: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'right' }" :aria-pressed="alignmentState.horizontal === 'right'" :title="m.xlsx.ribbon.alignRight" :aria-label="m.xlsx.ribbon.alignRight" @click="applyAlignment({ horizontal: 'right' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'top' }" :aria-pressed="alignmentState.vertical === 'top'" :title="m.xlsx.ribbon.alignTop" :aria-label="m.xlsx.ribbon.alignTop" @click="applyAlignment({ vertical: 'top' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M7 8h10M9 12h6" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'center' }" :aria-pressed="alignmentState.vertical === 'center'" :title="m.xlsx.ribbon.alignMiddle" :aria-label="m.xlsx.ribbon.alignMiddle" @click="applyAlignment({ vertical: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M7 9h10M7 15h10M5 19h14" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'bottom' }" :aria-pressed="alignmentState.vertical === 'bottom'" :title="m.xlsx.ribbon.alignBottom" :aria-label="m.xlsx.ribbon.alignBottom" @click="applyAlignment({ vertical: 'bottom' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6M7 16h10M5 20h14" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.wrapText }" :aria-pressed="alignmentState.wrapText" :title="m.xlsx.ribbon.wrapText" :aria-label="m.xlsx.ribbon.wrapText" @click="applyAlignment({ wrapText: !alignmentState.wrapText })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h12a3 3 0 0 1 0 6h-3M16 13l-3 3 3 3M4 20h7" /></svg></button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <select :value="numberFormatValue" class="xlsx-ribbon__number" :aria-label="m.xlsx.ribbon.numberFormat" :title="m.xlsx.ribbon.numberFormat" @change="setNumberFormat">
-          <option value="general">{{ m.xlsx.ribbon.numberFormats.general }}</option>
-          <option value="number">{{ m.xlsx.ribbon.numberFormats.number }}</option>
-          <option value="currency">{{ m.xlsx.ribbon.numberFormats.currency }}</option>
-          <option value="percent">{{ m.xlsx.ribbon.numberFormats.percent }}</option>
-          <option value="date">{{ m.xlsx.ribbon.numberFormats.date }}</option>
-          <option value="text">{{ m.xlsx.ribbon.numberFormats.text }}</option>
-        </select>
-        <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.currency" :aria-label="m.xlsx.ribbon.currency" @click="applyStyle(numberFormats.currency)">$</button>
-        <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.percent" :aria-label="m.xlsx.ribbon.percent" @click="applyStyle(numberFormats.percent)">%</button>
-        <button data-testid="xlsx-ribbon-number-format" class="xlsx-ribbon__action-button" :title="m.xlsx.ribbon.numberFormatDialog" @click="emit('authoring', 'numberFormat')">{{ m.xlsx.ribbon.numberFormatDialog }}</button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group">
-        <button data-testid="xlsx-ribbon-merge-center" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.mergeAndCenter" @click="mergeAndCenter">{{ m.xlsx.ribbon.mergeAndCenter }}</button>
-        <button data-testid="xlsx-ribbon-unmerge" class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
-        <select data-testid="xlsx-ribbon-border-preset" class="xlsx-ribbon__borders" :value="''" :aria-label="m.xlsx.ribbon.borders" :title="m.xlsx.ribbon.borders" @change="applyBorderPreset">
-          <option value="">{{ m.xlsx.ribbon.borders }}</option>
-          <option v-for="preset in borderPresets" :key="preset" :value="preset">{{ borderLabels[preset] }}</option>
-        </select>
-        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.borderColor">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /></svg><i :style="{ backgroundColor: borderColor }" />
-          <input v-model="borderColor" data-testid="xlsx-ribbon-border-color" type="color" :aria-label="m.xlsx.ribbon.borderColor" @change="applyBorderColor" />
-        </label>
-        <button data-testid="xlsx-ribbon-borders-all" class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders('all')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
-      </div>
-      <span class="xlsx-ribbon__separator" />
-      <div class="xlsx-ribbon__group" data-testid="xlsx-ribbon-authoring">
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-chart" :title="m.xlsx.authoring.chart.title" :aria-label="m.xlsx.authoring.chart.title" @click="emit('authoring', 'chart')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-comment" :title="m.xlsx.authoring.comment.title" :aria-label="m.xlsx.authoring.comment.title" :disabled="!hasActiveCell" @click="emit('authoring', 'comment')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-hyperlink" :title="m.xlsx.authoring.hyperlink.title" :aria-label="m.xlsx.authoring.hyperlink.title" :disabled="!hasActiveCell" @click="emit('authoring', 'hyperlink')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 1 0-5l3-3a4 4 0 0 1 5 5l-2 2M14 10a4 4 0 0 1 0 5l-3 3a4 4 0 0 1-5-5l2-2" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-table" :title="m.xlsx.authoring.table.title" :aria-label="m.xlsx.authoring.table.title" :disabled="!hasSelection" @click="emit('authoring', 'table')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><path d="M4 10h16M10 10v9M4 15h16" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-conditional" :title="m.xlsx.authoring.conditional.title" :aria-label="m.xlsx.authoring.conditional.title" :disabled="!hasSelection" @click="emit('authoring', 'conditional')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-validation" :title="m.xlsx.authoring.validation.title" :aria-label="m.xlsx.authoring.validation.title" :disabled="!hasSelection" @click="emit('authoring', 'validation')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: isFrozen }" data-testid="xlsx-ribbon-freeze" :aria-pressed="isFrozen" :title="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :aria-label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :disabled="!hasActiveCell" @click="toggleFreeze"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></button>
-        <button class="xlsx-ribbon__action-button" data-testid="xlsx-ribbon-names" :title="m.xlsx.ribbon.nameManager" @click="emit('authoring', 'names')">{{ m.xlsx.ribbon.nameManager }}</button>
-      </div>
-    </fieldset>
+  <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
+    <!-- `xlsx-ribbon--dark` remains the dark-mode marker the blackbox suite greps for. -->
+    <OfficeToolbar
+      :class="ribbonClasses"
+      data-testid="xlsx-format-toolbar"
+    >
+      <OfficeToolbarGroup
+        gap="sm"
+        class="xlsx-ribbon__controls"
+      >
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-undo"
+            :label="m.xlsx.ribbon.undo"
+            icon="undo-2"
+            size="icon-sm"
+            :disabled="controlsDisabled || !controller.canUndo"
+            @click="controller.undo()"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-redo"
+            :label="m.xlsx.ribbon.redo"
+            icon="redo-2"
+            size="icon-sm"
+            :disabled="controlsDisabled || !controller.canRedo"
+            @click="controller.redo()"
+          />
+      </OfficeToolbarGroup>
 
-    <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
-      <input data-testid="xlsx-ribbon-read-only" type="checkbox" :checked="isReadOnly" @change="emit('update:readOnly', ($event.target as HTMLInputElement).checked)" />
-      <span>{{ m.common.readOnly }}</span>
-    </label>
-  </div>
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <OfficeButton
+            data-testid="xlsx-ribbon-cut"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.cut"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="cutSelection"
+          >{{ m.xlsx.ribbon.cut }}</OfficeButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-copy"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.copy"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="copySelection"
+          >{{ m.xlsx.ribbon.copy }}</OfficeButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-paste"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.paste"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="controller.pasteFromClipboard()"
+          >{{ m.xlsx.ribbon.paste }}</OfficeButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-paste-special"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.pasteSpecial"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="emit('authoring', 'pasteSpecial')"
+          >{{ m.xlsx.ribbon.pasteSpecial }}</OfficeButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-insert-row-above"
+            :label="m.xlsx.ribbon.insertRowAbove"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="insertRow('above')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 8v8M8 12h8" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-insert-row-below"
+            :label="m.xlsx.ribbon.insertRowBelow"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="insertRow('below')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 6v8M8 10h8" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-delete-row"
+            :label="m.xlsx.ribbon.deleteRow"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="deleteRow"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M8 12h8" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-insert-column-left"
+            :label="m.xlsx.ribbon.insertColumnLeft"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="insertColumn('left')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-insert-column-right"
+            :label="m.xlsx.ribbon.insertColumnRight"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="insertColumn('right')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-delete-column"
+            :label="m.xlsx.ribbon.deleteColumn"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="deleteColumn"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8" /></svg></OfficeIconButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <select
+            class="xlsx-ribbon__select xlsx-ribbon__font"
+            :value="fontFamilyValue"
+            :aria-label="m.xlsx.ribbon.fontFamily"
+            :title="m.xlsx.ribbon.fontFamily"
+            :disabled="controlsDisabled"
+            @change="setFontFamily"
+          >
+            <option value="Calibri">Calibri</option>
+            <option value="Aptos">Aptos</option>
+            <option value="Arial">Arial</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+          </select>
+          <select
+            class="xlsx-ribbon__select xlsx-ribbon__size"
+            :value="fontSizeValue"
+            :aria-label="m.xlsx.ribbon.fontSize"
+            :title="m.xlsx.ribbon.fontSize"
+            :disabled="controlsDisabled"
+            @change="setFontSize"
+          >
+            <option v-if="!fontSizes.includes(fontSizeValue)" :value="fontSizeValue">{{ fontSizeValue }}</option>
+            <option v-for="size in fontSizes" :key="size" :value="size">{{ size }}</option>
+          </select>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :active="fontState.bold"
+            :aria-pressed="fontState.bold"
+            :label="m.xlsx.ribbon.bold"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyFont({ bold: !fontState.bold })"
+          ><strong aria-hidden="true">B</strong></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :active="fontState.italic"
+            :aria-pressed="fontState.italic"
+            :label="m.xlsx.ribbon.italic"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyFont({ italic: !fontState.italic })"
+          ><em aria-hidden="true">I</em></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :active="fontState.underline"
+            :aria-pressed="fontState.underline"
+            :label="m.xlsx.ribbon.underline"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyFont({ underline: fontState.underline ? 'none' : 'single' })"
+          ><u aria-hidden="true">U</u></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :active="fontState.strikethrough"
+            :aria-pressed="fontState.strikethrough"
+            :label="m.xlsx.ribbon.strikethrough"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyFont({ strikethrough: !fontState.strikethrough })"
+          ><s aria-hidden="true">S</s></OfficeIconButton>
+          <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.textColor">
+            <span aria-hidden="true">A</span><i :style="{ backgroundColor: textColor }" />
+            <input v-model="textColor" type="color" :aria-label="m.xlsx.ribbon.textColor" :disabled="controlsDisabled" @change="applyTextColor" />
+          </label>
+          <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.fillColor">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 10 10-5 5-7-7zM14 6l2-2 4 4-2 2" /></svg><i :style="{ backgroundColor: fillColor }" />
+            <input v-model="fillColor" type="color" :aria-label="m.xlsx.ribbon.fillColor" :disabled="controlsDisabled" @change="applyFillColor" />
+          </label>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.horizontal === 'left'"
+            :aria-pressed="alignmentState.horizontal === 'left'"
+            :label="m.xlsx.ribbon.alignLeft"
+            icon="align-left"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ horizontal: 'left' })"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.horizontal === 'center'"
+            :aria-pressed="alignmentState.horizontal === 'center'"
+            :label="m.xlsx.ribbon.alignCenter"
+            icon="align-center"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ horizontal: 'center' })"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.horizontal === 'right'"
+            :aria-pressed="alignmentState.horizontal === 'right'"
+            :label="m.xlsx.ribbon.alignRight"
+            icon="align-right"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ horizontal: 'right' })"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.vertical === 'top'"
+            :aria-pressed="alignmentState.vertical === 'top'"
+            :label="m.xlsx.ribbon.alignTop"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ vertical: 'top' })"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M7 8h10M9 12h6" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.vertical === 'center'"
+            :aria-pressed="alignmentState.vertical === 'center'"
+            :label="m.xlsx.ribbon.alignMiddle"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ vertical: 'center' })"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M7 9h10M7 15h10M5 19h14" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.vertical === 'bottom'"
+            :aria-pressed="alignmentState.vertical === 'bottom'"
+            :label="m.xlsx.ribbon.alignBottom"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ vertical: 'bottom' })"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6M7 16h10M5 20h14" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="alignmentState.wrapText"
+            :aria-pressed="alignmentState.wrapText"
+            :label="m.xlsx.ribbon.wrapText"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyAlignment({ wrapText: !alignmentState.wrapText })"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h12a3 3 0 0 1 0 6h-3M16 13l-3 3 3 3M4 20h7" /></svg></OfficeIconButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <select
+            class="xlsx-ribbon__select xlsx-ribbon__number"
+            :value="numberFormatValue"
+            :aria-label="m.xlsx.ribbon.numberFormat"
+            :title="m.xlsx.ribbon.numberFormat"
+            :disabled="controlsDisabled"
+            @change="setNumberFormat"
+          >
+            <option value="general">{{ m.xlsx.ribbon.numberFormats.general }}</option>
+            <option value="number">{{ m.xlsx.ribbon.numberFormats.number }}</option>
+            <option value="currency">{{ m.xlsx.ribbon.numberFormats.currency }}</option>
+            <option value="percent">{{ m.xlsx.ribbon.numberFormats.percent }}</option>
+            <option value="date">{{ m.xlsx.ribbon.numberFormats.date }}</option>
+            <option value="text">{{ m.xlsx.ribbon.numberFormats.text }}</option>
+          </select>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :label="m.xlsx.ribbon.currency"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyStyle(numberFormats.currency)"
+          ><span aria-hidden="true">$</span></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__text-button"
+            :label="m.xlsx.ribbon.percent"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyStyle(numberFormats.percent)"
+          ><span aria-hidden="true">%</span></OfficeIconButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-number-format"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.numberFormatDialog"
+            :disabled="controlsDisabled"
+            @click="emit('authoring', 'numberFormat')"
+          >{{ m.xlsx.ribbon.numberFormatDialog }}</OfficeButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group">
+          <OfficeButton
+            data-testid="xlsx-ribbon-merge-center"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.mergeAndCenter"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="mergeAndCenter"
+          >{{ m.xlsx.ribbon.mergeAndCenter }}</OfficeButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-unmerge"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="controller.unmergeSelection()"
+          >{{ m.xlsx.ribbon.unmerge }}</OfficeButton>
+          <select
+            data-testid="xlsx-ribbon-border-preset"
+            class="xlsx-ribbon__select xlsx-ribbon__borders"
+            :value="''"
+            :aria-label="m.xlsx.ribbon.borders"
+            :title="m.xlsx.ribbon.borders"
+            :disabled="controlsDisabled"
+            @change="applyBorderPreset"
+          >
+            <option value="">{{ m.xlsx.ribbon.borders }}</option>
+            <option v-for="preset in borderPresets" :key="preset" :value="preset">{{ borderLabels[preset] }}</option>
+          </select>
+          <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.borderColor">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /></svg><i :style="{ backgroundColor: borderColor }" />
+            <input v-model="borderColor" data-testid="xlsx-ribbon-border-color" type="color" :aria-label="m.xlsx.ribbon.borderColor" :disabled="controlsDisabled" @change="applyBorderColor" />
+          </label>
+          <OfficeIconButton
+            data-testid="xlsx-ribbon-borders-all"
+            class="xlsx-ribbon__icon-button"
+            :label="m.xlsx.ribbon.allBorders"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="applyBorders('all')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></OfficeIconButton>
+        </OfficeToolbarGroup>
+
+        <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
+
+        <OfficeToolbarGroup gap="sm" class="xlsx-ribbon__group" data-testid="xlsx-ribbon-authoring">
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-chart"
+            :label="m.xlsx.authoring.chart.title"
+            size="icon-sm"
+            :disabled="controlsDisabled"
+            @click="emit('authoring', 'chart')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-comment"
+            :label="m.xlsx.authoring.comment.title"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="emit('authoring', 'comment')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-hyperlink"
+            :label="m.xlsx.authoring.hyperlink.title"
+            icon="link"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="emit('authoring', 'hyperlink')"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-table"
+            :label="m.xlsx.authoring.table.title"
+            icon="table"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="emit('authoring', 'table')"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-conditional"
+            :label="m.xlsx.authoring.conditional.title"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="emit('authoring', 'conditional')"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></OfficeIconButton>
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            data-testid="xlsx-ribbon-validation"
+            :label="m.xlsx.authoring.validation.title"
+            icon="check"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasSelection"
+            @click="emit('authoring', 'validation')"
+          />
+          <OfficeIconButton
+            class="xlsx-ribbon__icon-button"
+            :active="isFrozen"
+            :aria-pressed="isFrozen"
+            data-testid="xlsx-ribbon-freeze"
+            :label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere"
+            size="icon-sm"
+            :disabled="controlsDisabled || !hasActiveCell"
+            @click="toggleFreeze"
+          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></OfficeIconButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-names"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.ribbon.nameManager"
+            :disabled="controlsDisabled"
+            @click="emit('authoring', 'names')"
+          >{{ m.xlsx.ribbon.nameManager }}</OfficeButton>
+        </OfficeToolbarGroup>
+
+        <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
+          <input data-testid="xlsx-ribbon-read-only" type="checkbox" :checked="isReadOnly" @change="emit('update:readOnly', ($event.target as HTMLInputElement).checked)" />
+          <span>{{ m.common.readOnly }}</span>
+        </label>
+      </OfficeToolbarGroup>
+    </OfficeToolbar>
+  </OfficeThemeProvider>
 </template>
 
 <script setup lang="ts">
@@ -122,6 +455,14 @@ import {
   type XlsxResolvedCellStyle,
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
+import {
+  OfficeButton,
+  OfficeIconButton,
+  OfficeThemeProvider,
+  OfficeToolbar,
+  OfficeToolbarGroup,
+  OfficeToolbarSeparator,
+} from "@arcships/vue-ui";
 import { classifyNumberFormat } from "../composables/cell-input";
 import { DEFAULT_BORDER_COLOR_HEX, XLSX_BORDER_PRESETS } from "../composables/border-presets";
 import { useXlsxMessages } from "../i18n";
@@ -139,6 +480,9 @@ const emit = defineEmits<{
 }>();
 
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
+const ribbonClasses = computed(() =>
+  props.isDark ? "xlsx-ribbon xlsx-ribbon--dark" : "xlsx-ribbon",
+);
 const m = useXlsxMessages();
 const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
@@ -161,6 +505,9 @@ const hasSelection = computed(() => Boolean(props.controller.selection));
 const hasActiveCell = computed(() => Boolean(props.controller.activeCell));
 const isFrozen = computed(() => Boolean(props.controller.freezePanes));
 const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
+// Replaces the disabled `<fieldset>` wrapper: every ribbon control honours the
+// same "no workbook / read-only" gate the fieldset used to enforce.
+const controlsDisabled = computed(() => isReadOnly.value || !hasWorkbook.value);
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -350,74 +697,178 @@ function deleteColumn(): void {
 </script>
 
 <style scoped>
+/*
+ * Geometry comes from `OfficeToolbar` / `OfficeToolbarGroup`: the ribbon is a
+ * dense second toolbar row (48px min height, 4px cluster gap, 8px group gap).
+ * Only spreadsheet-specific pieces (native selects, colour wells, the
+ * read-only switch) need local rules, and every colour is an Office token.
+ */
 .xlsx-ribbon {
-  align-items: center;
-  background: #fff;
-  border-bottom: 1px solid #e4e4e7;
-  color: #18181b;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
-  min-height: 48px;
-  padding: 7px 10px;
-  user-select: none;
+  --office-ui-toolbar-min-height: 3rem;
+  --office-ui-toolbar-padding-block: 6px;
+  border-block-start: var(--office-border-width) solid var(--office-border);
 }
-.xlsx-ribbon--dark { background: #18181b; border-color: #3f3f46; color: #f4f4f5; }
-.xlsx-ribbon__controls { align-items: center; border: 0; display: flex; flex: 1; flex-wrap: wrap; gap: 4px 6px; margin: 0; min-inline-size: 0; overflow: visible; padding: 0; }
-.xlsx-ribbon__group { align-items: center; display: flex; flex: 0 0 auto; gap: 3px; }
-.xlsx-ribbon__separator { background: #e4e4e7; flex: 0 0 auto; height: 20px; width: 1px; }
+
+.xlsx-ribbon__controls {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+
+.xlsx-ribbon__group {
+  /* Shrinkable so a 390px host lets each cluster wrap instead of overflowing. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+.xlsx-ribbon__separator {
+  block-size: 20px;
+  margin-inline: 2px;
+}
+
 .xlsx-ribbon button,
-.xlsx-ribbon select { color: inherit; font: inherit; }
-.xlsx-ribbon select { background: transparent; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 11px; height: 30px; max-width: 118px; padding: 0 7px; }
-.xlsx-ribbon__size { width: 52px; }
-.xlsx-ribbon__number { width: 86px; }
-.xlsx-ribbon__borders { width: 104px; }
-.xlsx-ribbon__icon-button,
-.xlsx-ribbon__text-button,
-.xlsx-ribbon__action-button,
+.xlsx-ribbon select {
+  color: inherit;
+  font: inherit;
+}
+
+.xlsx-ribbon__select {
+  background: var(--office-background);
+  border: var(--office-border-width) solid var(--office-input);
+  border-radius: var(--office-radius-sm);
+  color: var(--office-foreground);
+  font-size: var(--office-text-xs);
+  height: 28px;
+  max-inline-size: 118px;
+  padding-block: 0;
+  padding-inline: 6px;
+}
+
+.xlsx-ribbon__select:focus-visible {
+  border-color: var(--office-ring);
+  outline: 2px solid color-mix(in oklab, var(--office-ring) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width);
+}
+
+.xlsx-ribbon__font { inline-size: 112px; }
+.xlsx-ribbon__size { inline-size: 52px; }
+.xlsx-ribbon__number { inline-size: 92px; }
+.xlsx-ribbon__borders { inline-size: 104px; }
+
+.xlsx-ribbon__text-button strong,
+.xlsx-ribbon__text-button em,
+.xlsx-ribbon__text-button u,
+.xlsx-ribbon__text-button s,
+.xlsx-ribbon__text-button span {
+  font-size: var(--office-text-sm);
+  line-height: 1;
+}
+
+.xlsx-ribbon__action-button {
+  font-size: var(--office-text-xs);
+  padding-inline: var(--office-ui-space-2, 0.5rem);
+}
+
 .xlsx-ribbon__color {
   align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  border: var(--office-border-width) solid transparent;
+  border-radius: var(--office-radius-sm);
   box-sizing: border-box;
   cursor: pointer;
   display: inline-flex;
-  height: 30px;
+  flex-direction: column;
+  font-size: var(--office-text-sm);
+  font-weight: 700;
+  block-size: 28px;
+  inline-size: 28px;
   justify-content: center;
+  position: relative;
 }
-.xlsx-ribbon__icon-button,
-.xlsx-ribbon__text-button,
-.xlsx-ribbon__color { padding: 0; width: 30px; }
-.xlsx-ribbon__action-button { font-size: 11px; padding: 0 8px; }
-.xlsx-ribbon button:hover:not(:disabled),
-.xlsx-ribbon__color:hover { background: rgba(113, 113, 122, .12); }
-.xlsx-ribbon button.active { background: rgba(37, 99, 235, .14); color: #1d4ed8; }
-.xlsx-ribbon button:disabled,
-.xlsx-ribbon__controls:disabled { cursor: default; opacity: .45; }
-.xlsx-ribbon svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 16px; }
-.xlsx-ribbon__color { flex-direction: column; font-size: 13px; font-weight: 700; position: relative; }
-.xlsx-ribbon__color i { border-radius: 2px; height: 3px; width: 17px; }
-.xlsx-ribbon__color input { cursor: pointer; inset: 0; opacity: 0; position: absolute; }
-.xlsx-ribbon__readonly { align-items: center; color: #71717a; display: flex; flex: 0 0 auto; font-size: 11px; gap: 5px; }
-.xlsx-ribbon__readonly input { accent-color: #2563eb; }
-.xlsx-ribbon button:focus-visible,
-.xlsx-ribbon select:focus-visible,
-.xlsx-ribbon__color:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+.xlsx-ribbon__color:hover {
+  background: var(--office-accent);
+}
+
+.xlsx-ribbon__color:focus-within {
+  outline: 2px solid var(--office-ring);
+  outline-offset: var(--office-ring-offset-width);
+}
+
+.xlsx-ribbon__color svg {
+  block-size: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  inline-size: 14px;
+}
+
+.xlsx-ribbon__color i {
+  border-radius: 2px;
+  block-size: 3px;
+  inline-size: 17px;
+}
+
+.xlsx-ribbon__color input {
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.xlsx-ribbon__readonly {
+  align-items: center;
+  color: var(--office-muted-foreground);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: var(--office-text-xs);
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.xlsx-ribbon__readonly input {
+  accent-color: var(--office-primary);
+}
+
+.xlsx-ribbon :deep(.office-icon-button svg) {
+  block-size: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  inline-size: 16px;
+}
+
+/* Tablet/narrow hosts: wrapped clusters stay scrollable (about four rows)
+ * instead of eating the grid height. */
+@container xlsx-viewer (max-width: 900px) {
+  .xlsx-ribbon {
+    max-block-size: 132px;
+    overflow-y: auto;
+  }
+}
 
 @container xlsx-viewer (max-width: 560px) {
-  .xlsx-ribbon__readonly span { display: none; }
+  .xlsx-ribbon__readonly span {
+    display: none;
+  }
 }
 
 @media (pointer: coarse) {
-  .xlsx-ribbon button,
+  .xlsx-ribbon :deep(.office-button),
   .xlsx-ribbon select,
-  .xlsx-ribbon input {
-    min-height: 44px;
+  .xlsx-ribbon .xlsx-ribbon__color {
+    min-block-size: 44px;
   }
-  .xlsx-ribbon__icon-button,
-  .xlsx-ribbon__text-button {
-    min-width: 44px;
+
+  .xlsx-ribbon :deep(.office-button--size-icon-sm) {
+    min-inline-size: 44px;
+  }
+
+  .xlsx-ribbon .xlsx-ribbon__color {
+    min-inline-size: 44px;
   }
 }
 </style>

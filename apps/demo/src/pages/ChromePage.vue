@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue"
+import { XlsxRibbon, XlsxStatusBar, XlsxToolbar } from "@arcships/vue-xlsx"
 import {
   DocumentViewerSidebar,
   OfficeButton,
@@ -36,6 +37,51 @@ const wholeWord = ref(false)
 const regex = ref(false)
 const statusMode = ref<"normal" | "warning" | "error">("normal")
 const fileName = "Q3-review.pdf"
+const xlsxZoom = ref(100)
+const xlsxPageBreakPreview = ref(false)
+/**
+ * Static stand-in for `XlsxViewerController`. The chrome story only renders
+ * the toolbar/ribbon/status bar, so the fields they read are enough and the
+ * gallery needs no workbook or Worker.
+ */
+const xlsxController = {
+  activeCell: { row: 2, col: 1 },
+  activeCellAddress: "B3",
+  activeSheet: null,
+  canDownload: true,
+  canExport: true,
+  canRedo: false,
+  canUndo: true,
+  canZoomIn: true,
+  canZoomOut: true,
+  displayFileName: "quarterly-model.xlsx",
+  error: null,
+  exportXlsx: () => {},
+  download: () => {},
+  freezePanes: null,
+  get activeSelection() { return this.selection },
+  get activeTab() { return null },
+  isEditingLocked: false,
+  isLoading: false,
+  isPageBreakPreview: false,
+  get isWorkerBacked() { return false },
+  lastExportWarning: "",
+  locale: "en",
+  openPrintPreview: () => {},
+  readOnly: false,
+  revision: 0,
+  selection: { end: { row: 2, col: 1 }, start: { row: 2, col: 1 } },
+  selectedRangeAddress: "B3",
+  setPageBreakPreview: () => {},
+  setZoomScale: (value: number) => { xlsxZoom.value = value },
+  tabs: [{ name: "Sheet1" }],
+  undo: () => {},
+  redo: () => {},
+  get zoomScale() { return xlsxZoom.value },
+  zoomIn: () => { xlsxZoom.value = Math.min(200, xlsxZoom.value + 25) },
+  zoomOut: () => { xlsxZoom.value = Math.max(50, xlsxZoom.value - 25) },
+} as unknown as import("@arcships/xlsx-core").XlsxViewerController
+
 
 const thumbnails = Array.from({ length: 6 }, (_, index) => index + 1)
 
@@ -260,6 +306,20 @@ function submitSearch() {
           </template>
         </OfficeToolbar>
       </section>
+
+      <section class="chrome-page__section">
+        <h3>Spreadsheet chrome (#160)</h3>
+        <div class="xlsx-story" data-testid="xlsx-chrome-story">
+          <XlsxToolbar :controller="xlsxController" :is-dark="theme === 'dark'" show-upload />
+          <XlsxRibbon :controller="xlsxController" :is-dark="theme === 'dark'" />
+          <div class="xlsx-story__sheet">
+            <strong class="xlsx-story__cell">B3</strong>
+            <span>Quarterly revenue</span>
+            <span class="chrome-demo__muted">Shared Office toolbar, ribbon, status bar and states</span>
+          </div>
+          <XlsxStatusBar :controller="xlsxController" :is-dark="theme === 'dark'" />
+        </div>
+      </section>
     </section>
   </OfficeThemeProvider>
 </template>
@@ -385,6 +445,37 @@ function submitSearch() {
 .chrome-demo__muted { color: var(--office-muted-foreground, var(--muted-foreground)); }
 .chrome-demo__lines { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
 .chrome-demo__lines span { display: block; height: 8px; border-radius: 4px; background: var(--office-muted, var(--muted)); }
+.xlsx-story {
+  /* Emulates the viewer container so the ribbon/status container queries apply. */
+  container: xlsx-viewer / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--office-border, var(--border));
+  border-radius: 12px;
+  background: var(--office-background, var(--background));
+}
+.xlsx-story__sheet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 120px;
+  padding: 16px;
+  color: var(--office-foreground, var(--foreground));
+  font-size: 13px;
+}
+.xlsx-story__cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 32px;
+  border: 1px solid var(--office-ring, var(--border));
+  border-radius: 6px;
+  background: var(--office-accent, var(--muted));
+  font-weight: 650;
+}
 .chrome-states { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .chrome-state-card { overflow: hidden; border: 1px solid var(--office-border, var(--border)); border-radius: 10px; background: var(--office-background, var(--background)); }
 .chrome-state-card h4 { margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--office-border, var(--border)); color: var(--office-muted-foreground, var(--muted-foreground)); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }

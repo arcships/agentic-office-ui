@@ -9,7 +9,7 @@
     <div
       v-if="visible"
       ref="menuRef"
-      class="xlsx-contextmenu"
+      class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu"
       data-testid="xlsx-context-menu"
       :data-menu-kind="menuKind"
       :style="menuStyle"
@@ -19,7 +19,7 @@
     >
       <template v-if="chartTarget">
         <button
-          class="xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
+          class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
           data-testid="xlsx-context-chart-type"
           role="menuitem"
           aria-haspopup="menu"
@@ -29,18 +29,17 @@
           @mouseenter="openChartTypeMenu"
         >
           <span>{{ m.xlsx.contextMenu.changeChartType }}</span>
-          <span class="xlsx-contextmenu__chevron" aria-hidden="true">›</span>
         </button>
         <div
           v-if="chartTypeMenuOpen"
-          class="xlsx-contextmenu__submenu"
+          class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu"
           data-testid="xlsx-chart-type-menu"
           role="menu"
           :aria-label="m.xlsx.contextMenu.changeChartType"
         >
           <div v-for="family in chartFamilies" :key="family.family" class="xlsx-contextmenu__group">
             <button
-              class="xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
+              class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
               role="menuitem"
               aria-haspopup="menu"
               :aria-expanded="openChartFamily === family.family"
@@ -49,18 +48,17 @@
               @mouseenter="openChartFamilyMenu(family.family)"
             >
               <span>{{ family.family }}</span>
-              <span class="xlsx-contextmenu__chevron" aria-hidden="true">›</span>
-            </button>
+                </button>
             <div
               v-if="openChartFamily === family.family"
-              class="xlsx-contextmenu__submenu xlsx-contextmenu__submenu--nested"
+              class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu xlsx-contextmenu__submenu--nested"
               role="menu"
               :aria-label="family.family"
             >
               <button
                 v-for="option in family.options"
                 :key="option.id"
-                class="xlsx-contextmenu__item"
+                class="office-menu__item xlsx-contextmenu__item"
                 role="menuitem"
                 :data-testid="`xlsx-chart-type-${option.id}`"
                 :disabled="isChartTypeUnavailable(option)"
@@ -72,57 +70,57 @@
             </div>
           </div>
         </div>
-        <div class="xlsx-contextmenu__separator" role="separator" />
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
+        <div class="office-menu__separator" role="separator" />
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
-        <div class="xlsx-contextmenu__separator" role="separator" />
-        <button class="xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
-        <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
+        <div class="office-menu__separator" role="separator" />
+        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
       </template>
       <template v-else-if="drawingTarget">
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
         </button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
-        <div class="xlsx-contextmenu__separator" role="separator" />
-        <button class="xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
-        <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
+        <div class="office-menu__separator" role="separator" />
+        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
       </template>
       <template v-else>
-      <button class="xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" :disabled="isReadOnly" @click="onCut">
-        <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
+      <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" :disabled="isReadOnly" @click="onCut">
+        <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_CUT }}</kbd>
       </button>
-      <button class="xlsx-contextmenu__item" data-testid="xlsx-context-copy" role="menuitem" @click="onCopy">
-        <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
+      <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-copy" role="menuitem" @click="onCopy">
+        <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_COPY }}</kbd>
       </button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-paste"
         role="menuitem"
         @click="onPaste"
       >
-        <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
+        <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="office-menu__item-shortcut">{{ SHORTCUT_PASTE }}</kbd>
       </button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
+        class="office-menu__item office-menu__sub-trigger xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
         data-testid="xlsx-context-paste-special"
         data-submenu="pasteSpecial"
         role="menuitem"
@@ -130,115 +128,115 @@
         :aria-expanded="submenu === 'pasteSpecial'"
         @click="togglePasteSpecial"
       >
-        <span>{{ m.xlsx.contextMenu.pasteSpecial }}</span><span class="xlsx-contextmenu__chevron">▸</span>
+        <span>{{ m.xlsx.contextMenu.pasteSpecial }}</span>
       </button>
       <div
         v-if="submenu === 'pasteSpecial'"
-        class="xlsx-contextmenu__submenu"
+        class="office-ui office-menu__content office-menu__viewport xlsx-contextmenu__submenu"
         data-testid="xlsx-context-paste-special-menu"
         role="menu"
       >
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-paste-all" role="menuitem" @click="onPasteSpecial({ mode: 'all' })">{{ m.xlsx.contextMenu.pasteAll }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-paste-values" role="menuitem" @click="onPasteSpecial({ mode: 'values' })">{{ m.xlsx.contextMenu.pasteValues }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-paste-formats" role="menuitem" @click="onPasteSpecial({ mode: 'formats' })">{{ m.xlsx.contextMenu.pasteFormats }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-paste-transpose" role="menuitem" @click="onPasteSpecial({ mode: 'all', transpose: true })">{{ m.xlsx.contextMenu.pasteTranspose }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-all" role="menuitem" @click="onPasteSpecial({ mode: 'all' })">{{ m.xlsx.contextMenu.pasteAll }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-values" role="menuitem" @click="onPasteSpecial({ mode: 'values' })">{{ m.xlsx.contextMenu.pasteValues }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-formats" role="menuitem" @click="onPasteSpecial({ mode: 'formats' })">{{ m.xlsx.contextMenu.pasteFormats }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-paste-transpose" role="menuitem" @click="onPasteSpecial({ mode: 'all', transpose: true })">{{ m.xlsx.contextMenu.pasteTranspose }}</button>
       </div>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-edit-cell"
         role="menuitem"
         @click="onEditCell"
       >
-        <span>{{ m.xlsx.contextMenu.editCell }}</span><kbd class="xlsx-contextmenu__shortcut">F2</kbd>
+        <span>{{ m.xlsx.contextMenu.editCell }}</span><kbd class="office-menu__item-shortcut">F2</kbd>
       </button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-clear"
         role="menuitem"
         @click="onClear"
       >
-        <span>{{ m.xlsx.contextMenu.clear }}</span><kbd class="xlsx-contextmenu__shortcut">Del</kbd>
+        <span>{{ m.xlsx.contextMenu.clear }}</span><kbd class="office-menu__item-shortcut">Del</kbd>
       </button>
       <button
         v-if="!isReadOnly && menuKind === 'cell'"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-number-format"
         role="menuitem"
         @click="onAuthoring('numberFormat')"
       >{{ m.xlsx.authoring.numberFormat.title }}</button>
       <button
         v-if="!isReadOnly && menuKind === 'cell'"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-names"
         role="menuitem"
         @click="onAuthoring('names')"
       >{{ m.xlsx.authoring.names.title }}</button>
       <template v-if="sortTarget && !isReadOnly">
-        <div class="xlsx-contextmenu__separator" role="separator" />
+        <div class="office-menu__separator" role="separator" />
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-sort-ascending"
           role="menuitem"
           @click="onSort('ascending')"
         >{{ m.xlsx.contextMenu.sortAscending }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-sort-descending"
           role="menuitem"
           @click="onSort('descending')"
         >{{ m.xlsx.contextMenu.sortDescending }}</button>
       </template>
       <template v-if="!isReadOnly">
-        <div class="xlsx-contextmenu__separator" role="separator" />
+        <div class="office-menu__separator" role="separator" />
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-insert-row-above"
           role="menuitem"
           @click="onInsertRow('above')"
         >{{ m.xlsx.contextMenu.insertRowAbove }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-insert-row-below"
           role="menuitem"
           @click="onInsertRow('below')"
         >{{ m.xlsx.contextMenu.insertRowBelow }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-delete-row"
           role="menuitem"
           @click="onDeleteRow"
         >{{ m.xlsx.contextMenu.deleteRow }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-insert-column-left"
           role="menuitem"
           @click="onInsertColumn('left')"
         >{{ m.xlsx.contextMenu.insertColumnLeft }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-insert-column-right"
           role="menuitem"
           @click="onInsertColumn('right')"
         >{{ m.xlsx.contextMenu.insertColumnRight }}</button>
         <button
-          class="xlsx-contextmenu__item"
+          class="office-menu__item xlsx-contextmenu__item"
           data-testid="xlsx-context-delete-column"
           role="menuitem"
           @click="onDeleteColumn"
         >{{ m.xlsx.contextMenu.deleteColumn }}</button>
       </template>
       <template v-if="menuKind === 'cell' && !isReadOnly">
-        <div class="xlsx-contextmenu__separator" role="separator" />
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-merge-center" role="menuitem" @click="onMergeCenter">{{ m.xlsx.contextMenu.mergeAndCenter }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-merge-across" role="menuitem" @click="onMergeAcross">{{ m.xlsx.contextMenu.mergeAcross }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-merge" role="menuitem" @click="onMergeCells">{{ m.xlsx.contextMenu.mergeCells }}</button>
-        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-unmerge" role="menuitem" @click="onUnmerge">{{ m.xlsx.contextMenu.unmerge }}</button>
+        <div class="office-menu__separator" role="separator" />
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge-center" role="menuitem" @click="onMergeCenter">{{ m.xlsx.contextMenu.mergeAndCenter }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge-across" role="menuitem" @click="onMergeAcross">{{ m.xlsx.contextMenu.mergeAcross }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-merge" role="menuitem" @click="onMergeCells">{{ m.xlsx.contextMenu.mergeCells }}</button>
+        <button class="office-menu__item xlsx-contextmenu__item" data-testid="xlsx-context-unmerge" role="menuitem" @click="onUnmerge">{{ m.xlsx.contextMenu.unmerge }}</button>
       </template>
-      <div class="xlsx-contextmenu__separator" role="separator" />
+      <div class="office-menu__separator" role="separator" />
       <button
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-select-row"
         role="menuitemradio"
         :aria-checked="selectionIsRow"
@@ -247,7 +245,7 @@
         <span>{{ m.xlsx.contextMenu.selectRow }}</span><span v-if="selectionIsRow" class="xlsx-contextmenu__checked">✓</span>
       </button>
       <button
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-select-column"
         role="menuitemradio"
         :aria-checked="selectionIsColumn"
@@ -256,7 +254,7 @@
         <span>{{ m.xlsx.contextMenu.selectColumn }}</span><span v-if="selectionIsColumn" class="xlsx-contextmenu__checked">✓</span>
       </button>
       <button
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-select-all"
         role="menuitemradio"
         :aria-checked="selectionIsAll"
@@ -264,81 +262,81 @@
       >
         <span>{{ m.xlsx.contextMenu.selectAll }}</span><span v-if="selectionIsAll" class="xlsx-contextmenu__checked">✓</span>
       </button>
-      <div class="xlsx-contextmenu__separator" role="separator" />
+      <div class="office-menu__separator" role="separator" />
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-comment"
         role="menuitem"
         @click="onAuthoring('comment')"
       >{{ commentAtCell ? m.xlsx.authoring.context.editComment : m.xlsx.authoring.context.insertComment }}</button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-hyperlink"
         role="menuitem"
         @click="onAuthoring('hyperlink')"
       >{{ hyperlinkAtCell ? m.xlsx.authoring.context.editHyperlink : m.xlsx.authoring.context.insertHyperlink }}</button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-chart"
         role="menuitem"
         @click="onAuthoring('chart')"
       >{{ m.xlsx.authoring.context.insertChart }}</button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-conditional"
         role="menuitem"
         @click="onAuthoring('conditional')"
       >{{ m.xlsx.authoring.context.conditional }}</button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-validation"
         role="menuitem"
         @click="onAuthoring('validation')"
       >{{ m.xlsx.authoring.context.validation }}</button>
       <button
         v-if="!isReadOnly && !tableAtCell"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-table"
         role="menuitem"
         @click="onAuthoring('table')"
       >{{ m.xlsx.authoring.context.createTable }}</button>
       <button
         v-if="!isReadOnly && tableAtCell"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-table-remove"
         role="menuitem"
         @click="onRemoveTable"
       >{{ m.xlsx.authoring.context.removeTable }}</button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-freeze"
         role="menuitem"
         @click="onToggleFreeze"
       >{{ isFrozen ? m.xlsx.authoring.context.unfreeze : m.xlsx.authoring.context.freezeHere }}</button>
-      <div class="xlsx-contextmenu__separator" role="separator" />
+      <div class="office-menu__separator" role="separator" />
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-undo"
         role="menuitem"
         @click="onUndo"
       >
-        <span>{{ m.xlsx.contextMenu.undo }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+Z</kbd>
+        <span>{{ m.xlsx.contextMenu.undo }}</span><kbd class="office-menu__item-shortcut">Ctrl+Z</kbd>
       </button>
       <button
         v-if="!isReadOnly"
-        class="xlsx-contextmenu__item"
+        class="office-menu__item xlsx-contextmenu__item"
         data-testid="xlsx-context-redo"
         role="menuitem"
         @click="onRedo"
       >
-        <span>{{ m.xlsx.contextMenu.redo }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+Y</kbd>
+        <span>{{ m.xlsx.contextMenu.redo }}</span><kbd class="office-menu__item-shortcut">Ctrl+Y</kbd>
       </button>
       </template>
     </div>
@@ -920,37 +918,90 @@ defineExpose({ openAt, close, openForChart, openForDrawing });
 </script>
 
 <style scoped>
-.xlsx-contextmenu-backdrop { bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 9999; }
+/*
+ * Menu surface: the shared `.office-menu__content` / `.office-menu__item`
+ * contract (the classes `OfficeDropdownMenu` and `OfficeContextMenu` render)
+ * plus the imperative positioning layer this grid needs. Highlighting comes
+ * from hover/focus because these items are plain buttons rather than Reka
+ * menu parts, which publish `data-highlighted`.
+ */
+.xlsx-contextmenu-backdrop {
+  inset: 0;
+  position: fixed;
+  z-index: 9999;
+}
+
 .xlsx-contextmenu {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12); min-width: 160px; padding: 4px;
+  min-inline-size: 160px;
+  position: fixed;
 }
+
 .xlsx-contextmenu__item {
-  align-items: center; background: transparent; border: none; border-radius: 4px;
-  color: #18181b; cursor: pointer; display: flex; font-family: inherit;
-  font-size: 12px; gap: 16px; height: 28px; justify-content: space-between;
-  padding: 0 8px; text-align: left; width: 100%;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  inline-size: 100%;
+  justify-content: space-between;
+  text-align: start;
 }
-.xlsx-contextmenu__item:hover:not(:disabled) { background: #f4f4f5; }
-.xlsx-contextmenu__item:disabled { cursor: default; opacity: 0.45; }
-.xlsx-contextmenu__item--submenu { justify-content: space-between; position: relative; }
+
+.xlsx-contextmenu__item:hover:not(:disabled),
+.xlsx-contextmenu__item:focus-visible:not(:disabled) {
+  background: var(--office-accent);
+  color: var(--office-accent-foreground);
+  outline: none;
+}
+
+.xlsx-contextmenu__item:disabled {
+  cursor: default;
+  opacity: 0.64;
+}
+
+.xlsx-contextmenu__item--submenu {
+  justify-content: space-between;
+  position: relative;
+}
+
+:where(.xlsx-contextmenu__check) {
+  display: inline-block;
+  min-inline-size: 12px;
+}
+
+:where(.xlsx-contextmenu__checked) {
+  color: var(--office-primary);
+  font-weight: 700;
+}
+
+.xlsx-contextmenu__item[role="menuitemradio"][aria-checked="true"] {
+  font-weight: 600;
+}
+
 .xlsx-contextmenu__shortcut {
-  color: #a1a1aa; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
+  color: var(--office-muted-foreground);
+  font-family: var(--office-font-mono);
+  font-size: var(--office-text-xs);
 }
-.xlsx-contextmenu__chevron { color: #71717a; }
-.xlsx-contextmenu__checked { color: #2563eb; font-weight: 700; }
-.xlsx-contextmenu__check { display: inline-block; min-width: 12px; }
+
+/* Submenus reuse the shared surface; only their placement is local. */
 .xlsx-contextmenu__submenu {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12); left: calc(100% - 4px);
-  max-height: 70vh; min-width: 190px; overflow-y: auto; padding: 4px;
-  position: absolute; top: 0;
+  inset-block-start: 0;
+  inset-inline-start: calc(100% - 4px);
+  max-block-size: 70vh;
+  min-inline-size: 190px;
+  position: absolute;
 }
-.xlsx-contextmenu__submenu--nested { z-index: 1; }
-.xlsx-contextmenu__group { position: relative; }
-.xlsx-contextmenu__separator { background: #e4e4e7; height: 1px; margin: 4px 0; }
+
+.xlsx-contextmenu__submenu--nested {
+  z-index: 1;
+}
+
+.xlsx-contextmenu__group {
+  position: relative;
+}
+
 @media (pointer: coarse) {
-  .xlsx-contextmenu__item { height: 44px; }
+  .xlsx-contextmenu__item {
+    min-block-size: 44px;
+  }
 }
 </style>
