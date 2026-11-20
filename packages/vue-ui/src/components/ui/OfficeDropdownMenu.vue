@@ -35,6 +35,22 @@ export interface OfficeDropdownMenuProps {
   sideOffset?: number
   alignOffset?: number
   disabled?: boolean
+  /**
+   * Modal menus trap focus and block outside pointer events. Pass `false` for
+   * context-style menus that must let the underlying surface react.
+   */
+  modal?: boolean
+  /** `data-testid` for the portalled menu content. */
+  contentTestId?: string
+  /** Extra `data-*` attributes for the menu content (surface contracts). */
+  contentData?: Record<string, string | number | boolean | undefined>
+  /** Accessible name for the menu; defaults to the trigger label. */
+  menuLabel?: string
+  /**
+   * Element that receives focus after the menu closes. Returning `null`
+   * leaves Reka's default (the trigger) in place.
+   */
+  restoreFocus?: () => HTMLElement | null | undefined
   /** Extra classes merged on the trigger. */
   class?: string
   /** Extra classes merged on the portalled content. */
@@ -51,6 +67,11 @@ const props = withDefaults(defineProps<OfficeDropdownMenuProps>(), {
   sideOffset: 4,
   alignOffset: 0,
   disabled: false,
+  modal: true,
+  contentTestId: undefined,
+  contentData: undefined,
+  menuLabel: undefined,
+  restoreFocus: undefined,
   class: "",
   contentClass: "",
 })
@@ -73,11 +94,23 @@ function handleSelect(entry: OfficeMenuEntry, event: Event) {
   callback?.(entry)
   emit("select", entry, event)
 }
+
+/**
+ * Reka returns focus to the trigger on close. Hosts that open a menu from a
+ * surface (grid, canvas) pass `restoreFocus` so the keyboard goes back there.
+ */
+function onCloseAutoFocus(event: Event) {
+  const target = props.restoreFocus?.() ?? null
+  if (!target) return
+  event.preventDefault()
+  target.focus()
+}
 </script>
 
 <template>
   <DropdownMenuRoot
     :open="props.open"
+    :modal="props.modal"
     :disabled="props.disabled"
     @update:open="emit('update:open', $event)"
   >
@@ -110,7 +143,11 @@ function handleSelect(entry: OfficeMenuEntry, event: Event) {
         :align="props.align"
         :side-offset="props.sideOffset"
         :align-offset="props.alignOffset"
+        :data-testid="props.contentTestId"
+        :aria-label="props.menuLabel"
+        v-bind="props.contentData"
         data-slot="dropdown-menu-content"
+        @close-auto-focus="onCloseAutoFocus"
       >
         <OfficeMenuList
           kind="dropdown"

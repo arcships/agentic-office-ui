@@ -218,7 +218,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 范围与图表数据源高亮（issue #132）：`XlsxRangeHighlightLayer` 是根入口新增的浮层出口，`XlsxViewer`/`XlsxSheetSurface` 已自动挂载；`controller.highlightRanges()`/`clearHighlightedRanges()`/`highlightedRanges` 读写范围，选中图表/系列/数据点/图例时按 category/value/bubbleSize 角色自动高亮源区域。根入口同时导出 `CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE`、`XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR`、`collectChartRangeHighlights`、`parseChartSourceRange`、`parseChartSourceA1Range`、`chartRangeCellAt`、`normalizeHighlightRange`、`createRangeHighlightLayout`、`rangeHighlightStyle` 及对应类型，供自建网格复用同一套解析、颜色和冻结窗格几何。
 - 公式引用高亮（issue #126）：编辑 `=SUM(A1:A3)+B2` 时，`XlsxFormulaBar` 与 `XlsxGrid` 的内联编辑器都会把每个引用按 Excel 调色板着色；光标所在的引用在公式栏加下划线，网格用同色边框描出当前工作表上的目标区域（活动引用更粗）。支持 A1、`$A$1`、区域、整行/整列、`Sheet2!A1` 与名称引用；字符串、函数名、外部工作簿和无法解析的名称不着色。回车/取消/失焦后清除，且不写工作簿。根入口导出 `collectFormulaReferences`、`parseFormulaReferences`、`formulaReferenceSegments`、`FORMULA_REFERENCE_COLORS`、`resolveNamedRangeTarget`、`useFormulaReferenceEditing`、`createNamedRangeResolver`、`isReferenceOnActiveSheet` 及对应类型；自定义公式输入框用这些 API 驱动同一个网格高亮会话。网格根节点暴露 `data-formula-reference-ranges`、`data-formula-reference-active` 与 `data-formula-reference-count` 供宿主和测试读取。
 
-网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。`XlsxAuthoringDialog` 是新增的独立对话框出口，`XlsxViewer` 会自动渲染它。
+网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。`XlsxAuthoringDialog` 是独立对话框出口，`XlsxViewer` 会自动渲染它；0.8 起它渲染在共享 `OfficeDialog`（Reka）上，表单状态、校验、Esc/backdrop/关闭后焦点归还保持不变。`XlsxHeaderMenu` 与 `XlsxAutoFilterMenu`（issue #160）是新增的独立菜单出口，分别承载行/列表头菜单与 AutoFilter 值面板，均渲染在共享 `OfficeDropdownMenu`（Reka）上并保留原有 `data-testid`；`XlsxGrid` 会自动挂载它们，只嵌入网格的宿主也可以直接使用。
 
 ### 3.5 `@arcships/vue-pdf`
 

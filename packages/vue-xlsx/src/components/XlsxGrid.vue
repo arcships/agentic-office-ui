@@ -125,6 +125,7 @@
           :index="headerMenu.index"
           :x="headerMenu.x"
           :y="headerMenu.y"
+          :restore-target="containerRef"
           @close="headerMenu = null"
         />
         <template
@@ -161,6 +162,7 @@
           :column-name="autoFilterMenu.columnName"
           :x="autoFilterMenu.x"
           :y="autoFilterMenu.y"
+          :restore-target="containerRef"
           @close="autoFilterMenu = null"
         />
         <div

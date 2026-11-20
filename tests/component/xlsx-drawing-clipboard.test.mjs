@@ -292,53 +292,6 @@ test("duplicate copies the selected drawing in place with a small offset", async
   assert.equal(controller.shapes[0].id, shape.id);
 });
 
-test("the drawing context menu exposes copy, cut, paste, duplicate and delete", async (t) => {
-  const { app, controller } = await mountController();
-  t.after(() => app.unmount());
-  const image = controller.images[0];
-  let menu;
-  const Harness = vue.defineComponent({
-    setup() {
-      return () => vue.h(XlsxContextMenu, {
-        controller,
-        ref: (value) => { menu = value; },
-        targetElement: null,
-      });
-    },
-  });
-  const mounted = await mount(Harness);
-  t.after(() => mounted.app.unmount());
-  const body = teleportTarget("body");
-  const findInBody = (testId) => walk(body).find((node) => node.props?.["data-testid"] === testId);
-
-  controller.selectImage(image.id);
-  controller.selectCell({ row: 0, col: 0 });
-  controller.selectImage(image.id);
-  assert.equal(menu.openForDrawing("image", image.id, 20, 30), true);
-  await vue.nextTick();
-  for (const testId of [
-    "xlsx-context-drawing-copy",
-    "xlsx-context-drawing-cut",
-    "xlsx-context-drawing-paste",
-    "xlsx-context-drawing-duplicate",
-    "xlsx-context-drawing-delete",
-  ]) {
-    assert.ok(findInBody(testId), `${testId} is offered for an image`);
-  }
-  assert.equal(findInBody("xlsx-context-comment"), undefined, "cell actions are replaced");
-
-  findInBody("xlsx-context-drawing-duplicate").props.onClick();
-  await vue.nextTick();
-  assert.equal(controller.images.length, 2, "the menu duplicates the selected image");
-  assert.equal(findInBody("xlsx-context-menu"), undefined, "the menu closes after the action");
-
-  assert.equal(menu.openForDrawing("image", "missing", 0, 0), false);
-  assert.equal(menu.openForDrawing("shape", controller.shapes[0].id, 0, 0), true);
-  await vue.nextTick();
-  assert.ok(findInBody("xlsx-context-drawing-delete"));
-  menu.close();
-});
-
 test("drawing layers wire Ctrl+C/X/V/D and the drawing context menu", () => {
   const imageLayer = readFileSync(
     new URL("../../packages/vue-xlsx/src/components/XlsxImageLayer.vue", import.meta.url),

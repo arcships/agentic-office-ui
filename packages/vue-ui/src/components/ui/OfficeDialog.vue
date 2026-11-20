@@ -30,6 +30,12 @@ export interface OfficeDialogProps {
   showClose?: boolean
   /** Localized override for the close button. */
   closeLabel?: string
+  /** `data-testid` for the close button. */
+  closeTestId?: string
+  /** `data-testid` for the dialog surface. */
+  contentTestId?: string
+  /** Extra `data-*` attributes for the dialog surface (surface contracts). */
+  contentData?: Record<string, string | number | boolean | undefined>
   modal?: boolean
   closeOnEscape?: boolean
   closeOnBackdrop?: boolean
@@ -47,6 +53,9 @@ const props = withDefaults(defineProps<OfficeDialogProps>(), {
   titleHidden: false,
   showClose: true,
   closeLabel: undefined,
+  closeTestId: undefined,
+  contentTestId: undefined,
+  contentData: undefined,
   modal: true,
   closeOnEscape: true,
   closeOnBackdrop: true,
@@ -103,6 +112,8 @@ function onPointerDownOutside(event: Event) {
       />
       <DialogContent
         :class="contentClasses"
+        :data-testid="props.contentTestId"
+        v-bind="props.contentData"
         data-slot="dialog-content"
         @escape-key-down="onEscapeKeyDown"
         @pointer-down-outside="onPointerDownOutside"
@@ -139,6 +150,7 @@ function onPointerDownOutside(event: Event) {
           <button
             type="button"
             class="office-ui office-button office-button--ghost office-button--size-icon office-dialog__close"
+            :data-testid="props.closeTestId"
             data-slot="dialog-close"
             :aria-label="resolvedCloseLabel"
           >
