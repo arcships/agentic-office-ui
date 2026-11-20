@@ -91,7 +91,8 @@ DOCX/PPTX/XLSX chrome），9 个 chrome/block surface 只在 nightly 全矩阵�
 
 1. **当前形态（2026-11-20 起）**：所有可渲染 surface 已 `blocking`，`manifest.gate.prMode` 为
    `all`，workflow 两个 parity job 都直接传 `--gate-mode all`。PR 核心子集与 nightly 全矩阵
-   都以严格模式阻断；`strict` dispatch 输入已删除。
+   都以严格模式阻断；`strict` dispatch 输入已删除。合并 #158b 后的全矩阵实测：
+   **864 case / 845 `pass` + 19 个 file-upload AA / 0 `fail`**，基线 432 张、4 条审批。
 2. **以后新增 surface 时**：
    - 参考/对照通过后，把 `gateStatus` 改成 `blocking`（删掉 `gatePendingIssue`）；
    - 需要进 PR 子集的再加 `core: true`；否则只在 nightly 全矩阵里阻断；
