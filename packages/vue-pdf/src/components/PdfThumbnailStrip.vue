@@ -84,19 +84,24 @@ function altFor(page: number): string {
 </script>
 
 <style scoped>
+/*
+ * The strip is the sidebar body, so it fills its host instead of owning a
+ * width. `DocumentViewerSidebar` owns the 160px rail, inline/overlay mode and
+ * the loading skeleton; this file keeps the page buttons and their active /
+ * focus states.
+ */
 .pdf-thumbnails {
-  width: 150px;
-  flex: 0 0 150px;
-  overflow: auto;
-  border-right: 1px solid var(--pdf-border, #e5e5e5);
-  padding: 10px;
-  background: var(--pdf-panel-bg, #fafafa);
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-1);
+  width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 .pdf-thumbnails__title {
-  margin: 0 0 8px;
-  color: var(--pdf-muted, #737373);
-  font-size: 11px;
+  margin: 0 0 var(--office-ui-space-1);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -105,28 +110,29 @@ function altFor(page: number): string {
   display: flex;
   width: 100%;
   min-height: 118px;
-  margin-bottom: 10px;
-  padding: 6px;
+  margin-bottom: var(--office-ui-space-1);
+  padding: var(--office-ui-space-1);
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--office-ui-space-1);
   overflow: hidden;
   border: 2px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--office-radius-md);
   background: transparent;
-  color: var(--pdf-muted, #737373);
-  font-size: 11px;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
   cursor: pointer;
 }
+.thumbnail:hover { background: color-mix(in oklab, var(--office-foreground) 6%, transparent); }
 .thumbnail img {
   display: block;
   max-width: 106px;
   max-height: 86px;
   object-fit: contain;
-  border: 1px solid var(--pdf-control-border, #d4d4d4);
-  background: var(--pdf-control-bg, #fff);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+  border: var(--office-border-width) solid var(--office-border);
+  background: var(--office-background);
+  box-shadow: var(--office-shadow-xs);
   filter: var(--pdf-page-filter, none);
 }
 .thumbnail-placeholder {
@@ -134,32 +140,18 @@ function altFor(page: number): string {
   place-items: center;
   width: 74px;
   height: 84px;
-  border: 1px solid var(--pdf-control-border, #d4d4d4);
-  background: var(--pdf-control-bg, #fff);
-  color: var(--pdf-muted, #737373);
+  border: var(--office-border-width) solid var(--office-border);
+  background: var(--office-background);
+  color: var(--office-muted-foreground);
 }
 .thumbnail.active {
-  border-color: #2563eb;
-  background: color-mix(in srgb, #2563eb 12%, var(--pdf-panel-bg, #fafafa));
-  color: var(--pdf-link, #1d4ed8);
+  border-color: var(--office-ring);
+  background: color-mix(in oklab, var(--office-primary) 10%, transparent);
+  color: var(--office-primary);
   font-weight: 700;
 }
-.thumbnail:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-
-@container pdf-viewer (max-width: 760px) {
-  .pdf-thumbnails {
-    width: auto;
-    flex-basis: auto;
-    display: flex;
-    gap: 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--pdf-border, #e5e5e5);
-  }
-  .thumbnail {
-    width: 108px;
-    min-height: 104px;
-    flex: 0 0 auto;
-    margin-bottom: 0;
-  }
+.thumbnail:focus-visible {
+  outline: var(--office-ring-width) solid var(--office-ring);
+  outline-offset: 2px;
 }
 </style>

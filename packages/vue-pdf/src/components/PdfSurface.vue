@@ -2,11 +2,16 @@
   <div
     class="pdf-surface-shell"
     :class="{ 'pdf-surface--dark': props.isDark }"
+    :data-office-theme="props.isDark ? 'dark' : 'light'"
     :style="minHeightStyle"
     data-testid="pdf-surface-shell"
-  >
-    <aside
+  >    
+    <div class="pdf-surface__body">
+    <DocumentViewerSidebar
       v-if="navigationVisible"
+      v-model:open="navOpen"
+      :close-on-escape="false"
+      :label="m.pdf.surface.outline"
       class="pdf-surface__nav"
       data-testid="pdf-surface-nav"
     >
@@ -17,8 +22,13 @@
         :label="m.pdf.surface.outline"
         @activate="onOutlineActivate"
       />
+      <DocumentViewerSidebarSkeleton
+        v-if="thumbnailsLoading"
+        :items="3"
+        class="pdf-surface__thumbnails-skeleton"
+      />
       <PdfThumbnailStrip
-        v-if="showThumbnails && renderDocument"
+        v-else-if="showThumbnails && renderDocument"
         :pageCount="renderDocument.pageCount"
         :labels="resolvedPageLabels"
         :urls="thumbnailUrls"
@@ -31,7 +41,7 @@
         itemTestId="pdf-surface-thumbnail"
         @select="onThumbnailSelect"
       />
-    </aside>
+    </DocumentViewerSidebar>
     <div
       ref="scrollRef"
       class="pdf-surface"
@@ -45,16 +55,30 @@
       @copy="onCopy"
       @keydown="onSurfaceKeydown"
     >
-    <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
-    <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
-    <div
+    <OfficeEmptyState
+      v-if="!effectiveSource"
+      class="pdf-surface__empty"
+      data-testid="pdf-surface-empty"
+      :title="m.pdf.surface.noPdf"
+      icon="file-text"
+    />
+    <OfficeLoadingState
+      v-else-if="loading"
+      class="pdf-surface__loading"
+      data-testid="pdf-surface-loading"
+      :title="m.pdf.surface.opening"
+    />
+    <OfficeErrorState
       v-else-if="loadError"
       class="pdf-surface__error"
       data-testid="pdf-surface-load-error"
       :data-error-code="loadError.code"
-    >
-      {{ loadError.code }}: {{ loadErrorMessage }}
-    </div>
+      :data-encrypted="encryptedError ? 'true' : undefined"
+      :title="errorTitle"
+      :description="errorDetail"
+      :icon="encryptedError ? 'lock' : 'triangle-alert'"
+      :show-retry="false"
+    />
     <div v-else-if="renderDocument" class="pdf-surface__pages" :style="pageStackStyle">
       <div
         v-for="pageIndex in Array.from({ length: renderDocument.pageCount }, (_, i) => i)"
@@ -153,6 +177,10 @@
           :data-form-page="pageIndex"
         >
           <template v-for="annotation in formControlsForPage(pageIndex)" :key="`form-${annotation.id}`">
+            <PdfFieldTooltip
+              :enabled="overlaysAvailable"
+              :label="annotation.fieldName"
+            >
             <select
               v-if="annotation.fieldType === 'combobox' || annotation.fieldType === 'listbox'"
               class="pdf-surface__form-control pdf-surface__form-control--select"
@@ -194,11 +222,94 @@
               @change="annotation.fieldType === 'text' ? onFormTextChange($event, pageIndex, annotation) : onFormToggleChange($event, pageIndex, annotation)"
               @keydown.stop
             />
+            </PdfFieldTooltip>
           </template>
         </div>
       </div>
     </div>
     </div>
+    </div>
+    <OfficeStatusBar
+      v-if="props.showStatusBar"
+      class="pdf-surface__status-bar"
+      data-testid="pdf-surface-status-bar"
+      :page="activePageIndex + 1"
+      :total-pages="renderDocument?.pageCount ?? 0"
+      :status="statusBarStatus"
+      :file-name="surfaceFileName"
+      :busy="loading"
+    />
+    <OfficePopover
+      v-if="overlaysAvailable && selectionState.kind === 'text' && selectionAnchor"
+      :open="true"
+      side="top"
+      align="center"
+      :side-offset="8"
+      content-class="pdf-surface__selection-popover"
+      data-testid="pdf-surface-selection-popover"
+      @update:open="onSelectionPopoverOpen"
+    >
+      <template #trigger>
+        <span class="pdf-surface__selection-anchor" :style="selectionAnchorStyle" aria-hidden="true" />
+      </template>
+      <div
+        class="pdf-surface__selection-body"
+        role="toolbar"
+        :aria-label="m.pdf.viewer.selectionActions"
+      >
+        <p class="pdf-surface__selection-text">{{ selectionState.text }}</p>
+        <div class="pdf-surface__selection-actions">
+          <span v-if="selectionCopied" class="pdf-surface__selection-status" role="status">{{ m.pdf.viewer.copiedSelection }}</span>
+          <OfficeButton
+            variant="outline"
+            size="sm"
+            data-testid="pdf-surface-selection-copy"
+            @click="copySelection"
+          >
+            <OfficeIcon name="copy" />
+            {{ m.pdf.viewer.copySelection }}
+          </OfficeButton>
+        </div>
+      </div>
+    </OfficePopover>
+    <OfficePopover
+      v-if="overlaysAvailable && hoveredLink"
+      :open="true"
+      side="top"
+      align="center"
+      :side-offset="6"
+      content-class="pdf-surface__link-card"
+      data-testid="pdf-surface-link-card"
+      @update:open="closeLinkCard"
+    >
+      <template #trigger>
+        <span class="pdf-surface__link-anchor" :style="linkAnchorStyle" aria-hidden="true" />
+      </template>
+      <div
+        class="pdf-surface__link-body"
+        role="group"
+        :aria-label="m.pdf.viewer.linkActions"
+      >
+        <span class="pdf-surface__link-url">{{ hoveredLinkUrl }}</span>
+        <OfficeButton
+          variant="outline"
+          size="sm"
+          data-testid="pdf-surface-link-open"
+          @click="openHoveredLink"
+        >
+          <OfficeIcon name="link" />
+          {{ m.pdf.viewer.openLink }}
+        </OfficeButton>
+      </div>
+    </OfficePopover>
+    <OfficeDialog
+      v-if="overlaysAvailable && props.showAnnotationDialog"
+      :open="annotationDialogOpen"
+      :title="activeAnnotationTitle"
+      :description="activeAnnotationDetail"
+      content-test-id="pdf-surface-annotation-dialog"
+      @update:open="onAnnotationDialogOpen"
+    />
   </div>
 </template>
 
@@ -314,7 +425,20 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
-import { useViewerKeys } from "@arcships/vue-ui"
+import {
+  DocumentViewerSidebar,
+  DocumentViewerSidebarSkeleton,
+  OfficeButton,
+  OfficeDialog,
+  OfficeEmptyState,
+  OfficeErrorState,
+  OfficeIcon,
+  OfficeLoadingState,
+  OfficePopover,
+  OfficeStatusBar,
+  OfficeTooltip,
+  useViewerKeys,
+} from "@arcships/vue-ui"
 import type {
   OfficeRegionCaptureRequest,
   OfficeRegionCaptureSource,
@@ -326,6 +450,7 @@ import { resolvePdfLinkUrl } from "../pdf/pdf-annotation"
 import type { PdfOutlineItem } from "../pdf/pdf-outline"
 import PdfOutlinePanel from "./PdfOutlinePanel.vue"
 import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
+import PdfFieldTooltip from "./PdfFieldTooltip.vue"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -383,6 +508,17 @@ const props = withDefaults(
      * viewer's bounded thumbnail pipeline.
      */
     showThumbnails?: boolean
+    /**
+     * Render a visible `OfficeStatusBar` footer with the page, file and state.
+     * Defaults to false so an embed keeps its previous footprint.
+     */
+    showStatusBar?: boolean
+    /**
+     * Open an `OfficeDialog` with the annotation or form-field details when a
+     * reader activates one. Defaults to false; hosts that own their annotation
+     * UI keep receiving `annotationActivate` without an extra dialog.
+     */
+    showAnnotationDialog?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
     /**
@@ -407,6 +543,8 @@ const props = withDefaults(
     isDark: false,
     showOutline: true,
     showThumbnails: true,
+    showStatusBar: false,
+    showAnnotationDialog: false,
     locale: "en",
     messages: undefined,
     maxBitmapBytes: DEFAULT_PDF_BITMAP_BUDGET_BYTES,
@@ -505,6 +643,32 @@ const loadError = ref<PdfLoadError | null>(null)
 const loadErrorMessage = computed(() => loadError.value
   ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
   : "")
+/** Encrypted documents get their own unlock state instead of a generic error. */
+const encryptedError = computed(() => loadError.value?.code === "ENCRYPTED")
+const errorTitle = computed(() =>
+  encryptedError.value ? m.value.pdf.errors.encrypted : m.value.common.chrome.errorTitle
+)
+const errorDetail = computed(() =>
+  encryptedError.value
+    ? m.value.pdf.viewer.passwordRequired
+    : loadError.value
+      ? `${loadError.value.code}: ${loadErrorMessage.value}`
+      : ""
+)
+const surfaceFileName = computed(() => {
+  const source = effectiveSource.value
+  if (source?.kind === "blob") {
+    const file = source.blob as File
+    if (typeof file.name === "string" && file.name.trim()) return file.name
+  }
+  const url = source?.kind === "url" ? source.url.split(/[?#]/u)[0]?.split("/").pop() : undefined
+  return url || "document.pdf"
+})
+const statusBarStatus = computed(() => {
+  if (loading.value) return m.value.pdf.surface.opening
+  if (loadError.value) return loadErrorMessage.value
+  return ""
+})
 const renderDocument = ref<PdfRenderDocument | null>(null)
 const outlineItems = ref<readonly PdfOutlineItem[]>([])
 const pdfPageLabels = ref<readonly string[]>([])
@@ -522,6 +686,12 @@ const navigationVisible = computed(() => !!renderDocument.value && (
   (props.showOutline && outlineItems.value.length > 0)
   || props.showThumbnails
 ))
+/** Thumbnails are still rasterizing; show the shared sidebar skeleton. */
+const thumbnailsLoading = computed(() =>
+  !!renderDocument.value
+  && props.showThumbnails
+  && Object.keys(thumbnailUrls.value).length === 0
+)
 const printMode = ref(false)
 const verifiedBlob = ref<Blob | null>(null)
 const selectionMode = computed(() => props.selectionMode)
@@ -559,6 +729,26 @@ const searchState = ref<PdfSearchState>({
 })
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
 const selectionVisual = ref<{ ranges: readonly PageSelectionRects[] } | null>(null)
+/** Viewport point of the last committed text selection; anchors the selection toolbar. */
+const selectionAnchor = ref<{ x: number; y: number } | null>(null)
+const selectionCopied = ref(false)
+/**
+ * Reka overlays need a real DOM. The component test renderer mounts the
+ * Surface without one, so the floating cards only mount in a browser.
+ */
+const overlaysAvailable = typeof window !== "undefined" && typeof document !== "undefined"
+const navOpen = ref(true)
+/** Link under the pointer, resolved from the page annotations. */
+const hoveredLink = ref<{
+  pageIndex: number
+  annotation: PdfRenderAnnotation
+  rect: { x: number; y: number; width: number; height: number }
+} | null>(null)
+const annotationDialogOpen = ref(false)
+const activeAnnotation = ref<{
+  pageIndex: number
+  annotation: PdfRenderAnnotation
+} | null>(null)
 const pageAnnotations = reactive<Record<number, readonly PdfRenderAnnotation[]>>({})
 const textLayers = reactive<Record<number, PdfPageTextLayer>>({})
 const formWritesAvailable = ref(false)
@@ -727,6 +917,7 @@ function updateObjectOutline(candidates: readonly OfficeReferenceCandidatePrevie
 }
 
 function onReferencePointerLeave(): void {
+  closeLinkCard()
   clearObjectOutline()
   if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
   emit("referenceCandidateChange", { candidates: [] })
@@ -821,8 +1012,10 @@ function onSurfacePointerDown(event: PointerEvent, pageIndex: number): void {
   else if (selectionMode.value === "region") beginRegion(event, pageIndex)
 }
 function onSurfacePointerMove(event: PointerEvent, pageIndex: number): void {
-  if (selectionMode.value === "content") onSelectionPointerMove(event, pageIndex)
-  else if (selectionMode.value === "region") updateRegion(event)
+  if (selectionMode.value === "content") {
+    updateHoveredLink(event, pageIndex)
+    onSelectionPointerMove(event, pageIndex)
+  } else if (selectionMode.value === "region") updateRegion(event)
   else {
     const candidates = hitTest({ clientX: event.clientX, clientY: event.clientY })
     updateObjectOutline(candidates)
@@ -1582,6 +1775,139 @@ function displayRectStyle(pageIndex: number, rect: PdfRenderRect): Record<string
   }
 }
 
+/** Fixed viewport anchor used by the floating selection toolbar. */
+const selectionAnchorStyle = computed<Record<string, string> | undefined>(() =>
+  selectionAnchor.value
+    ? {
+        left: `${selectionAnchor.value.x}px`,
+        top: `${selectionAnchor.value.y}px`,
+      }
+    : undefined
+)
+
+/**
+ * Fixed viewport box of the hovered link. The annotation hit rectangle is a
+ * page-space box, so it is converted and offset by the page slot position.
+ */
+const linkAnchorStyle = computed<Record<string, string> | undefined>(() => {
+  if (!hoveredLink.value) return undefined
+  return {
+    left: `${hoveredLink.value.rect.x}px`,
+    top: `${hoveredLink.value.rect.y}px`,
+    width: `${hoveredLink.value.rect.width}px`,
+    height: `${hoveredLink.value.rect.height}px`,
+  }
+})
+
+const hoveredLinkUrl = computed(() =>
+  hoveredLink.value?.annotation.url ? hoveredLink.value.annotation.url : ""
+)
+
+function onSelectionPopoverOpen(open: boolean): void {
+  if (!open) clearSelection()
+}
+
+async function copySelection(): Promise<void> {
+  if (selectionState.value.kind !== "text") return
+  try {
+    await navigator.clipboard?.writeText(selectionState.value.text)
+    selectionCopied.value = true
+  } catch {
+    selectionCopied.value = false
+  }
+}
+
+function closeLinkCard(): void {
+  hoveredLink.value = null
+}
+
+/** Resolve the native link under the pointer for the hover preview. */
+function updateHoveredLink(event: PointerEvent, pageIndex: number): void {
+  if (!overlaysAvailable || selectionMode.value !== "content" || selectionGesture) {
+    closeLinkCard()
+    return
+  }
+  if (selectionState.value.kind !== "none") {
+    closeLinkCard()
+    return
+  }
+  const layer = event.currentTarget as HTMLElement | null
+  if (!layer) return
+  const point = canonicalPoint(eventClientPoint(event), pageIndex, layer)
+  if (!point) {
+    closeLinkCard()
+    return
+  }
+  const annotation = annotationAtPoint(pageAnnotations[pageIndex] ?? [], point)
+  if (!annotation || annotation.kind !== "link") {
+    closeLinkCard()
+    return
+  }
+  if (hoveredLink.value?.annotation.id === annotation.id
+    && hoveredLink.value.pageIndex === pageIndex) return
+  const bounds = layer.getBoundingClientRect()
+  const displayed = displayRect(pageIndex, annotation.rect)
+  hoveredLink.value = {
+    pageIndex,
+    annotation,
+    rect: {
+      x: bounds.left + displayed.x,
+      y: bounds.top + displayed.y,
+      width: displayed.width,
+      height: displayed.height,
+    },
+  }
+}
+
+function openHoveredLink(): void {
+  const link = hoveredLink.value
+  if (!link) return
+  const blocked = link.annotation.blocked === true
+    || (link.annotation.url !== undefined && !isPdfLinkUrlAllowed(link.annotation.url))
+  emit("linkActivate", {
+    pageIndex: link.pageIndex,
+    annotationId: link.annotation.id,
+    clientX: link.rect.x,
+    clientY: link.rect.y,
+    ...(!blocked && link.annotation.url ? { url: link.annotation.url } : {}),
+    ...(link.annotation.targetPageIndex !== undefined
+      ? { targetPageIndex: link.annotation.targetPageIndex }
+      : {}),
+    ...(blocked ? { blocked: true } : {}),
+  })
+  if (!blocked && link.annotation.targetPageIndex !== undefined) {
+    scrollToPage(link.annotation.targetPageIndex)
+  }
+  closeLinkCard()
+}
+
+/** Annotation details rendered by the optional `OfficeDialog`. */
+const activeAnnotationTitle = computed(() => {
+  const annotation = activeAnnotation.value?.annotation
+  if (!annotation) return m.value.pdf.viewer.annotationDetails
+  if (annotation.kind === "widget") return annotation.fieldName || m.value.pdf.viewer.annotationDetails
+  return annotation.contents?.trim() || m.value.pdf.viewer.annotationDetails
+})
+const activeAnnotationDetail = computed(() => {
+  const annotation = activeAnnotation.value?.annotation
+  if (!annotation) return ""
+  const parts = [
+    annotation.fieldValue,
+    annotation.contents?.trim(),
+  ].filter((part): part is string => Boolean(part && part.trim()))
+  return parts.join(" · ")
+})
+
+function closeAnnotationDialog(): void {
+  annotationDialogOpen.value = false
+  activeAnnotation.value = null
+}
+
+function onAnnotationDialogOpen(open: boolean): void {
+  annotationDialogOpen.value = open
+  if (!open) closeAnnotationDialog()
+}
+
 function searchRectsForPage(pageIndex: number): Array<{
   key: string
   resultIndex: number
@@ -2026,6 +2352,8 @@ function stopSelectionGesture(): void {
 
 function resetCommittedSelection(clearVisual: boolean): void {
   if (clearVisual) selectionVisual.value = null
+  selectionAnchor.value = null
+  selectionCopied.value = false
   if (selectionState.value.kind === "none") return
   selectionState.value = { kind: "none" }
   emit("selectionChange", selectionState.value)
@@ -2308,6 +2636,7 @@ function onSelectionPointerUp(event: PointerEvent, _pageIndex: number): void {
     return
   }
   selectionClickCandidate = false
+  selectionAnchor.value = gesture.latest
   finalizeSelectionGesture(gesture)
 }
 
@@ -2413,6 +2742,10 @@ async function activateAnnotationAt(event: MouseEvent, pageIndex: number): Promi
     ...(annotation.fieldValue ? { fieldValue: annotation.fieldValue } : {}),
     ...(annotation.contents ? { contents: annotation.contents } : {}),
   })
+  if (props.showAnnotationDialog) {
+    activeAnnotation.value = { pageIndex, annotation }
+    annotationDialogOpen.value = true
+  }
 }
 
 async function onSelectionClick(event: MouseEvent, pageIndex: number): Promise<void> {
@@ -2445,6 +2778,7 @@ async function onSelectionClick(event: MouseEvent, pageIndex: number): Promise<v
       new Segmenter(undefined, { granularity: "word" }),
     )
     if (!range) return
+    selectionAnchor.value = eventClientPoint(event)
     await commitSelection(
       { pageIndex, charIndex: range.from },
       { pageIndex, charIndex: range.to },
@@ -2984,10 +3318,20 @@ onBeforeUnmount(async () => {
 <style scoped>
 .pdf-surface-shell {
   display: flex;
+  flex-direction: column;
   flex: 1;
   align-items: stretch;
   min-height: 0;
   min-width: 0;
+}
+/* Rail + scroll surface row; the status bar (when enabled) stacks below it. */
+.pdf-surface__body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
 }
 .pdf-surface {
   flex: 1;
@@ -3000,25 +3344,13 @@ onBeforeUnmount(async () => {
   --pdf-surface-page-filter: none;
   background: var(--pdf-surface-bg);
 }
-/* Outline and thumbnail rail. It lives beside the scroll container so bookmarks
-   and thumbnails stay put while the pages scroll under them. */
+/* Outline and thumbnail rail. The shared `DocumentViewerSidebar` owns the
+   160px width, inline/overlay mode and open/close transition; this hook only
+   carries the PDF palette on top of the `--office-*` tokens. */
 .pdf-surface__nav {
-  display: flex;
-  width: 172px;
-  flex: 0 0 172px;
-  flex-direction: column;
-  gap: 10px;
-  overflow: auto;
-  box-sizing: border-box;
-  border-right: 1px solid #d1d5db;
-  background: #f3f4f6;
-  color: #111827;
-  padding: 8px;
+  --office-ui-sidebar-width: 10rem;
 }
 .pdf-surface--dark .pdf-surface__nav {
-  border-color: #1e293b;
-  background: #0f172a;
-  color: #e5e7eb;
   --pdf-fg: #e5e7eb;
   --pdf-link: #93c5fd;
   --pdf-muted: #94a3b8;
@@ -3028,26 +3360,65 @@ onBeforeUnmount(async () => {
   --pdf-panel-bg: #0f172a;
   --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
-.pdf-surface__nav .pdf-thumbnails {
-  width: 100%;
-  flex: 1 1 auto;
-  overflow: visible;
-  padding: 4px;
-  border-right: 0;
-  background: transparent;
-}
+.pdf-surface__thumbnails-skeleton { padding: 0; }
 .pdf-surface--dark {
   --pdf-surface-bg: #020617;
   --pdf-surface-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
 /* The scroll surface is focusable for keyboard paging; keep the ring visible. */
 .pdf-surface:focus-visible { outline: 2px solid #60a5fa; outline-offset: -2px; }
-.pdf-surface__empty {
-  display: flex; align-items: center; justify-content: center;
-  min-height: 200px; color: #9ca3af; font-size: 14px;
-}
+.pdf-surface__empty,
+.pdf-surface__loading,
 .pdf-surface__error {
-  padding: 16px; color: #ef4444; font-size: 13px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.pdf-surface__status-bar { flex: 0 0 auto; }
+/* Floating selection toolbar and link hover card: the zero-size fixed anchors
+   are the Reka popover triggers, so both open next to the page geometry without
+   participating in the surface layout. */
+.pdf-surface__selection-anchor,
+.pdf-surface__link-anchor {
+  position: fixed;
+  pointer-events: none;
+}
+.pdf-surface__selection-anchor { inline-size: 0; block-size: 0; }
+.pdf-surface__selection-popover { max-inline-size: min(22rem, calc(100vw - 2rem)); }
+.pdf-surface__selection-body,
+.pdf-surface__link-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+.pdf-surface__selection-text {
+  max-block-size: 4.5rem;
+  margin: 0;
+  overflow: hidden;
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+}
+.pdf-surface__selection-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--office-ui-space-2);
+}
+.pdf-surface__selection-status {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+}
+.pdf-surface__link-card { max-inline-size: min(20rem, calc(100vw - 2rem)); }
+.pdf-surface__link-body { flex-direction: row; align-items: center; }
+.pdf-surface__link-url {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pdf-surface__pages {
   display: grid;
@@ -3142,14 +3513,18 @@ onBeforeUnmount(async () => {
 
 @media print {
   .pdf-surface-shell { display: block !important; }
+  .pdf-surface__body { display: block !important; }
   .pdf-surface__nav { display: none !important; }
+  .pdf-surface__status-bar { display: none !important; }
   .pdf-surface {
     overflow: visible !important;
     background: #fff !important;
   }
+  .pdf-surface__interaction { display: none !important; }
   .pdf-surface__interaction,
   .pdf-surface__overlay,
   .pdf-surface__empty,
+  .pdf-surface__loading,
   .pdf-surface__error,
   .pdf-surface__page-loading,
   .pdf-surface__page-error,
