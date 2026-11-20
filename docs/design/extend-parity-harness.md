@@ -125,9 +125,9 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 `.github/workflows/ui-parity.yml` 现在有四个 job：`ui-contracts`（样式 guard + 基线审批）、
 `ui-parity-core`（PR 核心子集 + 基线比对，`--gate-mode ready`）、`ui-parity-nightly`（全矩阵）、
 `ui-a11y`（axe-core + 键盘 smoke）。所有 job 上传 artifact（含 diff/heatmap/baseline diff）。
-`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（`input`/`docx-*`/
-`document-sidebar`/`document-blocks`）仍采集、仍报告，但不阻断。最终切换用 `strict: true`
-（`--gate-mode all`），正式切换步骤见门禁文档 §5。
+`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（当前只有
+`document-sidebar`，等 #158；`#161b` 的 `pptx-*` 合入后会短暂处于 pending）仍采集、仍报告，
+但不阻断。最终切换用 `strict: true`（`--gate-mode all`），正式切换步骤见门禁文档 §5。
 
 ## 6.1 提交基线（#165）
 
@@ -140,32 +140,32 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 
 ## 7. 实施现状（2026-11-20，0.8 wave 2）
 
-- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 8 个 surface 完成端到端采集
-  （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar）。
+- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **18 个 surface** 完成端到端采集并提交基线
+  （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar+PdfSidebar / DOCX ×2 / XLSX ×3 /
+  document blocks ×4）。
 - `pnpm ui:parity:self-check`（参考页对自身）在完整矩阵下 344/344 全部 `pass`
   （0 像素差、0 几何差），证明截图/阈值链路可重复；`pass` 不是永远无法到达的状态。
-- #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入，最终矩阵 200 case
-  中 196 `pass`、4 个 `input/focus/light` 仅有 52 px、单通道 1/255（diff ratio 0.077%）
-  的抗锯齿残差；其余状态 0 px。
-- `file-upload` / `file-thumbnail` / `pdf-toolbar` 在 #163/#162 之前全部 `fail`，这是**真实 delta**：
-  - FileUpload：参考是 icon-cluster + browse chip + 组件内文件列表；旧 Vue 组件是宿主渲染的简化 dropzone（180px、单图标、额外 “Accepted/Max size” 行）。
-  - FileThumbnail：参考是方形预览卡（loading/error/fallback 图层）；旧 Vue 是带文件名/类型的行内缩略图。
-  - PDF toolbar：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；旧 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
-- `file-upload` / `file-thumbnail` 已由 #163 收敛，且 0.8 复跑时两侧均使用**默认 props**
-  （不再传 `show-file-list`）——`pnpm ui:parity -- --only file-upload,file-thumbnail --skip-tokens`
-  的 80 个 case 全部通过（61 `pass` + 19 `pass-with-antialiasing`，0 `fail`；最大 diff ratio
-  0.000008、单通道 1/255、几何 0px）。实现细节、状态和边界见
-  [components/file-components.md](../components/file-components.md)。
-- `pdf-toolbar` 仍有真实 delta：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；
-  当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
+- #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入；0.8 复跑
+  `--only input` 在 4 viewport × light/dark 下 40/40 `pass`、0px、0 AA（#157b 修正了
+  focus/light 的 52px 残差）。
+- `file-upload` / `file-thumbnail` 已由 #163 收敛，两侧均使用**默认 props**——80 个 case
+  全部通过（61 `pass` + 19 `pass-with-antialiasing`，0 `fail`；最大 diff ratio 0.000008、
+  单通道 1/255、几何 0px）。这 19 个 AA 是 0.8 唯一保留的已知残差，低于 0.1% 阈值。
+  实现细节见 [components/file-components.md](../components/file-components.md)。
+- `pdf-toolbar` / `pdf-sidebar` 已由 #162 收敛为上游 48px toolbar 行与 160px rail：40/40、
+  24/24 像素 0，并有提交基线。
+- `docx-toolbar` / `docx-sidebar` 已由 #159 切到上游 `DocxToolbar` 与
+  `DocumentViewerThumbnailSidebar` markup：32/32 + 24/24 像素 0；已提升为 `blocking` 并补基线。
 - `xlsx-toolbar` / `xlsx-sheet-tabs` / `xlsx-status-bar` 已由 **#160（重开）** 建成：上游
   `xlsx-viewer.tsx` 里 `WorkbookToolbar` / `WorkbookSheetTabsInner` 的 markup 与 class 串是自包含的，
   vendored 子集（`tools/extend-reference/src/vendor/extend/xlsx-*.tsx`）只剔除私有引擎 hook 与弹层，
   class 串、图标、间距一字未改。`pnpm ui:parity -- --only xlsx-toolbar,xlsx-sheet-tabs,xlsx-status-bar`
-  在 4 viewport × light/dark × 全部 state 上 **64/64 pass、0px**；三条 surface 目前 `gateStatus: pending`
-  （`#160`），补提交基线后再切 `blocking`。`xlsx-ribbon` / 公式行仍无对照（上游 editor 的格式行
-  来自私有包，且控件集合不同），结论与细节见
-  [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
+  在 4 viewport × light/dark × 全部 state 上 **64/64 pass、0px、0 AA**；三条 surface 已补基线并切
+  `blocking`。`xlsx-ribbon` / 公式行仍无对照（上游 editor 的格式行来自私有包，且控件集合不同），
+  结论与细节见 [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
+- `bounding-box-citations` / `layout-blocks` / `e-signature` / `document-splits` 已由 #164 完成：
+  232/232 case、0px、0 AA；四条 surface 已补基线并切 `blocking`。FileSystem / SchemaBuilder 按
+  [components/document-blocks.md](../components/document-blocks.md) 记录为延期，不建 surface。
 - `document-sidebar` 只保留参考基线：规范组件由 #158 在
   `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
@@ -182,18 +182,21 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 1. 在 `tools/extend-reference/src/surfaces/` 加参考渲染，并在 `App.tsx` 的 `renderers` 注册；需要新组件时先把最小上游文件 vendored 到 `src/vendor/`（MIT 头 + NOTICE + `UPSTREAM.md` + `attribution.json`）。
 2. 在 `tools/vue-reference/src/surfaces/` 加对照渲染，并在 `App.vue` 里接上；如果组件还没实现，把 manifest 标成 `subjectStatus: "missing"` + `pendingIssue`。
 3. 在 `tools/parity-fixtures/manifest.json` 增加 surface（`cellWidth`、`states`、交互、依赖 issue），共享文案/数据放 `fixtures.json`；同时声明 `core`（是否进 PR 子集）与 `gateStatus`（`pending` + `gatePendingIssue`，或 `blocking`）。
-4. 在 [components/ui-component-map.md](../components/ui-component-map.md) 补一行，`pnpm ui:docs` 会检查。
+4. 在 [components/ui-component-map.md](../components/ui-component-map.md) 用实际的 surface id（不是组件名）补一行，`pnpm ui:docs` 会检查。
 5. 运行 `pnpm ui:parity -- --only <id>` 和 `node --test tests/unit/ui-parity-gate.test.mjs`；surface 就绪后按
    [ui-parity-ci.md §5](../testing/ui-parity-ci.md) 切成 `blocking` 并用 `pnpm ui:baseline capture --only <id>` 补基线。
 
 ## 9. 后续 issue 分工
 
 - #156：token/theme/OfficeIcon（已合入；本 harness 直接消费 `theme.css`）。
-- #157：Button/Input/Select/Dialog/Tooltip primitive + reka-ui 层（已合入，像素对照见 §7）。
-- #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）。
-
-- #158/#162：PDF chrome → 收敛 `pdf-toolbar` 的 2 行布局、padding、gap 与控件样式。
+- #157：Button/Input/Select/Dialog/Tooltip primitive + reka-ui 层（已合入并 `blocking`，像素对照见 §7）。
+- #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）；`document-sidebar`
+  仍是唯一 pending surface。
+- #159：DOCX toolbar/sidebar（已合入，32/32 + 24/24 像素 0）。
+- #160：XLSX toolbar/sheet tabs/status（已合入，64/64 像素 0；ribbon 无对照）。
+- #161b：PPTX toolbar/sorter/presenter（进行中；surface 合入后先补基线再切 `blocking`）。
+- #162：PDF toolbar/sidebar（已合入，40/40 + 24/24 像素 0）。
 - #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
-- #164：document blocks 渲染对照。
-- #165：gate、基线、stylelint/axe、文档——已完成基础设施；pending surface 逐个切 `blocking`
-  （见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。
+- #164：document blocks（已合入，232/232 像素 0；FileSystem/SchemaBuilder 延期）。
+- #165：gate、基线、stylelint/axe、文档——基础设施已完成；18 个可渲染 surface 已全部 `blocking`，
+  等 #158/#161b 收尾后切 `prMode: all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。

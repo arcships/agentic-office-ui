@@ -63,7 +63,11 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   const core = manifest.surfaces.filter((surface) => surface.core).map((surface) => surface.id);
   assert.deepEqual(core, manifest.coreSubset.surfaces);
   assert.ok(core.includes("button"));
-  assert.ok(!core.includes("docx-toolbar"), "docx chrome stays out of the PR subset until #159 closes");
+  assert.ok(core.includes("input"));
+  assert.ok(core.includes("docx-toolbar"), "closed DOCX chrome gates on pull requests");
+  assert.ok(core.includes("xlsx-toolbar"), "closed XLSX chrome gates on pull requests");
+  assert.ok(!core.includes("bounding-box-citations"), "the large block matrix stays nightly-only");
+  assert.ok(!core.includes("document-sidebar"), "the pending sidebar stays out of the PR subset");
 
   for (const surface of manifest.surfaces) {
     assert.ok(["blocking", "pending"].includes(surface.gateStatus), `${surface.id} gateStatus`);
@@ -84,29 +88,31 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     .map((surface) => surface.id)
     .sort();
   assert.deepEqual(blocking, [
+    "bounding-box-citations",
     "button",
     "dialog",
+    "document-splits",
+    "docx-sidebar",
+    "docx-toolbar",
+    "e-signature",
     "file-thumbnail",
     "file-upload",
+    "input",
+    "layout-blocks",
     "pdf-sidebar",
     "pdf-toolbar",
     "select",
     "tooltip",
+    "xlsx-sheet-tabs",
+    "xlsx-status-bar",
+    "xlsx-toolbar",
   ]);
   const pending = manifest.surfaces
     .filter((surface) => surface.gateStatus === "pending")
     .map((surface) => `${surface.id}:${surface.gatePendingIssue}`)
     .sort();
-  assert.deepEqual(pending, [
-    "docx-sidebar:#159",
-    "docx-toolbar:#159",
-    "document-blocks:#164",
-    "document-sidebar:#158",
-    "input:#157",
-    "xlsx-sheet-tabs:#160",
-    "xlsx-status-bar:#160",
-    "xlsx-toolbar:#160",
-  ].sort());
+  // Only the canonical DocumentViewerSidebar (#158) is still in flight.
+  assert.deepEqual(pending, ["document-sidebar:#158"]);
 });
 
 test("committed baselines cover exactly the gate-blocking matrix", () => {
@@ -136,7 +142,7 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 152);
+  assert.equal(baselineManifest.files.length, 348);
 
   for (const file of baselineManifest.files) {
     assert.match(file.path, /^[a-z0-9-]+\/[a-z0-9-]+\/(light|dark)-[0-9]+x[0-9]+\.png$/);

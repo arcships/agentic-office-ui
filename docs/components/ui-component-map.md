@@ -27,7 +27,7 @@
 |---|---|---|---|---|---|
 | `apps/v4/components/ui/button.tsx` | adapted | `OfficeButton` | `button` | ✅ blocking | 6 variant × 4 size + loading/disabled；[ui-primitives.md](ui-primitives.md) |
 | `apps/v4/components/ui/button.tsx` | adapted | `OfficeIconButton` | `button`（`icon-sm`） | ✅ blocking | 复用 Button 的 token 与 focus ring，必有可访问名称 |
-| `apps/v4/components/ui/input.tsx` | adapted | `OfficeInput` | `input` | ⏳ #157 | focus ring 在 wrapper 的 `:has(:focus-visible)` 上 |
+| `apps/v4/components/ui/input.tsx` | adapted | `OfficeInput` | `input` | ✅ blocking | focus ring 在 wrapper 的 `:has(:focus-visible)` 上；#157 已 40/40 像素 0 |
 | `apps/v4/components/ui/input.tsx` | adapted | `OfficeTextarea` | — | — | 上游没有 `textarea.tsx`，多行控件沿用 Input token |
 | `apps/v4/components/ui/select.tsx` | adapted | `OfficeSelect` | `select` | ✅ blocking | reka-ui listbox；`class` 合并到 trigger |
 | `apps/v4/components/ui/dialog.tsx` | adapted | `OfficeDialog` | `dialog` | ✅ blocking | header/description/footer 槽位 + close |
@@ -53,7 +53,7 @@
 |---|---|---|---|---|---|
 | `apps/v4/components/extend/pdf-viewer.tsx`（toolbar 行） | reference-only | `OfficeToolbar` + `OfficeToolbarGroup` + `OfficeToolbarSeparator` | `pdf-toolbar` | ✅ blocking | 40/40 像素一致（#162） |
 | `apps/v4/components/extend/pdf-viewer.tsx`（page/zoom） | reference-only | `OfficePageControl` / `OfficeZoomControl` | `pdf-toolbar`, `docx-toolbar` | 见 surface | 页码与缩放输入 |
-| `apps/v4/components/extend/pdf-viewer.tsx`（search） | reference-only | `OfficeSearchPopover` / `OfficeFindBar` | `docx-toolbar` | ⏳ #159 | 搜索浮层与 find bar |
+| `apps/v4/components/extend/pdf-viewer.tsx`（search） | reference-only | `OfficeSearchPopover` / `OfficeFindBar` | `docx-toolbar` | ✅ blocking | 搜索浮层与 find bar；默认行保持上游 toolbar |
 | `apps/v4/components/extend/document-viewer-sidebar.tsx` | reference-only | `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | `pdf-sidebar`, `document-sidebar` | `pdf-sidebar` ✅ blocking；`document-sidebar` ⏳ #158 | 160px rail，inline/overlay |
 | `apps/v4/components/extend/pdf-viewer.tsx`（状态区） | reference-only | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeStatusBar` | `pdf-toolbar`, `document-sidebar` | 见 surface | 空/加载/状态条 |
 
@@ -71,20 +71,21 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 
 | 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
 |---|---|---|---|---|---|
-| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookToolbar`） | reference-only | `XlsxToolbar`（`OfficeToolbar` + `OfficeIconButton` + `HugeIcon`） | `xlsx-toolbar` | ⏳ #160 | 4 viewport × light/dark 共 32 case 全部 0px；下载/导出/上传/打印/分页在 ⋯ 菜单 |
-| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookSheetTabsInner`） | reference-only | `XlsxSheetTabs` | `xlsx-sheet-tabs` | ⏳ #160 | 24 case 全部 0px；新增/删除/翻页按钮改成 `show-sheet-actions`（默认关） |
-| `apps/v4/components/extend/file-system.tsx`（`aria-live` 状态条） | reference-only | `XlsxStatusBar`（`OfficeStatusBar`） | `xlsx-status-bar` | ⏳ #160 | 上游 XLSX 没有状态栏，取 Extend 自己的状态条 markup 作参考；8 case 全部 0px |
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookToolbar`） | reference-only | `XlsxToolbar`（`OfficeToolbar` + `OfficeIconButton` + `HugeIcon`） | `xlsx-toolbar` | ✅ blocking | 4 viewport × light/dark 共 32 case 全部 0px；下载/导出/上传/打印/分页在 ⋯ 菜单 |
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookSheetTabsInner`） | reference-only | `XlsxSheetTabs` | `xlsx-sheet-tabs` | ✅ blocking | 24 case 全部 0px；新增/删除/翻页按钮改成 `show-sheet-actions`（默认关） |
+| `apps/v4/components/extend/file-system.tsx`（`aria-live` 状态条） | reference-only | `XlsxStatusBar`（`OfficeStatusBar`） | `xlsx-status-bar` | ✅ blocking | 上游 XLSX 没有状态栏，取 Extend 自己的状态条 markup 作参考；8 case 全部 0px |
 | `apps/v4/components/extend/xlsx-editor.tsx`（格式行/公式行） | reference-only | `XlsxRibbon` / `XlsxFormulaBar` | — | — | 上游 editor 的公式行是私有包内部的 `Group`，暂无对照 surface |
 
 ## 5. Block 组件（文档内容块，#164）
 
 | 上游 Extend 文件 | 状态 | 本仓库导出 | parity surface | 基线 | 备注 |
 |---|---|---|---|---|---|
-| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | reference-only | `BoundingBoxCitations` | `document-blocks` | ⏳ #164 | 引用框叠加层 |
-| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | reference-only | `LayoutBlocks` | `document-blocks` | ⏳ #164 | Block 布局容器 |
-| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | reference-only | `SignaturePad` | — | — | 画布组件，边框/背景已 token 化 |
-| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | reference-only | 未实现（#164 评估） | — | — | 登记来源，避免以后从头找 |
-| `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | 未实现（#164 后置） | — | — | 同上 |
+| `apps/v4/components/extend/bounding-box-citations.tsx` + `registry/new-york-v4/blocks/bounding-box-citations-block.tsx` | adapted | `BoundingBoxCitations` | `bounding-box-citations` | ✅ blocking | Form 标量字段、Expected/Modified、空/加载/错误；8 状态 0px（#164） |
+| `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | adapted | `LayoutBlocks` | `layout-blocks` | ✅ blocking | OCR 面板、叠加层、markdown；7 状态 0px（#164） |
+| `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | adapted | `ESignatureFields` / `SignaturePad` | `e-signature` | ✅ blocking | Unsigned/Signed/Exporting/Preview；6 状态 0px（#164） |
+| `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | adapted | `DocumentSplits` | `document-splits` | ✅ blocking | 区间/缩略图/增删/键盘排序；8 状态 0px（#164） |
+| `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | — | — | — | 延期：私有文件系统依赖，已记录在 [document-blocks.md](document-blocks.md) |
+| `apps/v4/registry/new-york-v4/blocks/schema-builder.tsx` | reference-only | — | — | — | 延期：独立表单构建器，已记录在 [document-blocks.md](document-blocks.md) |
 | Extend 选区/标注 blocks | reference-only | `OfficeRegionSelector` / `OfficeRegionAnnotator` / `OfficeObjectOutlineLayer` | — | — | 规范坐标选区原语，见[组件手册](README.md) |
 
 ## 6. Viewer 外壳
@@ -92,8 +93,8 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 | 包 | 组件 | 上游 Extend 文件 | parity surface | 基线 |
 |---|---|---|---|---|
 | `@arcships/vue-pdf` | `PdfViewer` | `apps/v4/components/extend/pdf-viewer.tsx` | `pdf-toolbar`, `pdf-sidebar` | ✅ blocking（#162） |
-| `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ⏳ #159 |
-| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ⏳ #160（32 + 24 + 8 case 全 0px） |
+| `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ✅ blocking（#159：32/32 + 24/24） |
+| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ blocking（#160：32 + 24 + 8 case 全 0px） |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface | 见 [pptx-chrome.md](pptx-chrome.md) |
 
 ## 7. 面板与文档

@@ -225,8 +225,7 @@
         }
       ],
       "core": true,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#157"
+      "gateStatus": "blocking"
     },
     {
       "id": "select",
@@ -578,9 +577,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#159"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "docx-sidebar",
@@ -618,9 +616,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#159"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "document-sidebar",
@@ -740,7 +737,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "layout-blocks",
@@ -813,7 +810,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "e-signature",
@@ -876,7 +873,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "document-splits",
@@ -957,7 +954,7 @@
         }
       ],
       "core": false,
-      "gateStatus": "ready"
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-toolbar",
@@ -1005,9 +1002,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-sheet-tabs",
@@ -1047,9 +1043,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "xlsx-status-bar",
@@ -1071,9 +1066,8 @@
           }
         }
       ],
-      "core": false,
-      "gateStatus": "pending",
-      "gatePendingIssue": "#160"
+      "core": true,
+      "gateStatus": "blocking"
     }
   ],
   "coreSubset": {
@@ -1087,7 +1081,12 @@
       "file-upload",
       "file-thumbnail",
       "pdf-toolbar",
-      "pdf-sidebar"
+      "pdf-sidebar",
+      "docx-toolbar",
+      "docx-sidebar",
+      "xlsx-toolbar",
+      "xlsx-sheet-tabs",
+      "xlsx-status-bar"
     ]
   },
   "baselines": {

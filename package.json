@@ -46,7 +46,7 @@
     "ui:parity:core": "node scripts/ci/pixel-parity.mjs --only core --gate-mode ready --baseline --skip-tokens",
     "ui:parity:full": "node scripts/ci/pixel-parity.mjs --gate-mode ready --baseline --skip-tokens",
     "ui:parity:self-check": "node scripts/ci/pixel-parity.mjs --self-check --out output/ui-parity-selfcheck",
-    "ui:baseline": "node scripts/ci/visual-baseline.mjs capture",
+    "ui:baseline": "node scripts/ci/visual-baseline.mjs",
     "ui:baseline:verify": "node scripts/ci/visual-baseline.mjs verify --require-approval",
     "ui:baseline:status": "node scripts/ci/visual-baseline.mjs status",
     "lint:style": "node scripts/ci/lint-styles.mjs",

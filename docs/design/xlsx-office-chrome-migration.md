@@ -191,9 +191,9 @@ python3 scripts/ci/run-python.mjs scripts/ci/capture-office-chrome.py --serve ap
 | 合计 | 64 | **64/64 pass** |
 
 矩阵与阈值（`geometryTolerancePx: 0`、`maxDiffPixelRatio: 0.001`）一字未改。
-三条 surface 现在是 `gateStatus: pending`（`gatePendingIssue: #160`）：采集与报告都跑，
-但还没有提交侧基线；切 `blocking` 要走 `pnpm ui:baseline capture --approve …`
-（见 [ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。
+#165 在 0.8 集成分支上复跑同一命令仍为 **64/64 pass、0 AA**，随后把三条 surface 切为
+`gateStatus: blocking` 并提交对照侧基线（8 state × 2 viewport × 2 theme = 32 张）；
+采集/审批流程见 [ui-parity-ci.md §5](../testing/ui-parity-ci.md)。`xlsx-ribbon` 仍无对照基线。
 
 仍然**不可达**的对照：
 
