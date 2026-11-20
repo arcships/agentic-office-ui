@@ -191,7 +191,13 @@ def wait_ready(page, surface: str) -> None:
         timeout=30_000,
     )
     page.wait_for_function("document.fonts.status === 'loaded'", timeout=30_000)
-    page.evaluate("() => document.fonts.ready")
+    page.evaluate(
+        """async () => {
+          await document.fonts.load('16px "Geist Variable"');
+          await document.fonts.load('16px "Geist Mono Variable"');
+          await document.fonts.ready;
+        }"""
+    )
     page.wait_for_timeout(120)
 
 
