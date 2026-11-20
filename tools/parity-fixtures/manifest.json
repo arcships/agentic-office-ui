@@ -734,6 +734,14 @@
           "interaction": {
             "type": "none"
           }
+        },
+        {
+          "id": "wrapped",
+          "label": "wrapped message",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
         }
       ],
       "core": false,
