@@ -1,7 +1,7 @@
 <!-- Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn. -->
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false })
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { officeClass, type OfficeControlSize } from "./types"
 
 export interface OfficeInputProps {
@@ -33,6 +33,8 @@ const emit = defineEmits<{
   "update:modelValue": [value: string]
 }>()
 
+const inputRef = ref<HTMLInputElement | null>(null)
+
 const controlClasses = computed(() =>
   officeClass(
     "office-ui",
@@ -53,6 +55,11 @@ const inputClasses = computed(() =>
 function onInput(event: Event) {
   emit("update:modelValue", (event.target as HTMLInputElement).value)
 }
+
+defineExpose({
+  focus: () => inputRef.value?.focus(),
+  input: inputRef,
+})
 </script>
 
 <template>
@@ -63,6 +70,7 @@ function onInput(event: Event) {
     data-slot="input-control"
   >
     <input
+      ref="inputRef"
       v-bind="$attrs"
       :class="inputClasses"
       :type="props.type"

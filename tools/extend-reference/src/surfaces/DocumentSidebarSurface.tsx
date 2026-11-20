@@ -44,7 +44,12 @@ export function DocumentSidebarSurface({ cellWidth }: { cellWidth: number }) {
           width={cellWidth}
         >
           {entry.state === "skeleton" ? (
-            <div style={{ width: sidebar.widthPx, height: 240, overflow: "hidden" }}>
+            <div
+              style={{ width: sidebar.widthPx, height: 240, overflow: "hidden" }}
+              data-document-thumbnail-sidebar=""
+              data-sidebar-mode="inline"
+              data-sidebar-open="true"
+            >
               <DocumentViewerSidebarSkeleton inline />
             </div>
           ) : (

@@ -4,6 +4,8 @@ import { readQuery } from "./fixtures";
 import ParitySurface from "./parity/ParitySurface.vue";
 import ButtonSurface from "./surfaces/ButtonSurface.vue";
 import DialogSurface from "./surfaces/DialogSurface.vue";
+import DocxSidebarSurface from "./surfaces/DocxSidebarSurface.vue";
+import DocxToolbarSurface from "./surfaces/DocxToolbarSurface.vue";
 import FileThumbnailSurface from "./surfaces/FileThumbnailSurface.vue";
 import FileUploadSurface from "./surfaces/FileUploadSurface.vue";
 import InputSurface from "./surfaces/InputSurface.vue";
@@ -73,6 +75,16 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     />
     <PdfToolbarSurface
       v-else-if="surface.id === 'pdf-toolbar'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <DocxToolbarSurface
+      v-else-if="surface.id === 'docx-toolbar'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <DocxSidebarSurface
+      v-else-if="surface.id === 'docx-sidebar'"
       :cell-width="surface.cellWidth"
       :theme="theme"
     />

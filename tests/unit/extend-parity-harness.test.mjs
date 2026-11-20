@@ -57,6 +57,8 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "file-upload",
       "file-thumbnail",
       "pdf-toolbar",
+      "docx-toolbar",
+      "docx-sidebar",
       "document-sidebar",
       "document-blocks",
     ],
@@ -167,6 +169,7 @@ test("shell asks for the full state coverage on reference surfaces", () => {
     "FileUploadSurface",
     "FileThumbnailSurface",
     "PdfToolbarSurface",
+    "DocxToolbarSurface",
     "DocumentSidebarSurface",
   ]) {
     assert.ok(referenceApp.includes(surfaceId), `reference app does not mount ${surfaceId}`);
@@ -207,6 +210,7 @@ test("vendored components carry the MIT attribution header", () => {
     "tools/extend-reference/src/vendor/extend/file-upload.tsx",
     "tools/extend-reference/src/vendor/extend/file-thumbnail.tsx",
     "tools/extend-reference/src/vendor/extend/document-viewer-sidebar.tsx",
+    "tools/extend-reference/src/vendor/extend/docx-toolbar.tsx",
     "tools/extend-reference/src/vendor/extend/pdf-toolbar.tsx",
     "tools/extend-reference/src/lib/cn.ts",
     "tools/extend-reference/src/styles/extend-globals.css",

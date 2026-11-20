@@ -243,6 +243,40 @@
   min-inline-size: 0;
 }
 
+/* Inline variant: a permanent toolbar search field instead of a popover. */
+.office-search-popover--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--office-ui-space-1);
+}
+
+.office-search-popover--inline .office-input-control {
+  flex: 0 1 8.25rem;
+  inline-size: 8.25rem;
+  min-inline-size: 5rem;
+}
+
+.office-search-popover--inline .office-search-popover__row {
+  display: contents;
+}
+
+.office-search-popover--inline .office-search-popover__options {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  order: 1;
+}
+
+.office-search-popover--inline .office-search-popover__status {
+  flex: 0 1 auto;
+  order: 2;
+  min-inline-size: 2rem;
+  text-align: center;
+}
+
+.office-search-popover--inline .office-search-popover__navigation {
+  order: 3;
+}
+
 .office-search-popover__row {
   display: flex;
   align-items: center;
@@ -506,6 +540,7 @@
 
 .office-document-sidebar[data-sidebar-open="false"] {
   border-inline-end-color: transparent;
+  border-inline-end-width: 0;
 }
 
 .office-document-sidebar--inline[data-sidebar-open="false"] {
