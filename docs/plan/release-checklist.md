@@ -26,8 +26,10 @@
 
 - [ ] **`ui-parity` 结果**：附 `ui-parity-core-<sha>` artifact 链接，或本地
       `pnpm ui:parity:core` 的 `SUMMARY.md`；`gate: PASS` 且 `blocking=0`。
-- [ ] 若本次改动涉及 pending surface（`input`/`docx-*`/`document-sidebar`/`document-blocks`），
-      附 nightly 全矩阵 artifact，并写明剩余 delta 归哪个 issue。
+- [ ] 若本次改动涉及 pending surface（当前为 `document-sidebar` #158 与 unreachable 的
+      `pptx-presenter` #161），附 nightly 全矩阵 artifact，并写明剩余 delta 归哪个 issue。
+- [ ] 全部 surface 就绪后，确认 `pnpm ui:parity -- --gate-mode all --baseline` 通过，再把
+      workflow 的 strict 开关按 [ui-parity-ci.md §5](../testing/ui-parity-ci.md) 切成最终形态。
 - [ ] `pnpm ui:baseline:verify` 通过；基线变化都有审批记录（`APPROVALS.md` 新增行）。
 - [ ] `pnpm lint:style` 输出 `new=0`；新增裸值要么修掉，要么有审批记录。
 - [ ] `pnpm test:a11y` 通过；新增 allowlist 条目必须带 issue 与理由。
