@@ -1,32 +1,15 @@
 <template>
-  <Teleport to="body">
-    <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
-    <div class="office-overlay__backdrop xlsx-authoring-backdrop" data-testid="xlsx-authoring-backdrop" @pointerdown="emit('close')" />
-    <div
-      ref="dialogRef"
-      class="office-ui office-dialog__content office-dialog__content--lg xlsx-authoring"
-      :class="{ 'xlsx-authoring--dark': isDark }"
-      data-testid="xlsx-authoring-dialog"
-      :data-kind="kind"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="dialogTitle"
-      tabindex="-1"
-      @keydown.escape.stop.prevent="emit('close')"
-      @pointerdown.stop
+  <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
+    <OfficeDialog
+      :open="true"
+      :title="dialogTitle"
+      :close-label="m.xlsx.authoring.close"
+      :close-test-id="'xlsx-authoring-close'"
+      :content-test-id="'xlsx-authoring-dialog'"
+      :content-data="{ 'data-kind': kind }"
+      :class="dialogClasses"
+      @update:open="onDialogOpenChange"
     >
-      <header class="office-dialog__header xlsx-authoring__header">
-        <h2 class="office-dialog__title xlsx-authoring__title">{{ dialogTitle }}</h2>
-        <button
-          type="button"
-          class="office-button office-button--ghost office-button--size-icon-sm office-dialog__close xlsx-authoring__close"
-          data-testid="xlsx-authoring-close"
-          :title="m.xlsx.authoring.close"
-          :aria-label="m.xlsx.authoring.close"
-          @click="emit('close')"
-        ><span class="office-button__content" aria-hidden="true">×</span></button>
-      </header>
-      <div class="office-dialog__body xlsx-authoring__body">
       <p class="xlsx-authoring__range" data-testid="xlsx-authoring-range">{{ rangeLabel }}</p>
       <p v-if="statusMessage" class="xlsx-authoring__status" data-testid="xlsx-authoring-status" role="status">
         {{ statusMessage }}
@@ -397,14 +380,12 @@
         v-else-if="kind === 'names'"
         :controller="controller"
       />
-      </div>
-    </div>
-    </OfficeThemeProvider>
-  </Teleport>
+    </OfficeDialog>
+  </OfficeThemeProvider>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import type {
   XlsxCellAddress,
@@ -413,7 +394,7 @@ import type {
   XlsxConditionalFormatRule,
   XlsxViewerController,
 } from "@arcships/xlsx-core";
-import { OfficeThemeProvider } from "@arcships/vue-ui";
+import { OfficeDialog, OfficeThemeProvider } from "@arcships/vue-ui";
 import { useXlsxMessages } from "../i18n";
 import XlsxNameManagerSection from "./XlsxNameManagerSection.vue";
 import XlsxNumberFormatSection from "./XlsxNumberFormatSection.vue";
@@ -429,7 +410,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const m = useXlsxMessages();
-const dialogRef = ref<HTMLElement | null>(null);
+
 const statusMessage = ref("");
 const activeCell = computed<XlsxCellAddress | null>(() => props.controller.activeCell ?? null);
 const selectionRange = computed<XlsxCellRange | null>(() => {
@@ -449,6 +430,15 @@ const rangeLabel = computed(() => {
     : props.controller.activeCellAddress;
   return formatOfficeMessage(m.value.xlsx.authoring.rangeLabel, { range: address ?? "" });
 });
+
+const dialogClasses = computed(() => (props.isDark
+  ? "xlsx-authoring xlsx-authoring--dark"
+  : "xlsx-authoring"));
+
+/** Reka owns Esc/backdrop dismissal; both funnel into the public close event. */
+function onDialogOpenChange(value: boolean): void {
+  if (!value) emit("close");
+}
 
 const dialogTitle = computed(() => {
   switch (props.kind) {
@@ -471,10 +461,6 @@ const dialogTitle = computed(() => {
     default:
       return m.value.xlsx.authoring.validation.title;
   }
-});
-
-onMounted(() => {
-  void nextTick(() => dialogRef.value?.focus?.());
 });
 
 // ── Chart ────────────────────────────────────────────────────────────
@@ -868,6 +854,19 @@ function removeValidation() {
 
 /* Shared section controls. The paste-special, number-format and Name Manager
    sections are child components, so they need these rules unscoped. */
+/* The authoring surface keeps its compact width on top of the shared dialog. */
+.xlsx-authoring.office-dialog__content {
+  gap: var(--office-ui-space-2, 0.5rem);
+  max-block-size: min(82vh, 720px);
+  max-inline-size: min(92vw, 520px);
+}
+.xlsx-authoring .office-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2, 0.5rem);
+  padding-block-start: 0;
+}
+
 .xlsx-authoring__field { display: flex; flex-direction: column; font-size: var(--office-text-xs, 0.75rem); gap: 4px; }
 .xlsx-authoring__field select,
 .xlsx-authoring__field input,
@@ -906,46 +905,10 @@ function removeValidation() {
 
 <style scoped>
 /*
- * The panel is the shared `.office-dialog__content` surface (centred modal,
- * `lg` width, shared header/body/footer parts). Only the spreadsheet-specific
- * pieces — range chip, section stack, conditional-format thresholds — need
- * local rules, and every colour resolves from an Office token.
+ * `OfficeDialog` owns the shell (overlay, header/title/close, scroll body), so
+ * this block only styles slot content: the range chip, status line, sections
+ * and the conditional-format controls.
  */
-.xlsx-authoring-backdrop {
-  backdrop-filter: none;
-}
-
-.xlsx-authoring {
-  gap: var(--office-ui-space-2, 0.5rem);
-  max-block-size: min(82vh, 720px);
-  max-inline-size: min(92vw, 480px);
-}
-
-.xlsx-authoring__header {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  padding-block-end: var(--office-ui-space-2, 0.5rem);
-}
-
-.xlsx-authoring__title {
-  font-size: var(--office-text-lg, 1.125rem);
-}
-
-.xlsx-authoring__close {
-  border-radius: var(--office-radius-md, 0.5rem);
-  font-size: 18px;
-  line-height: 1;
-  position: static;
-}
-
-.xlsx-authoring__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--office-ui-space-2, 0.5rem);
-  padding-block-start: 0;
-}
-
 .xlsx-authoring__range {
   color: var(--office-muted-foreground, #71717a);
   font-size: var(--office-text-xs, 0.75rem);

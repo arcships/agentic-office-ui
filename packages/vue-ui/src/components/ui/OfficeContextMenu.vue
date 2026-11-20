@@ -26,6 +26,17 @@ export interface OfficeContextMenuProps {
   sideOffset?: number
   alignOffset?: number
   disabled?: boolean
+  /** `data-testid` for the portalled menu content. */
+  contentTestId?: string
+  /** Extra `data-*` attributes for the menu content (surface contracts). */
+  contentData?: Record<string, string | number | boolean | undefined>
+  /** Accessible name for the menu. */
+  contentAriaLabel?: string
+  /**
+   * Element that receives focus after the menu closes. Returning `null`
+   * leaves Reka's default (the trigger) in place.
+   */
+  restoreFocus?: () => HTMLElement | null | undefined
   /** Extra classes merged on the trigger area. */
   class?: string
   /** Extra classes merged on the portalled content. */
@@ -39,6 +50,10 @@ const props = withDefaults(defineProps<OfficeContextMenuProps>(), {
   sideOffset: 4,
   alignOffset: 0,
   disabled: false,
+  contentTestId: undefined,
+  contentData: undefined,
+  contentAriaLabel: undefined,
+  restoreFocus: undefined,
   class: "",
   contentClass: "",
 })
@@ -58,6 +73,14 @@ function handleSelect(entry: OfficeMenuEntry, event: Event) {
   const callback = (entry as { onSelect?: (item: OfficeMenuEntry) => void }).onSelect
   callback?.(entry)
   emit("select", entry, event)
+}
+
+/** See `OfficeDropdownMenu`: let hosts return focus to the invoking surface. */
+function onCloseAutoFocus(event: Event) {
+  const target = props.restoreFocus?.() ?? null
+  if (!target) return
+  event.preventDefault()
+  target.focus()
 }
 </script>
 
@@ -81,7 +104,11 @@ function handleSelect(entry: OfficeMenuEntry, event: Event) {
         :align="props.align"
         :side-offset="props.sideOffset"
         :align-offset="props.alignOffset"
+        :data-testid="props.contentTestId"
+        :aria-label="props.contentAriaLabel"
+        v-bind="props.contentData"
         data-slot="context-menu-content"
+        @close-auto-focus="onCloseAutoFocus"
       >
         <OfficeMenuList
           kind="context"

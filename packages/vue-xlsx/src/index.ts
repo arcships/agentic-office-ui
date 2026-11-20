@@ -149,6 +149,16 @@ export { default as XlsxRangeHighlightLayer } from "./components/XlsxRangeHighli
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
 /**
+ * Row/column header menu rendered by `XlsxGrid` on the shared
+ * `OfficeDropdownMenu` primitive. Hosts that embed the grid alone can mount it.
+ */
+export { default as XlsxHeaderMenu } from "./components/XlsxHeaderMenu.vue"
+/**
+ * AutoFilter value panel rendered by `XlsxGrid` on the shared
+ * `OfficeDropdownMenu` primitive. Hosts that embed the grid alone can mount it.
+ */
+export { default as XlsxAutoFilterMenu } from "./components/XlsxAutoFilterMenu.vue"
+/**
  * Authoring dialog for charts, comments, hyperlinks, tables, conditional
  * formats and data validation. `XlsxViewer` renders it from the ribbon and
  * context menu; hosts that embed `XlsxSheetSurface` can mount it directly.
