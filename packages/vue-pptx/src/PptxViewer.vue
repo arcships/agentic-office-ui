@@ -129,31 +129,49 @@
 
       <template #trailing>
         <OfficeToolbarGroup gap="sm" :wrap="false">
-          <OfficeIconButton
-            :label="m.common.zoom.out"
-            icon="minus"
-            size="icon-sm"
-            :disabled="state !== 'ready' || zoom <= 50"
-            data-testid="pptx-zoom-out"
-            @click="run(() => setZoom(zoom - 25))"
-          />
-          <OfficeButton
-            variant="outline"
-            size="sm"
-            class="pptx-viewer__zoom-value"
-            :aria-label="m.common.zoom.reset"
+          <!--
+            In a browser the toolbar uses the shared zoom control (presets plus
+            fit modes, Reka Select). The DOM-free component-test renderer gets
+            the equivalent icon-button cluster because Reka's Select needs a
+            real DOM; both paths call the same `setZoom()`.
+          -->
+          <OfficeZoomControl
+            v-if="canUseDom"
+            :model-value="zoom"
+            :min="50"
+            :max="200"
+            :options="[50, 75, 100, 125, 150, 200]"
+            :show-fit="false"
             :disabled="state !== 'ready'"
-            data-testid="pptx-zoom-reset"
-            @click="run(() => setZoom(100))"
-          >{{ zoom }}%</OfficeButton>
-          <OfficeIconButton
-            :label="m.common.zoom.in"
-            icon="plus"
-            size="icon-sm"
-            :disabled="state !== 'ready' || zoom >= 200"
-            data-testid="pptx-zoom-in"
-            @click="run(() => setZoom(zoom + 25))"
+            @update:model-value="run(() => setZoom($event))"
           />
+          <template v-else>
+            <OfficeIconButton
+              :label="m.common.zoom.out"
+              icon="minus"
+              size="icon-sm"
+              :disabled="state !== 'ready' || zoom <= 50"
+              data-testid="pptx-zoom-out"
+              @click="run(() => setZoom(zoom - 25))"
+            />
+            <OfficeButton
+              variant="outline"
+              size="sm"
+              class="pptx-viewer__zoom-value"
+              :aria-label="m.common.zoom.reset"
+              :disabled="state !== 'ready'"
+              data-testid="pptx-zoom-reset"
+              @click="run(() => setZoom(100))"
+            >{{ zoom }}%</OfficeButton>
+            <OfficeIconButton
+              :label="m.common.zoom.in"
+              icon="plus"
+              size="icon-sm"
+              :disabled="state !== 'ready' || zoom >= 200"
+              data-testid="pptx-zoom-in"
+              @click="run(() => setZoom(zoom + 25))"
+            />
+          </template>
           <OfficeToolbarSeparator v-if="showFullscreenControl" />
           <OfficeIconButton
             v-if="showFullscreenControl"
@@ -470,6 +488,7 @@ import {
   OfficeToolbar,
   OfficeToolbarGroup,
   OfficeToolbarSeparator,
+  OfficeZoomControl,
 } from "@arcships/vue-ui"
 import type { OfficeMenuEntry, ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
@@ -1176,9 +1195,15 @@ const linkMenuItems = computed<OfficeMenuEntry[]>(() => {
     id: "open",
     label: contextMenuOpenLabel.value,
     icon: target?.kind === "slide" ? "arrow-right" : "link",
+    testId: "pptx-context-menu-open-link",
   }]
   if (contextMenuCopyValue.value) {
-    items.push({ id: "copy", label: m.value.pptx.viewer.link.copy, icon: "copy" })
+    items.push({
+      id: "copy",
+      label: m.value.pptx.viewer.link.copy,
+      icon: "copy",
+      testId: "pptx-context-menu-copy-link",
+    })
   }
   return items
 })
