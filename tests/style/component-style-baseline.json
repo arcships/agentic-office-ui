@@ -9,7 +9,7 @@
   "approved": {
     "reviewer": "dim-agent",
     "issue": "#165",
-    "reason": "Freeze the 0.8 pre-migration component CSS debt measured before the style guard lands; easing keywords stay legal because the token layer has no easing token.",
+    "reason": "SignaturePad styles from #164 landed after the #165 baseline was captured",
     "date": "2026-11-20"
   },
   "counts": {
@@ -145,8 +145,16 @@
       "declaration-property-unit-disallowed-list": 16
     },
     "packages/vue-ui/src/components/BoundingBoxCitations.vue": {
-      "color-no-hex": 12,
-      "declaration-property-unit-disallowed-list": 10
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 25,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-ui/src/components/DocumentSplits.vue": {
+      "declaration-property-unit-disallowed-list": 16
+    },
+    "packages/vue-ui/src/components/ESignatureFields.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 1
     },
     "packages/vue-ui/src/components/FileThumbnail.vue": {
       "declaration-property-unit-disallowed-list": 4,
@@ -157,8 +165,8 @@
       "declaration-property-unit-disallowed-list": 5
     },
     "packages/vue-ui/src/components/LayoutBlocks.vue": {
-      "color-no-hex": 10,
-      "declaration-property-unit-disallowed-list": 8
+      "declaration-property-unit-disallowed-list": 13,
+      "declaration-property-value-disallowed-list": 2
     },
     "packages/vue-ui/src/components/OfficeFindBar.vue": {
       "color-no-hex": 12,
@@ -178,6 +186,10 @@
       "color-no-hex": 5,
       "declaration-property-unit-disallowed-list": 4,
       "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-ui/src/components/SignaturePad.vue": {
+      "color-no-hex": 8,
+      "declaration-property-unit-disallowed-list": 5
     },
     "packages/vue-ui/src/print.css": {
       "color-no-hex": 2
@@ -266,12 +278,12 @@
     }
   },
   "totals": {
-    "files": 59,
-    "warnings": 977,
+    "files": 62,
+    "warnings": 1015,
     "byRule": {
-      "color-no-hex": 564,
-      "declaration-property-unit-disallowed-list": 371,
-      "declaration-property-value-disallowed-list": 42
+      "color-no-hex": 556,
+      "declaration-property-unit-disallowed-list": 413,
+      "declaration-property-value-disallowed-list": 46
     }
   }
 }
