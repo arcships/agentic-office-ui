@@ -180,8 +180,10 @@ function exportSigned(field: ESignatureField) {
 .e-signature-fields__content > * + * {
   margin-top: var(--office-ui-space-4);
 }
-.e-signature-fields__heading > * + * {
-  margin-top: var(--office-ui-space-1);
+.e-signature-fields__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-1);
 }
 .e-signature-fields__title {
   margin: 0;

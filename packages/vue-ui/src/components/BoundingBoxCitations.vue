@@ -582,6 +582,8 @@ const jsonValue = computed(() => {
   background: var(--office-muted);
   padding: 2px;
   color: color-mix(in oklab, var(--office-muted-foreground) 72%, transparent);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
 }
 .review-tab {
   position: relative;

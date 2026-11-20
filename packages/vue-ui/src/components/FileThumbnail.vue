@@ -308,8 +308,8 @@ onBeforeUnmount(cancelReveal)
   height: 100%;
 }
 .file-thumbnail__preview--fill {
+  width: auto;
   height: 100%;
-  aspect-ratio: auto;
 }
 .file-thumbnail__image {
   position: absolute;
