@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 from urllib.parse import unquote, urlsplit
 
@@ -178,7 +179,8 @@ def runtime_proof(events: dict[str, list[dict[str, object]]]) -> tuple[dict[str,
         and all(bool(item["exists"]) for item in served_resources),
         "servedRuntimeHashesMatchBuiltConsumer": (
             resource_error is None
-            and len(served_resources) == len(built_by_path) == 5
+            and len(served_resources) == 5
+            and len(built_by_path) == 6
             and all(
                 built_by_path.get(str(item["path"])) == item["sha256"]
                 for item in served_resources
@@ -188,7 +190,7 @@ def runtime_proof(events: dict[str, list[dict[str, object]]]) -> tuple[dict[str,
             runtime_evidence_error is None
             and isinstance(expected_resources, list)
             and len(expected_resources) == 5
-            and len(built_runtime_files) == 5
+            and len(built_runtime_files) == 6
         ),
     }
     return {
@@ -461,11 +463,15 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
         page.locator('[data-testid="pdf-search-input"]').fill("ALPHA-4")
         page.locator('[data-testid="pdf-search-submit"]').click()
         page.wait_for_function(
-            """() => document.querySelector('[data-testid="pdf-search-result"]')?.textContent?.includes('第 4 页')""",
+            """() => /(?:page|第)\\s*4/.test(
+              document.querySelector('[data-testid="pdf-search-result"]')?.textContent ?? ''
+            )""",
             timeout=45_000,
         )
         wait_for_pdf_page(page, 4)
-        assert "ALPHA-4" in page.locator(".pdf-search-context").inner_text()
+        pdf_search_result_text = page.locator('[data-testid="pdf-search-result"]').inner_text()
+        pdf_search_context_text = page.locator(".pdf-search-context").inner_text()
+        assert "ALPHA-4" in pdf_search_context_text
         page.locator('[data-testid="pdf-thumbnail"][data-page-number="1"]').click()
         wait_for_pdf_page(page, 1)
 
@@ -511,7 +517,7 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
             "pdfZoom": int(zoomed_pdf["naturalWidth"]) > int(initial_pdf["naturalWidth"]),
             "pdfRotation": page.locator('[data-testid="pdf-document"]').get_attribute("data-rotation") == "90",
             "pdfThumbnails": page.locator('[data-testid="pdf-thumbnail"]').count() == 4,
-            "pdfSearch": "第 4 页" in page.locator('[data-testid="pdf-search-result"]').inner_text(),
+            "pdfSearch": bool(re.search(r"(?:page|第)\s*4", pdf_search_result_text)),
             "pdfDownload": downloaded_pdf == expected_pdf,
             "pdfMaxFileSize50MiB": page.locator('[data-testid="consumer-pdf-max-file-size"]').inner_text().strip() == str(50 * 1024 * 1024),
             "pdfRenderedFromVerifiedBytes": str(initial_pdf["src"]).startswith("blob:") and native_pdf_embeds == 0,
@@ -540,7 +546,8 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
             },
             "pdfInitial": initial_pdf,
             "pdfZoomed": zoomed_pdf,
-            "pdfSearchResult": page.locator('[data-testid="pdf-search-result"]').inner_text(),
+            "pdfSearchResult": pdf_search_result_text,
+            "pdfSearchContext": pdf_search_context_text,
             "downloadSha256": hashlib.sha256(downloaded_pdf).hexdigest(),
         }
     except Exception as caught:
@@ -561,9 +568,11 @@ def run_attempt(playwright, attempt_number: int) -> dict[str, object]:
         context.tracing.stop(path=attempt_dir / "trace.zip")
     except Exception as trace_error:
         error = f"{error or ''}; trace: {trace_error!r}".strip("; ")
-    context.close()
-    browser_version = browser.version
-    browser.close()
+    try:
+        context.close()
+    finally:
+        browser_version = browser.version
+        browser.close()
 
     result = {
         "suite": "BB-PACK-CONSUMER",

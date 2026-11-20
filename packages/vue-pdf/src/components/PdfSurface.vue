@@ -11,6 +11,7 @@
       v-if="navigationVisible"
       v-model:open="navOpen"
       :close-on-escape="false"
+      flush
       :label="m.pdf.surface.outline"
       class="pdf-surface__nav"
       data-testid="pdf-surface-nav"
@@ -24,7 +25,7 @@
       />
       <DocumentViewerSidebarSkeleton
         v-if="thumbnailsLoading"
-        :items="3"
+        variant="thumbnail"
         class="pdf-surface__thumbnails-skeleton"
       />
       <PdfThumbnailStrip
@@ -36,6 +37,7 @@
         :label="m.pdf.viewer.thumbnails"
         :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
         :pageLabel="m.pdf.viewer.pageLabel"
+        :page-sizes="renderDocument.pages"
         :heading="m.pdf.viewer.thumbnails"
         testId="pdf-surface-thumbnails"
         itemTestId="pdf-surface-thumbnail"

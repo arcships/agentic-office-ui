@@ -69,8 +69,8 @@
 
 | PDF 区域 | 共享组件 |
 |---|---|
-| 缩略图/大纲侧栏 | `DocumentViewerSidebar`（160px，inline/overlay auto） |
-| 侧栏骨架 | `DocumentViewerSidebarSkeleton` |
+| 缩略图/大纲侧栏 | `DocumentViewerSidebar`（160px，inline/overlay auto，PDF 使用 `flush` 让缩略图列表拥有整条 rail） |
+| 侧栏骨架 | `DocumentViewerSidebarSkeleton`（`variant="thumbnail"`：上游 80×112 页面占位 + 40×12 标签） |
 | 空 / 加载 / 错误 / 加密 | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeErrorState` |
 | 可见状态栏 | `OfficeStatusBar`（`show-status-bar`，默认关闭） |
 | 文本选择浮层 | `OfficePopover` + `OfficeButton`（浏览器，fixed 锚点） |
@@ -104,14 +104,22 @@
 
 ```bash
 pnpm ui:parity -- --only pdf-toolbar
+pnpm ui:parity -- --only pdf-sidebar
 ```
 
-当前结果：**PASS — 40/40，0 pass-with-AA，0 fail**（1440×900、1280×720、768×1024、
-390×844 × light/dark × default/hover/focus/active/disabled）。几何全部通过，
-像素差 **0**（`diffRatio 0.0`、`maxChannelDelta 0`），未修改阈值。
+PDF toolbar：**PASS — 40/40**（1440×900、1280×720、768×1024、390×844 × light/dark ×
+default/hover/focus/active/disabled），`diffRatio 0.0`、`maxChannelDelta 0`。
 
-为达到该结果，参考与 subject 都使用同一组 fixture 值（第 3 / 12 页、100%、侧栏关闭）；
-subject 直接渲染生产组件 `PdfViewerToolbar`，而不是加载真实 PDF。
+PDF sidebar：**PASS — 24/24**（1440/1280/768/390 × light/dark × open/closed/skeleton），
+`diffRatio 0.0`、`maxChannelDelta 0`；几何全部通过。两侧都是 160px rail、四页
+600×800 PDF、同一缩略图 PNG、数字页标签、active page 1；1440/1280/768 走 inline，
+390 走 overlay；closed 状态比较隐藏后的空 rail，skeleton 比较上游骨架。
+
+为达到该结果，参考与 subject 使用同一组 fixture 值；subject 直接渲染生产组件
+`PdfViewerToolbar` 和 PdfViewer 使用的 `DocumentViewerSidebar` + `PdfThumbnailStrip`，
+而不是加载真实 PDF。
+
+未修改阈值。
 
 ## 6. 截图 story
 

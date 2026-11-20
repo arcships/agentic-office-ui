@@ -221,7 +221,7 @@ test("PdfSurface renders a bookmark tree and hides it when the runtime has no ou
     assert.equal(withoutLabels.fake.calls.getPageLabels, 0, "runtime without page labels is not asked");
     assert.deepEqual(
       byTestId(withoutLabels.root, "pdf-surface-thumbnail").map((node) => textContent(node)),
-      ["Page 1", "Page 2", "Page 3", "Page 4"],
+      ["1", "2", "3", "4"],
       "thumbnails fall back to decimal page numbers",
     );
   } finally {
@@ -330,7 +330,7 @@ test("thumbnail strip follows the visible page and clicking a thumbnail scrolls 
       "the first page starts active",
     );
     const labels = byTestId(mounted.root, "pdf-surface-thumbnail").map((node) => textContent(node));
-    assert.deepEqual(labels, ["Page i", "Page ii", "Page iii", "Page iv"]);
+    assert.deepEqual(labels, ["i", "ii", "iii", "iv"]);
 
     // Scroll to the third page: 8 px page gap plus the 16 px stack padding.
     mounted.surface.scrollTop = 16 + 2 * (800 + 8);
@@ -382,7 +382,7 @@ test("PdfViewer shares the thumbnail strip and labels pages from the runtime", a
     await waitFor(() => byTestId(mounted.root, "pdf-thumbnail-image").length === 4, "viewer thumbnails");
     assert.equal(findByTestId(mounted.root, "pdf-thumbnails") !== undefined, true);
     const labels = byTestId(mounted.root, "pdf-thumbnail").map((node) => textContent(node));
-    assert.deepEqual(labels, ["Page i", "Page ii", "Page iii", "Page iv"]);
+    assert.deepEqual(labels, ["i", "ii", "iii", "iv"]);
     assert.equal(
       byTestId(mounted.root, "pdf-thumbnail").find((node) => classNames(node).includes("active"))
         ?.props?.["data-page-number"],

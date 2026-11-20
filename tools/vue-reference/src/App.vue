@@ -10,6 +10,7 @@ import FileThumbnailSurface from "./surfaces/FileThumbnailSurface.vue";
 import FileUploadSurface from "./surfaces/FileUploadSurface.vue";
 import InputSurface from "./surfaces/InputSurface.vue";
 import MissingSurface from "./surfaces/MissingSurface.vue";
+import PdfSidebarSurface from "./surfaces/PdfSidebarSurface.vue";
 import PdfToolbarSurface from "./surfaces/PdfToolbarSurface.vue";
 import SelectSurface from "./surfaces/SelectSurface.vue";
 import TooltipSurface from "./surfaces/TooltipSurface.vue";
@@ -75,6 +76,11 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     />
     <PdfToolbarSurface
       v-else-if="surface.id === 'pdf-toolbar'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <PdfSidebarSurface
+      v-else-if="surface.id === 'pdf-sidebar'"
       :cell-width="surface.cellWidth"
       :theme="theme"
     />

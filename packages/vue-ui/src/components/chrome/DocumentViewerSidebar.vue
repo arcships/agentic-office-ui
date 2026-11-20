@@ -35,6 +35,11 @@ export interface DocumentViewerSidebarProps {
   loading?: boolean
   /** Accessible name. Defaults to `common.chrome.sidebar`. */
   label?: string
+  /**
+   * Remove the body padding so the child owns the full rail (PDF thumbnails).
+   * Defaults to false, preserving the padded generic sidebar.
+   */
+  flush?: boolean
   /** Close an open overlay with Escape. */
   closeOnEscape?: boolean
   /**
@@ -53,6 +58,7 @@ const props = withDefaults(defineProps<DocumentViewerSidebarProps>(), {
   breakpoint: 768,
   width: 160,
   loading: false,
+  flush: false,
   label: undefined,
   closeOnEscape: true,
   container: null,
@@ -94,6 +100,7 @@ const classes = computed(() =>
     "office-ui",
     "office-document-sidebar",
     `office-document-sidebar--${resolvedMode.value}`,
+    props.flush && "office-document-sidebar--flush",
     props.class,
   ),
 )
