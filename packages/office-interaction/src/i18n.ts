@@ -1487,6 +1487,15 @@ export interface OfficeMessages {
   pptx: OfficePptxMessages
   pdf: OfficePdfMessages
   vueUi: {
+    primitives: {
+      /** Accessible name for the dialog/sheet dismiss control and the primitive close label. */
+      close: string
+      loading: string
+      menu: string
+      notifications: string
+      dialog: string
+      more: string
+    }
     regionSelector: {
       label: string
       instructions: string
@@ -2872,6 +2881,14 @@ export const officeMessagesEn: OfficeMessages = {
     },
   },
   vueUi: {
+    primitives: {
+      close: "Close",
+      loading: "Loading",
+      menu: "Menu",
+      notifications: "Notifications",
+      dialog: "Dialog",
+      more: "More",
+    },
     regionSelector: {
       label: "Selected region",
       instructions: "Drag to select a region. Use the arrow keys to move it, Shift+arrow keys to resize, Enter to confirm, and Escape to cancel.",
@@ -4239,6 +4256,14 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
   },
   vueUi: {
+    primitives: {
+      close: "关闭",
+      loading: "加载中",
+      menu: "菜单",
+      notifications: "通知",
+      dialog: "对话框",
+      more: "更多",
+    },
     regionSelector: {
       label: "选定区域",
       instructions: "拖动以框选区域。方向键移动区域，按住 Shift 配合方向键调整大小，Enter 确认，Escape 取消。",
