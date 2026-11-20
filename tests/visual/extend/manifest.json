@@ -209,9 +209,29 @@
         "default"
       ],
       "files": 4
+    },
+    "pptx-toolbar": {
+      "subjectComponent": "packages/vue-pptx/src/PptxViewerToolbar.vue ([data-pptx-toolbar])",
+      "states": [
+        "default",
+        "hover",
+        "focus",
+        "active",
+        "disabled"
+      ],
+      "files": 20
+    },
+    "pptx-sorter": {
+      "subjectComponent": "packages/vue-pptx/src/PptxSlideCard.vue + PptxThumbnail.vue ([data-pptx-sorter-grid])",
+      "states": [
+        "default",
+        "hover",
+        "selected"
+      ],
+      "files": 12
     }
   },
-  "treeSha256": "b7c1cea9ec840f39eb518dfad9e3d13d11900a2393d641d4541c0a2d4db6f7c7",
+  "treeSha256": "39b91f9c0919cc35e1504ac72e2dcdd5c03fdc4c1bbfcefd357d4ec3ad1a3e73",
   "files": [
     {
       "path": "bounding-box-citations/default/dark-1440x900.png",
@@ -3470,6 +3490,358 @@
       "sha256": "0b30aa95134e954e4e1c0927a31873b457923765bf78276873546c2b4f15cb77"
     },
     {
+      "path": "pptx-sorter/default/dark-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6266,
+      "sha256": "a5ebf62d0d238b77ab484f1f990d3b0287ea7f8ed2f54b57f02bf707e51cd279"
+    },
+    {
+      "path": "pptx-sorter/default/dark-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 4659,
+      "sha256": "cc0d9079c75287175095640e47ca7bd2a3605b9b6a503e8ef372cd7614f8c192"
+    },
+    {
+      "path": "pptx-sorter/default/light-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6153,
+      "sha256": "83fffa459637b5bf43dff81fa4e7f369cd31894bc0d361497025fa9c8fbbb88c"
+    },
+    {
+      "path": "pptx-sorter/default/light-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 4602,
+      "sha256": "2c53a02d3ad76225be4891e7d1db9dce597e5b867b4d7a1564e9c877144c0e4f"
+    },
+    {
+      "path": "pptx-sorter/hover/dark-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6690,
+      "sha256": "237a110de8ac5b9318c8881df4350d086a57820646755913fccbdd26a2a84d5e"
+    },
+    {
+      "path": "pptx-sorter/hover/dark-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 5034,
+      "sha256": "84fbdb5e748f0428aa1363fc369223b0c9d64a84c7b3f5b2e2d8e3fd393af30c"
+    },
+    {
+      "path": "pptx-sorter/hover/light-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6355,
+      "sha256": "893f8237a2e557e992d5f94955d0ba9e26ff9da89dc3ed47d2b6442106dc1b36"
+    },
+    {
+      "path": "pptx-sorter/hover/light-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 4996,
+      "sha256": "77a7517dc07824f68ce034fcb7cd137b301200b570fbed5aeec6818c325ee867"
+    },
+    {
+      "path": "pptx-sorter/selected/dark-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "selected",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6323,
+      "sha256": "abfaae2d72a43c00e35b12902df792c6f7f6874d49d2f257502300043669ea67"
+    },
+    {
+      "path": "pptx-sorter/selected/dark-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "selected",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 4704,
+      "sha256": "5826af7ab91bb407c7e28bc7fd6e97e4f5f7ec910b8fbac1c7a36d1e3cc0be2f"
+    },
+    {
+      "path": "pptx-sorter/selected/light-1440x900.png",
+      "surface": "pptx-sorter",
+      "state": "selected",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1344,
+      "height": 344,
+      "bytes": 6167,
+      "sha256": "2929a31b23d5b33087c0432b2df1ecfe3aacc79ca3dba6d8ae361e5b2b225858"
+    },
+    {
+      "path": "pptx-sorter/selected/light-390x844.png",
+      "surface": "pptx-sorter",
+      "state": "selected",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 220,
+      "bytes": 4620,
+      "sha256": "ae3618790178b5c5fd187f766e1a3a54f08fd5d90d2221c32d0ba581c6ef46fb"
+    },
+    {
+      "path": "pptx-toolbar/active/dark-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "active",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 11029,
+      "sha256": "802f680b5431ce2efe073dc75ea525fb455a2c537749e390ca7a1e2b767f7d71"
+    },
+    {
+      "path": "pptx-toolbar/active/dark-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "active",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10794,
+      "sha256": "d34865b093a2122566210824de47af588bb35e8962607197932374f7ce20166d"
+    },
+    {
+      "path": "pptx-toolbar/active/light-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "active",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 10996,
+      "sha256": "b44f4e9b6fb7001fbcc4e70fb693359fc1a99ea102fecaba4e3af12e419080f2"
+    },
+    {
+      "path": "pptx-toolbar/active/light-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "active",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10848,
+      "sha256": "565a58025886ae9dda54b163df11616471a0fe16035c81fe1d9ecb5f56d45016"
+    },
+    {
+      "path": "pptx-toolbar/default/dark-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 10541,
+      "sha256": "15202511f2b02d6991bfdc5f6af12bb41a72ba66d3c46737ddf8e0a92e79030e"
+    },
+    {
+      "path": "pptx-toolbar/default/dark-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10447,
+      "sha256": "66b17b8668c312dcd1da4cd637828f3b77d4f8bb4ea9dd5780be7e96e8061377"
+    },
+    {
+      "path": "pptx-toolbar/default/light-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 10536,
+      "sha256": "100b6c6c07cb48c2e6e43cdf8d9339711e0845cebb4c1bdc0246b65aa50572fa"
+    },
+    {
+      "path": "pptx-toolbar/default/light-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10480,
+      "sha256": "ab2c1b0cf7e2bf762f905b0cb0361d76c01a053512ff46cc541eb9abec7dc07d"
+    },
+    {
+      "path": "pptx-toolbar/disabled/dark-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 9193,
+      "sha256": "07574a0d4b830bd456bfbf60a0b2bab6855e834e2105bd54efc445eebdecabfb"
+    },
+    {
+      "path": "pptx-toolbar/disabled/dark-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 9052,
+      "sha256": "f586af160a14511d78b36b0a388d3db288104974a903e1571d476010db39b9a8"
+    },
+    {
+      "path": "pptx-toolbar/disabled/light-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 9164,
+      "sha256": "66c8cc222f119a571594b059dbdc8a64e816221c3f5aa7a2641b19ffc38680f2"
+    },
+    {
+      "path": "pptx-toolbar/disabled/light-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 8977,
+      "sha256": "49ac6f18fc746004cfea9c8cad1ad67f103dc6c6a12e445e1bd3e05e44032343"
+    },
+    {
+      "path": "pptx-toolbar/focus/dark-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 12628,
+      "sha256": "3dd0134bfdcb25bccdf4d109225cd9f792b8944cfd9f8a48f7d1e02f5c184171"
+    },
+    {
+      "path": "pptx-toolbar/focus/dark-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 12490,
+      "sha256": "ea189366bb6e5976fc7af2e74daf59f436406ede313bb9c0a4131d19cd9324b8"
+    },
+    {
+      "path": "pptx-toolbar/focus/light-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 12506,
+      "sha256": "1d41046c8ebd99184d5faba08324f30cfe395f3981e8ecd1b89e096ddddc0761"
+    },
+    {
+      "path": "pptx-toolbar/focus/light-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 12411,
+      "sha256": "8b515a5c6e0785b6c727eee52dcb7cff3e2fa6807065841c7ce87b806c23a861"
+    },
+    {
+      "path": "pptx-toolbar/hover/dark-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 11029,
+      "sha256": "802f680b5431ce2efe073dc75ea525fb455a2c537749e390ca7a1e2b767f7d71"
+    },
+    {
+      "path": "pptx-toolbar/hover/dark-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10912,
+      "sha256": "8c826c8b645271b5346e0ee0a39e28b6afdd50ec52d63846348c4af665b8597f"
+    },
+    {
+      "path": "pptx-toolbar/hover/light-1440x900.png",
+      "surface": "pptx-toolbar",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 1920,
+      "height": 144,
+      "bytes": 10996,
+      "sha256": "b44f4e9b6fb7001fbcc4e70fb693359fc1a99ea102fecaba4e3af12e419080f2"
+    },
+    {
+      "path": "pptx-toolbar/hover/light-390x844.png",
+      "surface": "pptx-toolbar",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 226,
+      "bytes": 10950,
+      "sha256": "346ce256db785db53e04839da747012e78c0b00922e933bb6b65e93856386799"
+    },
+    {
       "path": "select/default/dark-1440x900.png",
       "surface": "select",
       "state": "default",
@@ -4066,6 +4438,18 @@
       "updated": 0,
       "removed": 0,
       "gitHead": "a561c6f21966ad104b736dcabfd1fd2157090203"
+    },
+    {
+      "date": "2026-11-20",
+      "reviewer": "dim-agent",
+      "issue": "#161",
+      "reason": "PPTX toolbar and sorter chrome landed with #161b; exact 64/64 full-matrix parity rerun on the merged 0.8 tree, so commit the subject baselines at 1440x900 and 390x844, light and dark.",
+      "treeSha256": "39b91f9c0919cc35e1504ac72e2dcdd5c03fdc4c1bbfcefd357d4ec3ad1a3e73",
+      "files": 380,
+      "added": 32,
+      "updated": 0,
+      "removed": 0,
+      "gitHead": "0aa629b4a5211508cadcc7e4b3a55d83953da7ee"
     }
   ]
 }

@@ -66,6 +66,7 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   assert.ok(core.includes("input"));
   assert.ok(core.includes("docx-toolbar"), "closed DOCX chrome gates on pull requests");
   assert.ok(core.includes("xlsx-toolbar"), "closed XLSX chrome gates on pull requests");
+  assert.ok(core.includes("pptx-toolbar"), "closed PPTX chrome gates on pull requests");
   assert.ok(!core.includes("bounding-box-citations"), "the large block matrix stays nightly-only");
   assert.ok(!core.includes("document-sidebar"), "the pending sidebar stays out of the PR subset");
 
@@ -101,6 +102,8 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "layout-blocks",
     "pdf-sidebar",
     "pdf-toolbar",
+    "pptx-sorter",
+    "pptx-toolbar",
     "select",
     "tooltip",
     "xlsx-sheet-tabs",
@@ -111,16 +114,8 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     .filter((surface) => surface.gateStatus === "pending")
     .map((surface) => `${surface.id}:${surface.gatePendingIssue}`)
     .sort();
-  // DocumentViewerSidebar (#158) and the PPTX surfaces (#161b) are still in flight.
-  assert.deepEqual(
-    pending,
-    [
-      "document-sidebar:#158",
-      "pptx-presenter:#161",
-      "pptx-sorter:#161",
-      "pptx-toolbar:#161",
-    ].sort(),
-  );
+  // DocumentViewerSidebar (#158) and the unreachable presenter panel are left.
+  assert.deepEqual(pending, ["document-sidebar:#158", "pptx-presenter:#161"]);
 });
 
 test("committed baselines cover exactly the gate-blocking matrix", () => {
@@ -150,7 +145,7 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 348);
+  assert.equal(baselineManifest.files.length, 380);
 
   for (const file of baselineManifest.files) {
     assert.match(file.path, /^[a-z0-9-]+\/[a-z0-9-]+\/(light|dark)-[0-9]+x[0-9]+\.png$/);

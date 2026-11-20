@@ -128,9 +128,9 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 `.github/workflows/ui-parity.yml` 现在有四个 job：`ui-contracts`（样式 guard + 基线审批）、
 `ui-parity-core`（PR 核心子集 + 基线比对，`--gate-mode ready`）、`ui-parity-nightly`（全矩阵）、
 `ui-a11y`（axe-core + 键盘 smoke）。所有 job 上传 artifact（含 diff/heatmap/baseline diff）。
-`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（当前只有
-`document-sidebar`，等 #158；`#161b` 的 `pptx-*` 合入后会短暂处于 pending）仍采集、仍报告，
-但不阻断。最终切换用 `strict: true`（`--gate-mode all`），正式切换步骤见门禁文档 §5。
+`--gate-mode ready` 只判定 `gateStatus: blocking` 的 surface；pending surface（当前是等 #158 的
+`document-sidebar` 与上游不可达的 `pptx-presenter`）仍采集、仍报告，但不阻断。最终切换用
+`strict: true`（`--gate-mode all`），正式切换步骤见门禁文档 §5。
 
 ## 6.1 提交基线（#165）
 
@@ -143,9 +143,9 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 
 ## 7. 实施现状（2026-11-20，0.8 wave 2）
 
-- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **18 个 surface** 完成端到端采集并提交基线
-  （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar+PdfSidebar / DOCX ×2 / XLSX ×3 /
-  document blocks ×4）。
+- 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **20 个 surface** 完成端到端采集并提交基线
+  （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar+PdfSidebar / DOCX ×2 / PPTX ×2 /
+  XLSX ×3 / document blocks ×4）。
 - `pnpm ui:parity:self-check`（参考页对自身）在完整矩阵下 344/344 全部 `pass`
   （0 像素差、0 几何差），证明截图/阈值链路可重复；`pass` 不是永远无法到达的状态。
 - #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入；0.8 复跑
@@ -172,7 +172,8 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 - `document-sidebar` 只保留参考基线：规范组件由 #158 在
   `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
 - `pptx-toolbar` / `pptx-sorter` 已收敛到 vendored 上游标记：40 + 24 个 case
-  全部 pass，0 像素差、0 几何差（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。
+  全部 pass，0 像素差、0 几何差；#165 在合并后的 0.8 树上复跑 64/64 后补基线并切
+  `blocking`，两条都进 PR 子集（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。
   `pptx-presenter` 在固定 commit 没有上游布局（presenter 在私有
   `@extend-ai/react-pptx` 内），manifest 用 `referenceStatus: "unreachable"`
   描述它：harness 在 report/SUMMARY 的 unreachable 表列出原因并跳过采集，
@@ -200,12 +201,13 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 - #156：token/theme/OfficeIcon（已合入；本 harness 直接消费 `theme.css`）。
 - #157：Button/Input/Select/Dialog/Tooltip primitive + reka-ui 层（已合入并 `blocking`，像素对照见 §7）。
 - #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）；`document-sidebar`
-  仍是唯一 pending surface。
+  仍是唯一 pending 的 sidebar surface（另一个 pending 是上游不可达的 `pptx-presenter`）。
 - #159：DOCX toolbar/sidebar（已合入，32/32 + 24/24 像素 0）。
 - #160：XLSX toolbar/sheet tabs/status（已合入，64/64 像素 0；ribbon 无对照）。
-- #161b：PPTX toolbar/sorter/presenter（进行中；surface 合入后先补基线再切 `blocking`）。
+- #161b：PPTX toolbar/sorter/presenter（已合入；toolbar/sorter 64/64 像素 0，已补基线并切
+  `blocking`；presenter 无上游布局，保持 `unreachable`）。
 - #162：PDF toolbar/sidebar（已合入，40/40 + 24/24 像素 0）。
 - #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
 - #164：document blocks（已合入，232/232 像素 0；FileSystem/SchemaBuilder 延期）。
-- #165：gate、基线、stylelint/axe、文档——基础设施已完成；18 个可渲染 surface 已全部 `blocking`，
-  等 #158/#161b 收尾后切 `prMode: all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。
+- #165：gate、基线、stylelint/axe、文档——基础设施已完成；20 个可渲染 surface 已全部 `blocking`，
+  等 #158 补 `document-sidebar` 后切 `prMode: all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。

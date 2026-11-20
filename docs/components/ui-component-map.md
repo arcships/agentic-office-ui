@@ -95,8 +95,8 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 | `@arcships/vue-pdf` | `PdfViewer` | `apps/v4/components/extend/pdf-viewer.tsx` | `pdf-toolbar`, `pdf-sidebar` | ✅ blocking（#162） |
 | `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ✅ blocking（#159：32/32 + 24/24） |
 | `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ blocking（#160：32 + 24 + 8 case 全 0px） |
-| `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface | 见 [pptx-chrome.md](pptx-chrome.md) |
-| `@arcships/vue-pptx` | `PptxViewer` / `PptxViewerToolbar` / `PptxSlideCard` / `PptxPresenterPanel` | `apps/v4/components/extend/pptx-viewer.tsx` | `pptx-toolbar`, `pptx-sorter`（presenter 无上游布局） | ⏳ #161（toolbar 40/40、sorter 24/24 像素一致；`pptx-presenter` 为 unreachable） |
+| `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface（presenter 布局私有） | 见 [pptx-chrome.md](pptx-chrome.md) |
+| `@arcships/vue-pptx` | `PptxViewer` / `PptxViewerToolbar` / `PptxSlideCard` / `PptxPresenterPanel` | `apps/v4/components/extend/pptx-viewer.tsx` | `pptx-toolbar`, `pptx-sorter`（presenter 无上游布局） | ✅ blocking（#161：40/40 + 24/24 像素 0；`pptx-presenter` 为 unreachable） |
 
 
 ## 7. 面板与文档

@@ -8,8 +8,8 @@
   ],
   "approved": {
     "reviewer": "dim-agent",
-    "issue": "#159",
-    "reason": "DocxViewerToolbar.css landed with #159 after the #165 baseline was captured; its box-shadow ring and 1px radius offsets mirror the pinned upstream Tailwind utilities, so freeze the 9 occurrences and drop the 6 stale entries instead of tokenizing the exact values.",
+    "issue": "#161",
+    "reason": "PptxViewerToolbar ring/shadow offsets and PptxSlideCard 150ms transitions mirror the pinned upstream Tailwind utilities landed by #161b; freeze the remaining 22 occurrences. The #fff preview was switched to the identical CSS white keyword, which keeps pixels and removes one violation.",
     "date": "2026-11-20"
   },
   "counts": {
@@ -136,8 +136,14 @@
     "packages/vue-pdf/src/components/PdfViewerToolbar.vue": {
       "declaration-property-unit-disallowed-list": 10
     },
+    "packages/vue-pptx/src/PptxSlideCard.vue": {
+      "declaration-property-unit-disallowed-list": 3
+    },
     "packages/vue-pptx/src/PptxStage.vue": {
       "color-no-hex": 1
+    },
+    "packages/vue-pptx/src/PptxViewerToolbar.vue": {
+      "declaration-property-unit-disallowed-list": 19
     },
     "packages/vue-pptx/src/style.css": {
       "color-no-hex": 32,
@@ -276,11 +282,11 @@
     }
   },
   "totals": {
-    "files": 62,
-    "warnings": 993,
+    "files": 64,
+    "warnings": 1015,
     "byRule": {
       "color-no-hex": 537,
-      "declaration-property-unit-disallowed-list": 412,
+      "declaration-property-unit-disallowed-list": 434,
       "declaration-property-value-disallowed-list": 44
     }
   }

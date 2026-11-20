@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是，但只对 `gateStatus: blocking` 的 surface |
-| `ui-parity-nightly` | nightly / dispatch | 全矩阵（18 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
+| `ui-parity-nightly` | nightly / dispatch | 全矩阵（20 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，allowlist 之外的发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
@@ -74,13 +74,15 @@ pnpm ui:baseline:verify
 | `file-upload`, `file-thumbnail` | ✅ | blocking | #163 已收敛；19 个 `pass-with-AA`（单通道 1/255，低于 0.1% 阈值）；有基线 |
 | `pdf-toolbar`, `pdf-sidebar` | ✅ | blocking | #162 40/40、24/24 像素 0；有基线 |
 | `docx-toolbar`, `docx-sidebar` | ✅ | blocking | #159 32/32 + 24/24 像素 0；有基线，PR 即阻断 |
+| `pptx-toolbar`, `pptx-sorter` | ✅ | blocking | #161 40/40 + 24/24 像素 0；有基线，PR 即阻断 |
 | `bounding-box-citations`, `layout-blocks`, `e-signature`, `document-splits` | ❌ | blocking | #164 232/232 像素 0；有基线（nightly 阻断） |
 | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ | blocking | #160 64/64 像素 0；有基线，PR 即阻断 |
 | `document-sidebar` | ❌ | pending（#158） | 只有参考基线（Vue 侧 `subjectStatus: missing`） |
+| `pptx-presenter` | ❌ | pending（#161） | 上游无 presenter 布局（`referenceStatus: unreachable`），由组件测试覆盖 |
 
-18 个可渲染 surface 已全部 `blocking` 并提交基线；14 个进 PR 子集（全部 primitive、file、PDF 与
-DOCX/XLSX chrome），4 个 document block 只在 nightly 全矩阵跑。`document-sidebar` 是唯一 pending，
-等 #158 落地后按 §5 补对照与基线；`#161b` 的 `pptx-*` surface 合入后同样需要先补基线再切 `blocking`。
+20 个可渲染 surface 已全部 `blocking` 并提交基线；16 个进 PR 子集（全部 primitive、file、PDF、
+DOCX/PPTX/XLSX chrome），4 个 document block 只在 nightly 全矩阵跑。`document-sidebar` 等 #158
+落地后补对照与基线；`pptx-presenter` 是登记在案的无上游布局 surface，不参与像素计数。
 
 ## 5. 最终开关
 
@@ -121,11 +123,12 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（`PYTHON=/tmp/bb-venv/bi
 | 例外 | 位置 | 负责 |
 |---|---|---|
 | `document-sidebar` 无对照组件 | parity 报告（reference-only） | #158 |
+| `pptx-presenter` 无上游布局 | parity 报告（unreachable） | #161（组件测试覆盖） |
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` loading 无可访问名（`visibility: hidden`） | `tests/a11y/allowlist.json` | #157 |
 | `button` destructive 对比度 3.8:1（继承上游 token） | `tests/a11y/allowlist.json` | #157 |
 | `pdf-sidebar` 缩略图列表无焦点环 | `tests/a11y/allowlist.json` | #162 |
-| 993 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
+| 1,015 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
 
 除这些已登记项外，任何新增视觉漂移、裸值或无无障碍回归都会在 PR 阶段失败。
 
