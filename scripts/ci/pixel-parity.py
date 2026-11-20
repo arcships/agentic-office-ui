@@ -861,7 +861,7 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
         lines.append(
             f"| {surface['id']} | {surface['subjectComponent'] or '—'} "
             f"| {'yes' if surface.get('core') else 'no'} | {surface.get('gateStatus') or '—'} "
-            f"| {surface['pendingIssue'] or '—'} "
+            f"| {surface.get('gatePendingIssue') or surface['pendingIssue'] or '—'} "
             f"| {counts['passed'] + counts['passedWithAntialiasing']} | {counts['failed']} | {counts['baselineOnly']} |"
         )
     lines.extend(
@@ -1430,6 +1430,10 @@ def run_surface(
                 baseline_dir is not None
                 and baseline_mode != "off"
                 and (viewport["id"], theme) in (baseline_combos or set())
+                # Committed baselines only exist for gate-blocking surfaces;
+                # `capture` may still write one for a surface that is about to
+                # become blocking.
+                and (baseline_mode == "write" or surface.get("gateStatus") == "blocking")
             ):
                 baseline_file = baseline_dir / baseline_relpath(
                     surface["id"], state["id"], theme, viewport["id"]

@@ -112,11 +112,17 @@ random ids, timestamps and computed style strings.
 | XLSX grid rows/columns/canvas, dark canvas sample | yes | this script |
 | PDF pages, PPTX slides | yes | this script |
 | Evidence-specific assertions (`evidence_assertions`) | yes | this script |
-| Pixel diff (`threshold=8`, `maxDiffRatio=0.002`) | **no** | #57 / #165 later gate |
+| Pixel diff (`threshold=8`, `maxDiffRatio=0.002`) | **no** | this script (non-blocking) |
 
-Pixel diffs are nightly-only and non-blocking: the nightly job uploads the
+Pixel diffs here are nightly-only and non-blocking: the nightly job uploads the
 report and diff images as artifacts, but only structural failures fail the job.
-`--fail-on-pixel` is reserved for the eventual blocking gate in #165.
+The blocking visual gate from #165 lives in a different harness: it compares the
+upstream Extend reference and the committed subject baselines in
+[`tests/visual/extend`](../../visual/extend/README.md) with 0px geometry and
+≤0.1% pixel tolerance, and it fails pull requests for gate-blocking surfaces.
+See [`docs/testing/ui-parity-ci.md`](../../../docs/testing/ui-parity-ci.md).
+This route matrix keeps `--fail-on-pixel` opt-in until its baseline is
+re-calibrated after the 0.8 UI migration.
 
 ## Issue evidence
 

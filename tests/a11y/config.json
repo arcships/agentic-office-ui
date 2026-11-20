@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "description": "axe-core + keyboard smoke targets for the core Extend-aligned components (#165). The page under test is the built parity comparison app (tools/vue-reference/dist), which renders the real `@arcships/vue-ui` / `@arcships/vue-pdf` components in light and dark themes.",
-  "theme": "light",
+  "themes": ["light", "dark"],
   "viewports": ["1440x900"],
   "axe": {
     "tags": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],

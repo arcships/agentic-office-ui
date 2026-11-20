@@ -413,7 +413,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allowlist", default=str(ROOT / "tests/a11y/allowlist.json"))
     parser.add_argument("--out", default=str(ROOT / "output/a11y"))
     parser.add_argument("--only", default=None, help="comma separated surface ids")
-    parser.add_argument("--theme", default=None, help="override the configured theme")
+    parser.add_argument("--theme", default=None, help="override the configured themes (comma separated)")
     parser.add_argument("--report-only", action="store_true", help="always exit 0")
     return parser.parse_args()
 
@@ -447,7 +447,7 @@ def main() -> int:
         print("a11y: no surfaces selected", file=sys.stderr)
         return 2
 
-    theme = args.theme or config.get("theme", "light")
+    themes = parse_csv(args.theme) or config.get("themes") or [config.get("theme", "light")]
     viewports = config.get("viewports", ["1440x900"])
     viewport_specs = [
         {
@@ -474,19 +474,23 @@ def main() -> int:
                     reduced_motion="reduce",
                     color_scheme="light",
                 )
-                for surface in surfaces:
-                    print(f"a11y: {surface['id']} @ {viewport['id']} / {theme}", flush=True)
-                    reports.append(
-                        surface_report(
-                            context=context,
-                            surface=surface,
-                            config=config,
-                            base_url=server.url,
-                            theme=theme,
-                            viewport=viewport,
-                            axe_path=axe_path,
+                for theme in themes:
+                    for surface in surfaces:
+                        print(
+                            f"a11y: {surface['id']} @ {viewport['id']} / {theme}",
+                            flush=True,
                         )
-                    )
+                        reports.append(
+                            surface_report(
+                                context=context,
+                                surface=surface,
+                                config=config,
+                                base_url=server.url,
+                                theme=theme,
+                                viewport=viewport,
+                                axe_path=axe_path,
+                            )
+                        )
                 context.close()
             browser.close()
     finally:
@@ -548,7 +552,8 @@ def main() -> int:
             "axeVersion": json.loads(
                 (axe_path.parent / "package.json").read_text(encoding="utf-8")
             ).get("version"),
-            "theme": theme,
+            "theme": ",".join(themes),
+            "themes": themes,
             "viewports": viewport_specs,
         },
         "axe": config.get("axe", {}),

@@ -298,18 +298,23 @@ function captureCommand(argv) {
     capturePaddingPx: baselineConfig.capturePaddingPx,
     viewports: baselineConfig.viewports,
     themes: baselineConfig.themes,
-    surfaces: Object.fromEntries(
-      blockingSurfaces
-        .filter((surface) => surfaces.includes(surface.id))
-        .map((surface) => [
-          surface.id,
-          {
-            subjectComponent: surface.subjectComponent,
-            states: surface.states.map((state) => state.id),
-            files: files.filter((file) => file.surface === surface.id).length,
-          },
-        ]),
-    ),
+    surfaces: {
+      // Keep the metadata of surfaces that were not part of this capture; a
+      // single-surface approval must not erase the rest of the coverage map.
+      ...(previous?.surfaces || {}),
+      ...Object.fromEntries(
+        blockingSurfaces
+          .filter((surface) => surfaces.includes(surface.id))
+          .map((surface) => [
+            surface.id,
+            {
+              subjectComponent: surface.subjectComponent,
+              states: surface.states.map((state) => state.id),
+              files: files.filter((file) => file.surface === surface.id).length,
+            },
+          ]),
+      ),
+    },
     treeSha256: currentTree,
     files,
     approvals: [

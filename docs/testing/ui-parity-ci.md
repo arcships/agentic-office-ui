@@ -11,7 +11,7 @@
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是，但只对 `gateStatus: blocking` 的 surface |
 | `ui-parity-nightly` | nightly / dispatch | 全矩阵（13 surface × 4 viewport × 2 theme） | 同上；pending surface 只报告 |
-| `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合） | 是，allowlist 之外的发现即失败 |
+| `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，allowlist 之外的发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
 所有 job 都会上传 artifact：
@@ -103,7 +103,8 @@ pnpm ui:parity:self-check          # 参考页自己跟自己比，验证采集�
 pnpm ui:baseline:status            # 基线现状
 pnpm ui:baseline:verify            # 基线契约（CI 用）
 pnpm lint:style                    # 组件 CSS 裸值 guard（对比冻结基线）
-pnpm test:a11y                     # axe-core + 键盘 smoke（需要先 build tools/vue-reference）
+pnpm test:a11y                     # axe-core + 键盘 smoke（light+dark；需先 build tools/vue-reference）
+pnpm test:a11y -- --build          # 先构建 workspace 依赖 + tools/vue-reference 再检查（CI 用）
 pnpm ui:tokens:check               # token 报告与固定上游 CSS 同步
 ```
 

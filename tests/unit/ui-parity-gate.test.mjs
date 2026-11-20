@@ -242,6 +242,7 @@ test("a11y config covers the core surfaces and allowlists only owned findings", 
   );
   assert.ok(a11yConfig.axe.tags.includes("wcag2a"));
   assert.ok(a11yConfig.axe.tags.includes("wcag21aa"));
+  assert.deepEqual(a11yConfig.themes, ["light", "dark"]);
   for (const surface of a11yConfig.surfaces) {
     assert.ok(
       manifest.surfaces.some((candidate) => candidate.id === surface.id),

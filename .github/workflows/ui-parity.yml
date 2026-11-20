@@ -305,15 +305,12 @@ jobs:
       - name: Install the Chromium browser
         run: playwright install --with-deps chromium
 
-      # Builds the workspace packages the comparison app imports by name, then
-      # tools/vue-reference. axe-core is injected from node_modules.
-      - name: Build the comparison app
-        run: pnpm --filter @aou/vue-reference build
-
+      # `--build` builds the workspace packages the comparison app imports by
+      # name, then tools/vue-reference. axe-core is injected from node_modules.
       # Known findings are listed in tests/a11y/allowlist.json with an owner
       # issue; anything new fails the job.
       - name: Run axe-core and the keyboard smoke
-        run: pnpm test:a11y
+        run: pnpm test:a11y -- --build
 
       - name: Upload the accessibility report
         if: always()
