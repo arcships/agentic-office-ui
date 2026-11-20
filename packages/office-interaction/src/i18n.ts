@@ -814,6 +814,8 @@ export interface OfficeXlsxMessages {
     export: string
     printPreview: string
     pageBreaks: string
+    /** Trigger for the workbook actions (overflow) menu. */
+    moreActions: string
   }
   statusBar: {
     /** Accessible label of the selected cell/range address. */
@@ -2279,6 +2281,7 @@ export const officeMessagesEn: OfficeMessages = {
       export: "Export XLSX",
       printPreview: "Print preview",
       pageBreaks: "Page break preview",
+      moreActions: "Open workbook actions",
     },
     statusBar: {
       range: "Selected range",
@@ -3646,6 +3649,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       export: "导出 XLSX",
       printPreview: "打印预览",
       pageBreaks: "分页预览",
+      moreActions: "打开工作簿操作",
     },
     statusBar: {
       range: "选定区域",

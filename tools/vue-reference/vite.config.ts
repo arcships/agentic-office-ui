@@ -41,6 +41,10 @@ export default defineConfig({
           new URL("../../packages/office-interaction/src/index.ts", import.meta.url),
         ),
       },
+      {
+        find: "@arcships/xlsx-core",
+        replacement: fileURLToPath(new URL("./src/shims/xlsx-core.ts", import.meta.url)),
+      },
     ],
   },
   build: {

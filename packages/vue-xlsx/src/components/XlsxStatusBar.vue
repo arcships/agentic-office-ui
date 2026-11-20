@@ -1,5 +1,11 @@
 <template>
   <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
+    <!--
+      Layout source: Extend's status strip (`file-system.tsx`): a 28px
+      `aria-live` footer with `border-t bg-muted/40 px-3 text-xs` and centred
+      `gap-1` segments. The pinned XLSX viewer has no status bar of its own, so
+      the spreadsheet keeps its address/stat semantics inside that strip.
+    -->
     <OfficeStatusBar class="xlsx-status-bar" data-testid="xlsx-status-bar">
       <template #start>
         <span
@@ -13,8 +19,6 @@
           class="xlsx-status-bar__address xlsx-status-bar__address--empty"
           data-testid="xlsx-status-ready"
         >{{ m.xlsx.statusBar.ready }}</span>
-      </template>
-      <template #end>
         <span
           v-if="summary && summary.count > 0"
           class="xlsx-status-bar__stat"
@@ -126,35 +130,61 @@ const note = computed(() => {
 </script>
 
 <style scoped>
-/* Geometry comes from `OfficeStatusBar`; these rules keep the spreadsheet
- * address/stats typography and the shared token palette. */
+/*
+ * Geometry and colour come from Extend's status strip; `OfficeStatusBar`
+ * supplies the slots, `role` and aria wiring, and these rules map its shell
+ * onto that strip (`h-7 px-3 justify-center gap-1 text-xs`).
+ */
 .xlsx-status-bar {
   flex: 0 0 auto;
-  gap: var(--office-ui-space-3, 0.75rem);
+  justify-content: center;
+  min-block-size: 1.75rem;
+  padding: 0 12px;
+  border-block-start: var(--office-border-width, 1px) solid var(--office-border);
+  background: color-mix(in oklab, var(--office-muted) 40%, transparent);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
 }
 
-.xlsx-status-bar__address {
-  flex: 0 0 auto;
-  font-family: var(--office-font-mono);
-  max-inline-size: 40%;
+/* One centred line: the address, the statistics and the note are segments of
+ * the same strip instead of a left/right split. */
+.xlsx-status-bar :deep(.office-status-bar__start) {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 0 var(--office-ui-space-1, 0.25rem);
+  overflow: hidden;
+}
+
+.xlsx-status-bar :deep(.office-status-bar__end) {
+  display: none;
+}
+
+/* The segment separator is decoration: it renders like the `· ` prefix the
+ * reference puts inside its spans without polluting the announced text. */
+.xlsx-status-bar :deep(.office-status-bar__start) > span + span::before {
+  content: "· ";
+}
+
+.xlsx-status-bar__address,
+.xlsx-status-bar__stat,
+.xlsx-status-bar__note {
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.xlsx-status-bar__address {
+  max-inline-size: 40%;
 }
 
 .xlsx-status-bar__address--empty {
   color: var(--office-muted-foreground);
 }
 
-.xlsx-status-bar__stat,
 .xlsx-status-bar__note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.xlsx-status-bar__note {
-  color: var(--office-info-foreground);
   font-weight: 600;
 }
 
@@ -163,8 +193,10 @@ const note = computed(() => {
 }
 
 @container xlsx-viewer (max-width: 620px) {
-  .xlsx-status-bar :deep(.office-status-bar__group) {
+  .xlsx-status-bar :deep(.office-status-bar__start) {
+    justify-content: flex-start;
     overflow-x: auto;
+    scrollbar-width: none;
   }
 }
 </style>

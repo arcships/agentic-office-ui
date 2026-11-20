@@ -41,4 +41,5 @@ export { default as FileThumbnail } from "../../../../packages/vue-ui/src/compon
 export { default as OfficeIcon } from "../../../../packages/vue-ui/src/components/OfficeIcon.vue";
 export { HugeIcon } from "../../../../packages/vue-ui/src/components/HugeIcon";
 export { default as OfficePopover } from "../../../../packages/vue-ui/src/components/ui/OfficePopover.vue";
+export { default as OfficeFindBar } from "../../../../packages/vue-ui/src/components/OfficeFindBar.vue";
 export { useElementWidth } from "../../../../packages/vue-ui/src/composables/element-width";

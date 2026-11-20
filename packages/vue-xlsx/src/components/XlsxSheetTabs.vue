@@ -1,7 +1,13 @@
 <template>
   <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
-  <div ref="stripRef" class="xlsx-sheettabs" :style="tabsStyle">
+  <div
+    ref="stripRef"
+    class="xlsx-sheettabs"
+    :class="{ 'xlsx-sheettabs--actions': showSheetActions }"
+    data-testid="xlsx-sheet-tabs"
+  >
     <button
+      v-if="showSheetActions"
       type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex <= 0"
@@ -11,6 +17,12 @@
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg>
     </button>
+    <div
+      ref="scrollRef"
+      class="xlsx-sheettabs__scroll"
+      :data-has-overflow-x="overflowing ? '' : undefined"
+    >
+    <div class="xlsx-sheettabs__row">
     <div
       class="xlsx-sheettabs__list"
       role="tablist"
@@ -81,7 +93,6 @@
             'xlsx-sheettabs__tab--active': index === activeTabIndex,
             'xlsx-sheettabs__tab--hidden': tab.kind === 'sheet' && tab.visibility === 'hidden',
           }"
-          :style="tabStyle(index)"
           :title="tabTitle(tab)"
           @click="onTabClick(index)"
           @dblclick="onTabDblClick(tab, index)"
@@ -114,7 +125,7 @@
         </div>
       </div>
       <button
-        v-if="!isReadOnly"
+        v-if="showSheetActions && !isReadOnly"
         type="button"
         class="xlsx-sheettabs__add-btn"
         data-testid="xlsx-add-sheet"
@@ -125,7 +136,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       </button>
       <button
-        v-if="!isReadOnly"
+        v-if="showSheetActions && !isReadOnly"
         type="button"
         class="xlsx-sheettabs__remove-btn"
         data-testid="xlsx-remove-sheet"
@@ -137,7 +148,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
       </button>
     </div>
+    </div>
+    </div>
     <button
+      v-if="showSheetActions"
       type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex >= controller.tabs.length - 1"
@@ -253,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties } from "vue";
 import type {
   XlsxHiddenSheet,
   XlsxSheetNameIssue,
@@ -275,6 +289,13 @@ const props = defineProps<{
   /** DOM id of the worksheet panel this tab strip controls, used by `aria-controls`. */
   panelId?: string;
   thumbnailOptions?: UseXlsxViewerThumbnailsOptions;
+  /**
+   * Render Excel's extra sheet controls (previous/next arrows, add and remove
+   * buttons). Off by default: the pinned Extend strip only shows the sheet
+   * tabs and scrolls horizontally; hosts that keep the older Excel chrome can
+   * turn it back on.
+   */
+  showSheetActions?: boolean;
 }>();
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
@@ -859,42 +880,40 @@ function nextTab() {
   }
 }
 
-const tabsStyle = computed<CSSProperties>(() => ({
-  alignItems: "center",
-  backgroundColor: "var(--office-muted, #f4f4f5)",
-  borderTop: "1px solid var(--office-border, #e4e4e7)",
-  display: "flex",
-  flexShrink: "0",
-  gap: "2px",
-  overflow: "hidden",
-  padding: "0 4px",
-}));
+const tabsStyle = computed<CSSProperties>(() => ({}));
 
-function tabStyle(index: number): CSSProperties {
-  const isActive = index === activeTabIndex.value;
-  return {
-    backgroundColor: isActive
-      ? "var(--office-accent, #3f3f46)"
-      : "transparent",
-    border: isActive
-      ? "1px solid var(--office-border, #d4d4d8)"
-      : "1px solid transparent",
-    borderBottom: "none",
-    borderRadius: "var(--office-radius-sm, 4px) var(--office-radius-sm, 4px) 0 0",
-    color: isActive
-      ? "inherit"
-      : "var(--office-muted-foreground, #71717a)",
-    cursor: "pointer",
-    fontSize: "var(--office-text-xs, 12px)",
-    maxWidth: "120px",
-    padding: "4px 10px",
-    whiteSpace: "nowrap",
-  };
+/**
+ * Upstream swaps the 40px viewport for 50px as soon as the strip overflows
+ * (`has-[[data-slot=scroll-area-viewport][data-has-overflow-x]]:h-[50px]`), so
+ * the scrollbar gutter never clips the tabs.
+ */
+const scrollRef = ref<HTMLElement | null>(null);
+const overflowing = ref(false);
+let scrollObserver: ResizeObserver | null = null;
+
+function measureOverflow(): void {
+  const element = scrollRef.value;
+  if (!element) return;
+  if (typeof element.scrollWidth !== "number" || typeof element.clientWidth !== "number") return;
+  overflowing.value = element.scrollWidth - element.clientWidth > 1;
 }
 
+onMounted(() => {
+  measureOverflow();
+  const element = scrollRef.value;
+  const HostResizeObserver = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+  if (!element || typeof HostResizeObserver !== "function") return;
+  scrollObserver = new HostResizeObserver(() => measureOverflow());
+  scrollObserver.observe(element);
+});
+
+watch(() => props.controller.tabs, () => {
+  void nextTick(() => measureOverflow());
+});
+
 function renameInputStyle(index: number): CSSProperties {
+  void index;
   return {
-    ...tabStyle(index),
     cursor: "text",
     fontFamily: "inherit",
     minWidth: "72px",
@@ -993,24 +1012,84 @@ onUnmounted(() => {
   cancelScheduledPrefetch();
   cancelDrag();
   if (popupTimer) clearTimeout(popupTimer);
+  scrollObserver?.disconnect();
+  scrollObserver = null;
 });
 </script>
 
 <style scoped>
+/*
+ * Layout source: `tools/extend-reference/src/vendor/extend/xlsx-sheet-tabs.tsx`
+ * (Extend `WorkbookSheetTabsInner`, pinned 70fe70c6): a `border-t bg-muted/40
+ * px-3 py-2` strip, a horizontally scrolling 40px viewport (50px when the tabs
+ * overflow), and the `sm` TabsList (`bg-muted`, `p-0.5`, `rounded-lg`) with
+ * `max-w-48` triggers whose active state is the sliding indicator's
+ * `bg-background shadow-sm/5 dark:bg-input`.
+ */
 .xlsx-sheettabs {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-block-start: 1px solid var(--office-border);
+  background: color-mix(in oklab, var(--office-muted) 40%, transparent);
   user-select: none;
 }
 
-.xlsx-sheettabs__list {
-  display: flex;
-  flex: 1;
-  gap: 2px;
+.xlsx-sheettabs__scroll {
+  block-size: 2.5rem;
+  inline-size: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding-block-end: 0.875rem;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+/* Hosts that opt into Excel's extra sheet controls still get the upstream
+ * strip; the scroll area just shares the row with them. */
+.xlsx-sheettabs--actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.xlsx-sheettabs--actions .xlsx-sheettabs__scroll {
+  flex: 1 1 0%;
+  min-inline-size: 0;
+}
+
+.xlsx-sheettabs__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Upstream grows the viewport when the tabs overflow the gutter. */
+.xlsx-sheettabs__scroll[data-has-overflow-x] {
+  block-size: 3.125rem;
+}
+
+.xlsx-sheettabs__row {
+  display: flex;
+  align-items: center;
+  block-size: 100%;
+}
+
+.xlsx-sheettabs__list {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: fit-content;
+  gap: 0 2px;
+  padding: 2px;
+  border-radius: var(--office-radius-lg);
+  background: var(--office-muted);
+  color: color-mix(in oklab, var(--office-muted-foreground) 72%, transparent);
   scroll-behavior: smooth;
 }
 
 .xlsx-sheettabs__tab-wrapper {
   position: relative;
+  display: flex;
   flex-shrink: 0;
 }
 
@@ -1023,7 +1102,7 @@ onUnmounted(() => {
 }
 
 .xlsx-sheettabs__drop-indicator {
-  background: #2563eb;
+  background: var(--office-ring);
   border-radius: 1px;
   bottom: 2px;
   left: -2px;
@@ -1040,18 +1119,62 @@ onUnmounted(() => {
 }
 
 .xlsx-sheettabs__tab {
-  align-items: center;
-  background: transparent;
-  border: none;
+  position: relative;
   display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-inline-size: 12rem;
+  block-size: 2.25rem;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--office-radius-md);
+  background: transparent;
+  color: inherit;
   font-family: inherit;
-  gap: 4px;
+  font-size: var(--office-text-base);
+  font-weight: 500;
+  line-height: 1.5rem;
+  white-space: nowrap;
   outline: none;
-  overflow: hidden;
+  cursor: pointer;
+  transition:
+    color 150ms,
+    background-color 150ms,
+    box-shadow 150ms;
 }
 
+@media (min-width: 640px) {
+  .xlsx-sheettabs__tab {
+    block-size: 2rem;
+    font-size: var(--office-text-sm);
+    line-height: 1.25rem;
+  }
+}
+
+/* Upstream `hover:text-muted-foreground` + `data-active:text-foreground`. */
 .xlsx-sheettabs__tab:hover {
-  background: rgba(128, 128, 128, 0.1);
+  color: var(--office-muted-foreground);
+}
+
+.xlsx-sheettabs__tab--active {
+  color: var(--office-foreground);
+  background: light-dark(var(--office-background), var(--office-input));
+  background-clip: border-box;
+  box-shadow:
+    0 1px 3px 0 color-mix(in srgb, black 5%, transparent),
+    0 1px 2px -1px color-mix(in srgb, black 5%, transparent);
+}
+
+.xlsx-sheettabs__tab--active:hover {
+  color: var(--office-foreground);
+}
+
+.xlsx-sheettabs__tab:focus-visible {
+  box-shadow:
+    0 0 0 1px var(--office-background),
+    0 0 0 3px color-mix(in oklab, var(--office-ring) 50%, transparent);
 }
 
 .xlsx-sheettabs__tab-name {
@@ -1238,7 +1361,9 @@ onUnmounted(() => {
 }
 
 @media (pointer: coarse) {
-  .xlsx-sheettabs button {
+  .xlsx-sheettabs__nav-btn,
+  .xlsx-sheettabs__add-btn,
+  .xlsx-sheettabs__remove-btn {
     min-height: 44px;
     min-width: 44px;
   }

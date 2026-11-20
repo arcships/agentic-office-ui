@@ -18,6 +18,9 @@ import PdfSidebarSurface from "./surfaces/PdfSidebarSurface.vue";
 import PdfToolbarSurface from "./surfaces/PdfToolbarSurface.vue";
 import SelectSurface from "./surfaces/SelectSurface.vue";
 import TooltipSurface from "./surfaces/TooltipSurface.vue";
+import XlsxSheetTabsSurface from "./surfaces/XlsxSheetTabsSurface.vue";
+import XlsxStatusBarSurface from "./surfaces/XlsxStatusBarSurface.vue";
+import XlsxToolbarSurface from "./surfaces/XlsxToolbarSurface.vue";
 
 type Surface = (typeof manifest.surfaces)[number];
 
@@ -112,6 +115,18 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     />
     <DocumentSplitsSurface
       v-else-if="surface.id === 'document-splits'"
+      :cell-width="surface.cellWidth"
+    />
+    <XlsxToolbarSurface
+      v-else-if="surface.id === 'xlsx-toolbar'"
+      :cell-width="surface.cellWidth"
+    />
+    <XlsxSheetTabsSurface
+      v-else-if="surface.id === 'xlsx-sheet-tabs'"
+      :cell-width="surface.cellWidth"
+    />
+    <XlsxStatusBarSurface
+      v-else-if="surface.id === 'xlsx-status-bar'"
       :cell-width="surface.cellWidth"
     />
     <p v-else>No Vue renderer for {{ surface.id }}.</p>
