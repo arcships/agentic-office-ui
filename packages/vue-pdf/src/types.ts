@@ -32,6 +32,13 @@ export interface PdfViewerProps {
   showToolbar?: boolean
   showDownload?: boolean
   showRotateControls?: boolean
+  /** Render the print control in the toolbar. Defaults to true. */
+  showPrint?: boolean
+  /**
+   * Render a visible `OfficeStatusBar` footer with the page, file and state.
+   * Defaults to false; the visually hidden live region stays mounted either way.
+   */
+  showStatusBar?: boolean
   /** Optional minimum height; the viewer itself does not impose one. */
   minHeight?: string | number
   /** Dark viewer chrome and page surround. Defaults to false. */

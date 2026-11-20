@@ -31,7 +31,12 @@ export { default as OfficeToolbar } from "../../../../packages/vue-ui/src/compon
 export { default as OfficeToolbarGroup } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarGroup.vue";
 export { default as OfficeToolbarSeparator } from "../../../../packages/vue-ui/src/components/chrome/OfficeToolbarSeparator.vue";
 export { default as OfficeBadge } from "../../../../packages/vue-ui/src/components/ui/OfficeBadge.vue";
+export { default as OfficeEmptyState } from "../../../../packages/vue-ui/src/components/chrome/OfficeEmptyState.vue";
+export { default as OfficeErrorState } from "../../../../packages/vue-ui/src/components/chrome/OfficeErrorState.vue";
+export { default as OfficeLoadingState } from "../../../../packages/vue-ui/src/components/chrome/OfficeLoadingState.vue";
+export { default as OfficeStatusBar } from "../../../../packages/vue-ui/src/components/chrome/OfficeStatusBar.vue";
 export { default as DocumentViewerSidebar } from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue";
+export { default as DocumentViewerSidebarSkeleton } from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebarSkeleton.vue";
 export { default as FileThumbnail } from "../../../../packages/vue-ui/src/components/FileThumbnail.vue";
 export { default as OfficeIcon } from "../../../../packages/vue-ui/src/components/OfficeIcon.vue";
 export { default as OfficePopover } from "../../../../packages/vue-ui/src/components/ui/OfficePopover.vue";

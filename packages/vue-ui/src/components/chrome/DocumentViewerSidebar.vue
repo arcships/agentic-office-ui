@@ -141,7 +141,7 @@ onMounted(() => {
     ).matches
   }
   measureContainer()
-  if (typeof document !== "undefined") {
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener("keydown", onDocumentKeydown)
   }
   if (typeof requestAnimationFrame !== "function") {
@@ -159,7 +159,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   mounted = false
-  if (typeof document !== "undefined") {
+  if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
     document.removeEventListener("keydown", onDocumentKeydown)
   }
   if (typeof cancelAnimationFrame === "function") {

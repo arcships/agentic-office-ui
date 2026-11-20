@@ -50,7 +50,26 @@ import {
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
-import { isEditableViewerTarget, useViewerKeys, useFileDrop, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
+import {
+  DocumentViewerSidebar,
+  DocumentViewerSidebarSkeleton,
+  OfficeButton,
+  OfficeEmptyState,
+  OfficeErrorState,
+  OfficeIcon,
+  OfficeIconButton,
+  OfficeInput,
+  OfficeLoadingState,
+  OfficePopover,
+  OfficeStatusBar,
+  OfficeToolbar,
+  OfficeToolbarGroup,
+  OfficeToolbarSeparator,
+  isEditableViewerTarget,
+  useViewerKeys,
+  useFileDrop,
+  FILE_DROP_OUTLINE,
+} from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
@@ -74,6 +93,8 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   showToolbar: true,
   showDownload: true,
   showRotateControls: true,
+  showPrint: true,
+  showStatusBar: false,
   minHeight: undefined,
   isDark: false,
   locale: "en",
@@ -136,6 +157,14 @@ const thumbnailUrls = thumbnailPipeline.urls
 const printPageUrls = ref<Record<number, string>>({})
 const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
+/** Viewport point of the last committed text selection; anchors the selection toolbar. */
+const selectionAnchor = ref<{ x: number; y: number } | null>(null)
+const selectionCopied = ref(false)
+/**
+ * Reka overlays need a real DOM. Node component tests mount the viewer with a
+ * host renderer, so the floating toolbar only mounts in a browser.
+ */
+const overlaysAvailable = typeof window !== "undefined" && typeof document !== "undefined"
 const pageTextLayer = ref<PdfPageTextLayer | null>(null)
 let textLayerRequest = 0
 const selectionRects = ref<readonly PdfRenderRect[]>([])
@@ -219,6 +248,27 @@ const viewerState = computed(() => {
   return renderDocument.value && pageImageUrl.value ? "ready" : "idle"
 })
 const controlsDisabled = computed(() => !renderDocument.value || !!loadError.value)
+/** Encrypted documents get their own unlock state instead of a generic error. */
+const encryptedError = computed(() => loadError.value?.code === "ENCRYPTED")
+const errorTitle = computed(() =>
+  encryptedError.value ? m.value.pdf.errors.encrypted : m.value.common.chrome.errorTitle
+)
+const errorDetail = computed(() =>
+  encryptedError.value
+    ? m.value.pdf.viewer.passwordRequired
+    : loadError.value
+      ? `${loadError.value.code}: ${loadErrorMessage.value}`
+      : ""
+)
+const statusBarStatus = computed(() => {
+  if (viewerState.value === "loading") return m.value.pdf.viewer.opening
+  if (viewerState.value === "error") return loadErrorMessage.value
+  return ""
+})
+/** Thumbnails are still rasterizing; show the shared sidebar skeleton above them. */
+const thumbnailsLoading = computed(() =>
+  !!renderDocument.value && Object.keys(thumbnailUrls.value).length === 0
+)
 const pdfPageLabels = ref<readonly string[]>([])
 const currentSearchHit = computed(() => searchHits.value[searchHitIndex.value])
 const pageImageStyle = computed(() => {
@@ -566,8 +616,40 @@ function clearSelection(): void {
   selectionClickCandidate = false
   selectionGesture = null
   selectionRects.value = []
+  selectionAnchor.value = null
+  selectionCopied.value = false
   if (selectionState.value.kind === "none") return
   emitSelection({ kind: "none" })
+}
+
+const selectionAnchorStyle = computed<Record<string, string> | undefined>(() =>
+  selectionAnchor.value
+    ? {
+        left: `${selectionAnchor.value.x}px`,
+        top: `${selectionAnchor.value.y}px`,
+      }
+    : undefined
+)
+
+/** Close the floating selection toolbar when the reader dismisses it. */
+function onSelectionPopoverOpen(open: boolean): void {
+  if (!open) clearSelection()
+}
+
+async function copySelection(): Promise<void> {
+  if (selectionState.value.kind !== "text") return
+  const text = selectionState.value.text
+  const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined
+  if (!clipboard?.writeText) {
+    selectionCopied.value = false
+    return
+  }
+  try {
+    await clipboard.writeText(text)
+    selectionCopied.value = true
+  } catch {
+    selectionCopied.value = false
+  }
 }
 
 function selectionPageIndex(): number {
@@ -675,6 +757,8 @@ async function commitViewerSelection(gesture: ViewerSelectionGesture): Promise<v
       return
     }
     emitSelection({ kind: "text", range, text, rects: [...selectionRects.value] })
+    selectionCopied.value = false
+    selectionAnchor.value = { x: gesture.latest.x, y: gesture.latest.y }
   } catch {
     if (request === selectionRequest) emitSelection({ kind: "unavailable", pageIndex: gesture.pageIndex, reason: "empty" })
   }
@@ -1672,6 +1756,7 @@ defineExpose({
     ref="viewerRef"
     :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', printMode && 'pdf-viewer--print', props.className)"
     :style="viewerMinHeightStyle"
+    :data-office-theme="props.isDark ? 'dark' : 'light'"
     :data-file-drop-active="isDragOver ? 'true' : undefined"
     data-testid="pdf-viewer"
     tabindex="0"
@@ -1682,76 +1767,222 @@ defineExpose({
     @dragleave="onDragLeave"
     @drop="onDrop"
   >
-    <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
-      <button
-        data-testid="pdf-sidebar-toggle"
-        type="button"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.toggleThumbnails"
-        :aria-pressed="showThumbnails"
-        @click="showThumbnails = !showThumbnails"
-      >☰</button>
-      <span class="file-name">{{ getDownloadFileName() }}</span>
-      <button data-testid="pdf-first-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.first" @click="setActivePage(1)">«</button>
-      <button data-testid="pdf-previous-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.previous" @click="setActivePage(activePage - 1)">‹</button>
-      <input
-        v-model="pageInput"
-        data-testid="pdf-page-input"
-        class="page-input"
-        type="number"
-        min="1"
-        :max="numPages || 1"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.pageInput"
-        @change="commitPageInput"
-        @keydown.enter.prevent="commitPageInput"
-      />
-      <span class="page-indicator">/ <span data-testid="pdf-page-count">{{ numPages || '—' }}</span></span>
-      <button data-testid="pdf-next-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.next" @click="setActivePage(activePage + 1)">›</button>
-      <button data-testid="pdf-last-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.last" @click="setActivePage(numPages)">»</button>
-      <button data-testid="pdf-zoom-out" type="button" :disabled="controlsDisabled || zoom <= zoomOptions[0]" :aria-label="m.common.zoom.out" @click="zoomOut">−</button>
-      <select v-model.number="zoom" data-testid="pdf-zoom-select" :disabled="controlsDisabled" :aria-label="m.common.zoom.level">
-        <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
-      </select>
-      <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" :aria-label="m.common.zoom.in" @click="zoomIn">+</button>
-      <select
-        data-testid="pdf-page-layout"
-        class="page-layout-select"
-        :value="pageLayoutMode"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.pageLayout"
-        @change="onPageLayoutChange"
-      >
-        <option value="continuous">{{ m.pdf.viewer.pageLayoutContinuous }}</option>
-        <option value="single">{{ m.pdf.viewer.pageLayoutSingle }}</option>
-        <option value="spread">{{ m.pdf.viewer.pageLayoutSpread }}</option>
-      </select>
-      <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" :aria-label="m.pdf.viewer.rotateClockwise" @click="rotateClockwise">⟳</button>
-      <form class="pdf-search" role="search" @submit.prevent="submitSearch">
-        <input
-          ref="searchInputRef"
-          v-model="searchDraft"
-          data-testid="pdf-search-input"
-          :disabled="controlsDisabled"
-          :aria-label="m.pdf.viewer.searchLabel"
-          :placeholder="m.pdf.viewer.searchPlaceholder"
-          @keydown.esc.prevent="clearSearchAndRestoreFocus"
-        />
-        <button data-testid="pdf-search-submit" type="submit" :disabled="controlsDisabled || !searchDraft.trim()">{{ m.pdf.viewer.search }}</button>
-        <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.previous" @click="moveSearch(-1)">↑</button>
-        <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.next" @click="moveSearch(1)">↓</button>
-      </form>
-      <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status" aria-atomic="true">{{ searchResult }}</span>
-      <button v-if="props.showDownload" data-testid="pdf-download" type="button" :disabled="!verifiedBlob || !!loadError" :aria-label="m.pdf.viewer.download" @click="handleDownload">⬇</button>
-    </div>
+    <OfficeToolbar
+      v-if="props.showToolbar"
+      class="pdf-toolbar"
+      data-testid="pdf-toolbar"
+      :label="m.common.chrome.toolbar"
+    >
+      <template #leading>
+        <OfficeToolbarGroup gap="sm" class="pdf-toolbar__leading">
+          <OfficeIconButton
+            variant="ghost"
+            size="icon-sm"
+            icon="columns-2"
+            data-testid="pdf-sidebar-toggle"
+            :label="m.pdf.viewer.toggleThumbnails"
+            :active="showThumbnails"
+            :disabled="controlsDisabled"
+            @click="showThumbnails = !showThumbnails"
+          />
+          <span class="pdf-file-name" :title="getDownloadFileName()">{{ getDownloadFileName() }}</span>
+          <OfficeToolbarGroup gap="sm" class="pdf-page-cluster" :label="m.common.page.navigation">
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-first-page"
+              :label="m.common.page.first"
+              :disabled="controlsDisabled || activePage <= 1"
+              @click="setActivePage(1)"
+            >«</OfficeIconButton>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-previous-page"
+              :label="m.common.page.previous"
+              :disabled="controlsDisabled || activePage <= 1"
+              @click="setActivePage(activePage - 1)"
+            >‹</OfficeIconButton>
+            <OfficeInput
+              v-model="pageInput"
+              class="pdf-page-input"
+              size="sm"
+              type="number"
+              min="1"
+              :max="numPages || 1"
+              :disabled="controlsDisabled"
+              :aria-label="m.pdf.viewer.pageInput"
+              data-testid="pdf-page-input"
+              @change="commitPageInput"
+              @keydown.enter.prevent="commitPageInput"
+            />
+            <span class="pdf-page-total">{{ m.common.page.of }} <span data-testid="pdf-page-count">{{ numPages || '—' }}</span></span>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-next-page"
+              :label="m.common.page.next"
+              :disabled="controlsDisabled || activePage >= numPages"
+              @click="setActivePage(activePage + 1)"
+            >›</OfficeIconButton>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-last-page"
+              :label="m.common.page.last"
+              :disabled="controlsDisabled || activePage >= numPages"
+              @click="setActivePage(numPages)"
+            >»</OfficeIconButton>
+          </OfficeToolbarGroup>
+          <select
+            data-testid="pdf-page-layout"
+            class="office-ui pdf-page-layout"
+            :value="pageLayoutMode"
+            :disabled="controlsDisabled"
+            :aria-label="m.pdf.viewer.pageLayout"
+            @change="onPageLayoutChange"
+          >
+            <option value="continuous">{{ m.pdf.viewer.pageLayoutContinuous }}</option>
+            <option value="single">{{ m.pdf.viewer.pageLayoutSingle }}</option>
+            <option value="spread">{{ m.pdf.viewer.pageLayoutSpread }}</option>
+          </select>
+        </OfficeToolbarGroup>
+      </template>
+
+      <template #trailing>
+        <OfficeToolbarGroup gap="sm" class="pdf-toolbar__actions">
+          <OfficeToolbarGroup gap="sm" class="pdf-zoom-cluster" :label="m.common.zoom.level">
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              icon="minus"
+              data-testid="pdf-zoom-out"
+              :label="m.common.zoom.out"
+              :disabled="controlsDisabled || zoom <= zoomOptions[0]"
+              @click="zoomOut"
+            />
+            <select
+              v-model.number="zoom"
+              data-testid="pdf-zoom-select"
+              class="office-ui pdf-zoom-select"
+              :disabled="controlsDisabled"
+              :aria-label="m.common.zoom.level"
+            >
+              <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
+            </select>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              icon="plus"
+              data-testid="pdf-zoom-in"
+              :label="m.common.zoom.in"
+              :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]"
+              @click="zoomIn"
+            />
+          </OfficeToolbarGroup>
+          <OfficeToolbarSeparator v-if="props.showRotateControls" />
+          <OfficeIconButton
+            v-if="props.showRotateControls"
+            variant="ghost"
+            size="icon-sm"
+            data-testid="pdf-rotate"
+            :label="m.pdf.viewer.rotateClockwise"
+            :disabled="controlsDisabled"
+            @click="rotateClockwise"
+          >⟳</OfficeIconButton>
+          <OfficeToolbarSeparator />
+          <form class="pdf-search" role="search" @submit.prevent="submitSearch">
+            <span class="office-ui office-input-control pdf-search__field">
+              <input
+                ref="searchInputRef"
+                v-model="searchDraft"
+                class="office-ui office-input pdf-search__input"
+                type="search"
+                autocomplete="off"
+                spellcheck="false"
+                :disabled="controlsDisabled"
+                :aria-label="m.pdf.viewer.searchLabel"
+                :placeholder="m.pdf.viewer.searchPlaceholder"
+                data-testid="pdf-search-input"
+                @keydown.esc.prevent="clearSearchAndRestoreFocus"
+              />
+            </span>
+            <OfficeButton
+              variant="outline"
+              size="sm"
+              type="submit"
+              data-testid="pdf-search-submit"
+              :disabled="controlsDisabled || !searchDraft.trim()"
+            >{{ m.pdf.viewer.search }}</OfficeButton>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-search-prev"
+              :label="m.common.search.previous"
+              :disabled="!searchHits.length"
+              @click="moveSearch(-1)"
+            >↑</OfficeIconButton>
+            <OfficeIconButton
+              variant="ghost"
+              size="icon-sm"
+              data-testid="pdf-search-next"
+              :label="m.common.search.next"
+              :disabled="!searchHits.length"
+              @click="moveSearch(1)"
+            >↓</OfficeIconButton>
+          </form>
+          <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status" aria-atomic="true">{{ searchResult }}</span>
+          <OfficeToolbarSeparator />
+          <OfficeIconButton
+            v-if="props.showPrint"
+            variant="ghost"
+            size="icon-sm"
+            icon="printer"
+            data-testid="pdf-print"
+            :label="m.pdf.viewer.print"
+            :disabled="controlsDisabled"
+            @click="printAllPages"
+          />
+          <OfficeIconButton
+            v-if="props.showDownload"
+            variant="ghost"
+            size="icon-sm"
+            icon="download"
+            data-testid="pdf-download"
+            :label="m.pdf.viewer.download"
+            :disabled="!verifiedBlob || !!loadError"
+            @click="handleDownload"
+          />
+        </OfficeToolbarGroup>
+      </template>
+    </OfficeToolbar>
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
     <div v-if="dropError" data-testid="pdf-drop-error" class="pdf-drop-error" role="alert">{{ dropError }}</div>
-    <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
-    <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
-    <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
-      {{ loadError.code }}: {{ loadErrorMessage }}
-    </div>
+    <OfficeEmptyState
+      v-if="!effectiveSource"
+      class="pdf-state pdf-state--empty"
+      data-testid="pdf-empty"
+      :title="m.pdf.viewer.noPdf"
+      icon="file-text"
+    />
+    <OfficeLoadingState
+      v-else-if="isLoading && !renderDocument"
+      class="pdf-state pdf-state--loading"
+      data-testid="pdf-loading"
+      :title="m.pdf.viewer.opening"
+    />
+    <OfficeErrorState
+      v-else-if="loadError"
+      class="pdf-state pdf-state--error"
+      data-testid="load-error"
+      :data-error-code="loadError.code"
+      :data-encrypted="encryptedError ? 'true' : undefined"
+      :title="errorTitle"
+      :description="errorDetail"
+      :icon="encryptedError ? 'lock' : 'triangle-alert'"
+      :show-retry="false"
+    />
     <div
       v-else-if="renderDocument"
       data-testid="pdf-document"
@@ -1761,17 +1992,26 @@ defineExpose({
       :data-zoom="zoom"
       :data-rotation="rotation"
     >
-      <PdfThumbnailStrip
-        v-if="showThumbnails"
-        :pageCount="numPages"
-        :labels="pdfPageLabels"
-        :urls="thumbnailUrls"
-        :activePage="activePage"
+      <DocumentViewerSidebar
+        :open="showThumbnails"
+        :close-on-escape="false"
         :label="m.pdf.viewer.thumbnails"
-        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
-        :pageLabel="m.pdf.viewer.pageLabel"
-        @select="setActivePage"
-      />
+        class="pdf-sidebar"
+        data-testid="pdf-thumbnails-sidebar"
+        @update:open="showThumbnails = $event"
+      >
+        <DocumentViewerSidebarSkeleton v-if="thumbnailsLoading" :items="3" />
+        <PdfThumbnailStrip
+          :pageCount="numPages"
+          :labels="pdfPageLabels"
+          :urls="thumbnailUrls"
+          :activePage="activePage"
+          :label="m.pdf.viewer.thumbnails"
+          :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+          :pageLabel="m.pdf.viewer.pageLabel"
+          @select="setActivePage"
+        />
+      </DocumentViewerSidebar>
       <main
         ref="frameRef"
         class="pdf-frame-wrap"
@@ -1888,6 +2128,54 @@ defineExpose({
       </figure>
     </div>
     <div v-if="downloadError" class="download-error">{{ downloadError }}</div>
+    <OfficeStatusBar
+      v-if="props.showStatusBar"
+      class="pdf-status-bar"
+      data-testid="pdf-status-bar"
+      :page="activePage"
+      :total-pages="numPages"
+      :status="statusBarStatus"
+      :file-name="getDownloadFileName()"
+      :busy="viewerState === 'loading'"
+    />
+    <OfficePopover
+      v-if="overlaysAvailable && selectionState.kind === 'text' && selectionAnchor"
+      :open="true"
+      side="top"
+      align="center"
+      :side-offset="8"
+      content-class="pdf-selection-popover"
+      data-testid="pdf-selection-popover"
+      @update:open="onSelectionPopoverOpen"
+    >
+      <template #trigger>
+        <span class="pdf-selection-anchor" :style="selectionAnchorStyle" aria-hidden="true" />
+      </template>
+      <div
+        class="pdf-selection-popover__body"
+        data-testid="pdf-selection-popover"
+        role="toolbar"
+        :aria-label="m.pdf.viewer.selectionActions"
+      >
+        <p class="pdf-selection-popover__text">{{ selectionState.text }}</p>
+        <div class="pdf-selection-popover__actions">
+          <span
+            v-if="selectionCopied"
+            class="pdf-selection-popover__status"
+            role="status"
+          >{{ m.pdf.viewer.copiedSelection }}</span>
+          <OfficeButton
+            variant="outline"
+            size="sm"
+            data-testid="pdf-selection-copy"
+            @click="copySelection"
+          >
+            <OfficeIcon name="copy" />
+            {{ m.pdf.viewer.copySelection }}
+          </OfficeButton>
+        </div>
+      </div>
+    </OfficePopover>
   </div>
 </template>
 
@@ -1922,23 +2210,88 @@ defineExpose({
 }
 /* Keyboard focus lands on the viewer root; keep a visible ring around it. */
 .pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
-.pdf-toolbar { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--pdf-border); flex-wrap: wrap; }
-.pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--pdf-control-border); border-radius: 6px; background: var(--pdf-control-bg); color: inherit; padding: 0 8px; }
-.pdf-toolbar button { cursor: pointer; }
-.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.pdf-toolbar button:disabled, .pdf-toolbar input:disabled, .pdf-toolbar select:disabled { opacity: .45; cursor: not-allowed; }
-.file-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; margin-right: auto; }
-.page-input { width: 58px; text-align: center; }
-.page-indicator { font-size: 12px; white-space: nowrap; }
-.pdf-search { display: flex; align-items: center; gap: 4px; }
-.pdf-search input { width: 150px; }
-.search-result { font-size: 12px; color: var(--pdf-link); white-space: nowrap; }
+/* The toolbar is the shared `OfficeToolbar`; this class stays because it is the
+   public print/touch hook (`.pdf-toolbar`). Geometry, colours and control
+   metrics come from the `--office-*` tokens. */
+.pdf-toolbar { min-height: 48px; font-size: var(--office-text-base); line-height: var(--office-leading-base); }
+.pdf-toolbar__leading { min-width: 0; }
+.pdf-toolbar__actions { min-width: 0; justify-content: flex-end; }
+.pdf-file-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
+  font-weight: 600;
+}
+.pdf-page-cluster { flex-wrap: nowrap; }
+.pdf-page-input {
+  inline-size: 3.625rem;
+  min-inline-size: 0;
+  text-align: center;
+}
+.pdf-page-input :deep(input) { text-align: center; }
+.pdf-page-total {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pdf-page-layout,
+.pdf-zoom-select {
+  block-size: var(--office-control-height-xs);
+  box-sizing: border-box;
+  min-block-size: 0;
+  min-height: 0;
+  min-inline-size: 0;
+  padding-block: 0;
+  padding-inline: var(--office-ui-space-2);
+  border: var(--office-border-width) solid var(--office-input);
+  border-radius: var(--office-radius-md);
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font: inherit;
+  font-size: var(--office-text-sm);
+  box-shadow: var(--office-shadow-xs);
+  cursor: pointer;
+}
+.pdf-page-layout { max-inline-size: 9rem; }
+.pdf-zoom-select { inline-size: 6.5rem; font-variant-numeric: tabular-nums; }
+.pdf-page-layout:focus-visible,
+.pdf-zoom-select:focus-visible {
+  border-color: var(--office-ring);
+  outline: var(--office-ring-width) solid color-mix(in oklab, var(--office-ring) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width);
+}
+.pdf-page-layout:disabled,
+.pdf-zoom-select:disabled { cursor: not-allowed; opacity: 0.64; }
+.pdf-zoom-cluster { flex-wrap: nowrap; }
+.pdf-search { display: flex; align-items: center; gap: var(--office-ui-space-1); min-inline-size: 0; }
+.pdf-search__field {
+  block-size: var(--office-control-height-xs);
+  box-sizing: border-box;
+  inline-size: 9.5rem;
+  min-block-size: 0;
+  min-height: 0;
+  min-inline-size: 0;
+}
+.pdf-search__input {
+  block-size: 100%;
+  min-block-size: 0;
+  min-height: 0;
+  inline-size: 100%;
+  padding-block: 0;
+  line-height: 1.4;
+}
+.search-result { font-size: var(--office-text-xs); color: var(--office-muted-foreground); white-space: nowrap; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.pdf-status-bar { flex: 0 0 auto; }
 .pdf-drop-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-bottom: 1px solid var(--pdf-border); background: rgba(220, 38, 38, 0.08); }
-.pdf-empty, .pdf-error { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--pdf-muted); }
-.pdf-error, .download-error { color: #b91c1c; }
-.download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--pdf-border); }
-.pdf-body { display: flex; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
+.pdf-state { flex: 1 1 auto; min-height: 0; }
+.download-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-top: 1px solid var(--pdf-border); }
+.pdf-body { display: flex; position: relative; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
+.pdf-sidebar { --pdf-border: var(--office-border); }
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 /* Single-page mode paints one stage exactly like before; the stack wrapper only
    exists so continuous and spread modes share the same template. */
@@ -1981,17 +2334,80 @@ defineExpose({
 .page-error { min-height: 0; min-width: min(300px, 100%); border-radius: 8px; background: var(--pdf-control-bg); padding: 24px; box-shadow: 0 2px 8px rgb(0 0 0 / 12%); }
 .pdf-search-context { position: sticky; top: 0; z-index: 3; width: fit-content; max-width: min(720px, 90%); margin: 0 auto 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--pdf-control-border); border-radius: 8px; background: var(--pdf-control-bg); color: var(--pdf-fg); font-size: 12px; padding: 6px 10px; }
 .pdf-search-context mark { background: #fde047; color: #111827; padding: 1px 2px; }
+/* Floating text-selection toolbar. The zero-size fixed anchor is the Reka
+   popover trigger, so the surface opens next to the pointer that ended the
+   selection without owning any page geometry. */
+.pdf-selection-anchor {
+  position: fixed;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
+.pdf-selection-popover { max-inline-size: min(22rem, calc(100vw - 2rem)); }
+.pdf-selection-popover__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+.pdf-selection-popover__text {
+  max-block-size: 4.5rem;
+  margin: 0;
+  overflow: hidden;
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+}
+.pdf-selection-popover__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--office-ui-space-2);
+}
+.pdf-selection-popover__status {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+}
 .pdf-print-pages { display: none; }
+@container pdf-viewer (max-width: 1100px) {
+  /* The parity/reference toolbar has no file label or first/last pair; dropping
+     them at laptop and tablet widths keeps every remaining command on one
+     48px row. Page input, prev/next and Home/End keep full navigation. */
+  .pdf-file-name { display: none; }
+  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
+  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
+  .pdf-search__field { inline-size: 7.5rem; }
+  .pdf-zoom-select { inline-size: 5.5rem; }
+  .pdf-page-layout { max-inline-size: 7.5rem; }
+}
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
   .pdf-frame-wrap { padding: 12px; }
-  .pdf-search { order: 3; width: 100%; }
-  .pdf-search input { flex: 1; width: auto; }
+  .pdf-file-name { max-inline-size: 10rem; }
+  .pdf-page-layout { max-inline-size: 7rem; }
+}
+@container pdf-viewer (max-width: 520px) {
+  .pdf-file-name { display: none; }
+  .pdf-page-layout { max-inline-size: 6rem; }
+  /* Keep paging usable without three rows of navigation chrome. The first /
+     last buttons stay available at desktop widths and through the keyboard
+     map (Home/End) on narrow screens. */
+  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
+  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
+  .pdf-toolbar__actions { flex: 1 1 100%; justify-content: flex-end; }
+  .pdf-search { order: 3; flex: 1 1 100%; }
+  .pdf-search__field { flex: 1 1 auto; inline-size: auto; }
+  .search-result { flex: 1 1 100%; order: 4; }
+}
+@container pdf-viewer (max-width: 390px) {
+  .pdf-page-total { font-size: var(--office-text-xs); }
+  .pdf-page-layout { max-inline-size: 4.75rem; }
+  .pdf-zoom-select { inline-size: 5.25rem; }
 }
 
 @media print {
   .pdf-viewer { height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; color: #000 !important; }
-  .pdf-toolbar, .pdf-thumbnails, .pdf-status, .pdf-search-context, .download-error, .page-loading { display: none !important; }
+  .pdf-toolbar, .pdf-thumbnails, .pdf-sidebar, .pdf-status, .pdf-status-bar, .pdf-search-context, .download-error, .page-loading { display: none !important; }
   .pdf-viewer--print .pdf-body { display: none !important; }
   .pdf-body { display: block !important; min-height: 0 !important; background: #fff !important; }
   .pdf-frame-wrap { overflow: visible !important; min-height: 0 !important; padding: 0 !important; }
@@ -2021,12 +2437,12 @@ defineExpose({
 }
 
 @media (pointer: coarse) {
-  .pdf-toolbar button,
-  .pdf-toolbar select,
-  .pdf-toolbar input {
+  .pdf-toolbar :deep(button),
+  .pdf-toolbar :deep(select),
+  .pdf-toolbar :deep(input) {
     min-height: 44px;
   }
-  .pdf-toolbar button {
+  .pdf-toolbar :deep(button) {
     min-width: 44px;
   }
 }

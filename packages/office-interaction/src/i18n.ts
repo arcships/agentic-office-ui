@@ -1405,6 +1405,8 @@ export interface OfficePdfMessages {
     searchPlaceholder: string
     search: string
     download: string
+    /** Print the whole document through the browser print dialog. */
+    print: string
     thumbnails: string
     /** Template with a `{page}` placeholder. */
     thumbnailAlt: string
@@ -1424,6 +1426,17 @@ export interface OfficePdfMessages {
     /** Rejected drop: the file type is not a PDF document. */
     unsupportedDrop: string
     selectionLayer: string
+    /** A password is required to unlock an encrypted document. */
+    passwordRequired: string
+    /** Accessible name of the floating text-selection toolbar. */
+    selectionActions: string
+    copySelection: string
+    copiedSelection: string
+    /** Accessible name of the link hover card. */
+    linkActions: string
+    openLink: string
+    /** Title of the annotation details dialog. */
+    annotationDetails: string
   }
   surface: {
     noPdf: string
@@ -2740,6 +2753,7 @@ export const officeMessagesEn: OfficeMessages = {
       searchPlaceholder: "Search text",
       search: "Search",
       download: "Download PDF",
+      print: "Print PDF",
       thumbnails: "Page thumbnails",
       thumbnailAlt: "Page {page} thumbnail",
       pageLabel: "Page {page}",
@@ -2753,6 +2767,13 @@ export const officeMessagesEn: OfficeMessages = {
       invalidPdf: "The PDF file could not be parsed or rendered.",
       unsupportedDrop: "Only PDF files are supported",
       selectionLayer: "PDF page text selection layer",
+      passwordRequired: "Enter the document password to unlock this PDF.",
+      selectionActions: "Selection actions",
+      copySelection: "Copy selection",
+      copiedSelection: "Copied",
+      linkActions: "Link preview",
+      openLink: "Open link",
+      annotationDetails: "Annotation details",
     },
     surface: {
       noPdf: "No PDF loaded",
@@ -4041,6 +4062,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       searchPlaceholder: "搜索文本",
       search: "搜索",
       download: "下载 PDF",
+      print: "打印 PDF",
       thumbnails: "页面缩略图",
       thumbnailAlt: "第 {page} 页缩略图",
       pageLabel: "第 {page} 页",
@@ -4054,6 +4076,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       invalidPdf: "PDF 文件无法解析或渲染。",
       unsupportedDrop: "仅支持 PDF 文件",
       selectionLayer: "PDF 页面文本选择层",
+      passwordRequired: "输入文档密码以解锁此 PDF。",
+      selectionActions: "选中内容操作",
+      copySelection: "复制选中内容",
+      copiedSelection: "已复制",
+      linkActions: "链接预览",
+      openLink: "打开链接",
+      annotationDetails: "批注详情",
     },
     surface: {
       noPdf: "未加载 PDF",
