@@ -57,6 +57,7 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "file-upload",
       "file-thumbnail",
       "pdf-toolbar",
+      "pdf-sidebar",
       "docx-toolbar",
       "docx-sidebar",
       "document-sidebar",
@@ -334,7 +335,10 @@ test("harness docs and CI artifact wiring exist", () => {
   }
   const workflow = read(".github/workflows/ui-parity.yml");
   assert.ok(workflow.includes("pnpm ui:parity"));
-  assert.ok(workflow.includes("ui-parity-report"));
+  // #165 split the single `ui-parity-report` artifact into the PR core subset
+  // and the nightly full matrix; both still carry report.json/report.html.
+  assert.ok(workflow.includes("ui-parity-core-"));
+  assert.ok(workflow.includes("ui-parity-full-"));
   assert.ok(workflow.includes("actions/upload-artifact"));
   assert.ok(workflow.includes("playwright install"));
   assert.ok(workflow.includes("ui:parity:self-check"));

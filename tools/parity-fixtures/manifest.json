@@ -39,7 +39,8 @@
     "maxChannelDelta": 2,
     "maxDiffPixelRatio": 0.001,
     "maxContiguousDiffPx": 4,
-    "heatmapAmplification": 16
+    "heatmapAmplification": 16,
+    "topDiffRegions": 5
   },
   "surfaces": [
     {
@@ -166,7 +167,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "input",
@@ -220,7 +223,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#157"
     },
     {
       "id": "select",
@@ -266,7 +272,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "dialog",
@@ -287,7 +295,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "tooltip",
@@ -309,7 +319,9 @@
             "selector": "[data-parity-tooltip-trigger]"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "file-upload",
@@ -375,7 +387,9 @@
             "file": "fileUpload.selectedFile"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "file-thumbnail",
@@ -418,7 +432,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "pdf-toolbar",
@@ -473,7 +489,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "pdf-sidebar",
@@ -510,7 +528,9 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": true,
+      "gateStatus": "blocking"
     },
     {
       "id": "docx-toolbar",
@@ -557,7 +577,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#159"
     },
     {
       "id": "docx-sidebar",
@@ -594,7 +617,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#159"
     },
     {
       "id": "document-sidebar",
@@ -630,7 +656,10 @@
             "type": "none"
           }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#158"
     },
     {
       "id": "bounding-box-citations",
@@ -647,51 +676,71 @@
           "id": "default",
           "label": "form fields",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "hover",
           "label": "hover field",
           "matrixState": "hover",
-          "interaction": { "type": "hover", "selector": "[data-review-field-key='invoice_total']" }
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-review-field-key='invoice_total']"
+          }
         },
         {
           "id": "focus",
           "label": "focus field",
           "matrixState": "focus",
-          "interaction": { "type": "focus", "selector": "[data-review-field-key='payment_terms']" }
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-review-field-key='payment_terms']"
+          }
         },
         {
           "id": "selected",
           "label": "active field",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "modified",
           "label": "modified expected",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "empty",
           "label": "no fields",
           "matrixState": "empty",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "loading",
           "label": "loading",
           "matrixState": "loading",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "error",
           "label": "error",
           "matrixState": "error",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "ready"
     },
     {
       "id": "layout-blocks",
@@ -708,45 +757,63 @@
           "id": "default",
           "label": "blocks",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "hover",
           "label": "hover block",
           "matrixState": "hover",
-          "interaction": { "type": "hover", "selector": "[data-layout-block-id='block-2']" }
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-layout-block-id='block-2']"
+          }
         },
         {
           "id": "focus",
           "label": "focus block",
           "matrixState": "focus",
-          "interaction": { "type": "focus", "selector": "[data-layout-block-id='block-3']" }
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-layout-block-id='block-3']"
+          }
         },
         {
           "id": "active",
           "label": "active block",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "empty",
           "label": "no blocks",
           "matrixState": "empty",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "loading",
           "label": "loading",
           "matrixState": "loading",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "error",
           "label": "error",
           "matrixState": "error",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "ready"
     },
     {
       "id": "e-signature",
@@ -763,39 +830,53 @@
           "id": "unsigned",
           "label": "unsigned field",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "signed",
           "label": "signed field",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "exporting",
           "label": "exporting",
           "matrixState": "loading",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "preview",
           "label": "signature preview",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "loading",
           "label": "loading",
           "matrixState": "loading",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "error",
           "label": "error",
           "matrixState": "error",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "ready"
     },
     {
       "id": "document-splits",
@@ -812,51 +893,109 @@
           "id": "default",
           "label": "three splits",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "hover",
           "label": "hover thumbnail",
           "matrixState": "hover",
-          "interaction": { "type": "hover", "selector": "[data-page-id='page-1']" }
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-page-id='page-1']"
+          }
         },
         {
           "id": "focus",
           "label": "focus thumbnail",
           "matrixState": "focus",
-          "interaction": { "type": "focus", "selector": "[data-page-id='page-1']" }
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-page-id='page-1']"
+          }
         },
         {
           "id": "single",
           "label": "single split",
           "matrixState": "default",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "empty-pages",
           "label": "empty split group",
           "matrixState": "empty",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "empty",
           "label": "no splits",
           "matrixState": "empty",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "loading",
           "label": "loading",
           "matrixState": "loading",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         },
         {
           "id": "error",
           "label": "error",
           "matrixState": "error",
-          "interaction": { "type": "none" }
+          "interaction": {
+            "type": "none"
+          }
         }
-      ]
+      ],
+      "core": false,
+      "gateStatus": "ready"
     }
-  ]
+  ],
+  "coreSubset": {
+    "description": "Surfaces the pull-request parity job captures. Everything else only runs in the nightly full matrix.",
+    "surfaces": [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "pdf-sidebar"
+    ]
+  },
+  "baselines": {
+    "directory": "tests/visual/extend",
+    "manifest": "tests/visual/extend/manifest.json",
+    "naming": "<surface>/<state>/<theme>-<viewport>.png",
+    "viewports": [
+      "1440x900",
+      "390x844"
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "capturePaddingPx": 12,
+    "description": "Committed subject baselines for gate-blocking surfaces. `pnpm ui:baseline` manages them; the approval flow lives in tests/visual/extend/README.md."
+  },
+  "gate": {
+    "modes": {
+      "all": "Every parity failure blocks (default; `pnpm ui:parity`).",
+      "ready": "Only surfaces with gateStatus=blocking block; pending surfaces stay report-only (CI).",
+      "off": "Never exit non-zero; artifact mode (`--report-only`)."
+    },
+    "prMode": "ready",
+    "finalMode": "all"
+  }
 }
