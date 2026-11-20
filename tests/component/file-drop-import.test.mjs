@@ -34,6 +34,17 @@ globalThis.Node ??= XmlNode;
 globalThis.XMLSerializer ??= XmlSerializer;
 globalThis.Document ??= class Document {};
 globalThis.ShadowRoot ??= class ShadowRoot {};
+// Reka UI primitives check refs against these constructors even when the
+// custom renderer has no real DOM; the stubs keep mounting DOM-free.
+if (globalThis.Element === undefined) globalThis.Element = class Element {};
+if (globalThis.DocumentFragment === undefined) {
+  globalThis.DocumentFragment = class DocumentFragment {
+    constructor() {
+      this.children = [];
+      this.parent = null;
+    }
+  };
+}
 // The composite viewers mount real surfaces; only the browser APIs those
 // surfaces touch are stubbed. The renderer supplies the host nodes.
 globalThis.ResizeObserver ??= class ResizeObserver {

@@ -1528,6 +1528,7 @@ export interface OfficeMessages {
     fileUpload: {
       prompt: string
       title: string
+      description: string
       browse: string
       drop: string
       ready: string
@@ -2850,6 +2851,7 @@ export const officeMessagesEn: OfficeMessages = {
     fileUpload: {
       prompt: "Drag & drop files here, or click to select",
       title: "Click to upload or drop files",
+      description: "PDF, DOC/DOCX, XLSX, CSV, PNG, or JPG",
       browse: "Browse files",
       drop: "Drop to add",
       ready: "Ready",
@@ -4161,6 +4163,7 @@ export const officeMessagesZhCN: OfficeMessages = {
     fileUpload: {
       prompt: "将文件拖放到此处，或点击选择",
       title: "点击上传或拖放文件",
+      description: "PDF、DOC/DOCX、XLSX、CSV、PNG 或 JPG",
       browse: "浏览文件",
       drop: "拖放以添加",
       ready: "就绪",

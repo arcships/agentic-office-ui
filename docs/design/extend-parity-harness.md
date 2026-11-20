@@ -126,13 +126,14 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
 - #157 的 5 个 primitive（Button/Input/Select/Dialog/Tooltip）已接入，最终矩阵 200 case
   中 196 `pass`、4 个 `input/focus/light` 仅有 52 px、单通道 1/255（diff ratio 0.077%）
   的抗锯齿残差；其余状态 0 px。
-- `file-upload` / `file-thumbnail` / `pdf-toolbar` 全部 `fail`，这是**真实 delta**：
-  - FileUpload：参考是 icon-cluster + browse chip + 组件内文件列表；当前 Vue 组件是宿主渲染的简化 dropzone（180px、单图标、额外 “Accepted/Max size” 行）。
-  - FileThumbnail：参考是方形预览卡（loading/error/fallback 图层）；当前 Vue 是带文件名/类型的行内缩略图。
-  - PDF toolbar：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
-- `file-upload` / `file-thumbnail` 已由 #163 收敛：
-  `pnpm ui:parity -- --only file-upload,file-thumbnail --skip-tokens` 的 80 个 case 全部通过
-  （61 `pass` + 19 `pass-with-antialiasing`，0 `fail`）。实现细节、状态和边界见
+- `file-upload` / `file-thumbnail` / `pdf-toolbar` 在 #163/#162 之前全部 `fail`，这是**真实 delta**：
+  - FileUpload：参考是 icon-cluster + browse chip + 组件内文件列表；旧 Vue 组件是宿主渲染的简化 dropzone（180px、单图标、额外 “Accepted/Max size” 行）。
+  - FileThumbnail：参考是方形预览卡（loading/error/fallback 图层）；旧 Vue 是带文件名/类型的行内缩略图。
+  - PDF toolbar：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；旧 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
+- `file-upload` / `file-thumbnail` 已由 #163 收敛，且 0.8 复跑时两侧均使用**默认 props**
+  （不再传 `show-file-list`）——`pnpm ui:parity -- --only file-upload,file-thumbnail --skip-tokens`
+  的 80 个 case 全部通过（61 `pass` + 19 `pass-with-antialiasing`，0 `fail`；最大 diff ratio
+  0.000008、单通道 1/255、几何 0px）。实现细节、状态和边界见
   [components/file-components.md](../components/file-components.md)。
 - `pdf-toolbar` 仍有真实 delta：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；
   当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。

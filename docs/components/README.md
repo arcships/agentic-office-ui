@@ -54,7 +54,7 @@
 
 ### `FileUpload`
 
-属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`，以及 0.8 新增的可选视觉/交互属性：`title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam`、`borderBeamTheme`。事件保持 `files-accepted` 和 `files-rejected`；拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。默认 `showFileList=false` 以避免与宿主自己的文件列表重复；需要 Extend 内置列表时显式开启。完整合同、像素对照和状态说明见[File components](file-components.md)。
+属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`，以及 0.8 新增的可选视觉/交互属性：`title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam`、`borderBeamTheme`。事件保持 `files-accepted` 和 `files-rejected`；拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。0.8 起默认值与 Extend 对齐：`accept` 为文档/图片白名单、`multiple=true`、`showFileList=true`；旧宿主可显式传 `accept=""`、`:multiple="false"`、`:show-file-list="false"` 恢复旧行为。完整合同、像素对照和状态说明见[File components](file-components.md)。
 
 ### `SignaturePad`
 
@@ -62,7 +62,7 @@
 
 ### `FileThumbnail`
 
-接收 `file: { name, type, url?, size? }`、`size`（`sm`/`md`/`lg`，或像素/CSS 长度）、`previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta`、`alt` 和 `className`。方形/自定义比例预览卡包含图片 blur-in、loading overlay、error/empty fallback；需要旧版文件名/类型行时设置 `showMeta`。完整合同见[File components](file-components.md)。
+接收 `file: { name, type, url?, size? }`、`size`（`sm`/`md`/`lg`，或像素/CSS 长度）、`previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta`、`alt` 和 `className`。方形/自定义比例预览卡包含图片 blur-in、loading overlay、error/empty fallback；Extend 默认的 fallback 是纯 muted 色块，因此 `showTypeGlyph`/`showMeta` 保持 opt-in，需要旧版文件名/类型行或类型 glyph 时显式开启。完整合同见[File components](file-components.md)。
 
 ### `BoundingBoxCitations`
 

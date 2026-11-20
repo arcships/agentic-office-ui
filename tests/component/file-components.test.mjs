@@ -78,27 +78,41 @@ function imageLoad(naturalWidth = 120, naturalHeight = 90) {
   return { currentTarget: { naturalWidth, naturalHeight } };
 }
 
-test("FileUpload renders the Extend structure with host-compatible defaults", async () => {
-  const mounted = await mount(FileUpload, {
-    accept: ".pdf",
-    title: "Click to upload or drop files",
-    description: "PDF, DOC, XLSX",
-    showFileList: true,
-  });
+test("FileUpload ships the Extend defaults: copy, icon cluster, accept list and file list", async () => {
+  const mounted = await mount(FileUpload, {});
 
   assert.equal(byClass(mounted.root, "file-upload__icon-card").length, 3);
   assert.match(textContent(mounted.root), /Click to upload or drop files/);
-  assert.match(textContent(mounted.root), /PDF, DOC, XLSX/);
+  assert.match(textContent(mounted.root), /PDF, DOC\/DOCX, XLSX, CSV, PNG, or JPG/);
   assert.match(textContent(mounted.root), /Browse files/);
   assert.equal(dropzone(mounted.root).props.tabindex, "0");
+
+  const input = fileInput(mounted.root);
+  assert.match(input.props.accept, /\.pdf/u);
+  assert.match(
+    input.props.accept,
+    /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/u,
+  );
+  assert.ok(input.props.multiple, "default multiple matches the Extend reference");
+
+  selectFiles(mounted.root, [
+    { name: "quarterly-report.pdf", type: "application/pdf", size: 14, lastModified: 1 },
+  ]);
+  await vue.nextTick();
+  assert.equal(byClass(mounted.root, "file-upload__list").length, 1);
+  assert.match(textContent(mounted.root), /quarterly-report\.pdf/);
+  assert.match(textContent(mounted.root), /Ready/);
+
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
 
-test("FileUpload keeps the internal file list opt-in for existing hosts", async () => {
+test("FileUpload keeps an opt-out for hosts that render their own list and copy", async () => {
   const accepted = [];
   const legacy = await mount(FileUpload, {
     accept: ".pdf",
+    description: "",
+    showFileList: false,
     onFilesAccepted: (files) => accepted.push(files),
   });
   selectFiles(legacy.root, [
@@ -107,6 +121,7 @@ test("FileUpload keeps the internal file list opt-in for existing hosts", async 
   await vue.nextTick();
   assert.equal(accepted.length, 1);
   assert.equal(byClass(legacy.root, "file-upload__list").length, 0);
+  assert.equal(byClass(legacy.root, "file-upload__description").length, 0);
   legacy.app.unmount();
 });
 
@@ -321,7 +336,9 @@ test("FileThumbnail renders loading, error, fallback and type glyph layers", asy
   });
   assert.equal(byClass(error.root, "file-thumbnail__loading").length, 0);
   assert.equal(byClass(error.root, "file-thumbnail__fallback").length, 1);
+  // The Extend default tile is a plain muted square: glyph and meta stay opt-in.
   assert.equal(walk(error.root).filter((node) => node.type === "svg").length, 0);
+  assert.equal(byClass(error.root, "file-thumbnail__meta").length, 0);
   error.app.unmount();
 
   const glyph = await mount(FileThumbnail, {

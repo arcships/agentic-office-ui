@@ -318,7 +318,7 @@
       "subjectComponent": "packages/vue-ui/src/components/FileUpload.vue",
       "subjectStatus": "available",
       "cellWidth": 520,
-      "notes": "Extend's icon cluster, drop-target chip and in-component file list are reproduced by the Vue FileUpload (opt-in file list, same geometry/colors).",
+      "notes": "Both sides render FileUpload with shipped defaults (no visual props): Extend's icon cluster, default copy, accept list, multiple input and in-component file list are reproduced by the Vue FileUpload. The file list is on by default; hosts can opt out with show-file-list=false.",
       "states": [
         {
           "id": "default",
@@ -384,7 +384,7 @@
       "subjectComponent": "packages/vue-ui/src/components/FileThumbnail.vue",
       "subjectStatus": "available",
       "cellWidth": 220,
-      "notes": "Extend's square preview card, blur-in reveal, loading overlay, error fallback and muted empty tile are reproduced by the Vue FileThumbnail.",
+      "notes": "Extend's square preview card, blur-in reveal, loading overlay, error fallback and muted empty tile are reproduced by the Vue FileThumbnail. The Extend default tile has no glyph/meta layer; showTypeGlyph/showMeta stay opt-in Vue extensions.",
       "states": [
         {
           "id": "default",

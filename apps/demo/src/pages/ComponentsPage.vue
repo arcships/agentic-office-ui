@@ -28,7 +28,6 @@
             <FileUpload
               accept=".pdf,.docx"
               :max-size="2 * 1024 * 1024"
-              show-file-list
               title="Click to upload or drop files"
               description="PDF or DOCX, up to 2 MB"
               @files-accepted="uploaded = $event"
@@ -53,8 +52,6 @@
           <FileThumbnail
             :file="{ name: 'large-contract.pdf', type: 'application/pdf' }"
             :size="96"
-            show-meta
-            show-type-glyph
           />
           <FileThumbnail
             :file="{ name: 'legal-contract.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }"

@@ -1,0 +1,33 @@
+// Shipped defaults for FileUpload, mirroring extend-hq/ui
+// apps/v4/components/extend/file-upload.tsx at
+// 70fe70c6f1e1eee53954c6923f3d9f583557a57e.
+//
+// The values live outside the SFC because `defineProps()` defaults are hoisted
+// outside `setup()` and cannot reference locally declared variables.
+import type { FileUploadAcceptedType } from "../types"
+
+/** Extend's default accept list: PDF, Word, Excel/CSV and PNG/JPEG images. */
+export const FILE_UPLOAD_DEFAULT_ACCEPT = [
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xlsx",
+  ".csv",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "image/png",
+  "image/jpeg",
+].join(",")
+
+/** Extend's default icon cluster: Image / PDF / Sheet. */
+export const FILE_UPLOAD_DEFAULT_ACCEPTED_TYPES: FileUploadAcceptedType[] = [
+  { label: "Image", icon: "image" },
+  { label: "PDF", icon: "pdf" },
+  { label: "Sheet", icon: "sheet" },
+]

@@ -280,7 +280,7 @@ http://localhost:5173
 
 通过标准：
 
-- 合法文件触发 `files-accepted`；开启 `showFileList` 时出现文件名、`type - size` 与 Ready。
+- 合法文件触发 `files-accepted`；默认渲染文件名、`type - size` 与 Ready，`:show-file-list="false"` 时只保留 dropzone。
 - 非法文件显示错误（类型拒绝显示参考文案，尺寸/混合批次保留详细原因）。
 - dragover 样式变化、图标 cluster 抬升；chip 文案切换到 drop label。
 - disabled 场景禁止打开 picker、拖放和键盘激活。
@@ -298,7 +298,7 @@ http://localhost:5173
 
 - 图片首次加载有 blur-in/overlay，重复挂载直接显示。
 - 长文件名/类型截断合理，Ready 徽标不被挤出。
-- unknown 类型和失败图片回退到 muted fallback；开启 `showTypeGlyph` 时显示 glyph。
+- unknown 类型和失败图片回退到 muted fallback（Extend 默认无 glyph）；开启 `showTypeGlyph` 时显示 glyph。
 - demo 的 `/#/file-components` 覆盖 light/dark 与 390 / 768 / 1440。
 
 ### Spinner
