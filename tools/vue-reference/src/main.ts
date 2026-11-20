@@ -2,6 +2,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "@arcships/vue-ui/theme.css";
 import "@arcships/vue-ui/style.css";
+import "../../../packages/vue-ui/src/styles/chrome.css";
 import "./parity.css";
 
 import { createApp } from "vue";

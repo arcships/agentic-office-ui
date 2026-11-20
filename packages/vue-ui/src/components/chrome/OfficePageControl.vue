@@ -17,6 +17,14 @@ export interface OfficePageControlProps {
   disabled?: boolean
   /** Accessible label of the page input; defaults to `common.page.current`. */
   label?: string
+  /**
+   * Render a native `<input>` instead of `OfficeInput`. Hosts that integrate
+   * the control with a form or a renderer without Vue's component patches use
+   * this; the visual treatment and keyboard semantics are identical.
+   */
+  nativeInput?: boolean
+  /** Optional `data-testid` for the page input element. */
+  inputTestId?: string
   /** Extra classes merged on the root. */
   class?: string
 }
@@ -26,6 +34,8 @@ const props = withDefaults(defineProps<OfficePageControlProps>(), {
   defaultPage: 1,
   disabled: false,
   label: undefined,
+  nativeInput: false,
+  inputTestId: undefined,
   class: "",
 })
 
@@ -39,7 +49,9 @@ const m = useOfficeUiMessages()
 const internalPage = ref(normalize(props.defaultPage))
 const focused = ref(false)
 const draft = ref(String(currentPage()))
-const inputRef = ref<InstanceType<typeof OfficeInput> | null>(null)
+const inputRef = ref<
+  InstanceType<typeof OfficeInput> | HTMLInputElement | null
+>(null)
 
 function upperBound(): number {
   return Math.max(Math.trunc(props.totalPages) || 0, 0)
@@ -62,7 +74,14 @@ const displayTotal = computed(() => (total.value > 0 ? String(total.value) : "â€
 const classes = computed(() =>
   officeClass("office-ui", "office-page-control", props.class),
 )
-const inputClasses = computed(() => "office-page-control__input")
+const inputClasses = computed(() =>
+  officeClass(
+    "office-ui",
+    "office-input",
+    "office-input--sm",
+    "office-page-control__input",
+  ),
+)
 
 watch(page, (next) => {
   // Keep a focused draft intact while the user is typing a page number.
@@ -156,10 +175,17 @@ function onKeydown(event: KeyboardEvent): void {
 function resolveInput(): HTMLInputElement | null {
   const instance = inputRef.value as unknown
   if (!instance) return null
-  if (instance instanceof HTMLInputElement) return instance
-  return (instance as { $el?: unknown }).$el instanceof HTMLInputElement
-    ? ((instance as { $el: HTMLInputElement }).$el)
-    : null
+  // Non-DOM renderers (SSR, component tests) may not define the global
+  // constructors at all; the component must not throw in a deferred tick.
+  const hasElement = typeof HTMLInputElement !== "undefined"
+  if (hasElement && instance instanceof HTMLInputElement) return instance
+  const root = (instance as { $el?: unknown }).$el
+  if (hasElement && root instanceof HTMLInputElement) return root
+  if (root && typeof (root as { querySelector?: unknown }).querySelector === "function") {
+    return (root as { querySelector: (selector: string) => HTMLInputElement | null })
+      .querySelector("input")
+  }
+  return null
 }
 
 defineExpose({
@@ -176,7 +202,24 @@ defineExpose({
     data-testid="office-page-control"
   >
     <span class="office-page-control__label">{{ m.common.page.label }}</span>
+    <input
+      v-if="props.nativeInput"
+      ref="inputRef"
+      v-model="draft"
+      :class="inputClasses"
+      :aria-label="props.label ?? m.common.page.current"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      autocomplete="off"
+      :disabled="props.disabled || total < 1"
+      data-slot="page-input"
+      :data-testid="props.inputTestId ?? 'office-page-input'"
+      @focus="onFocus"
+      @blur="onBlur"
+      @keydown="onKeydown"
+    />
     <OfficeInput
+      v-else
       ref="inputRef"
       :class="inputClasses"
       :model-value="draft"
@@ -186,7 +229,7 @@ defineExpose({
       autocomplete="off"
       :disabled="props.disabled || total < 1"
       data-slot="page-input"
-      data-testid="office-page-input"
+      :data-testid="props.inputTestId ?? 'office-page-input'"
       @update:model-value="onUpdate"
       @focus="onFocus"
       @blur="onBlur"

@@ -136,6 +136,10 @@ CI：`.github/workflows/ui-parity.yml` 上传 artifact `ui-parity-report`（含 
   [components/file-components.md](../components/file-components.md)。
 - `pdf-toolbar` 仍有真实 delta：参考 `min-h-12`、`px-3 py-2`、`gap-2`、ghost icon buttons；
   当前 Vue toolbar 在 936px 内换行成两行（88px vs 48px），控件仍含原生 `<select>`、搜索表单行和文件名。
+- `xlsx-toolbar` / `xlsx-ribbon` **没有**可跑的 surface：上游 `xlsx-viewer.tsx` / `xlsx-editor.tsx`
+  依赖不可分发的私有包 `@extend-ai/react-xlsx`，参考侧无法渲染。结论与替代证据
+  （geometry / structural / token 三层已对齐，像素 diff 不可达）见
+  [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
 - `document-sidebar` 只保留参考基线：规范组件由 #158 在
   `packages/vue-ui/src/components/chrome/` 实现；#163 记录 seam，不重复实现。
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。

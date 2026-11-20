@@ -1,30 +1,29 @@
 <template>
-  <Teleport to="body">
-    <div class="xlsx-headermenu-backdrop" data-testid="xlsx-headermenu-backdrop" @pointerdown="emit('close')" />
-    <div
-      ref="menuRef"
-      class="xlsx-headermenu"
-      :data-testid="isColumn ? 'xlsx-column-menu-list' : 'xlsx-row-menu-list'"
-      :style="menuStyle"
-      role="menu"
-      :aria-label="isColumn ? m.xlsx.contextMenu.selectColumn : m.xlsx.contextMenu.selectRow"
-      @keydown="onKeydown"
-    >
-      <button
-        v-for="item in items"
-        :key="item.id"
-        class="xlsx-headermenu__item"
-        :data-testid="item.testId"
-        role="menuitem"
-        @click="run(item)"
-      >{{ item.label }}</button>
-    </div>
-  </Teleport>
+  <!--
+    Header menu: a real `OfficeDropdownMenu` anchored at the pointer. The item
+    model keeps the historical `data-testid`s, the read-only guard and the
+    controller commands; keyboard, typeahead, focus and dismissal come from the
+    shared primitive layer.
+  -->
+  <OfficeDropdownMenu
+    :open="open"
+    :items="menuItems"
+    :content-test-id="listTestId"
+    :menu-label="isColumn ? m.xlsx.contextMenu.selectColumn : m.xlsx.contextMenu.selectRow"
+    :content-class="'xlsx-headermenu'"
+    :side-offset="-4"
+    :restore-focus="restoreFocusTarget"
+    @update:open="onOpenChange"
+  >
+    <template #trigger>
+      <span class="xlsx-headermenu__anchor" :style="anchorStyle" aria-hidden="true" tabindex="-1" />
+    </template>
+  </OfficeDropdownMenu>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, type CSSProperties } from "vue";
-import { resolveOfficeMenuKeyCommand } from "@arcships/vue-ui";
+import { computed, onMounted, ref, type CSSProperties } from "vue";
+import { OfficeDropdownMenu, type OfficeMenuEntry } from "@arcships/vue-ui";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
 import { useXlsxMessages } from "../i18n";
 
@@ -41,22 +40,32 @@ const props = defineProps<{
   kind: "row" | "column";
   x: number;
   y: number;
+  /** Element that receives focus when the menu closes (the grid). */
+  restoreTarget?: HTMLElement | null;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
 
 const m = useXlsxMessages();
-const menuRef = ref<HTMLElement | null>(null);
-const menuStyle = computed<CSSProperties>(() => ({
-  left: `${props.x}px`,
+const open = ref(false);
+const isColumn = computed(() => props.kind === "column");
+const listTestId = computed(() => (isColumn.value ? "xlsx-column-menu-list" : "xlsx-row-menu-list"));
+onMounted(() => {
+  open.value = true;
+});
+
+const anchorStyle = computed<CSSProperties>(() => ({
+  blockSize: "0px",
+  inlineSize: "0px",
+  insetBlockStart: `${props.y}px`,
+  insetInlineStart: `${props.x}px`,
+  pointerEvents: "none",
   position: "fixed",
-  top: `${props.y}px`,
-  zIndex: "10000"
 }));
 
 const items = computed<HeaderMenuItem[]>(() => {
   const controller = props.controller;
-  if (props.kind === "column") {
+  if (isColumn.value) {
     const table = controller.tables.find(
       (candidate) => props.index >= candidate.start.col && props.index <= candidate.end.col
     );
@@ -150,67 +159,43 @@ const items = computed<HeaderMenuItem[]>(() => {
     }
   ];
 });
-const isColumn = computed(() => props.kind === "column")
 
-function run(item: HeaderMenuItem) {
-  if (props.controller.isEditingLocked ?? props.controller.readOnly) {
-    emit("close");
-    return;
-  }
+const menuItems = computed<OfficeMenuEntry[]>(() => items.value.map((item) => ({
+  type: "item",
+  id: item.id,
+  testId: item.testId,
+  label: item.label,
+  onSelect: () => run(item),
+})));
+
+/**
+ * Reka closes the menu after the select, which funnels through
+ * `onOpenChange(false)` → `close`; the handler only guards and runs the command.
+ */
+function run(item: HeaderMenuItem): void {
+  if (props.controller.isEditingLocked === true || props.controller.readOnly === true) return;
   item.run();
-  emit("close");
 }
 
-function focusables() {
-  return menuRef.value && typeof menuRef.value.querySelectorAll === "function"
-    ? Array.from(menuRef.value.querySelectorAll('[role="menuitem"]')) as HTMLElement[]
-    : [];
+function restoreFocusTarget(): HTMLElement | null {
+  return props.restoreTarget ?? null;
 }
 
-function onKeydown(event: KeyboardEvent) {
-  const focused = typeof document !== "undefined" ? document.activeElement as HTMLElement | null : null;
-  const elements = focusables();
-  const currentIndex = focused ? elements.indexOf(focused) : -1;
-  if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-    const key = event.key.toLowerCase();
-    for (let offset = 1; offset <= elements.length; offset += 1) {
-      const candidate = elements[(currentIndex + offset + elements.length) % elements.length];
-      if ((candidate?.textContent ?? "").trim().toLowerCase().startsWith(key)) {
-        event.preventDefault();
-        candidate?.focus?.();
-        return;
-      }
-    }
-    return;
-  }
-  const command = resolveOfficeMenuKeyCommand(event.key, elements.length, currentIndex);
-  if (!command) return;
-  event.preventDefault();
-  if (command.type === "focus") {
-    elements[command.index]?.focus?.();
-  } else {
-    emit("close");
-  }
+function onOpenChange(value: boolean): void {
+  open.value = value;
+  if (!value) emit("close");
 }
-
-onMounted(() => {
-  void nextTick(() => focusables()[0]?.focus?.());
-});
 </script>
 
 <style scoped>
-.xlsx-headermenu-backdrop { bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 9999; }
-.xlsx-headermenu {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); min-width: 168px; padding: 4px;
-}
-.xlsx-headermenu__item {
-  align-items: center; background: transparent; border: none; border-radius: 4px;
-  color: #18181b; cursor: pointer; display: flex; font-family: inherit;
-  font-size: 12px; height: 28px; padding: 0 8px; text-align: left; width: 100%;
-}
-.xlsx-headermenu__item:hover { background: #f4f4f5; }
-@media (pointer: coarse) {
-  .xlsx-headermenu__item { height: 44px; }
+/*
+ * The menu surface and its rows come from `OfficeDropdownMenu`
+ * (`.office-menu__content` / `.office-menu__item`); only the invisible pointer
+ * anchor is local.
+ */
+.xlsx-headermenu__anchor {
+  border: 0;
+  margin: 0;
+  padding: 0;
 }
 </style>

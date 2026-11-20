@@ -1,4 +1,5 @@
 <template>
+  <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
   <div ref="stripRef" class="xlsx-sheettabs" :style="tabsStyle">
     <button
       type="button"
@@ -248,6 +249,7 @@
       </div>
     </div>
   </div>
+  </OfficeThemeProvider>
 </template>
 
 <script setup lang="ts">
@@ -262,6 +264,7 @@ import type {
 } from "@arcships/xlsx-core";
 import { XLSX_MAX_SHEET_NAME_LENGTH } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
+import { OfficeThemeProvider } from "@arcships/vue-ui";
 import { useXlsxMessages } from "../i18n";
 import { nextXlsxDomId } from "./dom-ids";
 
@@ -395,9 +398,9 @@ const thumbnailPopupStyle = computed<CSSProperties>(() => ({
   top: `${popupY.value}px`,
   zIndex: 9999,
   transform: "translate(-50%, calc(-100% - 8px))",
-  backgroundColor: props.isDark ? "#27272a" : "#fff",
-  border: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
-  borderRadius: "8px",
+  backgroundColor: "var(--office-popover, #fff)",
+  border: "1px solid var(--office-border, #e4e4e7)",
+  borderRadius: "var(--office-radius-lg, 8px)",
   boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
   padding: "8px",
   pointerEvents: "none",
@@ -858,8 +861,8 @@ function nextTab() {
 
 const tabsStyle = computed<CSSProperties>(() => ({
   alignItems: "center",
-  backgroundColor: props.isDark ? "#27272a" : "#f4f4f5",
-  borderTop: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
+  backgroundColor: "var(--office-muted, #f4f4f5)",
+  borderTop: "1px solid var(--office-border, #e4e4e7)",
   display: "flex",
   flexShrink: "0",
   gap: "2px",
@@ -871,18 +874,18 @@ function tabStyle(index: number): CSSProperties {
   const isActive = index === activeTabIndex.value;
   return {
     backgroundColor: isActive
-      ? props.isDark ? "#3f3f46" : "#ffffff"
+      ? "var(--office-accent, #3f3f46)"
       : "transparent",
     border: isActive
-      ? `1px solid ${props.isDark ? "#52525b" : "#d4d4d8"}`
+      ? "1px solid var(--office-border, #d4d4d8)"
       : "1px solid transparent",
     borderBottom: "none",
-    borderRadius: "4px 4px 0 0",
+    borderRadius: "var(--office-radius-sm, 4px) var(--office-radius-sm, 4px) 0 0",
     color: isActive
       ? "inherit"
-      : props.isDark ? "#a1a1aa" : "#71717a",
+      : "var(--office-muted-foreground, #71717a)",
     cursor: "pointer",
-    fontSize: "12px",
+    fontSize: "var(--office-text-xs, 12px)",
     maxWidth: "120px",
     padding: "4px 10px",
     whiteSpace: "nowrap",
@@ -895,16 +898,16 @@ function renameInputStyle(index: number): CSSProperties {
     cursor: "text",
     fontFamily: "inherit",
     minWidth: "72px",
-    outline: `2px solid ${props.isDark ? "#60a5fa" : "#2563eb"}`,
+    outline: "2px solid var(--office-ring, #2563eb)",
     outlineOffset: "-1px",
   };
 }
 
 const renameErrorStyle = computed<CSSProperties>(() => ({
-  backgroundColor: "#b91c1c",
-  borderRadius: "4px",
-  color: "#ffffff",
-  fontSize: "11px",
+  backgroundColor: "var(--office-destructive-foreground, #b91c1c)",
+  borderRadius: "var(--office-radius-sm, 4px)",
+  color: "var(--office-primary-foreground, #ffffff)",
+  fontSize: "var(--office-text-xs, 11px)",
   left: `${renameAnchor.value?.left ?? 0}px`,
   maxWidth: "260px",
   padding: "4px 8px",
@@ -916,10 +919,10 @@ const renameErrorStyle = computed<CSSProperties>(() => ({
 }));
 
 const moveErrorStyle = computed<CSSProperties>(() => ({
-  backgroundColor: "#b91c1c",
-  borderRadius: "4px",
-  color: "#ffffff",
-  fontSize: "11px",
+  backgroundColor: "var(--office-destructive-foreground, #b91c1c)",
+  borderRadius: "var(--office-radius-sm, 4px)",
+  color: "var(--office-primary-foreground, #ffffff)",
+  fontSize: "var(--office-text-xs, 11px)",
   left: `${moveErrorAnchor.value?.left ?? 0}px`,
   maxWidth: "260px",
   padding: "4px 8px",
@@ -931,10 +934,10 @@ const moveErrorStyle = computed<CSSProperties>(() => ({
 }));
 
 const visibilityErrorStyle = computed<CSSProperties>(() => ({
-  backgroundColor: "#b91c1c",
-  borderRadius: "4px",
-  color: "#ffffff",
-  fontSize: "11px",
+  backgroundColor: "var(--office-destructive-foreground, #b91c1c)",
+  borderRadius: "var(--office-radius-sm, 4px)",
+  color: "var(--office-primary-foreground, #ffffff)",
+  fontSize: "var(--office-text-xs, 11px)",
   left: `${visibilityErrorAnchor.value?.left ?? 0}px`,
   maxWidth: "260px",
   padding: "4px 8px",
@@ -946,9 +949,9 @@ const visibilityErrorStyle = computed<CSSProperties>(() => ({
 }));
 
 const tabMenuStyle = computed<CSSProperties>(() => ({
-  backgroundColor: props.isDark ? "#27272a" : "#ffffff",
-  border: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
-  borderRadius: "8px",
+  backgroundColor: "var(--office-popover, #ffffff)",
+  border: "1px solid var(--office-border, #e4e4e7)",
+  borderRadius: "var(--office-radius-lg, 8px)",
   boxShadow: "0 4px 16px rgba(0,0,0,0.16)",
   left: `${tabMenu.value?.x ?? 0}px`,
   padding: "4px",

@@ -1,7 +1,8 @@
 # 共享 Office chrome（toolbar / sidebar / status / states）
 
 > 状态：已实现（issue #158）。所有 viewer/editor 共用的 chrome 层位于
-> `@arcships/vue-ui`；四个 viewer 本批**尚未迁移**，接入工作由 #159–#162 完成。
+> `@arcships/vue-ui`；DOCX 已在本批 #159 完成迁移，XLSX/PPTX/PDF 的接入见
+> #160–#162。
 >
 > 视觉基准：Extend UI 固定 commit
 > `70fe70c6f1e1eee53954c6923f3d9f583557a57e` 的 PDF toolbar 与
@@ -106,6 +107,8 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 | `totalPages` | 必填 | `0` 时显示 `–` 并禁用输入 |
 | `disabled` | `false` | 禁用输入和键盘 |
 | `label` | `common.page.current` | 输入框可访问名称 |
+| `nativeInput` | `false` | 渲染原生 `<input>`，供宿主表单集成或非 DOM 渲染器使用 |
+| `inputTestId` | `office-page-input` | 输入框的 `data-testid` |
 | `class` | `""` | 合并到根 |
 
 事件：`update:modelValue`、`change`。
@@ -123,6 +126,9 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 `showFit` 默认 `true`，select 中依次提供 Fit width / Fit page / Actual size 与百分比。
 事件：`update:modelValue`、`update:fitMode`、`change: { zoom, fitMode }`。
 `min` / `max` 默认 25 / 400，到达边界时对应按钮禁用。`disabled` 同时禁用三个控件。
+`nativeSelect` 为 `true` 时用原生 `<select>` 替换 Reka select（百分比选项，fit
+模式由宿主单独提供）；`selectTestId` / `selectTitle` 分别设置它的 `data-testid`
+和原生 title。`OfficeToolbar` 内的 DOCX 工具栏使用这一模式以保留原生表单契约。
 
 ### 3.5 `OfficeSearchPopover`
 
@@ -151,6 +157,10 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 | `caseSensitive` / `wholeWord` / `regex` | `false` | 选项状态 |
 | `showOptions` | `true` | 显示 Aa / ab\| / .\* |
 | `open` | — | 受控展开；省略时自管 |
+| `inline` | `false` | 不渲染触发器/portal，直接在原地渲染常驻搜索控件 |
+| `inputType` | `"text"` | 原生输入类型；viewer 可设为 `search` |
+| `statusText` | — | 覆盖本地化计数行（例如 DOCX 的 `1/4`） |
+| `testIdPrefix` | `"office-search"` | 生成 `-input` / `-status` / `-previous` / `-next` / 选项 test id |
 | `disabled` | `false` | 禁用触发器与内容 |
 
 事件：`update:modelValue`、`update:open`、`update:caseSensitive`、
@@ -159,7 +169,9 @@ coarse pointer 下 page input 提升到 44px 命中区，toolbar 实测约 61px�
 打开后焦点进入输入框；`Enter` 下一个、`Shift+Enter` 上一个、`Escape` 关闭。
 计数使用 `common.search.resultOf`（`{current}` / `{total}`），状态区
 `role="status" aria-live="polite"`。触发器默认是 `OfficeIconButton`（search 图标，
-28px），可用 `trigger` slot 替换。
+28px），可用 `trigger` slot 替换。`inline` 模式保留同一输入、计数、选项、导航和
+键盘契约，只是省去 trigger/portal，供工具栏常驻搜索使用；选项按钮在该模式下是
+带 `office-toggle` 类的原生按钮，以兼容没有全局 `Element` 的自定义渲染器。
 
 ### 3.6 `OfficeStatusBar`
 
@@ -342,8 +354,8 @@ pnpm --filter @arcships/vue-ui build
   open/close、zh-CN。
 - 合同测试：Extend 几何、token-only CSS、公开导出、i18n 键、gzip 预算和 public
   API fingerprint。
-- 包体积：`dist/index.js` 40,211 B gzip + `style.css` 9,399 B gzip，相对 #157 前
-  基线增加 30,470 B，仍在 35,840 B 预算内。
+- 包体积：`dist/index.js` 43,391 B gzip + `style.css` 11,567 B gzip，相对 #157 前
+  基线增加 35,818 B，仍在 35,840 B 预算内。
 - `public-api-contract.json`：`@arcships/vue-ui` fingerprint 从 199/`8a1aff85…`
   更新为 233/`1479c668…`；`@arcships/office-interaction` 因新增导出类型
   `OfficeChromeMessages` 从 154/`e1b91beb…` 更新为 155/`5732cb82…`。
@@ -359,3 +371,37 @@ pnpm --filter @arcships/vue-ui build
 - 暂不提供右侧 sidebar、拖动改变宽度或多面板；这些可由宿主在现有组件外层组合。
 - axe-core 由 #165 接入；本 issue 的手工检查覆盖角色、名称、重复 id 和 live region，
   组件测试覆盖键盘与焦点行为。
+
+## 10. DOCX 迁移（issue #159）
+
+`DocxViewerToolbar` / `DocxToolbar` 现在由共享 chrome 组成：
+
+- 根节点是 `OfficeToolbar`，页/缩放/编辑/评论组使用 `OfficeToolbarGroup`，组间使用
+  `OfficeToolbarSeparator`；图标统一走 `OfficeIcon`，纯图标动作使用
+  `OfficeIconButton`，文字动作使用 `OfficeButton`。
+- `DocxViewerToolbar` 使用 `OfficePageControl`（`native-input`）和
+  `OfficeZoomControl`（`native-select`），保留 `docx-page-current` / `docx-zoom-select`
+  的既有原生表单契约；搜索使用 `OfficeSearchPopover` 的 `inline` 模式，保留
+  `Ctrl/Cmd+F`、焦点、计数、上一个/下一个和原有 `docx-search-*` test id。
+- `DocxToolbar` 的两行分别渲染为 `.docx-toolbar-topbar` 和 `.docx-toolbar`，保留
+  blackbox 依赖的类名、`editor-zoom` 原生 select 和 fieldset disabled 语义。
+- 空/加载/错误/页数限制使用 `OfficeEmptyState` / `OfficeLoadingState` /
+  `OfficeErrorState`；loading/error 仍外包一层现有 test id 的 wrapper，以保留
+  `docx-loading-state`、`load-error` 的 `data-error-*` 契约。
+- `DocxThumbnailPanel` 改用 `DocumentViewerSidebar`：160px、`auto` 模式、768px
+  以下 overlay、内置 skeleton；旧 170px/折叠 rail 已移除，open/close 由宿主和
+  sidebar 控制。
+- 评论/修订 gutter 卡片、链接 hover card 和表单字段 dialog 使用 `OfficeCard`；
+  dialog/footer 与 link card 动作使用 `OfficeButton` / `OfficeIconButton`，锚点、
+  偏移、选区同步和原有 test id 不变。
+
+证据：`tests/baseline/visual/docx-stories/`（8 个确定性 story，覆盖 viewer/editor、
+read-only、continuous/single/spread、light/dark、390/768/1440），以及
+`tests/component/docx-*.test.mjs`、`tests/blackbox/docx_*.py`。
+
+已知边界：Extend 的上游 toolbar 把文件动作收进 dropdown。DOCX 在宽屏（≥1360px）
+保留可见 search/edit/theme/upload/download；窄屏把非参考控件收进真实 overflow
+dropdown，搜索保留为共享 `OfficeSearchPopover` 的 compact trigger，因此
+`Ctrl/Cmd+F`、touch target 和搜索能力不丢失。`pnpm ui:parity -- --only
+docx-toolbar,docx-sidebar` 已运行，精确像素/几何 delta 见
+[docx-ui-stories.md](./docx-ui-stories.md#与-155-parity-harness-的关系)。

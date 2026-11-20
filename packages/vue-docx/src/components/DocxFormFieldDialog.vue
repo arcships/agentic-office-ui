@@ -3,6 +3,8 @@
     v-if="open"
     class="docx-form-field-dialog-backdrop"
     :class="{ 'docx-form-field-dialog-backdrop--dark': isDark }"
+    :data-office-theme="isDark ? 'dark' : 'light'"
+    data-office-density="comfortable"
     data-docx-thumbnail-exclude="true"
     @mousedown.self="close()"
   >
@@ -17,17 +19,17 @@
       :data-docx-form-field-dialog="true"
       @keydown.esc.stop.prevent="close()"
     >
+      <OfficeCard class="docx-form-field-dialog__card">
       <header class="docx-form-field-dialog__header">
         <h2 class="docx-form-field-dialog__title">{{ m.docx.formFieldDialog.title }}</h2>
-        <button
-          type="button"
+        <OfficeIconButton
+          variant="ghost"
+          size="icon-sm"
           class="docx-form-field-dialog__close"
-          :aria-label="m.docx.formFieldDialog.close"
-          :title="m.docx.formFieldDialog.close"
+          :label="m.docx.formFieldDialog.close"
+          icon="x"
           @click="close()"
-        >
-          ×
-        </button>
+        />
       </header>
 
       <div class="docx-form-field-dialog__body">
@@ -125,25 +127,27 @@
                 :placeholder="m.docx.formFieldDialog.optionValue"
                 :data-testid="`docx-form-field-dialog-option-value-${index}`"
               />
-              <button
+              <OfficeButton
                 type="button"
+                variant="outline"
+                size="xs"
                 class="docx-form-field-dialog__option-remove"
                 :aria-label="m.docx.formFieldDialog.removeOption"
                 :title="m.docx.formFieldDialog.removeOption"
                 :data-testid="`docx-form-field-dialog-remove-option-${index}`"
                 @click="removeOption(index)"
-              >
-                −
-              </button>
+              >−</OfficeButton>
             </div>
-            <button
+            <OfficeButton
               type="button"
+              variant="outline"
+              size="xs"
               class="docx-form-field-dialog__add-option"
               data-testid="docx-form-field-dialog-add-option"
               @click="addOption"
             >
               {{ m.docx.formFieldDialog.addOption }}
-            </button>
+            </OfficeButton>
           </div>
         </template>
 
@@ -185,29 +189,34 @@
       </div>
 
       <footer class="docx-form-field-dialog__footer">
-        <button
+        <OfficeButton
           type="button"
+          size="sm"
           class="docx-form-field-dialog__save"
           data-testid="docx-form-field-dialog-save"
           @click="submit"
         >
           {{ m.docx.formFieldDialog.save }}
-        </button>
-        <button
+        </OfficeButton>
+        <OfficeButton
           type="button"
+          variant="outline"
+          size="sm"
           class="docx-form-field-dialog__cancel"
           data-testid="docx-form-field-dialog-cancel"
           @click="close()"
         >
           {{ m.docx.formFieldDialog.cancel }}
-        </button>
+        </OfficeButton>
       </footer>
+      </OfficeCard>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue"
+import { OfficeButton, OfficeCard, OfficeIconButton } from "@arcships/vue-ui"
 import type {
   DocxEditorController,
   DocxFormFieldLocation,
@@ -417,20 +426,28 @@ defineExpose({
   z-index: 60;
 }
 .docx-form-field-dialog {
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.28);
-  color: #111827;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   max-height: 80vh;
   max-width: 460px;
   min-width: 320px;
   outline: none;
-  overflow: auto;
-  padding: 16px;
   width: 32rem;
+}
+.docx-form-field-dialog__card {
+  background: var(--office-card, #ffffff);
+  border-color: var(--office-border, #d1d5db);
+  color: var(--office-card-foreground, #111827);
+  max-height: 80vh;
+  overflow: auto;
+  padding: var(--office-ui-space-4, 16px);
+  box-shadow: var(--office-shadow-sm, 0 20px 48px rgba(15, 23, 42, 0.28));
+}
+.docx-form-field-dialog__card :deep(.office-card__content) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
 }
 .docx-form-field-dialog__header {
   align-items: center;
@@ -443,13 +460,7 @@ defineExpose({
   margin: 0;
 }
 .docx-form-field-dialog__close {
-  background: transparent;
-  border: none;
-  color: #6b7280;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  padding: 2px 6px;
+  color: var(--office-muted-foreground, #6b7280);
 }
 .docx-form-field-dialog__body {
   display: flex;
@@ -494,12 +505,7 @@ defineExpose({
 }
 .docx-form-field-dialog__option-remove,
 .docx-form-field-dialog__add-option {
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
-  padding: 2px 8px;
 }
 .docx-form-field-dialog__add-option {
   align-self: flex-start;
@@ -521,28 +527,20 @@ defineExpose({
 }
 .docx-form-field-dialog__save,
 .docx-form-field-dialog__cancel {
-  border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
-  padding: 6px 14px;
 }
 .docx-form-field-dialog__save {
-  background: #2563eb;
-  border: 1px solid #2563eb;
-  color: #ffffff;
-}
-.docx-form-field-dialog__cancel {
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
 }
 .docx-form-field-dialog-backdrop--dark {
   background: rgba(2, 6, 23, 0.64);
 }
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog {
-  background: #18181b;
-  border: 1px solid #3f3f46;
-  color: #f4f4f5;
+.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__card {
+  background: var(--office-card, #18181b);
+  border-color: var(--office-border, #3f3f46);
+  color: var(--office-card-foreground, #f4f4f5);
 }
 .docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__label {
   color: #a1a1aa;

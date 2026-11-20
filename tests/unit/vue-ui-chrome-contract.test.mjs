@@ -217,14 +217,14 @@ test("the chrome stylesheet stays token-only and ships no reset", () => {
 })
 
 test("IconButton keeps the 28/32px desktop sizes and a 44px coarse hit area", () => {
-  const icon = findBlock(stripComments(uiCss), ".office-button--icon")
-  const iconSmall = findBlock(stripComments(uiCss), ".office-button--icon-sm")
+  const icon = findBlock(stripComments(uiCss), ".office-button--size-icon")
+  const iconSmall = findBlock(stripComments(uiCss), ".office-button--size-icon-sm")
   assert.ok(icon)
   assert.ok(iconSmall)
-  assert.match(icon, /inline-size:\s*var\(--office-ui-height-sm\)/u)
-  assert.match(icon, /height:\s*var\(--office-ui-height-sm\)/u)
-  assert.match(iconSmall, /inline-size:\s*var\(--office-ui-height-xs\)/u)
-  assert.match(iconSmall, /height:\s*var\(--office-ui-height-xs\)/u)
+  assert.match(icon, /inline-size:\s*var\(--office-ui-height-default\)/u)
+  assert.match(icon, /height:\s*var\(--office-ui-height-default\)/u)
+  assert.match(iconSmall, /inline-size:\s*var\(--office-ui-height-sm\)/u)
+  assert.match(iconSmall, /height:\s*var\(--office-ui-height-sm\)/u)
   assert.match(tokensCss, /--office-control-height-sm:\s*2rem/u, "icon is 32px")
   assert.match(tokensCss, /--office-control-height-xs:\s*1\.75rem/u, "icon-sm is 28px")
   assert.match(uiCss, /--office-ui-touch-target:\s*2\.75rem/u)
@@ -261,6 +261,16 @@ test("the public entries export every chrome component and the width composable"
     assert.match(barrel, new RegExp(typeName), `missing ${typeName}`)
   }
   assert.equal(packageJson.exports["./style.css"], "./dist/style.css")
+})
+
+test("SearchPopover exposes an inline mode with stable host hooks", () => {
+  const source = read("packages/vue-ui/src/components/chrome/OfficeSearchPopover.vue")
+  assert.match(source, /inline\?: boolean/u)
+  assert.match(source, /testIdPrefix\?: string/u)
+  assert.match(source, /inputType\?: string/u)
+  assert.match(source, /statusText\?: string/u)
+  assert.match(source, /office-search-popover__fields/u)
+  assert.match(source, /office-toggle--outline/u)
 })
 
 test("the shared catalog ships chrome and zoom labels in English and zh-CN", () => {
