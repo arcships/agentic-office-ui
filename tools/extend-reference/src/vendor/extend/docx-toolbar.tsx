@@ -117,7 +117,6 @@ export function DocxToolbar({
           variant="ghost"
           size="icon-sm"
           aria-label="Open DOCX actions"
-          disabled={controlsDisabled}
         >
           <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4" />
         </Button>

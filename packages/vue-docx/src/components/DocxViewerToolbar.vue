@@ -32,6 +32,7 @@ import {
   OfficeIconButton,
   OfficeSearchPopover,
 } from "@arcships/vue-ui"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useDocxMessages } from "../i18n"
 
 const props = withDefaults(
@@ -149,14 +150,22 @@ const revisionDisplayLabels = computed<Record<string, string>>(() => ({
   balloons: m.value.docx.toolbar.revisionDisplayBalloons,
   none: m.value.docx.toolbar.revisionDisplayNone,
 }))
-const trackedChangesLabel = computed(() => {
-  if (!props.showTrackedChanges) return m.value.docx.toolbar.trackedChangesShow.replace("{count}", String(props.trackedChangeCount))
-  return m.value.docx.toolbar.trackedChangesHide.replace("{count}", String(props.trackedChangeCount))
-})
-const commentsLabel = computed(() => {
-  if (!props.showComments) return m.value.docx.toolbar.commentsShow.replace("{count}", String(props.commentCount))
-  return m.value.docx.toolbar.commentsHide.replace("{count}", String(props.commentCount))
-})
+const trackedChangesLabel = computed(() =>
+  formatOfficeMessage(
+    props.showTrackedChanges
+      ? m.value.docx.toolbar.trackedChangesHide
+      : m.value.docx.toolbar.trackedChangesShow,
+    { count: props.trackedChangeCount },
+  ),
+)
+const commentsLabel = computed(() =>
+  formatOfficeMessage(
+    props.showComments
+      ? m.value.docx.toolbar.commentsHide
+      : m.value.docx.toolbar.commentsShow,
+    { count: props.commentCount },
+  ),
+)
 const themeToggleLabel = computed(() =>
   props.isDark ? m.value.docx.toolbar.lightThemeAction : m.value.docx.toolbar.darkThemeAction,
 )
@@ -169,7 +178,6 @@ watch(displayPage, (page) => {
 })
 
 function commitPageDraft(): void {
-  pageFocused.value = false
   const parsed = Number.parseInt(String(pageDraft.value).trim(), 10)
   if (!Number.isInteger(parsed) || props.totalPages < 1) {
     pageDraft.value = String(displayPage.value)
@@ -186,6 +194,7 @@ function onPageFocus(event?: FocusEvent): void {
 }
 
 function onPageBlur(): void {
+  pageFocused.value = false
   commitPageDraft()
 }
 
@@ -228,7 +237,7 @@ const searchStatusText = computed(() =>
 function openSearch(): void {
   if (props.disabled) return
   actionsOpen.value = false
-  searchOpen.value = true
+  if (!props.showSearch) searchOpen.value = true
   void nextTick(() => searchPopoverRef.value?.focus())
 }
 
@@ -243,7 +252,8 @@ const actionsOpen = ref(false)
 const actionsRoot = ref<HTMLElement | null>(null)
 
 function toggleActions(): void {
-  if (props.disabled) return
+  // Upstream keeps the trigger enabled while the document controls are
+  // disabled, so an empty viewer can still reach Upload.
   if (actionsOpen.value) {
     actionsOpen.value = false
     return
@@ -361,11 +371,10 @@ defineExpose({
           <span class="docx-viewer-toolbar__page-display" aria-hidden="true">{{ displayPage }}</span>
           <input
             class="docx-viewer-toolbar__page-input"
-            type="number"
+            type="text"
             inputmode="numeric"
             pattern="[0-9]*"
-            min="1"
-            :max="totalPages || 1"
+            autocomplete="off"
             v-model="pageDraft"
             :disabled="disabled || totalPages < 1"
             @input="pageFocused = true"
@@ -377,7 +386,7 @@ defineExpose({
             @keydown="onPageKeydown"
           />
         </span>
-        <span class="docx-viewer-toolbar__page-total">{{ m.common.page.of }} {{ displayTotal }}</span>
+        <span class="docx-viewer-toolbar__page-total" data-testid="docx-page-total">{{ m.common.page.of }} {{ displayTotal }}</span>
       </div>
     </div>
 
@@ -471,7 +480,6 @@ defineExpose({
             data-testid="docx-toolbar-actions"
             :label="m.docx.toolbar.moreActions"
             :active="actionsOpen"
-            :disabled="disabled"
             aria-haspopup="menu"
             :aria-expanded="actionsOpen"
             @click="toggleActions"
@@ -624,7 +632,6 @@ defineExpose({
             class="docx-viewer-toolbar__menu-item"
             role="menuitem"
             data-testid="docx-upload"
-            :disabled="disabled"
             @click="runAction('upload')"
           >
             <OfficeIcon name="upload" />
@@ -644,6 +651,38 @@ defineExpose({
           </button>
         </div>
       </span>
+    </div>
+
+    <div
+      v-if="searchOpen && !showSearch"
+      class="docx-viewer-toolbar__popover docx-viewer-toolbar__find"
+      role="search"
+      :aria-label="m.docx.toolbar.searchPlaceholder"
+      data-testid="docx-find-popover"
+    >
+      <OfficeSearchPopover
+        ref="searchPopoverRef"
+        inline
+        :model-value="searchQuery"
+        :result-count="searchResultCount"
+        :active-index="searchResultIndex"
+        :status-text="searchStatusText"
+        :case-sensitive="searchCaseSensitive"
+        :whole-word="searchWholeWord"
+        :regex="searchRegex"
+        :show-options="true"
+        :disabled="disabled"
+        :placeholder="m.docx.toolbar.searchPlaceholder"
+        input-type="search"
+        test-id-prefix="docx-search"
+        @update:model-value="emit('update:searchQuery', $event)"
+        @update:case-sensitive="emit('update:searchCaseSensitive', $event)"
+        @update:whole-word="emit('update:searchWholeWord', $event)"
+        @update:regex="emit('update:searchRegex', $event)"
+        @previous="emit('searchPrevious')"
+        @next="emit('searchNext')"
+        @close="closeSearch"
+      />
     </div>
   </div>
 </template>
@@ -763,14 +802,7 @@ defineExpose({
   color: transparent;
   font: inherit;
   text-align: center;
-  appearance: textfield;
   cursor: text;
-}
-
-.docx-viewer-toolbar__page-input::-webkit-outer-spin-button,
-.docx-viewer-toolbar__page-input::-webkit-inner-spin-button {
-  margin: 0;
-  appearance: none;
 }
 
 .docx-viewer-toolbar__page-control:hover:not([data-disabled="true"]) {
@@ -950,6 +982,13 @@ defineExpose({
   box-shadow: var(--office-shadow-md);
 }
 
+.docx-viewer-toolbar__find {
+  inset-inline-end: 12px;
+  inline-size: 288px;
+  max-inline-size: calc(100vw - 24px);
+  padding: 8px;
+}
+
 .docx-viewer-toolbar__menu {
   display: flex;
   flex-direction: column;
@@ -1085,6 +1124,14 @@ defineExpose({
   .docx-viewer-toolbar input {
     min-block-size: 44px;
     min-inline-size: 44px;
+  }
+
+  /* The row's custom controls are wrappers around the native form elements,
+     so they grow with them on touch surfaces. */
+  .docx-viewer-toolbar__zoom,
+  .docx-viewer-toolbar__zoom-trigger,
+  .docx-viewer-toolbar__page-control {
+    min-block-size: 44px;
   }
 
   .docx-viewer-toolbar__zoom-native {

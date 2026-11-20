@@ -147,6 +147,8 @@ test("DocxViewer shows gesture zoom in its toolbar and announces search status",
   const mounted = await mount(DocxViewer, {
     model: styledModel(),
     defaultZoom: 100,
+    // The find field is opt-in on the upstream-shaped default row.
+    toolbarSearch: true,
   });
 
   const scrollContainer = walk(mounted.root).find((node) =>

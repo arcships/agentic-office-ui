@@ -1241,11 +1241,17 @@ def run_ux_docx_001(
     page_input = page.get_by_test_id("docx-page-current")
     zoom_select = page.get_by_test_id("docx-zoom-select")
     sidebar_toggle = page.get_by_test_id("docx-sidebar-toggle")
-    download_button = page.get_by_test_id("docx-download")
-    for locator in (page_input, zoom_select, sidebar_toggle, download_button):
+    for locator in (page_input, zoom_select, sidebar_toggle):
         locator.wait_for(state="visible")
 
-    navigation_text = toolbar.locator('[aria-label="Page navigation"]').inner_text()
+    # The default row is the upstream Extend row; download lives in the
+    # closed DOCX actions menu.
+    page.get_by_test_id("docx-toolbar-actions").click()
+    download_button = page.get_by_test_id("docx-download")
+    download_button.wait_for(state="visible")
+    page.keyboard.press("Escape")
+
+    navigation_text = page.get_by_test_id("docx-page-total").inner_text()
     total_match = re.search(r"\bof\s+(\d+)\b", navigation_text)
     assert total_match, navigation_text
     total_pages = int(total_match.group(1))
@@ -1310,6 +1316,8 @@ def run_ux_docx_001(
         timeout=settings.timeout_ms,
     )
 
+    page.get_by_test_id("docx-toolbar-actions").click()
+    download_button = page.get_by_test_id("docx-download")
     expect(download_button).to_be_enabled(timeout=settings.timeout_ms)
     download_dir = attempt_dir / "download"
     download_dir.mkdir(parents=True, exist_ok=True)
