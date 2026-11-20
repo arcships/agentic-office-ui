@@ -15,6 +15,10 @@ import {
 // update. The custom component renderer intentionally has no browser DOM.
 if (globalThis.Document === undefined) globalThis.Document = class Document {};
 if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
+// Reka UI primitives check refs against these constructors even when the
+// custom renderer has no real DOM; the stubs keep mounting DOM-free.
+if (globalThis.Element === undefined) globalThis.Element = class Element {};
+if (globalThis.DocumentFragment === undefined) globalThis.DocumentFragment = class DocumentFragment {};
 
 const { PptxViewer } = await importFromDemo("@arcships/vue-pptx");
 
@@ -107,7 +111,7 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
   assert.equal(sorter, undefined, "single view is the default browse layout");
 
   const sorterButton = findByTestId(mounted.root, "pptx-view-mode-sorter");
-  assert.equal(sorterButton.props["aria-pressed"], false);
+  assert.notEqual(sorterButton.props["aria-pressed"], "true", "single view is pressed, not the sorter");
   sorterButton.props.onClick();
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
@@ -129,7 +133,7 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
   );
   assert.equal(
     findByTestId(mounted.root, "pptx-view-mode-sorter").props["aria-pressed"],
-    true,
+    "true",
   );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();

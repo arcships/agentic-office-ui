@@ -35,6 +35,8 @@ export interface OfficeDropdownMenuProps {
   sideOffset?: number
   alignOffset?: number
   disabled?: boolean
+  /** Accessible name announced for the menu surface. */
+  contentLabel?: string
   /** Extra classes merged on the trigger. */
   class?: string
   /** Extra classes merged on the portalled content. */
@@ -51,6 +53,7 @@ const props = withDefaults(defineProps<OfficeDropdownMenuProps>(), {
   sideOffset: 4,
   alignOffset: 0,
   disabled: false,
+  contentLabel: undefined,
   class: "",
   contentClass: "",
 })
@@ -110,6 +113,7 @@ function handleSelect(entry: OfficeMenuEntry, event: Event) {
         :align="props.align"
         :side-offset="props.sideOffset"
         :align-offset="props.alignOffset"
+        :aria-label="props.contentLabel"
         data-slot="dropdown-menu-content"
       >
         <OfficeMenuList
