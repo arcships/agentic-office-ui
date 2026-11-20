@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "baselineLabel": "pre-ui-migration-snapshot",
+  "baselineLabel": "post-ui-migration",
   "structure": {
     "assertionsBlocking": true,
     "description": "Route readiness, root visibility, no visible error slots, theme, zoom, overflow, grid/page/slide counts. These are blocking in nightly CI."
@@ -10,7 +10,7 @@
     "maxDiffRatio": 0.002,
     "blocking": false,
     "nightly": true,
-    "description": "Per-pixel channel tolerance 8/255 and at most 0.2% differing pixels. Reported but non-blocking until #165 owns the gate; pass --fail-on-pixel to make it blocking."
+    "description": "Per-pixel channel tolerance 8/255 and at most 0.2% differing pixels. Reported but non-blocking; #165 owns the upstream Extend blocking gate."
   },
   "matrix": {
     "routes": [
@@ -25,10 +25,21 @@
       "pptx-viewer",
       "pptx-surface"
     ],
-    "viewports": ["desktop-1440x900", "laptop-1280x720", "tablet-768x1024", "mobile-390x844"],
-    "themes": ["light", "dark"],
-    "zooms": [50, 100, 200],
-    "fullMatrixPending": true,
-    "pendingReason": "UI migration #157/#158-#164 is still landing. The committed snapshot keeps a small pre-migration subset; recapture the full 240-scenario matrix after those branches merge."
+    "viewports": [
+      "desktop-1440x900",
+      "laptop-1280x720",
+      "tablet-768x1024",
+      "mobile-390x844"
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "zooms": [
+      50,
+      100,
+      200
+    ],
+    "fullMatrixPending": false
   }
 }
