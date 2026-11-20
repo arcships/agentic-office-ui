@@ -57,14 +57,9 @@ import {
   OfficeEmptyState,
   OfficeErrorState,
   OfficeIcon,
-  OfficeIconButton,
-  OfficeInput,
   OfficeLoadingState,
   OfficePopover,
   OfficeStatusBar,
-  OfficeToolbar,
-  OfficeToolbarGroup,
-  OfficeToolbarSeparator,
   isEditableViewerTarget,
   useViewerKeys,
   useFileDrop,
@@ -75,6 +70,7 @@ import { providePdfMessages } from "../i18n"
 import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
 import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
 import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
+import PdfViewerToolbar from "./PdfViewerToolbar.vue"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -121,13 +117,12 @@ const rotation = ref<PdfRotation>(0)
 /** Pixel ratio the current page bitmap was rendered at; re-renders on display change. */
 const renderDpr = ref(currentRenderDpr())
 const activePage = ref(1)
-const pageInput = ref("1")
 const showThumbnails = ref(true)
 const searchDraft = ref("")
 const viewerRef = ref<HTMLElement | null>(null)
 const frameRef = ref<HTMLElement | null>(null)
 const pageImageRef = ref<HTMLElement | null>(null)
-const searchInputRef = ref<HTMLInputElement | null>(null)
+const toolbarRef = ref<InstanceType<typeof PdfViewerToolbar> | null>(null)
 const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
@@ -482,11 +477,6 @@ function setPageLayout(mode: PdfPageLayout): void {
   if (props.pageLayout == null) internalPageLayout.value = next
   emit("update:pageLayout", next)
   void nextTick(() => scrollFrameToActivePage())
-}
-
-function onPageLayoutChange(event: Event): void {
-  const value = (event.target as HTMLSelectElement | null)?.value
-  if (value === "continuous" || value === "single" || value === "spread") setPageLayout(value)
 }
 
 function scrollFrameToActivePage(): void {
@@ -1106,6 +1096,7 @@ function resetSearch(): void {
 }
 
 function clearSearchAndRestoreFocus(): void {
+  toolbarRef.value?.closeSearch()
   searchDraft.value = ""
   searchGeneration++
   searchAbort?.abort()
@@ -1161,7 +1152,7 @@ function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
       return true
     case "search":
       if (!props.showToolbar) return false
-      searchInputRef.value?.focus()
+      toolbarRef.value?.openSearch()
       return true
     case "escape":
       if (searchDraft.value || searchHits.value.length) {
@@ -1219,7 +1210,6 @@ async function releaseCurrentDocument(options: { closeDocument?: boolean } = {})
   runtimeForDocument = undefined
   numPages.value = 0
   activePage.value = 1
-  pageInput.value = "1"
   verifiedBlob.value = null
   loadedFileName.value = ""
   resetSearch()
@@ -1334,14 +1324,6 @@ function applyZoom(next: number | undefined): void {
   zoom.value = next
 }
 
-function zoomIn(): void {
-  applyZoom(zoomOptions.find((value) => value > zoom.value))
-}
-
-function zoomOut(): void {
-  applyZoom([...zoomOptions].reverse().find((value) => value < zoom.value))
-}
-
 const touchGestures = createTouchGestureTracker({
   getZoom: () => zoom.value,
   onZoom: (next) => { zoom.value = next },
@@ -1353,9 +1335,9 @@ function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMo
 function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
 function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
-function rotateClockwise(): void {
+function rotateBy(direction: 1 | -1): void {
   const anchor = measureAnchor()
-  const next = ((rotation.value + 90) % 360) as PdfRotation
+  const next = (((rotation.value + direction * 90) % 360) + 360) % 360 as PdfRotation
   pendingAnchor = anchor ? { ...anchor, zoom: zoom.value, rotation: next } : undefined
   rotation.value = next
 }
@@ -1365,16 +1347,11 @@ function setActivePage(page: number, options: { reveal?: boolean } = {}): void {
   const changed = next !== activePage.value
   if (changed) pendingAnchor = undefined
   activePage.value = next
-  pageInput.value = String(next)
   emit("active-page-change", next)
   // Continuous and spread layouts scroll; a toolbar, thumbnail, keyboard or
   // search jump has to bring the new page's row into view. Scroll tracking
   // passes `reveal: false` so the reader's own scroll is never fought.
   if (changed && options.reveal !== false) scrollFrameToActivePage()
-}
-
-function commitPageInput(): void {
-  setActivePage(Number(pageInput.value))
 }
 
 async function handleDownload(): Promise<void> {
@@ -1629,7 +1606,6 @@ async function load(): Promise<void> {
     renderDocument.value = openedDocument
     numPages.value = openedDocument.pageCount
     activePage.value = 1
-    pageInput.value = "1"
     verifiedBlob.value = verified.blob
     loadedFileName.value = verified.fileName
     await renderCurrentPage(requestId, task.signal, true)
@@ -1684,7 +1660,6 @@ watch(
   () => void load(),
   { immediate: true },
 )
-watch(activePage, (page) => { pageInput.value = String(page) })
 watch([activePage, zoom, rotation, renderDpr], () => {
   clearSelection()
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
@@ -1767,195 +1742,36 @@ defineExpose({
     @dragleave="onDragLeave"
     @drop="onDrop"
   >
-    <OfficeToolbar
+    <PdfViewerToolbar
       v-if="props.showToolbar"
-      class="pdf-toolbar"
-      data-testid="pdf-toolbar"
-      :label="m.common.chrome.toolbar"
-    >
-      <template #leading>
-        <OfficeToolbarGroup gap="sm" class="pdf-toolbar__leading">
-          <OfficeIconButton
-            variant="ghost"
-            size="icon-sm"
-            icon="columns-2"
-            data-testid="pdf-sidebar-toggle"
-            :label="m.pdf.viewer.toggleThumbnails"
-            :active="showThumbnails"
-            :disabled="controlsDisabled"
-            @click="showThumbnails = !showThumbnails"
-          />
-          <span class="pdf-file-name" :title="getDownloadFileName()">{{ getDownloadFileName() }}</span>
-          <OfficeToolbarGroup gap="sm" class="pdf-page-cluster" :label="m.common.page.navigation">
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-first-page"
-              :label="m.common.page.first"
-              :disabled="controlsDisabled || activePage <= 1"
-              @click="setActivePage(1)"
-            >«</OfficeIconButton>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-previous-page"
-              :label="m.common.page.previous"
-              :disabled="controlsDisabled || activePage <= 1"
-              @click="setActivePage(activePage - 1)"
-            >‹</OfficeIconButton>
-            <OfficeInput
-              v-model="pageInput"
-              class="pdf-page-input"
-              size="sm"
-              type="number"
-              min="1"
-              :max="numPages || 1"
-              :disabled="controlsDisabled"
-              :aria-label="m.pdf.viewer.pageInput"
-              data-testid="pdf-page-input"
-              @change="commitPageInput"
-              @keydown.enter.prevent="commitPageInput"
-            />
-            <span class="pdf-page-total">{{ m.common.page.of }} <span data-testid="pdf-page-count">{{ numPages || '—' }}</span></span>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-next-page"
-              :label="m.common.page.next"
-              :disabled="controlsDisabled || activePage >= numPages"
-              @click="setActivePage(activePage + 1)"
-            >›</OfficeIconButton>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-last-page"
-              :label="m.common.page.last"
-              :disabled="controlsDisabled || activePage >= numPages"
-              @click="setActivePage(numPages)"
-            >»</OfficeIconButton>
-          </OfficeToolbarGroup>
-          <select
-            data-testid="pdf-page-layout"
-            class="office-ui pdf-page-layout"
-            :value="pageLayoutMode"
-            :disabled="controlsDisabled"
-            :aria-label="m.pdf.viewer.pageLayout"
-            @change="onPageLayoutChange"
-          >
-            <option value="continuous">{{ m.pdf.viewer.pageLayoutContinuous }}</option>
-            <option value="single">{{ m.pdf.viewer.pageLayoutSingle }}</option>
-            <option value="spread">{{ m.pdf.viewer.pageLayoutSpread }}</option>
-          </select>
-        </OfficeToolbarGroup>
-      </template>
-
-      <template #trailing>
-        <OfficeToolbarGroup gap="sm" class="pdf-toolbar__actions">
-          <OfficeToolbarGroup gap="sm" class="pdf-zoom-cluster" :label="m.common.zoom.level">
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              icon="minus"
-              data-testid="pdf-zoom-out"
-              :label="m.common.zoom.out"
-              :disabled="controlsDisabled || zoom <= zoomOptions[0]"
-              @click="zoomOut"
-            />
-            <select
-              v-model.number="zoom"
-              data-testid="pdf-zoom-select"
-              class="office-ui pdf-zoom-select"
-              :disabled="controlsDisabled"
-              :aria-label="m.common.zoom.level"
-            >
-              <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
-            </select>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              icon="plus"
-              data-testid="pdf-zoom-in"
-              :label="m.common.zoom.in"
-              :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]"
-              @click="zoomIn"
-            />
-          </OfficeToolbarGroup>
-          <OfficeToolbarSeparator v-if="props.showRotateControls" />
-          <OfficeIconButton
-            v-if="props.showRotateControls"
-            variant="ghost"
-            size="icon-sm"
-            data-testid="pdf-rotate"
-            :label="m.pdf.viewer.rotateClockwise"
-            :disabled="controlsDisabled"
-            @click="rotateClockwise"
-          >⟳</OfficeIconButton>
-          <OfficeToolbarSeparator />
-          <form class="pdf-search" role="search" @submit.prevent="submitSearch">
-            <span class="office-ui office-input-control pdf-search__field">
-              <input
-                ref="searchInputRef"
-                v-model="searchDraft"
-                class="office-ui office-input pdf-search__input"
-                type="search"
-                autocomplete="off"
-                spellcheck="false"
-                :disabled="controlsDisabled"
-                :aria-label="m.pdf.viewer.searchLabel"
-                :placeholder="m.pdf.viewer.searchPlaceholder"
-                data-testid="pdf-search-input"
-                @keydown.esc.prevent="clearSearchAndRestoreFocus"
-              />
-            </span>
-            <OfficeButton
-              variant="outline"
-              size="sm"
-              type="submit"
-              data-testid="pdf-search-submit"
-              :disabled="controlsDisabled || !searchDraft.trim()"
-            >{{ m.pdf.viewer.search }}</OfficeButton>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-search-prev"
-              :label="m.common.search.previous"
-              :disabled="!searchHits.length"
-              @click="moveSearch(-1)"
-            >↑</OfficeIconButton>
-            <OfficeIconButton
-              variant="ghost"
-              size="icon-sm"
-              data-testid="pdf-search-next"
-              :label="m.common.search.next"
-              :disabled="!searchHits.length"
-              @click="moveSearch(1)"
-            >↓</OfficeIconButton>
-          </form>
-          <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status" aria-atomic="true">{{ searchResult }}</span>
-          <OfficeToolbarSeparator />
-          <OfficeIconButton
-            v-if="props.showPrint"
-            variant="ghost"
-            size="icon-sm"
-            icon="printer"
-            data-testid="pdf-print"
-            :label="m.pdf.viewer.print"
-            :disabled="controlsDisabled"
-            @click="printAllPages"
-          />
-          <OfficeIconButton
-            v-if="props.showDownload"
-            variant="ghost"
-            size="icon-sm"
-            icon="download"
-            data-testid="pdf-download"
-            :label="m.pdf.viewer.download"
-            :disabled="!verifiedBlob || !!loadError"
-            @click="handleDownload"
-          />
-        </OfficeToolbarGroup>
-      </template>
-    </OfficeToolbar>
+      ref="toolbarRef"
+      :active-page="activePage"
+      :total-pages="numPages"
+      :disabled="controlsDisabled"
+      :sidebar-open="showThumbnails"
+      :zoom="zoom"
+      :page-layout="pageLayoutMode"
+      :file-name="getDownloadFileName()"
+      :show-download="props.showDownload"
+      :show-print="props.showPrint"
+      :show-rotate-controls="props.showRotateControls"
+      :can-download="!!verifiedBlob && !loadError"
+      :search-query="searchDraft"
+      :search-result="searchResult"
+      :search-has-hits="searchHits.length > 0"
+      @toggle-sidebar="showThumbnails = !showThumbnails"
+      @select-page="setActivePage"
+      @update:zoom="applyZoom"
+      @rotate="rotateBy"
+      @update:page-layout="setPageLayout"
+      @update:search-query="searchDraft = $event"
+      @submit-search="submitSearch"
+      @search-previous="moveSearch(-1)"
+      @search-next="moveSearch(1)"
+      @search-close="clearSearchAndRestoreFocus"
+      @download="handleDownload"
+      @print="printAllPages"
+    />
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
     <div v-if="dropError" data-testid="pdf-drop-error" class="pdf-drop-error" role="alert">{{ dropError }}</div>
@@ -2210,81 +2026,10 @@ defineExpose({
 }
 /* Keyboard focus lands on the viewer root; keep a visible ring around it. */
 .pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
-/* The toolbar is the shared `OfficeToolbar`; this class stays because it is the
-   public print/touch hook (`.pdf-toolbar`). Geometry, colours and control
-   metrics come from the `--office-*` tokens. */
-.pdf-toolbar { min-height: 48px; font-size: var(--office-text-base); line-height: var(--office-leading-base); }
-.pdf-toolbar__leading { min-width: 0; }
-.pdf-toolbar__actions { min-width: 0; justify-content: flex-end; }
-.pdf-file-name {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--office-foreground);
-  font-size: var(--office-text-sm);
-  font-weight: 600;
-}
-.pdf-page-cluster { flex-wrap: nowrap; }
-.pdf-page-input {
-  inline-size: 3.625rem;
-  min-inline-size: 0;
-  text-align: center;
-}
-.pdf-page-input :deep(input) { text-align: center; }
-.pdf-page-total {
-  color: var(--office-muted-foreground);
-  font-size: var(--office-text-sm);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.pdf-page-layout,
-.pdf-zoom-select {
-  block-size: var(--office-control-height-xs);
-  box-sizing: border-box;
-  min-block-size: 0;
-  min-height: 0;
-  min-inline-size: 0;
-  padding-block: 0;
-  padding-inline: var(--office-ui-space-2);
-  border: var(--office-border-width) solid var(--office-input);
-  border-radius: var(--office-radius-md);
-  background: var(--office-background);
-  color: var(--office-foreground);
-  font: inherit;
-  font-size: var(--office-text-sm);
-  box-shadow: var(--office-shadow-xs);
-  cursor: pointer;
-}
-.pdf-page-layout { max-inline-size: 9rem; }
-.pdf-zoom-select { inline-size: 6.5rem; font-variant-numeric: tabular-nums; }
-.pdf-page-layout:focus-visible,
-.pdf-zoom-select:focus-visible {
-  border-color: var(--office-ring);
-  outline: var(--office-ring-width) solid color-mix(in oklab, var(--office-ring) 40%, transparent);
-  outline-offset: var(--office-ring-offset-width);
-}
-.pdf-page-layout:disabled,
-.pdf-zoom-select:disabled { cursor: not-allowed; opacity: 0.64; }
-.pdf-zoom-cluster { flex-wrap: nowrap; }
-.pdf-search { display: flex; align-items: center; gap: var(--office-ui-space-1); min-inline-size: 0; }
-.pdf-search__field {
-  block-size: var(--office-control-height-xs);
-  box-sizing: border-box;
-  inline-size: 9.5rem;
-  min-block-size: 0;
-  min-height: 0;
-  min-inline-size: 0;
-}
-.pdf-search__input {
-  block-size: 100%;
-  min-block-size: 0;
-  min-height: 0;
-  inline-size: 100%;
-  padding-block: 0;
-  line-height: 1.4;
-}
-.search-result { font-size: var(--office-text-xs); color: var(--office-muted-foreground); white-space: nowrap; }
+/* The toolbar keeps the public `.pdf-toolbar` hook for print/touch rules. Its
+   default row is implemented by `PdfViewerToolbar` against the pinned Extend
+   reference; this scoped rule only keeps the print hook working. */
+.pdf-toolbar { min-height: 48px; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .pdf-status-bar { flex: 0 0 auto; }
 .pdf-drop-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-bottom: 1px solid var(--pdf-border); background: rgba(220, 38, 38, 0.08); }
@@ -2369,40 +2114,9 @@ defineExpose({
   font-size: var(--office-text-xs);
 }
 .pdf-print-pages { display: none; }
-@container pdf-viewer (max-width: 1100px) {
-  /* The parity/reference toolbar has no file label or first/last pair; dropping
-     them at laptop and tablet widths keeps every remaining command on one
-     48px row. Page input, prev/next and Home/End keep full navigation. */
-  .pdf-file-name { display: none; }
-  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
-  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
-  .pdf-search__field { inline-size: 7.5rem; }
-  .pdf-zoom-select { inline-size: 5.5rem; }
-  .pdf-page-layout { max-inline-size: 7.5rem; }
-}
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
   .pdf-frame-wrap { padding: 12px; }
-  .pdf-file-name { max-inline-size: 10rem; }
-  .pdf-page-layout { max-inline-size: 7rem; }
-}
-@container pdf-viewer (max-width: 520px) {
-  .pdf-file-name { display: none; }
-  .pdf-page-layout { max-inline-size: 6rem; }
-  /* Keep paging usable without three rows of navigation chrome. The first /
-     last buttons stay available at desktop widths and through the keyboard
-     map (Home/End) on narrow screens. */
-  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
-  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
-  .pdf-toolbar__actions { flex: 1 1 100%; justify-content: flex-end; }
-  .pdf-search { order: 3; flex: 1 1 100%; }
-  .pdf-search__field { flex: 1 1 auto; inline-size: auto; }
-  .search-result { flex: 1 1 100%; order: 4; }
-}
-@container pdf-viewer (max-width: 390px) {
-  .pdf-page-total { font-size: var(--office-text-xs); }
-  .pdf-page-layout { max-inline-size: 4.75rem; }
-  .pdf-zoom-select { inline-size: 5.25rem; }
 }
 
 @media print {

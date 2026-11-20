@@ -40,6 +40,8 @@ export type { UseElementWidthOptions } from "./composables/element-width"
 // Theme provider and icon adapter
 export { default as OfficeThemeProvider } from "./components/OfficeThemeProvider.vue"
 export { default as OfficeIcon } from "./components/OfficeIcon.vue"
+export { HugeIcon } from "./components/HugeIcon"
+export type { HugeIconData } from "./components/HugeIcon"
 export {
   OFFICE_DARK_MEDIA_QUERY,
   OFFICE_DENSITY_ATTRIBUTE,
