@@ -203,6 +203,20 @@ test("primitives use tokens instead of Tailwind utilities or literal visuals", (
   }
 });
 
+test("the input field paints the reference white in light mode", () => {
+  // #157: the reference element sits on `bg-popover`, whose light value is
+  // Extend's `var(--color-white)` (#fff). `oklch(1 0 0)` serialises to
+  // color(srgb .99987 1.00005 1.00007); blending the 1px border over that
+  // off-white made the rounded-corner anti-aliasing 1/255 darker than the
+  // reference in every light focus capture. The light branch must paint exact
+  // white, like `.office-button--outline` already does.
+  assert.match(
+    uiCssCode,
+    /\.office-input-control\s*\{[^}]*background:\s*light-dark\(\s*white,/u,
+    "input light background must be white, not oklch(1 0 0)",
+  );
+});
+
 test("touch targets and focus-visible rings are part of the interaction contract", () => {
   assert.match(uiCss, /@media \(pointer: coarse\)/u);
   assert.match(uiCss, /--office-ui-touch-target:\s*2\.75rem/u);
