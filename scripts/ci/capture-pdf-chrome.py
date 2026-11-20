@@ -134,7 +134,9 @@ def wait_for_layout(page: Page, layout: str) -> None:
 
 
 def select_layout(page: Page, layout: str) -> None:
-    page.locator('[data-testid="pdf-page-layout"]').select_option(layout)
+    page.locator('[data-testid="pdf-actions"]').click()
+    page.locator('[data-testid="pdf-actions-menu"]').wait_for(state="visible", timeout=10_000)
+    page.locator(f'[data-testid="pdf-page-layout-{layout}"]').click()
     wait_for_layout(page, layout)
 
 
@@ -167,9 +169,8 @@ def assert_toolbar(page: Page, label: str, toolbar: Locator, touch: bool) -> dic
               page: Boolean(toolbar.querySelector('[data-testid="pdf-page-input"]')),
               zoom: Boolean(toolbar.querySelector('[data-testid="pdf-zoom-select"]')),
               rotate: Boolean(toolbar.querySelector('[data-testid="pdf-rotate"]')),
-              search: Boolean(toolbar.querySelector('[data-testid="pdf-search-input"]')),
-              print: Boolean(toolbar.querySelector('[data-testid="pdf-print"]')),
-              download: Boolean(toolbar.querySelector('[data-testid="pdf-download"]')),
+              search: Boolean(toolbar.querySelector('[data-testid="pdf-search-toggle"]')),
+              actions: Boolean(toolbar.querySelector('[data-testid="pdf-actions"]')),
               sidebar: Boolean(toolbar.querySelector('[data-testid="pdf-sidebar-toggle"]')),
             },
             unnamedButtons: unnamed,
@@ -178,7 +179,7 @@ def assert_toolbar(page: Page, label: str, toolbar: Locator, touch: bool) -> dic
     )
     assert toolbar_box["height"] >= 48, f"{label}: toolbar height {toolbar_box}"
     assert metrics["overflow"] <= 1, f"{label}: toolbar overflows {metrics}"
-    assert metrics["iconButtons"] >= 8, f"{label}: shared icon buttons {metrics}"
+    assert metrics["iconButtons"] >= 7, f"{label}: shared icon buttons {metrics}"
     assert all(metrics["controls"].values()), f"{label}: toolbar controls {metrics['controls']}"
     assert not metrics["unnamedButtons"], f"{label}: unnamed buttons {metrics['unnamedButtons']}"
     if body_box:
@@ -296,9 +297,35 @@ def assert_status_bar(page: Page, label: str) -> dict[str, Any]:
     return metrics
 
 
+def assert_actions_menu(page: Page, label: str) -> dict[str, Any]:
+    """The upstream row keeps the extra PDF commands in the closed menu."""
+    page.locator('[data-testid="pdf-actions"]').click()
+    menu = page.locator('[data-testid="pdf-actions-menu"]')
+    menu.wait_for(state="visible", timeout=10_000)
+    metrics = page.evaluate(
+        """() => {
+          const menu = document.querySelector('[data-testid="pdf-actions-menu"]');
+          const ids = ['pdf-page-layout-continuous', 'pdf-page-layout-single', 'pdf-page-layout-spread',
+            'pdf-previous-page', 'pdf-next-page', 'pdf-first-page', 'pdf-last-page', 'pdf-print', 'pdf-download'];
+          return {
+            items: ids.filter((id) => Boolean(menu.querySelector(`[data-testid="${id}"]`))),
+            role: menu.getAttribute('role'),
+            labelled: Boolean(menu.getAttribute('aria-label')),
+          };
+        }"""
+    )
+    assert len(metrics["items"]) == 9, f"{label}: actions menu items {metrics}"
+    assert metrics["role"] == "menu", f"{label}: actions menu role {metrics}"
+    assert metrics["labelled"], f"{label}: actions menu needs a name {metrics}"
+    page.keyboard.press("Escape")
+    menu.wait_for(state="hidden", timeout=5_000)
+    return metrics
+
+
 def viewer_story(page: Page, out: Path, prefix: str, touch: bool) -> dict[str, Any]:
     toolbar = page.locator('[data-testid="pdf-toolbar"]')
     toolbar_metrics = assert_toolbar(page, prefix, toolbar, touch)
+    actions = assert_actions_menu(page, prefix)
     sidebar = assert_sidebar(page, prefix, out, prefix)
     status = assert_status_bar(page, prefix)
 
@@ -327,6 +354,7 @@ def viewer_story(page: Page, out: Path, prefix: str, touch: bool) -> dict[str, A
         assert layouts[layout]["layout"] == layout, f"{prefix}: {layout} layout did not apply {layouts[layout]}"
     return {
         "toolbar": toolbar_metrics,
+        "actions": actions,
         "sidebar": sidebar,
         "status": status,
         "layouts": layouts,

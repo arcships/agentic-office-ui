@@ -1230,7 +1230,10 @@ test("PdfViewer becomes ready only after the injected runtime opens and renders 
   assert.equal(findByTestId(ready.root, "pdf-page").props["data-render-state"], "rendered");
   assert.ok(findByTestId(ready.root, "pdf-page-image"));
 
+  findByTestId(ready.root, "pdf-actions").props.onClick();
+  await vue.nextTick();
   findByTestId(ready.root, "pdf-next-page").props.onClick();
+  await vue.nextTick();
   await waitFor(
     () => calls.renderPage.length >= 2 &&
       calls.renderPage.at(-1).pageIndex === 1 &&
@@ -1255,6 +1258,8 @@ test("PdfViewer becomes ready only after the injected runtime opens and renders 
   );
   assert.equal(findByTestId(ready.root, "pdf-document").props["data-rotation"], 90);
 
+  findByTestId(ready.root, "pdf-search-toggle").props.onClick();
+  await vue.nextTick();
   const searchInput = findByTestId(ready.root, "pdf-search-input");
   searchInput.value = "needle";
   searchInput.dispatchEvent({ type: "input", target: searchInput });
@@ -1731,6 +1736,8 @@ test("PdfViewer downloads verified bytes without reading the source again and re
   );
   assert.equal(sourceReads, 1);
   assert.equal(fake.calls.openDocument.length, 1);
+  findByTestId(mounted.root, "pdf-actions").props.onClick();
+  await vue.nextTick();
   await findByTestId(mounted.root, "pdf-download").props.onClick();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.deepEqual(actions, ["create", "append", "click", "remove", "revoke:blob:component-test-download"]);

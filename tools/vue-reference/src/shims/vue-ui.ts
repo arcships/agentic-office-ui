@@ -39,5 +39,6 @@ export { default as DocumentViewerSidebar } from "../../../../packages/vue-ui/sr
 export { default as DocumentViewerSidebarSkeleton } from "../../../../packages/vue-ui/src/components/chrome/DocumentViewerSidebarSkeleton.vue";
 export { default as FileThumbnail } from "../../../../packages/vue-ui/src/components/FileThumbnail.vue";
 export { default as OfficeIcon } from "../../../../packages/vue-ui/src/components/OfficeIcon.vue";
+export { HugeIcon } from "../../../../packages/vue-ui/src/components/HugeIcon";
 export { default as OfficePopover } from "../../../../packages/vue-ui/src/components/ui/OfficePopover.vue";
 export { useElementWidth } from "../../../../packages/vue-ui/src/composables/element-width";

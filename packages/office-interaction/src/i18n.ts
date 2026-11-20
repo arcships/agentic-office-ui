@@ -1401,12 +1401,15 @@ export interface OfficePdfMessages {
     pageLayoutSpread: string
     pageInput: string
     rotateClockwise: string
+    rotateCounterclockwise: string
     searchLabel: string
     searchPlaceholder: string
     search: string
     download: string
     /** Print the whole document through the browser print dialog. */
     print: string
+    /** Trigger for the toolbar overflow actions menu. */
+    moreActions: string
     thumbnails: string
     /** Template with a `{page}` placeholder. */
     thumbnailAlt: string
@@ -2749,11 +2752,13 @@ export const officeMessagesEn: OfficeMessages = {
       pageLayoutSpread: "Two-page spread",
       pageInput: "Page number",
       rotateClockwise: "Rotate clockwise",
+      rotateCounterclockwise: "Rotate counterclockwise",
       searchLabel: "Search PDF text",
       searchPlaceholder: "Search text",
       search: "Search",
       download: "Download PDF",
       print: "Print PDF",
+      moreActions: "More PDF actions",
       thumbnails: "Page thumbnails",
       thumbnailAlt: "Page {page} thumbnail",
       pageLabel: "Page {page}",
@@ -4058,11 +4063,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageLayoutSpread: "双页",
       pageInput: "页码",
       rotateClockwise: "顺时针旋转",
+      rotateCounterclockwise: "逆时针旋转",
       searchLabel: "搜索 PDF 文本",
       searchPlaceholder: "搜索文本",
       search: "搜索",
       download: "下载 PDF",
       print: "打印 PDF",
+      moreActions: "更多 PDF 操作",
       thumbnails: "页面缩略图",
       thumbnailAlt: "第 {page} 页缩略图",
       pageLabel: "第 {page} 页",

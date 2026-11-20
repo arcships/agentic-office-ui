@@ -1,147 +1,135 @@
 # PDF viewer / surface chrome（#162）
 
-> 状态：已实现（issue #162）。`PdfViewer` 的 toolbar、缩略图/大纲侧栏、空/加载/错误/加密
-> 状态、文本选择浮层、链接 hover card、批注对话框和状态栏改用 `@arcships/vue-ui` 的
-> 共享 chrome；PDFium 会话、翻页/缩放/旋转、搜索、选择、文本层、打印、连续/单页/双页布局
-> 和公共 API 保持不变。
+> 状态：已实现（issue #162）。`PdfViewer` 的默认 toolbar 行是 Extend
+> `PDFViewerToolbar` 的逐像素复刻；PDF 额外的 layout、首/末页、上/下一页、文件名、
+> 下载和打印命令收进右侧 `⋯` actions 菜单。缩略图/大纲侧栏、空/加载/错误/加密状态、
+> 文本选择浮层、链接 hover card、批注对话框和状态栏继续使用共享 chrome。
 >
-> 视觉基准：Extend UI 固定 commit
-> `70fe70c6f1e1eee53954c6923f3d9f583557a57e` 的 PDF toolbar 与 document sidebar。
-> 所有视觉值来自 `--office-*` token，没有 Tailwind/preflight/reset。
+> 视觉基准：`tools/extend-reference/src/vendor/extend/pdf-toolbar.tsx`（Extend UI
+> `apps/v4/components/extend/pdf-viewer.tsx`，固定 commit
+> `70fe70c6f1e1eee53954c6923f3d9f583557a57e`）。默认行没有 Tailwind：
+> `PdfViewerToolbar.vue` 用专用 CSS 回到上游 computed 尺寸。
 
-## 1. 组件映射
+## 1. 默认 toolbar 行（与上游一致）
 
-| PDF 区域 | 共享组件 |
-|---|---|
-| 工具栏骨架 | `OfficeToolbar` + `OfficeToolbarGroup` + `OfficeToolbarSeparator` |
-| 侧栏按钮、翻页、缩放、旋转、搜索、打印、下载 | `OfficeIconButton`（28px `icon-sm`） |
-| 页码输入 | `OfficeInput`（native input，`data-testid="pdf-page-input"`，Enter/change 提交） |
-| 页码总数 | 保留 `pdf-page-count` 文本节点，`of N` 来自 `common.page.of` |
-| 页码/缩放/布局原生控件 | 原生 `<select>` + `.office-ui` 与 `--office-*` 度量 |
-| 搜索框 | 原生 `input` + `.office-ui office-input`（保留 form submit/Enter 合同） |
-| 缩略图/大纲侧栏 | `DocumentViewerSidebar`（160px，inline/overlay auto，`Escape` 关闭关闭） |
-| 侧栏骨架 | `DocumentViewerSidebarSkeleton` |
-| 空 / 加载 / 错误 / 加密 | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeErrorState`（加密用 `lock` 图标 + `pdf.viewer.passwordRequired`） |
-| 可见状态栏 | `OfficeStatusBar`（`show-status-bar`，默认关闭） |
-| 文本选择浮层 | `OfficePopover` + `OfficeButton`（浏览器；零尺寸 fixed 锚点） |
-| 链接 hover card | `OfficePopover`（`link` 批注；显示清洗后的 URL + 打开动作） |
-| 批注详情 | `OfficeDialog`（`show-annotation-dialog`，默认关闭） |
-| 表单字段提示 | `OfficeTooltip`（`PdfFieldTooltip`，浏览器 only） |
+左侧：
 
-`PdfViewer` 保留 `.pdf-toolbar` 类作为打印/触屏的公共钩子；工具栏根本身是
-`OfficeToolbar`（`role="toolbar"`、48px 行高、`--office-*` token）。根元素同时带
-`data-office-theme="light|dark"`，确保共享组件和弹层解析到同一主题。
+- sidebar toggle（`SidebarLeftIcon`，28px 按钮 / 16px 图标）；
+- `Page` 文本、页码按钮（原生 input 透明覆盖，可输入/↑/↓/Home/End）、`of N`。
 
-## 2. 工具栏合同
+右侧：
+
+- rotate counterclockwise + rotate clockwise（`showRotateControls` 时，
+  `RotateClockwiseIcon`，第二个水平镜像）；
+- 1×16 separator；
+- zoom out、104px zoom select、zoom in（`CircleMinusIcon` / `CirclePlusIcon`）；
+- 1×16 separator；
+- search 按钮（`Search01Icon`，点击打开搜索浮层）；
+- 1×16 separator；
+- `⋯` actions 按钮（`MoreHorizontalIcon`）。
+
+图标全部来自 `@hugeicons/core-free-icons`，由 `@arcships/vue-ui` 的 `HugeIcon`
+渲染；尺寸 16px，chevron 在 <640px 为 18px，和上游 `sm:` 变体一致。
+
+### 尺寸合同
 
 | 项目 | 值 | 来源 |
 |---|---|---|
-| 桌面高度 | 48px（≥1100px 容器；含 1px 底边） | Extend `min-h-12` |
-| 桌面字号/行高 | 16px / 24px | Extend toolbar 根节点 |
-| 内边距/间距 | 12px 水平、8px 垂直、8px gap | Extend `px-3 py-2 gap-2` |
-| 图标按钮 | 28px（`icon-sm`）；coarse pointer 命中区 ≥44px | Extend `size-7` |
-| 原生 select/搜索框 | 28px（`--office-control-height-xs`） | 与 toolbar 行高一致 |
-| 页码 | 保留 `pdf-first-page` / `pdf-previous-page` / `pdf-page-input` / `pdf-page-count` / `pdf-next-page` / `pdf-last-page` | 现有测试与黑盒 |
-| 缩放 | `pdf-zoom-out` / `pdf-zoom-select`（0.5–2 的倍率值）/ `pdf-zoom-in` | 保留既有 value 合同 |
-| 布局 | `pdf-page-layout` 原生 select（continuous/single/spread） | 保留 `update:pageLayout` |
-| 搜索 | `form role="search"` + `pdf-search-input` / `pdf-search-submit` / `pdf-search-prev` / `pdf-search-next` / `pdf-search-result` | 保留 Enter/submit 与 live region |
-| 其他 | `pdf-sidebar-toggle`、`pdf-rotate`、`pdf-print`、`pdf-download` | 打印为 #162 新增可选按钮 |
+| toolbar | `min-height: 48px`、`padding: 8px 12px`、`gap: 8px`、1px 底边 | Extend `min-h-12 px-3 py-2 gap-2 border-b` |
+| 根字号/行高 | 16px / 24px | Extend toolbar 根节点 |
+| 左侧组 | `gap: 8px` | `gap-2` |
+| 右侧组 | `gap: 4px`、`justify-end` | `gap-1` |
+| icon button | 28×28（<640px 为 32×32），radius 10px，ghost hover 4% accent | `size-icon-sm` / `sm:size-7` |
+| 页码按钮 | 文本宽 + 18px padding + 2px border；<640px 字号 16/24、按钮 32px | `size-sm` / `sm:h-7` |
+| zoom select | 104×28（<640px 高 32px），padding 0 9px，chevron 16px（<640px 18px） | `w-[104px] min-w-[104px] size-sm` |
+| separator | 1×16，左右 margin 4px | `mx-1 h-4` |
+| disabled | 每个控件 opacity 0.64，shadow/edge 关闭 | `disabled:opacity-64` |
 
-### 响应式策略
+页码输入使用透明原生 input 覆盖在可见文本上：默认状态与上游按钮逐像素一致，
+同时保留 `pdf-page-input` 的 fill/Enter 和 `value` 合同。zoom 使用可见 trigger +
+透明原生 `<select>` 覆盖，保留 `select_option("2")` 的分数值合同。
 
-- **≥1100px 容器**：显示文件名、第一页/最后一页，全部命令一行。
-- **≤1100px**：隐藏文件名和第一页/最后一页（PageUp/PageDown、Home/End、页码输入仍可导航），
-  压缩搜索框和缩放 select，桌面/平板命令保持单行。
-- **≤520px**：搜索独占一行，工具栏按 `flex-wrap` 换行；`pdf-page-layout` 保留但压缩。
-- **≤390px**：进一步压缩页码总数和布局 select；无横向溢出。
-- 侧栏：容器 ≥768px 为 inline；更窄为 overlay，关闭时页面内容不平移。
+## 2. `⋯` actions 菜单
 
-## 3. 状态与交互
+默认不渲染（因此不影响像素对照），点击 `pdf-actions` 后显示：
 
-- `pdf-status` 视觉隐藏的 polite/atomic live region 保持不变，`data-state` 仍为
-  `idle | loading | error | ready`。
-- 空/加载/错误/加密状态改用 `Office*State`；错误节点保留
-  `data-testid="load-error"`（查看器）和 `pdf-surface-load-error`（Surface）以及
-  `data-error-code`。加密状态额外带 `data-encrypted="true"` 和 `lock` 图标。
-- `show-status-bar` 在查看器/Surface 中渲染 `OfficeStatusBar`，包含页码、文件名和
-  加载/错误状态；默认关闭，不改变既有高度。
-- `PdfSurface` 仍是最小嵌入 Surface：不新增内部 toolbar（宿主拥有搜索/缩放/翻页控件，
-  这是公开合同）；它的状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
-- 文本选择浮层只在浏览器挂载（Node/host renderer 无 DOM 时不挂载），复制走
-  `navigator.clipboard.writeText`；`Escape`/关闭 popover 清空选择。
+| 菜单项 | test id | 说明 |
+|---|---|---|
+| 文件名 | — | 只读 label |
+| layout: continuous / single / spread | `pdf-page-layout`（group）、`pdf-page-layout-continuous` 等 | 保留 `update:pageLayout` |
+| previous / next page | `pdf-previous-page`、`pdf-next-page` | 保留翻页命令 |
+| first / last page | `pdf-first-page`、`pdf-last-page` | 保留首/末页命令 |
+| print | `pdf-print` | 打印全部页面快照 |
+| download | `pdf-download` | 使用已验证字节 |
 
-浏览器交互抽查（Chromium 149，`#/pdf-viewer` 与 `#/pdf-surface`）：拖选后浮层出现，
-点击复制写入剪贴板并显示“已复制”；上传 `pdf-acroform-annotations.pdf` 后悬停内部
-链接显示“第 2 页”卡片，点击 highlight 批注打开 `OfficeDialog` 显示
-“Highlighted contract clause”；以上均无 console/page error。
-- 链接 hover card 复用 Surface 已有的 `linkActivate` 事件和 URL policy；
-  `show-annotation-dialog` 打开 `OfficeDialog`，批注/表单字段的既有
-  `annotationActivate` 事件仍先发出。
-- 表单控件在浏览器中由 `OfficeTooltip` 包裹字段名；`as-child` 触发，不增加影响
-  绝对定位的盒子。
+菜单关闭时不渲染，`pdf-download`/`pdf-print` 等仍保留原 test id；测试需要先点击
+`pdf-actions` 再操作。文档加载错误或控件禁用时 actions 按钮 disabled。
 
-## 4. 保留的行为
+## 3. 侧栏、状态和浮层
 
-连续/单页/双页布局、对页渲染、缩略图跟随可见页、outline 键盘树、页标签、搜索命中导航、
+| PDF 区域 | 共享组件 |
+|---|---|
+| 缩略图/大纲侧栏 | `DocumentViewerSidebar`（160px，inline/overlay auto） |
+| 侧栏骨架 | `DocumentViewerSidebarSkeleton` |
+| 空 / 加载 / 错误 / 加密 | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeErrorState` |
+| 可见状态栏 | `OfficeStatusBar`（`show-status-bar`，默认关闭） |
+| 文本选择浮层 | `OfficePopover` + `OfficeButton`（浏览器，fixed 锚点） |
+| 链接 hover card | `OfficePopover`（link 批注，显示 URL 或目标页） |
+| 批注详情 | `OfficeDialog`（`show-annotation-dialog`，默认关闭） |
+| 表单字段提示 | `OfficeTooltip`（`PdfFieldTooltip`，浏览器 only） |
+
+`PdfSurface` 仍是最小嵌入 Surface：不新增内部 toolbar（宿主拥有搜索/缩放/翻页控件，
+这是公开合同）；状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
+
+## 4. 保留的公共合同
+
+连续/单页/双页、对页渲染、缩略图跟随可见页、outline 键盘树、页标签、搜索命中导航、
 旋转、缩放锚点、拖选/双击选词/复制、文本层、打印全页快照、拖放导入、URL policy、
-诊断事件和所有公开 props/events/expose 方法均未改变。新增 props 均为可选：
+诊断事件和 `expose` 方法均未改变。新增 props 均为可选：
 
 | 组件 | 新增可选 prop | 默认 | 说明 |
 |---|---|---|---|
-| `PdfViewer` | `showPrint` | `true` | 工具栏打印按钮 |
+| `PdfViewer` | `showPrint` | `true` | actions 菜单打印项 |
 | `PdfViewer` | `showStatusBar` | `false` | 可见 `OfficeStatusBar` |
 | `PdfSurface` | `showStatusBar` | `false` | 可见 `OfficeStatusBar` |
-| `PdfSurface` | `showAnnotationDialog` | `false` | 点击批注时打开 `OfficeDialog` |
+| `PdfSurface` | `showAnnotationDialog` | `false` | 点击批注打开 `OfficeDialog` |
 
-新增消息键：`pdf.viewer.print`、`pdf.viewer.passwordRequired`、
+新增消息键（en / zh-CN）：`pdf.viewer.print`、`pdf.viewer.moreActions`、
+`pdf.viewer.rotateCounterclockwise`、`pdf.viewer.passwordRequired`、
 `pdf.viewer.selectionActions`、`pdf.viewer.copySelection`、
 `pdf.viewer.copiedSelection`、`pdf.viewer.linkActions`、`pdf.viewer.openLink`、
-`pdf.viewer.annotationDetails`（en / zh-CN）。
+`pdf.viewer.annotationDetails`。
 
-## 5. 截图 story
-
-`scripts/ci/capture-pdf-chrome.py` 在进程内启动 `apps/demo/dist`，覆盖
-390x844 / 768x1024 / 1440x900 × light/dark，驱动真实 `#/pdf-viewer` 与
-`#/pdf-surface`：
-
-- 断言 toolbar ≥48px、无横向溢出、不覆盖页面；
-- 断言侧栏 160px、inline/overlay 模式、关闭后内容不平移、缩略图仍在；
-- 断言页码/缩放/旋转/搜索/打印/下载/侧栏按钮存在且有可访问名称；
-- 连续/单页/双页各截一张 viewer 和 toolbar；
-- 断言可见状态栏位于页面下方且不覆盖页面。
+## 5. Extend 像素对照
 
 ```bash
-pnpm --filter demo build
-pnpm test:pdf:chrome
-# 等价于：
-# PYTHON=/tmp/bb-venv/bin/python RUN_PYTHON_MODULES=playwright \
-#   node scripts/ci/run-python.mjs scripts/ci/capture-pdf-chrome.py --serve apps/demo/dist
+pnpm ui:parity -- --only pdf-toolbar
 ```
 
+当前结果：**PASS — 40/40，0 pass-with-AA，0 fail**（1440×900、1280×720、768×1024、
+390×844 × light/dark × default/hover/focus/active/disabled）。几何全部通过，
+像素差 **0**（`diffRatio 0.0`、`maxChannelDelta 0`），未修改阈值。
+
+为达到该结果，参考与 subject 都使用同一组 fixture 值（第 3 / 12 页、100%、侧栏关闭）；
+subject 直接渲染生产组件 `PdfViewerToolbar`，而不是加载真实 PDF。
+
+## 6. 截图 story
+
+`scripts/ci/capture-pdf-chrome.py`（`pnpm test:pdf:chrome`）在进程内启动
+`apps/demo/dist`，覆盖 390x844 / 768x1024 / 1440x900 × light/dark，驱动真实
+`#/pdf-viewer` 与 `#/pdf-surface`：
+
+- 断言 toolbar ≥48px、无横向溢出、不覆盖页面；
+- 断言侧栏 160px、inline/overlay、关闭后内容不平移、缩略图仍在；
+- 断言 toolbar 可见控件（页码/缩放/旋转/search/actions）有可访问名称；
+- 连续/单页/双页各截一张 viewer 和 toolbar；
+- 断言可见状态栏位于页面下方且不覆盖页面；
+- coarse pointer 下 10 个可见控件 ≥44px。
+
 最近一次结果：6/6 通过，0 console error；产物在 `output/pdf-chrome/`。
-在 touch/coarse 指针 profile 下（390、768 两个 viewport）：390x844 toolbar 211px（4 行，
-44px 命中区，15 个可见控件）、768x1024 115px（2 行）、1440x900 48px（1 行）；侧栏在
-390/768 为 overlay、1440 为 inline；状态栏 32px。非触摸的 parity/桌面测量在 390 为
-125px、768 为 81px。
-
-## 6. Extend 像素对照（`pnpm ui:parity -- --only pdf-toolbar`）
-
-参考 surface 是 Extend 的静态 PDF toolbar 子集（无布局 select、无内联搜索框、无打印、
-下载/操作合并为菜单）。本仓库的 toolbar 必须保留这些既有命令和测试钩子，因此
-**几何在桌面宽度对齐，像素差异来自被保留的额外交互控件**，不能在不删功能的前提下
-降到 0.1%。
-
-| viewport | reference 高度 | subject 高度 | geometry | 像素差异（light / dark） | 最大通道差 |
-|---|---|---|---|---|---|
-| 1440x900 | 48px | 48px | PASS | 25.3049% / 32.7167% | 217 / 236 |
-| 1280x720 | 48px | 48px | PASS | 25.3049% / 32.7167% | 217 / 236 |
-| 768x1024 | 48px | 81px | FAIL (+33px) | 11.2476% / 22.2753% | 217 / 236 |
-| 390x844 | 125px | 161px | FAIL (+36px) | 11.7837% / 24.4957% | 218 / 236 |
-
-桌面几何（48px、16/24 子、12/8 内边距、8px gap）已与参考完全一致；768/390 的差异是
-保留的布局 select、内联搜索和打印按钮导致的额外换行。阈值仍为
-`geometryTolerancePx: 0`、`maxDiffPixelRatio: 0.001`，未修改。剩余差异需要产品决定是否
-把布局/搜索/打印移入溢出菜单后才能消除。
+触摸 profile：1440 48px、768 61px（44px 命中区）、390 161px（4 行）；非触摸
+parity/桌面测量为 1440/768 48px、390 125px。侧栏在窄容器为 overlay，1440 为
+inline；状态栏 32px；coarse pointer 下 10 个可见控件均 ≥44px。
 
 ## 7. 验证
 

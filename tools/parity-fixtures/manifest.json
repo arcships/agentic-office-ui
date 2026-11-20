@@ -424,11 +424,11 @@
       "id": "pdf-toolbar",
       "title": "PDF toolbar",
       "referenceComponent": "apps/v4/components/extend/pdf-viewer.tsx (PDFViewerToolbar)",
-      "subjectComponent": "packages/vue-pdf/src/components/PdfViewer.vue ([data-testid=pdf-toolbar])",
+      "subjectComponent": "packages/vue-pdf/src/components/PdfViewerToolbar.vue ([data-testid=pdf-toolbar])",
       "subjectStatus": "available",
       "subjectTargetSelector": "[data-testid='pdf-toolbar']",
       "cellWidth": 960,
-      "notes": "The reference toolbar's popover/dropdown/menu controls are vendored as static triggers with the same class strings; the Vue toolbar is the real viewer toolbar with a document loaded.",
+      "notes": "Both sides render the pinned Extend PDFViewerToolbar row with the same fixture values (page 3 of 12, 100%, sidebar closed). The Vue subject is the production PdfViewerToolbar; additional PDF commands (layout, first/last, download, print, file name) live in the closed ⋯ actions menu and do not affect the default row.",
       "states": [
         {
           "id": "default",

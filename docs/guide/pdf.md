@@ -44,7 +44,7 @@ import "@arcships/vue-pdf/style.css"
 
 `PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图、大纲面板和可见状态栏会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
-自 0.8（issue #162）起，`PdfViewer`/`PdfSurface` 的 chrome 使用 `@arcships/vue-ui` 的共享设计系统：`OfficeToolbar` 工具栏、`DocumentViewerSidebar` 缩略图/大纲侧栏（160px，窄容器为 overlay）、`OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState` 状态、`OfficeStatusBar` 可见状态栏，以及文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）。完整映射、响应式合同和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
+自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
 
 ### 页面布局
 

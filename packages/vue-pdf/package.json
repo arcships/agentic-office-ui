@@ -45,7 +45,8 @@
     "@arcships/office-interaction": "^0.7.1",
     "@arcships/vue-ui": "^0.7.1",
     "@embedpdf/core": "2.14.4",
-    "@embedpdf/models": "2.14.4"
+    "@embedpdf/models": "2.14.4",
+    "@hugeicons/core-free-icons": "4.4.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

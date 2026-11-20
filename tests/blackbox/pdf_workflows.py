@@ -157,6 +157,31 @@ def navigate_pdf(page: Page, file_name: str = "sample.pdf") -> None:
     wait_for_rendered_page(page, 1, file_name)
 
 
+def open_pdf_actions(page: Page) -> None:
+    """Open the upstream `...` actions menu that owns the extra PDF commands."""
+    menu = page.locator('[data-testid="pdf-actions-menu"]')
+    if menu.count() == 0:
+        page.locator('[data-testid="pdf-actions"]').click()
+    menu.wait_for(state="visible", timeout=10_000)
+
+
+def click_pdf_action(page: Page, test_id: str) -> None:
+    open_pdf_actions(page)
+    page.locator(f'[data-testid="{test_id}"]').click()
+
+
+def open_pdf_search(page: Page) -> None:
+    input_locator = page.locator('[data-testid="pdf-search-input"]')
+    if input_locator.count() == 0:
+        page.locator('[data-testid="pdf-search-toggle"]').click()
+    input_locator.wait_for(state="visible", timeout=10_000)
+
+
+def pdf_download_disabled(page: Page) -> bool:
+    open_pdf_actions(page)
+    return page.locator('[data-testid="pdf-download"]').is_disabled()
+
+
 def select_sample(page: Page, file_name: str, page_number: int = 1) -> None:
     page.locator('[data-testid="pdf-sample-select"]').select_option(file_name)
     wait_for_rendered_page(page, page_number, file_name)
@@ -348,16 +373,16 @@ def pdf_002_navigation(
         assert selected.get_attribute("aria-current") == "page"
         visited.append({"action": action, "document": current, "image": image_snapshot(page)})
 
-    page.locator('[data-testid="pdf-next-page"]').click()
+    click_pdf_action(page, "pdf-next-page")
     capture("next", 2)
     page.locator('[data-testid="pdf-page-input"]').fill("3")
     page.locator('[data-testid="pdf-page-input"]').press("Enter")
     capture("page-input", 3)
-    page.locator('[data-testid="pdf-previous-page"]').click()
+    click_pdf_action(page, "pdf-previous-page")
     capture("previous", 2)
-    page.locator('[data-testid="pdf-last-page"]').click()
+    click_pdf_action(page, "pdf-last-page")
     capture("last", 4)
-    page.locator('[data-testid="pdf-first-page"]').click()
+    click_pdf_action(page, "pdf-first-page")
     capture("first", 1)
     page.locator('[data-testid="pdf-thumbnail"][data-page-number="4"]').click()
     capture("thumbnail", 4)
@@ -413,6 +438,7 @@ def pdf_003_zoom_rotate_search(
     rotated_pixels = assert_rendered_pixels(page, "sample.pdf page 1 rotated by the viewer")
     screenshot(page, attempt_dir, "PDF-003-rotated-clockwise.png")
 
+    open_pdf_search(page)
     page.locator('[data-testid="pdf-search-input"]').fill("ALPHA-4")
     page.locator('[data-testid="pdf-search-submit"]').click()
     page.wait_for_function(
@@ -467,7 +493,7 @@ def pdf_004_fixture_matrix(
     portrait = image_snapshot(page)
     portrait_stage = page_stage_snapshot(page)
     portrait_document = document_snapshot(page)
-    page.locator('[data-testid="pdf-next-page"]').click()
+    click_pdf_action(page, "pdf-next-page")
     wait_for_rendered_page(page, 2, "rotated-pages.pdf")
     landscape = image_snapshot(page)
     landscape_stage = page_stage_snapshot(page)
@@ -506,7 +532,7 @@ def pdf_004_fixture_matrix(
         arg=240,
         timeout=120_000,
     )
-    page.locator('[data-testid="pdf-last-page"]').click()
+    click_pdf_action(page, "pdf-last-page")
     wait_for_rendered_page(page, 240, "large-contract.pdf")
     last_page = image_snapshot(page)
     assert last_page["naturalWidth"] > 0 and last_page["naturalHeight"] > 0, last_page
@@ -533,6 +559,7 @@ def pdf_005_verified_download(
     }
     downloads_dir = attempt_dir / "downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
+    open_pdf_actions(page)
     with page.expect_download(timeout=30_000) as download_info:
         page.locator('[data-testid="pdf-download"]').click()
     download = download_info.value
@@ -589,6 +616,7 @@ def pdf_006_corrupted_recovery(
     page: Page, attempt_dir: Path, _evidence: BrowserEvidence
 ) -> dict[str, object]:
     navigate_pdf(page)
+    open_pdf_search(page)
     page.locator('[data-testid="pdf-search-input"]').fill("ALPHA-4")
     page.locator('[data-testid="pdf-search-submit"]').click()
     wait_for_rendered_page(page, 4, "sample.pdf")
@@ -606,7 +634,7 @@ def pdf_006_corrupted_recovery(
     assert page.locator('[data-testid="pdf-thumbnail"]').count() == 0
     assert page.locator('[data-testid="pdf-page-image"]').count() == 0
     assert page.locator('[data-testid="pdf-search-result"]').count() == 0
-    assert page.locator('[data-testid="pdf-download"]').is_disabled()
+    assert page.locator('[data-testid="pdf-actions"]').is_disabled()
     assert_no_native_pdf_embed(page)
     screenshot(page, attempt_dir, "PDF-006-corrupted-error.png")
 
@@ -615,7 +643,9 @@ def pdf_006_corrupted_recovery(
     assert recovered["document"]["pageCount"] == 4, recovered
     assert recovered["document"]["activePage"] == 1, recovered
     assert page.locator('[data-testid="pdf-thumbnail"]').count() == 4
+    open_pdf_actions(page)
     assert not page.locator('[data-testid="pdf-download"]').is_disabled()
+    page.keyboard.press("Escape")
     assert_no_native_pdf_embed(page)
     screenshot(page, attempt_dir, "PDF-006-recovered-sample.png")
     return {"errorCode": error_code, "error": error, "recovered": recovered}
@@ -737,7 +767,7 @@ def pdf_009_encrypted_document(
     assert page.locator('[data-testid="pdf-document"]').count() == 0
     assert page.locator('[data-testid="pdf-thumbnail"]').count() == 0
     assert page.locator('[data-testid="pdf-page-image"]').count() == 0
-    assert page.locator('[data-testid="pdf-download"]').is_disabled()
+    assert page.locator('[data-testid="pdf-actions"]').is_disabled()
     diagnostic = page.locator(
         '[data-testid="pdf-diagnostic"][data-diagnostic-type="load-error"]'
         '[data-error-code="ENCRYPTED"]'
