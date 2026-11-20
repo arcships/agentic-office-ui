@@ -17,9 +17,15 @@ const { pathToFileURL } = await import("node:url");
 const requireFromDemo = createRequire(
   new URL("../../apps/demo/package.json", import.meta.url),
 );
+const requireFromUi = createRequire(
+  new URL("../../packages/vue-ui/package.json", import.meta.url),
+);
 const vue = await import(pathToFileURL(requireFromDemo.resolve("vue")).href);
 const ui = await import(
   pathToFileURL(requireFromDemo.resolve("@arcships/vue-ui")).href
+);
+const interaction = await import(
+  pathToFileURL(requireFromUi.resolve("@arcships/office-interaction")).href
 );
 const { renderToString } = await import(
   pathToFileURL(requireFromDemo.resolve("vue/server-renderer")).href
@@ -55,10 +61,20 @@ after(() => {
   GlobalRegistrator.unregister();
 });
 
-function mountRoot(render) {
+function mountRoot(render, { locale = "en" } = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   const app = createApp({ render });
+  const messages =
+    locale === "zh-CN" ? interaction.officeMessagesZhCN : interaction.officeMessagesEn;
+  app.provide(
+    interaction.OFFICE_I18N_INJECTION_KEY,
+    vue.computed(() => messages),
+  );
+  app.provide(
+    interaction.OFFICE_LOCALE_INJECTION_KEY,
+    vue.computed(() => locale),
+  );
   app.mount(host);
   const cleanup = () => {
     app.unmount();
@@ -68,8 +84,8 @@ function mountRoot(render) {
   return { app, host, cleanup };
 }
 
-function mount(component, { props = {}, slots = {} } = {}) {
-  return mountRoot(() => h(component, props, slots));
+function mount(component, { props = {}, slots = {}, locale = "en" } = {}) {
+  return mountRoot(() => h(component, props, slots), { locale });
 }
 
 async function flush(ms = 60) {
@@ -874,6 +890,25 @@ test("Badge, Card, Separator, Skeleton, Spinner and ScrollArea render their cont
   const viewport = bySlot("scroll-area-viewport");
   assert.equal(viewport.getAttribute("tabindex"), "0");
   assert.ok(bySlot("scroll-area"));
+});
+
+test("primitive labels default to English and follow the provided Office locale", async (t) => {
+  const english = mountRoot(() => h(OfficeSpinner), { locale: "en" });
+  const chinese = mountRoot(() => h(OfficeSpinner), { locale: "zh-CN" });
+  t.after(() => {
+    english.cleanup();
+    chinese.cleanup();
+  });
+  await flush();
+
+  assert.equal(
+    english.host.querySelector('[data-slot="spinner"]').getAttribute("aria-label"),
+    "Loading",
+  );
+  assert.equal(
+    chinese.host.querySelector('[data-slot="spinner"]').getAttribute("aria-label"),
+    "加载中",
+  );
 });
 
 // ── Toast ─────────────────────────────────────────────────────────────────
