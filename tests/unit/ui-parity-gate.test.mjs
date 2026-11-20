@@ -66,7 +66,13 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   assert.ok(!core.includes("docx-toolbar"), "docx chrome stays out of the PR subset until #159 closes");
 
   for (const surface of manifest.surfaces) {
-    assert.ok(["blocking", "pending"].includes(surface.gateStatus), `${surface.id} gateStatus`);
+    // `ready` is the documented third state: the surface is captured and
+    // reported (the document blocks use it until their owners flip them to
+    // `blocking`) but never gates a run.
+    assert.ok(
+      ["blocking", "pending", "ready"].includes(surface.gateStatus),
+      `${surface.id} gateStatus`,
+    );
     if (surface.gateStatus === "pending") {
       assert.match(
         surface.gatePendingIssue ?? "",
@@ -86,8 +92,13 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   assert.deepEqual(blocking, [
     "button",
     "dialog",
+    "document-sidebar",
     "file-thumbnail",
     "file-upload",
+    "office-empty-state",
+    "office-error-state",
+    "office-loading-state",
+    "office-status-bar",
     "pdf-sidebar",
     "pdf-toolbar",
     "select",
@@ -100,10 +111,18 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
   assert.deepEqual(pending, [
     "docx-sidebar:#159",
     "docx-toolbar:#159",
-    "document-blocks:#164",
-    "document-sidebar:#158",
     "input:#157",
   ].sort());
+  const ready = manifest.surfaces
+    .filter((surface) => surface.gateStatus === "ready")
+    .map((surface) => surface.id)
+    .sort();
+  assert.deepEqual(ready, [
+    "bounding-box-citations",
+    "document-splits",
+    "e-signature",
+    "layout-blocks",
+  ]);
 });
 
 test("committed baselines cover exactly the gate-blocking matrix", () => {
@@ -133,7 +152,7 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 152);
+  assert.equal(baselineManifest.files.length, expected.size);
 
   for (const file of baselineManifest.files) {
     assert.match(file.path, /^[a-z0-9-]+\/[a-z0-9-]+\/(light|dark)-[0-9]+x[0-9]+\.png$/);
@@ -238,7 +257,23 @@ test("style baseline cannot grow without an approval", () => {
 test("a11y config covers the core surfaces and allowlists only owned findings", () => {
   assert.deepEqual(
     a11yConfig.surfaces.map((surface) => surface.id),
-    ["button", "input", "select", "dialog", "tooltip", "file-upload", "file-thumbnail", "pdf-toolbar", "pdf-sidebar"],
+    [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "pdf-sidebar",
+      "docx-toolbar",
+      "document-sidebar",
+      "office-empty-state",
+      "office-error-state",
+      "office-loading-state",
+      "office-status-bar",
+    ],
   );
   assert.ok(a11yConfig.axe.tags.includes("wcag2a"));
   assert.ok(a11yConfig.axe.tags.includes("wcag21aa"));
