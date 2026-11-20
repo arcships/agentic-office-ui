@@ -57,6 +57,7 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "file-upload",
       "file-thumbnail",
       "pdf-toolbar",
+      "pdf-sidebar",
       "docx-toolbar",
       "docx-sidebar",
       "document-sidebar",
@@ -265,15 +266,35 @@ test("token mapping compares the pinned palette with the #156 office layer", () 
   assert.equal(byName.get("--border").officeTokenStatus, "present");
   assert.equal(byName.get("--border").lightDelta.maxChannelDelta, 0);
   assert.equal(byName.get("--border").lightDelta.alphaDelta, 0);
-  assert.equal(byName.get("--code").officeTokenStatus, "missing-in-token-layer");
-  assert.equal(byName.get("--code").lightDelta.comparable, false);
+  // #156 reopened: every pinned semantic colour, including the --code* family,
+  // is represented by an --office-* token with no channel delta.
+  for (const name of ["--code", "--code-foreground", "--code-highlight", "--code-number"]) {
+    const entry = byName.get(name);
+    assert.ok(entry, `${name} must be in the mapping`);
+    assert.equal(entry.officeTokenStatus, "present", `${name} must be declared`);
+    assert.equal(entry.lightDelta.matches, true, `${name} light`);
+    assert.equal(entry.darkDelta.matches, true, `${name} dark`);
+  }
+  assert.ok(
+    tokens.mapping.every((entry) => entry.officeTokenStatus === "present"),
+    "every Extend semantic colour must be mapped",
+  );
 
   assert.ok(tokens.tokenLayer.entries.length > 20);
-  assert.equal(tokens.tokenLayer.summary.missing, 0);
+  assert.deepEqual(tokens.tokenLayer.summary, {
+    total: 27,
+    matched: 27,
+    mismatched: 0,
+    missing: 0,
+  });
   const padding = tokens.tokenLayer.entries.find((entry) =>
     entry.token.startsWith("control-padding-inline"),
   );
-  assert.equal(padding.match, false, "the 11px/12px control padding delta must stay visible");
+  // The token is the full 12px inset (11px padding + 1px border); consumers
+  // subtract --office-border-width when they paint the border.
+  assert.equal(padding.extend.px, 12);
+  assert.equal(padding.office.px, 12);
+  assert.equal(padding.match, true);
   const radius = tokens.tokenLayer.entries.find((entry) => entry.token === "--radius");
   assert.equal(radius.match, true);
 });
@@ -334,7 +355,10 @@ test("harness docs and CI artifact wiring exist", () => {
   }
   const workflow = read(".github/workflows/ui-parity.yml");
   assert.ok(workflow.includes("pnpm ui:parity"));
-  assert.ok(workflow.includes("ui-parity-report"));
+  // #165 split the single `ui-parity-report` artifact into the PR core subset
+  // and the nightly full matrix; both still carry report.json/report.html.
+  assert.ok(workflow.includes("ui-parity-core-"));
+  assert.ok(workflow.includes("ui-parity-full-"));
   assert.ok(workflow.includes("actions/upload-artifact"));
   assert.ok(workflow.includes("playwright install"));
   assert.ok(workflow.includes("ui:parity:self-check"));

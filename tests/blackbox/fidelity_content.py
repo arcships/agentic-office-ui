@@ -199,7 +199,13 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         endnote_text = page.locator('[data-testid="docx-endnotes"]').inner_text()
         expect("服务级别摘要" in footnote_text, "脚注正文未展示")
         expect("响应时间变更" in endnote_text, "尾注正文未展示")
+        # Find lives in the DOCX actions menu on the upstream-shaped default
+        # row; Ctrl/Cmd+F opens the same find popover while the viewer has
+        # focus.
+        page.locator('[data-testid="docx-viewer"]').click()
+        page.keyboard.press("Control+f")
         search = page.locator('[data-testid="docx-search-input"]')
+        search.wait_for(timeout=10_000)
         search.fill("reviewed")
         page.locator('[data-testid="docx-search-status"]').wait_for()
         status = page.locator('[data-testid="docx-search-status"]').inner_text()

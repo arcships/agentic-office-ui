@@ -634,10 +634,10 @@ function buildTokenLayer({ tailwind, typography, officeLightDecls, radius }) {
   );
   scalar(
     "control",
-    "control-padding-inline (px-[calc(--spacing(3)-1px)])",
-    "11px",
+    "control-padding-inline (full inset: px-[calc(--spacing(3)-1px)] + 1px border)",
+    "12px",
     office("control-padding-inline"),
-    "Extend subtracts the 1px border from the 12px spacing step; the office token is the full inline inset, so a 12px token + 1px border renders 13px unless the consumer subtracts it.",
+    "Extend paints 11px inline padding (calc(--spacing(3)-1px)) inside the control's 1px border, i.e. a 12px inset from the outer edge. The office token is that full inset, matching Extend's rendered inset; every consumer subtracts --office-border-width when it paints its own border (see packages/vue-ui/src/styles/ui.css), so the rendered padding is 11px on both sides.",
   );
   scalar("control", "control-gap (gap-2)", "8px", office("control-gap"));
 

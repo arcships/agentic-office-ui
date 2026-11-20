@@ -39,6 +39,8 @@ const statusMode = ref<"normal" | "warning" | "error">("normal")
 const fileName = "Q3-review.pdf"
 const xlsxZoom = ref(100)
 const xlsxPageBreakPreview = ref(false)
+/** Selection exposed as both `selection` and `activeSelection` by the stand-in. */
+const xlsxSelection = { end: { row: 2, col: 1 }, start: { row: 2, col: 1 } }
 /**
  * Static stand-in for `XlsxViewerController`. The chrome story only renders
  * the toolbar/ribbon/status bar, so the fields they read are enough and the
@@ -59,7 +61,7 @@ const xlsxController = {
   exportXlsx: () => {},
   download: () => {},
   freezePanes: null,
-  get activeSelection() { return this.selection },
+  get activeSelection() { return xlsxSelection },
   get activeTab() { return null },
   isEditingLocked: false,
   isLoading: false,
@@ -70,7 +72,7 @@ const xlsxController = {
   openPrintPreview: () => {},
   readOnly: false,
   revision: 0,
-  selection: { end: { row: 2, col: 1 }, start: { row: 2, col: 1 } },
+  selection: xlsxSelection,
   selectedRangeAddress: "B3",
   setPageBreakPreview: () => {},
   setZoomScale: (value: number) => { xlsxZoom.value = value },

@@ -303,9 +303,15 @@ test("DocxViewer exposes empty, loading, success and error states with public ev
 });
 
 test("DocxViewer hides upload and download entry points through showUpload and showDownload", async () => {
+  async function openActionsMenu(root) {
+    await findByTestId(root, "docx-toolbar-actions").props.onClick();
+    await vue.nextTick();
+  }
+
   const shown = await mount(DocxViewer, { emptyState: "DOCX empty" });
-  assert.ok(findByTestId(shown.root, "docx-upload"), "upload button visible by default");
-  assert.ok(findByTestId(shown.root, "docx-download"), "download button visible by default");
+  await openActionsMenu(shown.root);
+  assert.ok(findByTestId(shown.root, "docx-upload"), "upload entry visible by default");
+  assert.ok(findByTestId(shown.root, "docx-download"), "download entry visible by default");
   assert.match(textContent(shown.root), /Choose Word file/);
   assert.deepEqual(shown.warnings, []);
   shown.app.unmount();
@@ -316,8 +322,9 @@ test("DocxViewer hides upload and download entry points through showUpload and s
     showDownload: false,
   });
   assert.ok(findByTestId(hidden.root, "docx-viewer-toolbar"), "toolbar still renders");
-  assert.equal(findByTestId(hidden.root, "docx-upload"), undefined, "upload button hidden");
-  assert.equal(findByTestId(hidden.root, "docx-download"), undefined, "download button hidden");
+  await openActionsMenu(hidden.root);
+  assert.equal(findByTestId(hidden.root, "docx-upload"), undefined, "upload entry hidden");
+  assert.equal(findByTestId(hidden.root, "docx-download"), undefined, "download entry hidden");
   assert.doesNotMatch(textContent(hidden.root), /Choose Word file/);
   assert.deepEqual(hidden.warnings, []);
   hidden.app.unmount();
@@ -336,7 +343,8 @@ test("DocxViewer hides upload and download entry points through showUpload and s
     "DOCX error state",
   );
   assert.doesNotMatch(textContent(failed.root), /Choose another Word file/);
-  assert.ok(findByTestId(failed.root, "docx-download"), "download button retained when only upload is hidden");
+  await openActionsMenu(failed.root);
+  assert.ok(findByTestId(failed.root, "docx-download"), "download entry retained when only upload is hidden");
   assert.deepEqual(failed.warnings, []);
   failed.app.unmount();
 });
@@ -367,21 +375,33 @@ test("DocxViewer displays model-derived tracked changes and comments without an 
   await vue.nextTick();
 
   const viewer = findByTestId(mounted.root, "docx-viewer");
-  const trackedToggle = findByTestId(mounted.root, "docx-show-tracked-changes");
-  const commentToggle = findByTestId(mounted.root, "docx-show-comments");
   assert.equal(viewer.props["data-show-tracked-changes"], "true");
   assert.equal(viewer.props["data-show-comments"], "true");
-  assert.equal(trackedToggle.props.disabled, false);
-  assert.equal(commentToggle.props.disabled, false);
-  assert.equal(trackedToggle.props["aria-pressed"], true);
-  assert.equal(commentToggle.props["aria-pressed"], true);
   assert.match(textContent(mounted.root), /Alex Reviewer/);
   assert.match(textContent(mounted.root), /Priya Reviewer/);
   assert.match(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
 
+  // Comments and edits live in the upstream DOCX actions menu; open it and
+  // assert the two toggles' checked state there.
+  async function openActionsMenu() {
+    await findByTestId(mounted.root, "docx-toolbar-actions").props.onClick();
+    await vue.nextTick();
+    assert.ok(findByTestId(mounted.root, "docx-actions-menu"), "the actions menu must open");
+  }
+  await openActionsMenu();
+  let trackedToggle = findByTestId(mounted.root, "docx-show-tracked-changes");
+  let commentToggle = findByTestId(mounted.root, "docx-show-comments");
+  assert.equal(trackedToggle.props.disabled, false);
+  assert.equal(commentToggle.props.disabled, false);
+  assert.equal(trackedToggle.props["aria-checked"], true);
+  assert.equal(commentToggle.props["aria-checked"], true);
+
   commentToggle.props.onClick();
   await vue.nextTick();
   assert.equal(findByTestId(mounted.root, "docx-viewer").props["data-show-comments"], "false");
+  await openActionsMenu();
+  commentToggle = findByTestId(mounted.root, "docx-show-comments");
+  assert.equal(commentToggle.props["aria-checked"], false);
   assert.doesNotMatch(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
   assert.match(textContent(mounted.root), /Alex Reviewer/);
   assert.deepEqual(mounted.warnings, []);

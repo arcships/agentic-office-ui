@@ -20,6 +20,18 @@ Thresholds (manifest `thresholds`):
   maxChannelDelta       per-channel delta treated as text anti-aliasing (2/255)
   maxDiffPixelRatio     share of differing pixels allowed inside the AA rule
   maxContiguousDiffPx   longest allowed run of differing pixels (2 => 2x2 box)
+  topDiffRegions        number of clustered diff regions reported per failure
+
+Modes:
+  default                  live reference-vs-subject parity, every failure blocks
+  --gate-mode ready        only `gateStatus: blocking` surfaces block (CI)
+  --report-only            alias for `--gate-mode off` (artifact mode)
+  --baseline               also compare the subject with tests/visual/extend/*
+  --write-baseline         write the subject captures into the baseline tree
+                           (`pnpm ui:baseline` owns approval + manifest hashes)
+
+Baselines are named `<surface>/<state>/<theme>-<viewport>.png` and only the
+`manifest.baselines` viewport/theme combinations are compared.
 """
 
 from __future__ import annotations
@@ -31,6 +43,7 @@ import http.server
 import importlib.metadata
 import json
 import platform
+import shutil
 import socketserver
 import sys
 import threading
@@ -335,6 +348,93 @@ def longest_run(mask: Image.Image, limit: int = 8) -> int:
     return best if mask.getbbox() is not None else 0
 
 
+REGION_CELL_PX = 16
+
+
+def diff_regions(
+    max_diff: Image.Image,
+    mask: Image.Image,
+    limit: int,
+    grid: int = REGION_CELL_PX,
+) -> list[dict]:
+    """Cluster the differing pixels into coarse regions, worst first.
+
+    A 16px grid keeps this cheap on a 4000px-tall capture: cells that contain
+    any differing pixel are connected (8-neighbourhood), then each cluster is
+    measured against the real pixel mask so the reported pixel count and peak
+    channel delta are exact.
+    """
+    if limit <= 0 or mask.getbbox() is None:
+        return []
+    width, height = mask.size
+    columns = max(1, (width + grid - 1) // grid)
+    rows = max(1, (height + grid - 1) // grid)
+    cells = mask.resize((columns, rows), Image.BOX).load()
+    seen = [[False] * columns for _ in range(rows)]
+    clusters: list[tuple[int, int, int, int]] = []
+    for start_y in range(rows):
+        for start_x in range(columns):
+            if seen[start_y][start_x] or not cells[start_x, start_y]:
+                continue
+            seen[start_y][start_x] = True
+            stack = [(start_x, start_y)]
+            min_x = max_x = start_x
+            min_y = max_y = start_y
+            while stack:
+                cell_x, cell_y = stack.pop()
+                min_x, max_x = min(min_x, cell_x), max(max_x, cell_x)
+                min_y, max_y = min(min_y, cell_y), max(max_y, cell_y)
+                for dx, dy in (
+                    (1, 0), (-1, 0), (0, 1), (0, -1),
+                    (1, 1), (1, -1), (-1, 1), (-1, -1),
+                ):
+                    next_x, next_y = cell_x + dx, cell_y + dy
+                    if (
+                        0 <= next_x < columns
+                        and 0 <= next_y < rows
+                        and not seen[next_y][next_x]
+                        and cells[next_x, next_y]
+                    ):
+                        seen[next_y][next_x] = True
+                        stack.append((next_x, next_y))
+            clusters.append((min_x, min_y, max_x, max_y))
+    if not clusters:
+        # A 16x16 BOX reduction of a single differing pixel rounds to 1, so
+        # this is a safety net rather than the normal path.
+        bbox = mask.getbbox()
+        clusters = [
+            (
+                bbox[0] // grid,
+                bbox[1] // grid,
+                max(0, (bbox[2] - 1) // grid),
+                max(0, (bbox[3] - 1) // grid),
+            )
+        ]
+
+    regions = []
+    for min_x, min_y, max_x, max_y in clusters:
+        box = (
+            min_x * grid,
+            min_y * grid,
+            min(width, (max_x + 1) * grid),
+            min(height, (max_y + 1) * grid),
+        )
+        pixels = mask.crop(box).histogram()[255]
+        peak = max_diff.crop(box).getextrema()[1]
+        regions.append(
+            {
+                "x": box[0],
+                "y": box[1],
+                "width": box[2] - box[0],
+                "height": box[3] - box[1],
+                "diffPixels": pixels,
+                "maxChannelDelta": peak,
+            }
+        )
+    regions.sort(key=lambda region: region["diffPixels"], reverse=True)
+    return regions[:limit]
+
+
 def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict) -> dict:
     diff = ImageChops.difference(reference, subject)
     red, green, blue, alpha = diff.split()
@@ -366,6 +466,11 @@ def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict)
             )
 
     status = "pass" if diff_pixels == 0 else ("fail" if reasons else "pass-with-antialiasing")
+    regions = diff_regions(
+        max_diff,
+        mask,
+        int(thresholds.get("topDiffRegions", 5)),
+    ) if diff_pixels else []
     return {
         "status": status,
         "reasons": reasons,
@@ -374,6 +479,8 @@ def diff_metrics(reference: Image.Image, subject: Image.Image, thresholds: dict)
         "maxChannelDelta": max_channel,
         "maxContiguousRunPx": run,
         "has3x3Block": has_3x3,
+        "regions": regions,
+        "regionGridPx": REGION_CELL_PX,
         "width": reference.size[0],
         "height": reference.size[1],
         "_diff": max_diff,
@@ -462,6 +569,50 @@ def compare_images(
     return strip_private(result)
 
 
+# --------------------------------------------------------------------------
+# Committed baselines (tests/visual/extend)
+# --------------------------------------------------------------------------
+
+
+def baseline_relpath(surface_id: str, state_id: str, theme: str, viewport_id: str) -> str:
+    """`<component>/<state>/<theme>-<viewport>.png` — the committed naming scheme."""
+    return f"{surface_id}/{state_id}/{theme}-{viewport_id}.png"
+
+
+def compare_baseline(
+    baseline_path: Path,
+    subject_path: Path,
+    case_dir: Path,
+    out: Path,
+    thresholds: dict,
+) -> dict:
+    if not baseline_path.exists():
+        return {"status": "missing", "baseline": rel(baseline_path)}
+    result = compare_images(
+        baseline_path,
+        subject_path,
+        case_dir / "baseline-diff.png",
+        case_dir / "baseline-heatmap.png",
+        None,
+        thresholds,
+    )
+    status = result.pop("status")
+    entry = {"status": status, "baseline": rel(baseline_path), **result}
+    diff_file = case_dir / "baseline-diff.png"
+    heatmap_file = case_dir / "baseline-heatmap.png"
+    if diff_file.exists():
+        entry["screenshot"] = artifact_rel(diff_file, out)
+    if heatmap_file.exists():
+        entry["heatmap"] = artifact_rel(heatmap_file, out)
+    return entry
+
+
+def write_baseline(baseline_path: Path, subject_path: Path) -> dict:
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(subject_path, baseline_path)
+    return {"status": "written", "baseline": rel(baseline_path)}
+
+
 def compare_metrics(reference: dict, subject: dict, tolerance: float) -> dict:
     deltas = []
     for key in GEOMETRY_KEYS:
@@ -537,6 +688,17 @@ def write_html_report(report: dict, destination: Path) -> None:
                 f'<figure><img src="{html.escape(case["compare"])}" loading="lazy" />'
                 f"<figcaption>reference / subject</figcaption></figure>"
             )
+        baseline = case.get("baseline") or {}
+        if baseline.get("screenshot"):
+            images += (
+                f'<figure><img src="{html.escape(baseline["screenshot"])}" loading="lazy" />'
+                f"<figcaption>baseline diff</figcaption></figure>"
+            )
+        if baseline.get("heatmap"):
+            images += (
+                f'<figure><img src="{html.escape(baseline["heatmap"])}" loading="lazy" />'
+                f"<figcaption>baseline heatmap</figcaption></figure>"
+            )
         for key, caption in (
             ("overlapDiffScreenshot", "overlap diff"),
             ("overlapHeatmapScreenshot", "overlap heatmap"),
@@ -555,6 +717,21 @@ def write_html_report(report: dict, destination: Path) -> None:
                 f"geometry {delta['key']}: {delta['reference']} -> {delta['subject']}"
             )
         failures.extend(case.get("errors", []))
+        if baseline.get("status") == "missing":
+            failures.append(f"baseline missing: {baseline.get('baseline')}")
+        elif baseline.get("status") == "fail":
+            for region in (baseline.get("regions") or [])[:3]:
+                failures.append(
+                    f"baseline diff region {region['width']}x{region['height']} "
+                    f"at ({region['x']}, {region['y']}) — {region['diffPixels']} px"
+                )
+        for region in (case.get("diff", {}).get("regions") or [])[:3]:
+            failures.append(
+                f"diff region {region['width']}x{region['height']} "
+                f"at ({region['x']}, {region['y']}) — {region['diffPixels']} px"
+            )
+        if baseline.get("status"):
+            failures.append(f"baseline: {baseline['status']}")
         rows.append(
             """
             <tr class="status-{status}">
@@ -641,6 +818,13 @@ def write_html_report(report: dict, destination: Path) -> None:
   {summary["baselineOnly"]} reference-only ·
   {summary["total"]} cases
 </p>
+<p>
+  gate <code>{html.escape(summary["gate"])}</code> ·
+  mode <code>{html.escape(str(summary.get("gateMode")))}</code> ·
+  baseline <code>{html.escape(str(summary.get("baselineMode")))}</code> ·
+  blocking <strong>{summary.get("blockingFailures", 0)}</strong> ·
+  pending {summary.get("pendingFailures", 0)}
+</p>
 <h2>Token diff (Extend &rarr; --office-*)</h2>
 <table>
   <thead><tr><th>Group</th><th>Token</th><th>Extend</th><th>Office (#156)</th></tr></thead>
@@ -676,17 +860,21 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
         f"- generated: `{report['generatedAt']}`",
         f"- chromium: `{report['environment']['browserVersion']}` at DPR {report['environment']['deviceScaleFactor']}",
         f"- cases: {summary['total']} (pass {summary['passed']}, pass-with-AA {summary['passedWithAntialiasing']}, fail {summary['failed']}, reference-only {summary['baselineOnly']})",
-        f"- gate: `{summary['gate']}`",
+        f"- gate: `{summary['gate']}` (mode `{summary.get('gateMode')}`, baseline `{summary.get('baselineMode')}`)",
+        f"- blocking failures: {summary.get('blockingFailures', 0)}; pending (reported only): {summary.get('pendingFailures', 0)}",
+        f"- baseline: {summary.get('baselineWritten', 0)} written, {summary.get('baselineFailed', 0)} failed, {summary.get('baselineMissing', 0)} missing",
         "",
         "## Per surface",
         "",
-        "| Surface | Subject | Pending | Pass | Fail | Reference-only |",
-        "|---|---|---|---|---|---|",
+        "| Surface | Subject | Core | Gate | Pending | Pass | Fail | Reference-only |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for surface in report["surfaces"]:
         counts = surface["counts"]
         lines.append(
-            f"| {surface['id']} | {surface['subjectComponent'] or '—'} | {surface['pendingIssue'] or '—'} "
+            f"| {surface['id']} | {surface['subjectComponent'] or '—'} "
+            f"| {'yes' if surface.get('core') else 'no'} | {surface.get('gateStatus') or '—'} "
+            f"| {surface.get('gatePendingIssue') or surface['pendingIssue'] or '—'} "
             f"| {counts['passed'] + counts['passedWithAntialiasing']} | {counts['failed']} | {counts['baselineOnly']} |"
         )
     lines.extend(["", "## Unreachable surfaces", ""])
@@ -729,7 +917,13 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
             "",
         ]
     )
-    failing = [case for case in report["cases"] if case["status"] == "fail"]
+    failing = [
+        case
+        for case in report["cases"]
+        if case["status"] == "fail"
+        or case["status"] == "error"
+        or (case.get("baseline") or {}).get("status") in {"fail", "missing"}
+    ]
     if not failing:
         lines.append("None.")
     for case in failing[:200]:
@@ -737,6 +931,27 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
             f"geometry {delta['key']} {delta['reference']} -> {delta['subject']}"
             for delta in case.get("geometry", {}).get("deltas", [])
         ]
+        baseline = case.get("baseline") or {}
+        if baseline.get("status") == "missing":
+            reasons.append(f"baseline missing: `{baseline.get('baseline')}`")
+        elif baseline.get("status") == "fail":
+            reasons.append(
+                "baseline diff "
+                + ", ".join(
+                    f"{region['width']}x{region['height']} at ({region['x']}, {region['y']}) "
+                    f"= {region['diffPixels']} px"
+                    for region in (baseline.get("regions") or [])[:5]
+                )
+            )
+        regions = case.get("diff", {}).get("regions") or []
+        if regions:
+            reasons.append(
+                "top diff regions "
+                + ", ".join(
+                    f"{region['width']}x{region['height']} at ({region['x']}, {region['y']})"
+                    for region in regions[:5]
+                )
+            )
         lines.append(
             f"- `{case['surface']}` / `{case['state']}` / `{case['viewport']}` / `{case['theme']}`: "
             + ("; ".join(reasons) or "subject missing")
@@ -756,16 +971,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--subject-dir", default=str(ROOT / "tools/vue-reference/dist"))
     parser.add_argument("--tokens", default=str(ROOT / "docs/design/extend-tokens.json"))
     parser.add_argument("--out", default=str(ROOT / "output/ui-parity"))
-    parser.add_argument("--only", default=None, help="comma separated surface ids")
+    parser.add_argument("--only", default=None, help="comma separated surface ids (`core` expands to the PR subset)")
     parser.add_argument("--viewports", default=None, help="comma separated viewport ids")
     parser.add_argument("--themes", default=None, help="comma separated themes")
     parser.add_argument("--report-only", action="store_true", help="always exit 0")
+    parser.add_argument(
+        "--gate-mode",
+        choices=["all", "ready", "off"],
+        default=None,
+        help=(
+            "which parity failures fail the run: all (default), ready (only "
+            "gateStatus=blocking surfaces), off (artifact mode)"
+        ),
+    )
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="compare the subject captures with the committed baselines",
+    )
+    parser.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="write the subject captures into the baseline directory (use pnpm ui:baseline instead)",
+    )
+    parser.add_argument(
+        "--baseline-dir",
+        default=None,
+        help="baseline directory (default: manifest.baselines.directory)",
+    )
     parser.add_argument(
         "--self-check",
         action="store_true",
         help="capture the reference page twice and compare it with itself (harness determinism gate)",
     )
-    parser.add_argument("--capture-padding", type=int, default=12)
+    parser.add_argument("--capture-padding", type=int, default=None)
     return parser.parse_args()
 
 
@@ -784,6 +1023,47 @@ def main() -> int:
     only = parse_csv(args.only)
     viewport_filter = parse_csv(args.viewports)
     theme_filter = parse_csv(args.themes)
+
+    if only and "core" in only:
+        remaining = [item for item in only if item != "core"]
+        only = remaining + [
+            surface["id"] for surface in manifest["surfaces"] if surface.get("core")
+        ]
+
+    baseline_config = manifest.get("baselines") or {}
+    if args.baseline and args.write_baseline:
+        log("--baseline and --write-baseline are mutually exclusive")
+        return 2
+    baseline_mode = "write" if args.write_baseline else ("compare" if args.baseline else "off")
+    if args.self_check:
+        # The self-check compares the reference page with itself; committed
+        # subject baselines do not apply.
+        baseline_mode = "off"
+    baseline_dir = None
+    baseline_combos: set[tuple[str, str]] = set()
+    if baseline_mode != "off":
+        baseline_dir = Path(
+            args.baseline_dir or baseline_config.get("directory") or "tests/visual/extend"
+        )
+        if not baseline_dir.is_absolute():
+            baseline_dir = ROOT / baseline_dir
+        baseline_combos = {
+            (viewport_id, theme)
+            for viewport_id in baseline_config.get("viewports", [v["id"] for v in manifest["viewports"]])
+            for theme in baseline_config.get("themes", manifest["themes"])
+        }
+
+    gate_mode = args.gate_mode or ("off" if args.report_only else "all")
+    if baseline_mode == "write" and args.gate_mode is None:
+        gate_mode = "off"
+
+    padding = args.capture_padding
+    if padding is None:
+        padding = (
+            baseline_config.get("capturePaddingPx", 12)
+            if baseline_mode != "off"
+            else 12
+        )
 
     viewports = [
         viewport
@@ -821,6 +1101,8 @@ def main() -> int:
         return 2
 
     thresholds = manifest["thresholds"]
+    if "topDiffRegions" not in thresholds:
+        thresholds["topDiffRegions"] = (manifest.get("gate") or {}).get("topDiffRegions", 5)
     reference_server = Server(Path(args.reference_dir).resolve())
     subject_server = Server(Path(args.subject_dir).resolve())
 
@@ -865,7 +1147,10 @@ def main() -> int:
                                 cases_dir=cases_dir,
                                 out=out,
                                 thresholds=thresholds,
-                                padding=args.capture_padding,
+                                padding=padding,
+                                baseline_dir=baseline_dir,
+                                baseline_mode=baseline_mode,
+                                baseline_combos=baseline_combos,
                             )
                         cases.extend(case_batch)
                 context.close()
@@ -873,6 +1158,24 @@ def main() -> int:
     finally:
         reference_server.close()
         subject_server.close()
+
+    surfaces_by_id = {surface["id"]: surface for surface in manifest["surfaces"]}
+
+    def surface_is_blocking(case: dict) -> bool:
+        return surfaces_by_id.get(case["surface"], {}).get("gateStatus") == "blocking"
+
+    blocking: list[dict] = []
+    pending: list[dict] = []
+    for case in cases:
+        live_failed = case["status"] in {"fail", "error"}
+        baseline_failed = case.get("baseline", {}).get("status") in {"fail", "missing"}
+        failed = live_failed or (baseline_failed and surface_is_blocking(case))
+        if not failed:
+            continue
+        if gate_mode == "all" or (gate_mode == "ready" and surface_is_blocking(case)):
+            blocking.append(case)
+        else:
+            pending.append(case)
 
     summary = {
         "total": len(cases),
@@ -883,9 +1186,22 @@ def main() -> int:
         "failed": sum(1 for case in cases if case["status"] == "fail"),
         "baselineOnly": sum(1 for case in cases if case["status"] == "baseline-only"),
         "errors": sum(1 for case in cases if case["status"] == "error"),
+        "baselineFailed": sum(
+            1 for case in cases if case.get("baseline", {}).get("status") == "fail"
+        ),
+        "baselineMissing": sum(
+            1 for case in cases if case.get("baseline", {}).get("status") == "missing"
+        ),
+        "baselineWritten": sum(
+            1 for case in cases if case.get("baseline", {}).get("status") == "written"
+        ),
+        "blockingFailures": len(blocking),
+        "pendingFailures": len(pending),
+        "gateMode": gate_mode,
+        "baselineMode": baseline_mode,
         "durationMs": int((time.time() - started) * 1000),
     }
-    summary["gate"] = "FAIL" if summary["failed"] or summary["errors"] else "PASS"
+    summary["gate"] = "FAIL" if blocking else "PASS"
 
     tokens = build_token_summary(token_report)
     surface_summaries = build_surface_summaries(surfaces, cases)
@@ -894,6 +1210,9 @@ def main() -> int:
         "schemaVersion": 1,
         "harness": manifest.get("harness", "extend-ui-pixel-parity"),
         "mode": "self-check" if args.self_check else "parity",
+        "gateMode": gate_mode,
+        "baselineMode": baseline_mode,
+        "baselineDirectory": rel(baseline_dir) if baseline_dir is not None else None,
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "reference": {
             "repository": manifest.get("referenceUrl"),
@@ -931,8 +1250,40 @@ def main() -> int:
         f"{summary['passedWithAntialiasing']} pass-with-AA, {summary['failed']} fail, "
         f"{summary['baselineOnly']} reference-only ({summary['durationMs']} ms)"
     )
+    log(
+        f"gate: {summary['gate']} mode={gate_mode} "
+        f"baseline={baseline_mode} blocking={len(blocking)} pending={len(pending)}"
+    )
+    if baseline_mode != "off":
+        log(
+            f"baseline: {summary['baselineWritten']} written, "
+            f"{summary['baselineFailed']} failed, {summary['baselineMissing']} missing"
+        )
+    for case in blocking[:20]:
+        reasons = list(case.get("diff", {}).get("reasons", []))
+        baseline = case.get("baseline")
+        if baseline:
+            if baseline["status"] == "missing":
+                reasons.append(f"baseline missing: {baseline.get('baseline')}")
+            elif baseline["status"] == "fail":
+                regions = baseline.get("regions") or []
+                detail = ", ".join(
+                    f"{region['width']}x{region['height']}@{region['x']},{region['y']} "
+                    f"({region['diffPixels']} px)"
+                    for region in regions[:3]
+                )
+                reasons.append(f"baseline diff: {detail or 'size mismatch'}")
+        reasons.extend(case.get("errors", [])[:2])
+        log(
+            f"  BLOCK {case['surface']}/{case['state']}/{case['viewport']}/{case['theme']}: "
+            + ("; ".join(reasons[:3]) or case["status"])
+        )
+    if pending:
+        log(f"  {len(pending)} pending failure(s) reported but not gating")
     log(f"report: {rel(out / 'report.json')} / {rel(out / 'report.html')}")
-    if summary["failed"] and not args.report_only:
+    if blocking:
+        return 1
+    if baseline_mode == "write" and summary["errors"]:
         return 1
     return 0
 
@@ -1012,6 +1363,9 @@ def build_surface_summaries(surfaces: list[dict], cases: list[dict]) -> list[dic
                 "subjectComponent": surface.get("subjectComponent"),
                 "subjectStatus": surface.get("subjectStatus"),
                 "pendingIssue": surface.get("pendingIssue"),
+                "core": bool(surface.get("core")),
+                "gateStatus": surface.get("gateStatus"),
+                "gatePendingIssue": surface.get("gatePendingIssue"),
                 "referenceComponent": surface.get("referenceComponent"),
                 "notes": surface.get("notes"),
                 "counts": {
@@ -1047,6 +1401,9 @@ def run_surface(
     out: Path,
     thresholds: dict,
     padding: int,
+    baseline_dir: Path | None = None,
+    baseline_mode: str = "off",
+    baseline_combos: set | None = None,
 ) -> list[dict]:
     cases: list[dict] = []
     subject_status = "available" if self_check else surface.get("subjectStatus", "available")
@@ -1113,6 +1470,31 @@ def run_surface(
                 side_errors=subject_errors,
             )
             case["subject"] = subject_capture
+
+            if (
+                baseline_dir is not None
+                and baseline_mode != "off"
+                and (viewport["id"], theme) in (baseline_combos or set())
+                # Committed baselines only exist for gate-blocking surfaces;
+                # `capture` may still write one for a surface that is about to
+                # become blocking.
+                and (baseline_mode == "write" or surface.get("gateStatus") == "blocking")
+            ):
+                baseline_file = baseline_dir / baseline_relpath(
+                    surface["id"], state["id"], theme, viewport["id"]
+                )
+                if baseline_mode == "write":
+                    case["baseline"] = write_baseline(
+                        baseline_file, case_dir / "subject.png"
+                    )
+                else:
+                    case["baseline"] = compare_baseline(
+                        baseline_file,
+                        case_dir / "subject.png",
+                        case_dir,
+                        out,
+                        thresholds,
+                    )
 
             geometry = compare_metrics(
                 reference_capture["metrics"],

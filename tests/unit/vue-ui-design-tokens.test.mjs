@@ -98,6 +98,14 @@ const REQUIRED_TOKENS = [
   "sidebar-accent-foreground",
   "sidebar-border",
   "sidebar-ring",
+  "surface",
+  "surface-foreground",
+  "code",
+  "code-foreground",
+  "code-highlight",
+  "code-number",
+  "selection",
+  "selection-foreground",
   "success",
   "success-foreground",
   "warning",
@@ -140,6 +148,12 @@ test("radius, ring and elevation match the pinned Extend reference", () => {
 test("light colours match Extend globals.css", () => {
   assert.equal(light.get("--office-background"), "oklch(1 0 0)");
   assert.equal(light.get("--office-foreground"), "oklch(26.9% 0 0)"); // neutral-800
+  // Extend declares card/popover as var(--color-white). Literal white avoids
+  // the color(srgb .99987 1.00005 1.00007) drift of oklch(1 0 0) (#157).
+  assert.equal(light.get("--office-card"), "white");
+  assert.equal(light.get("--office-popover"), "white");
+  assert.notEqual(light.get("--office-card"), "oklch(1 0 0)");
+  assert.notEqual(light.get("--office-popover"), "oklch(1 0 0)");
   assert.equal(light.get("--office-primary"), "oklch(26.9% 0 0)"); // neutral primary
   assert.equal(light.get("--office-primary-foreground"), "oklch(98.5% 0 0)"); // neutral-50
   assert.equal(light.get("--office-secondary"), "color-mix(in oklab, black 4%, transparent)");
@@ -161,6 +175,14 @@ test("light colours match Extend globals.css", () => {
   assert.equal(light.get("--office-info-foreground"), "oklch(48.8% 0.243 264.376)");
   assert.equal(light.get("--office-chart-1"), "oklch(80.9% 0.105 251.813)");
   assert.equal(light.get("--office-chart-5"), "oklch(42.4% 0.199 265.638)");
+  assert.equal(light.get("--office-surface"), "oklch(98% 0 0)");
+  assert.equal(light.get("--office-surface-foreground"), "var(--office-foreground)");
+  assert.equal(light.get("--office-code"), "var(--office-surface)");
+  assert.equal(light.get("--office-code-foreground"), "var(--office-surface-foreground)");
+  assert.equal(light.get("--office-code-highlight"), "oklch(96% 0 0)");
+  assert.equal(light.get("--office-code-number"), "oklch(56% 0 0)");
+  assert.equal(light.get("--office-selection"), "oklch(14.5% 0 0)");
+  assert.equal(light.get("--office-selection-foreground"), "oklch(1 0 0)");
 });
 
 test("dark colours match Extend globals.css", () => {
@@ -178,6 +200,14 @@ test("dark colours match Extend globals.css", () => {
   assert.equal(dark.get("--office-success-foreground"), "oklch(76.5% 0.177 163.223)");
   assert.equal(dark.get("--office-warning-foreground"), "oklch(82.8% 0.189 84.429)");
   assert.equal(dark.get("--office-info-foreground"), "oklch(70.7% 0.165 254.624)");
+  assert.equal(dark.get("--office-surface"), "oklch(20% 0 0)");
+  assert.equal(dark.get("--office-surface-foreground"), "oklch(70.8% 0 0)");
+  assert.equal(dark.get("--office-code"), "var(--office-surface)");
+  assert.equal(dark.get("--office-code-foreground"), "var(--office-surface-foreground)");
+  assert.equal(dark.get("--office-code-highlight"), "oklch(27% 0 0)");
+  assert.equal(dark.get("--office-code-number"), "oklch(72% 0 0)");
+  assert.equal(dark.get("--office-selection"), "oklch(92.2% 0 0)");
+  assert.equal(dark.get("--office-selection-foreground"), "oklch(20.5% 0 0)");
 });
 
 test("system dark and explicit dark cannot drift", () => {
@@ -232,6 +262,22 @@ test("density tokens switch control metrics without changing colour", () => {
   assert.equal(compact.get("--office-control-padding-inline"), "0.625rem");
   assert.equal(compact.get("--office-control-gap"), "0.375rem");
   assert.equal(compact.has("--office-background"), false);
+});
+
+test("control padding is the full inset and consumers subtract the border", () => {
+  // Extend: px-[calc(--spacing(3)-1px)] = 11px padding inside a 1px border =
+  // 12px inset. The token keeps the inset so the report can compare rendered
+  // insets; every bordered control subtracts --office-border-width.
+  assert.equal(light.get("--office-control-padding-inline"), "0.75rem");
+  assert.equal(light.get("--office-control-padding-inline-sm"), "0.625rem");
+  const uiCss = read("packages/vue-ui/src/styles/ui.css");
+  const subtractions = uiCss.match(
+    /padding-inline:\s*calc\(var\(--office-control-padding-inline\) - var\(--office-border-width\)\)/gu,
+  );
+  assert.ok(
+    (subtractions?.length ?? 0) >= 3,
+    "button, input and select must subtract the 1px border from the inset token",
+  );
 });
 
 test("new component code uses tokens instead of bare visual values", () => {
