@@ -170,12 +170,14 @@ def menu_keyboard_flow(page: Page, label: str) -> dict[str, Any]:
     page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2, button="right")
     menu = page.locator('[data-testid="xlsx-context-menu"]')
     menu.wait_for(state="visible", timeout=10_000)
-    first_item = active_item(page)
+    # The shared menu focuses its container on open; the first ArrowDown lands
+    # on the first enabled item (Reka's roving focus).
     arrows: list[dict[str, str]] = []
     for _ in range(2):
         page.keyboard.press("ArrowDown")
-        page.wait_for_timeout(60)
+        page.wait_for_timeout(80)
         arrows.append(active_item(page))
+    first_item = arrows[0]
     menu.screenshot(path=str(label))
     page.keyboard.press("Escape")
     menu.wait_for(state="detached", timeout=10_000)
@@ -278,10 +280,10 @@ def capture_case(
 
         keyboard = menu_keyboard_flow(page, str(theme_out / f"{prefix}-xlsx-context-menu.png"))
         assert keyboard["firstItem"]["role"] == "menuitem", (
-            f"{prefix}: the menu focuses its first item {keyboard}"
+            f"{prefix}: ArrowDown focuses a real menu item {keyboard}"
         )
-        focused = [keyboard["firstItem"]["testId"]] + [item["testId"] for item in keyboard["arrows"]]
-        assert all(keyboard["arrows"][index]["role"] == "menuitem" for index in range(2)), (
+        focused = [item["testId"] for item in keyboard["arrows"]]
+        assert all(item["role"] == "menuitem" for item in keyboard["arrows"]), (
             f"{prefix}: arrow keys stay inside the menu {keyboard}"
         )
         assert len(set(focused)) == len(focused), (

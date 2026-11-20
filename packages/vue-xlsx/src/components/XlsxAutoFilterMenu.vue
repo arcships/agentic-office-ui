@@ -7,10 +7,9 @@
   -->
   <OfficeDropdownMenu
     :open="open"
-    :modal="false"
     :items="menuItems"
     :content-test-id="'xlsx-autofilter-menu'"
-    :content-aria-label="dialogLabel"
+    :content-aria-label="columnName ? m.xlsx.autoFilter.label + ': ' + columnName : m.xlsx.autoFilter.label"
     :content-class="'xlsx-autofilter'"
     :side-offset="-4"
     :restore-focus="restoreFocusTarget"
@@ -66,11 +65,6 @@ const anchorStyle = computed<CSSProperties>(() => ({
   pointerEvents: "none",
   position: "fixed",
 }));
-
-const dialogLabel = computed(() => props.columnName
-  ? `${m.value.xlsx.autoFilter.label}: ${props.columnName}`
-  : m.value.xlsx.autoFilter.label
-);
 
 const sortDisabled = computed(() => props.controller.readOnly || props.controller.isEditingLocked);
 

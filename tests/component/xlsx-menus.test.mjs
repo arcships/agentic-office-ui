@@ -586,3 +586,49 @@ test("the menus are real shared menu primitives, not local markup", async () => 
     );
   }
 });
+
+test("right-click hit-testing opens the matching menu kind", async () => {
+  const calls = [];
+  const controller = contextMenuController().controller;
+  controller.insertColumns = (col) => calls.push(["insertColumns", col]);
+  controller.deleteRows = (row) => calls.push(["deleteRows", row]);
+  const target = makeGridTarget();
+  const listeners = new Map();
+  target.addEventListener = (type, listener) => listeners.set(type, listener);
+  target.removeEventListener = (type) => listeners.delete(type);
+  const mounted = await mountCellMenu(controller, target);
+  const rightClick = (clientX, clientY) => {
+    listeners.get("contextmenu")?.({
+      clientX,
+      clientY,
+      preventDefault() {},
+      target: undefined,
+      type: "contextmenu",
+    });
+  };
+  try {
+    // 10px from the top edge is inside the column header strip.
+    rightClick(90, 10);
+    await flush(150);
+    assert.equal(
+      byTestId("xlsx-context-menu")?.getAttribute("data-menu-kind"),
+      "column",
+      "a header right-click opens the column menu",
+    );
+    await chooseItem("xlsx-context-insert-column-right");
+    assert.deepEqual(calls.at(-1), ["insertColumns", 1]);
+
+    // 10px from the left edge is inside the row header strip.
+    rightClick(10, 40);
+    await flush(150);
+    assert.equal(
+      byTestId("xlsx-context-menu")?.getAttribute("data-menu-kind"),
+      "row",
+      "a row header right-click opens the row menu",
+    );
+    await chooseItem("xlsx-context-delete-row");
+    assert.deepEqual(calls.at(-1), ["deleteRows", 0]);
+  } finally {
+    mounted.cleanup();
+  }
+});

@@ -8,7 +8,7 @@
   <OfficeDropdownMenu
     v-if="mounted"
     :open="visible"
-    :modal="false"
+    :modal="true"
     :items="menuItems"
     :content-test-id="'xlsx-context-menu'"
     :content-data="{ 'data-menu-kind': menuKind }"

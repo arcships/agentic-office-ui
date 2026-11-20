@@ -6,9 +6,9 @@
 > [#158](https://github.com/arcships/agentic-office-ui/issues/158) 共享 Office chrome。
 > 参考基准：[extend-hq/ui@70fe70c6](https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e)。
 
-本文记录 XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框和状态栏如何落到共享层，
-以及**没有**直接使用 Reka 版 `OfficeContextMenu` / `OfficeDropdownMenu` / `OfficeDialog`
-的边界与后续动作。
+本文记录 XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框和状态栏如何落到共享层。
+菜单与对话框现在**真正运行在 Reka 版 `OfficeDropdownMenu` / `OfficeDialog` 上**（第三轮 0.8 复审），
+本篇同时记录为此做的 primitive 扩展、测试迁移与仍然不可达的像素对照项。
 
 ## 0. 相对 issue 验收清单的审计（0.8 复审）
 
@@ -16,13 +16,13 @@
 |---|---|---|
 | `XlsxToolbar` / `XlsxRibbon` 改用 primitives；48px toolbar、28/32px icon、gap/separator | ✅ | §1 表；§4.3 toolbar=48px、`office-button--size-icon-sm` |
 | 缩放/搜索/sheet tabs/冻结/打印/导出/Worker 状态控件对齐 | ✅ | 缩放/搜索/冻结/打印/导出：§1；**sheet tabs：本轮补 provider + token（10 处三元色值清零）**；Worker 状态：viewer 无独立控件，由 `OfficeLiveStatus`（`xlsx-live-status`）+ 只读/编辑锁 gate + grid `data-worker-backed` 暴露（与上游一致） |
-| 右键/表头/图表/绘图菜单统一用 DropdownMenu/ContextMenu | ⚠️ 共享表面 + 共享键盘（Reka 版不可接线，§3） | `xlsx-office-chrome.test.mjs`、§4.3 |
-| authoring dialog 用 Dialog/Sheet | ⚠️ 共享 dialog 表面（同上） | 同上 |
+| 右键/表头/图表/绘图菜单统一用 DropdownMenu/ContextMenu | ✅ 真正使用 `OfficeDropdownMenu`（Reka），含子菜单/键盘/焦点/关闭 | `xlsx-menus.test.mjs`（happy-dom，12 条）、§4.3 |
+| authoring dialog 用 Dialog/Sheet | ✅ 真正使用 `OfficeDialog`（Reka），含焦点陷阱/Esc/backdrop/关闭后还焦 | `xlsx-authoring-dialog.test.mjs`（happy-dom，16 条）、§4.3 |
 | 状态栏用 `OfficeStatusBar`；空/加载/错误用 `Office*State` | ✅ | `xlsx-office-chrome.test.mjs` |
 | 保留公式编辑/AutoFilter/冻结/图表/绘图/Worker/导出/RTL/DOM render | ✅ | §5 + 750 条 XLSX 测试 |
 | 截图 story：viewer/authoring、light/dark、390/768/1440 | ✅ | §4.3 每 viewport × theme 输出 viewer/toolbar/menu/**authoring** 截图 |
 | XLSX toolbar/ribbon 与 Extend 参考 diff ≤0.1% | ❌ 不可达（参考侧私有依赖） | §4.2 结论表 |
-| 现有 XLSX unit/component/blackbox 全绿 | ✅（本轮实测） | unit 275 + component 475 + touch blackbox 20/20 |
+| 现有 XLSX unit/component/blackbox 全绿 | ✅（本轮实测） | unit 275 + component 475（含新增 happy-dom 套件）+ touch blackbox 20/20 + xlsx 导出/Worker 黑盒 |
 | 菜单键盘/焦点/关闭不回归 | ✅ | §4.3 浏览器断言 + 组件测试 |
 | 移动端 toolbar 换行且 grid 可用高度 | ✅ | 390px：toolbar 84px + `wrapped=true` + grid 360px |
 
@@ -34,14 +34,17 @@
 | `XlsxRibbon` | 第二个 `OfficeToolbar` 行 + 每组 `OfficeToolbarGroup` + `OfficeButton` / `OfficeIconButton` | 原来的 disabled `<fieldset>` 换成显式 `controlsDisabled` |
 | `XlsxStatusBar` | `OfficeStatusBar`（`#start` / `#end` 插槽） | 选区地址、统计、note 的 `data-testid` 全部保留 |
 | 空/加载/错误 | `OfficeEmptyState` / `OfficeLoadingState` / `OfficeErrorState` | 仍可被 `#empty` / `#loading` / `#error` 插槽覆盖 |
-| 右键/表头/图表/绘图菜单 | 共享 `.office-menu__content` / `.office-menu__item` 表面 + `useOfficeMenuKeyboard` | 定位层保留（见 §3） |
-| AutoFilter 面板 | 共享 `.office-popover__content` + `.office-menu__*` 行 | |
-| Authoring 对话框 | 共享 `.office-dialog__content` 外壳（header/title/body/footer/close）+ `.office-button` 操作 | 见 §3 |
+| 右键/表头/图表/绘图菜单 | `OfficeDropdownMenu`（Reka）：`items` 模型 + 指针锚点定位 | 键盘/typeahead/子菜单/焦点/关闭全部由 primitive 层提供（见 §3） |
+| AutoFilter 面板 | 同上（checkbox 行用 `keepOpen` 保持多选） | |
+| Authoring 对话框 | `OfficeDialog`（Reka）：overlay + header/title/body + close | 焦点陷阱、Esc、backdrop、关闭还焦由 primitive 层提供（见 §3） |
 | Sheet tabs | `OfficeThemeProvider` 包裹 + 全部 inline 样式走 `var(--office-*)` | 10 处 `isDark ? … : …` 三元色值全部移除 |
 | 主题 | viewer/各 chrome 组件用 `OfficeThemeProvider` 提供 `data-office-theme` | 原有 `.xlsx-*--dark` 标记保留给黑盒/矩阵，颜色一律走 token |
 
 `XlsxToolbar` / `XlsxRibbon` / `XlsxStatusBar` / `XlsxContextMenu` / `XlsxAuthoringDialog`
-的 **public props/emits 一字未改**，`scripts/ci/public-api-contract.json` 的声明指纹因此不变。
+的 **public props/emits 一字未改**。新增两个低层出口 `XlsxHeaderMenu` / `XlsxAutoFilterMenu`
+（`XlsxGrid` 已自动挂载），因此 `scripts/ci/public-api-contract.json` 中 `@arcships/vue-xlsx`
+的声明指纹按预期从 103 更新到 105 项（sha256 `8663ede6…`），见
+[api/public-api-contract.md](../api/public-api-contract.md)。
 
 ## 2. 为什么要 `OfficeThemeProvider`
 
@@ -65,44 +68,65 @@ XLSX 的 `isDark` 是 prop，不是全局主题，所以每个装配点自己提
    同理，图标按钮里的内联 SVG 显式声明 `fill: none; stroke: currentColor`，
    否则会被默认填充吞掉（页分隔预览按钮曾整颗图标不可见）。
 
-## 3. 已知差异：Reka 覆盖层没有直接接线
+## 3. Reka 覆盖层接法：指针锚点 + 共享 item 模型
 
-`OfficeContextMenu` / `OfficeDropdownMenu` / `OfficeDialog` / `OfficeSheet` / `OfficeSelect`
-建在 Reka UI 上，**需要真实 DOM**（`document`、`Element`、pointer/portal/focus scope）。
-本仓库的 XLSX 组件测试用的是 `tests/component/vue-test-renderer.mjs` 的最小 host renderer，
-在其中挂载这些组件会直接抛错：
+菜单与对话框现在直接渲染共享 primitive。为了让既有的命令式 API、`data-testid` 契约和
+测试选择器都保持不变，接法如下：
 
-```
-OfficeDialog  -> TypeError: Cannot read properties of undefined (reading 'display')
-OfficeContextMenu -> ReferenceError: Element is not defined
-OfficeSelect  -> ReferenceError: Element is not defined
-```
+### 3.1 菜单：`OfficeDropdownMenu` + 不可见指针锚点
 
-（`OfficeIconButton` / `OfficeButton` / `OfficeToolbar` / `OfficeStatusBar` / `Office*State`
-只用 Reka 的 `Primitive` / 纯 Vue，最小 renderer 下正常，所以上述 chrome 组件可以真接线。）
+`XlsxContextMenu` / `XlsxHeaderMenu` / `XlsxAutoFilterMenu` 都渲染
+`<OfficeDropdownMenu :items="…">`，并在 `#trigger` 插槽里放一个 0×0、`position: fixed` 的
+锚点元素，定位到指针坐标。于是：
 
-XLSX 的菜单还有两个 Reka 菜单覆盖不了的需求：
+- 打开方式仍是命令式的（网格右键命中、图表/绘图覆盖层、表头按钮、AutoFilter 触发按钮），
+  但内容、子菜单、typeahead、方向键/Home/End、Esc/Tab 关闭与焦点归还全部由 Reka 提供；
+- 菜单始终通过 `data-testid`（`xlsx-context-menu`、`xlsx-column-menu-list`、
+  `xlsx-row-menu-list`、`xlsx-autofilter-menu`）与原有 item testid 暴露，黑盒选择器不变；
+- 子菜单（chart type 家族/类型、paste special）改用 `type: "sub"`，由 Reka 负责展开与收起，
+  不再有手写的 `ArrowRight`/`ArrowLeft`/`mouseenter` 分支；
+- 菜单是 `modal` 的（与旧的全屏 backdrop 等价）：长按合成菜单后 `touchend` 不会立刻把它关掉
+  （`TOUCH-XLSX-LONG-PRESS` 通过），点击菜单外关闭。
+- 关闭后焦点交给 `restoreFocus` 回调：单元格菜单回到网格元素，表头/AutoFilter 菜单回到网格容器。
 
-1. 定位来自原生 `contextmenu` 事件的坐标（包括长按合成事件、图表/绘图对象覆盖层），
-   不是来自声明式 trigger；
-2. 子菜单（图表类型 / 粘贴选项）与"先关闭再派发 `authoring`"的顺序被组件测试逐条固定。
+为了承载这些契约，primitive 层做了**向后兼容的增量扩展**（默认行为不变）：
 
-因此本轮采用**共享表面 + 共享键盘语义**的接法，而不是把菜单整体换成 Reka 组件：
+| 扩展 | 位置 | 用途 |
+|---|---|---|
+| `OfficeMenuEntry.testId`（item/checkbox/label/separator/group/sub） | `components/ui/types.ts` + `OfficeMenuItems.ts` | 把历史 `data-testid` 固定到 Reka 渲染的行上 |
+| `OfficeMenuSubmenu.contentTestId` | 同上 | 子菜单容器仍需 `xlsx-chart-type-menu` 等 testid |
+| `OfficeMenuItem/CheckboxItem.keepOpen` | 同上 | AutoFilter/多选行选中后不关闭菜单（`event.preventDefault()`） |
+| `OfficeDropdownMenu.contentTestId` / `contentData` / `contentAriaLabel` / `modal` / `restoreFocus` | `OfficeDropdownMenu.vue`（`OfficeContextMenu.vue` 同步） | 菜单 surface 的 testid、`data-menu-kind`、无障碍名称、非模态与焦点归还 |
+| checkbox 行改用 `modelValue` | `OfficeMenuItems.ts` | reka-ui 2.11 的 `DropdownMenuCheckboxItem` 只认 `modelValue`；此前 `checked` 被忽略，勾选状态从不显示（顺带修掉的 primitive bug） |
 
-- DOM 类名与 `OfficeDropdownMenu` / `OfficeContextMenu` 渲染出来的完全一致
-  （`.office-menu__content`、`.office-menu__viewport`、`.office-menu__item`、
-  `.office-menu__separator`、`.office-menu__item-shortcut`、`.office-menu__sub-trigger`），
-  视觉/间距/键盘提示由 `styles/ui.css` 提供，本地只保留定位与 hover/focus 高亮；
-- 键盘语义继续走 `useOfficeMenuKeyboard` / `resolveOfficeMenuKeyCommand`
-  （Escape/Tab 关闭并还焦、方向键/Home/End 循环、表头菜单的 type-ahead 保留）。
+### 3.2 对话框：`OfficeDialog`
 
-对话框同理：`XlsxAuthoringDialog` 复用 `.office-dialog__content`、`.office-dialog__header/_title/_body/_footer/_close`
-和 `.office-button` 的视觉契约，但保留自己的 `Teleport`、`Escape`、`pointerdown` 关闭与
-`tabindex` 焦点行为，因为它的打开/关闭由 `XlsxViewer` 的 `v-if` 驱动，且测试用
-`findByTestId(...).props.onClick()` 直接驱动按钮。
+`XlsxAuthoringDialog` 现在渲染 `<OfficeDialog :open="true" …>`：
 
-**后续（建议放到 #165 或独立 issue）**：把 XLSX 组件测试从最小 renderer 迁到 happy-dom 后，
-这些表面可以无缝换成 Reka 版 `OfficeContextMenu` / `OfficeDialog`——本轮的类名契约就是为这次替换准备的。
+- `title` 是原来的 `dialogTitle`，`closeTestId` 保持 `xlsx-authoring-close`，
+  `contentTestId`/`contentData` 保持 `xlsx-authoring-dialog` + `data-kind`；
+- 表单（数字格式、条件格式、数据验证、图表、批注、超链接、表格、粘贴选项、名称管理器）
+  原样放在默认插槽里，状态/校验逻辑一字未改；
+- 焦点陷阱、Esc、点击遮罩关闭由 Reka 提供；`XlsxViewer.closeAuthoring()` 在关闭后把焦点还给
+  打开者（`OfficeDialog` 的 `update:open(false)` → 我们 emit `close`）。
+- 旧的手写 `Teleport`/backdrop/header/close 按钮已删除；面板宽度/最大高度仍由
+  `.xlsx-authoring.office-dialog__content` 收紧到 520px / 82vh。
+
+### 3.3 测试怎么迁的（不遮罩、不退自定义）
+
+最小 host renderer 没有真实 DOM，Reka 在它与 `document` 之间无法工作。因此：
+
+- **新增** `tests/component/xlsx-menus.test.mjs`（happy-dom，12 条）：单元格/表头/行头/AutoFilter/
+  图表/绘图菜单的 testid、命令、只读禁用、子菜单、`keepOpen` 多选、右键命中 kind、
+  ArrowDown/焦点归还、Esc 关闭、以及"确实使用 OfficeDropdownMenu 而不是本地标记"的源码断言；
+- **新增** `tests/component/xlsx-authoring-dialog.test.mjs`（happy-dom，16 条）：shell/标题/焦点陷阱/
+  Esc/backdrop/关闭按钮、数字格式、批注、超链接、表格、条件格式、数据验证、图表、粘贴选项、
+  名称管理器的表单 → 控制器调用；
+- 旧文件里这些"假 renderer 驱动 Reka 组件"的用例被移除（覆盖已迁移，不是删掉了事）：
+  `xlsx-structure`、`xlsx-authoring-ui`、`xlsx-auto-filter`、`xlsx-chart-type-menu`、
+  `xlsx-drawing-clipboard`、`xlsx-cut`、`xlsx-menu-state`、`xlsx-office-chrome`；
+  纯控制器/模型断言全部保留；
+- 真实浏览器路径（`pnpm test:xlsx:chrome` + `touch_mobile.py`）继续覆盖集成行为。
 
 ## 4. 视觉对照证据
 
@@ -161,9 +185,12 @@ python3 scripts/ci/run-python.mjs scripts/ci/capture-office-chrome.py --serve ap
    断言上表 geometry + 菜单/对话框键盘与焦点行为，输出 `output/xlsx-chrome/summary.json` 与截图；
 2. `scripts/ci/capture-office-chrome.py`（`xlsx_story_flow`）：共享 chrome 画廊里的 toolbar/ribbon/status
    构图与无障碍断言（4 viewport × 2 theme）；
-3. `tests/component/xlsx-office-chrome.test.mjs`（10 条）固定共享组件/类名/键盘契约；
-4. `tests/component/xlsx-*.test.mjs` 475 条 + `tests/unit/xlsx-*.test.mjs` 275 条行为回归；
-5. `tests/blackbox/touch_mobile.py` 20/20（含 `TOUCH-XLSX-TARGETS-44PX`、长按菜单、双指缩放）。
+3. `tests/component/xlsx-office-chrome.test.mjs`（6 条）固定 toolbar/ribbon/status bar/状态组件的共享接线；
+4. `tests/component/xlsx-menus.test.mjs`（12 条，happy-dom）与
+   `tests/component/xlsx-authoring-dialog.test.mjs`（16 条，happy-dom）覆盖 Reka 菜单/对话框的
+   testid、命令、键盘/焦点、只读禁用与表单；`tests/component/xlsx-*.test.mjs` 合计 475 条、
+   `tests/unit/xlsx-*.test.mjs` 275 条行为回归；
+5. `tests/blackbox/touch_mobile.py` 20/20（含 `TOUCH-XLSX-TARGETS-44PX`、长按菜单 → Reka 菜单保持打开、双指缩放）。
 
 建议收口：与 #159 一致，**接受 geometry/structural/token parity + 记录像素 delta**；
 像素级判定留给 `#165`（若届时能引入 `@extend-ai/react-xlsx` 或上游提供自包含的 xlsx toolbar 组件，
@@ -184,8 +211,8 @@ pnpm test:xlsx:chrome
 - toolbar 在 390px 换行（`trailing.top > leading.top`），在 768/1440 单行、高度 48px（或 coarse 44px 触控尺寸）；
 - toolbar/ribbon 无水平溢出、无垂直裁切（换行时 toolbar 自己长高，ribbon 在 ≤900px 容器内按 132px 上限滚动）；
 - `.xlsx-viewer__body` ≥ 360px、grid ≥ 300px，页面无横向溢出；
-- 右键菜单：打开后焦点落在第一个 `menuitem`（`xlsx-context-cut`），`ArrowDown` 依次走
-  `cut → copy → paste`，`Escape` 关闭并把焦点还给表格；
+- 右键菜单（Reka `OfficeDropdownMenu`）：`ArrowDown` 先把焦点放到第一个 `menuitem`
+  （`xlsx-context-cut`），再按一次走到 `xlsx-context-copy`；`Escape` 关闭并把焦点还给表格；
 - authoring 对话框：点击 Ribbon「Number format…」打开，表面是 `office-dialog__content`，
   表单仍在，`Escape` 关闭后焦点回到 viewer（`closeAuthoring()` 恢复调用者焦点，本轮新增）。
 

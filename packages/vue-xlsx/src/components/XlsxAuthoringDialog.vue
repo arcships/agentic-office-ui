@@ -902,6 +902,103 @@ function removeValidation() {
   padding: 0;
 }
 
+<style>
+/* Shared section controls. The paste-special, number-format and Name Manager
+   sections are child components, so they need these rules unscoped. */
+/* The authoring surface keeps its compact width on top of the shared dialog. */
+.xlsx-authoring.office-dialog__content {
+  gap: var(--office-ui-space-2, 0.5rem);
+  max-block-size: min(82vh, 720px);
+  max-inline-size: min(92vw, 520px);
+}
+.xlsx-authoring .office-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2, 0.5rem);
+  padding-block-start: 0;
+}
+.xlsx-authoring__field {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: 4px;
+}
+.xlsx-authoring__field select,
+.xlsx-authoring__field input,
+.xlsx-authoring__field textarea {
+  background: var(--office-background, #fff);
+  border: var(--office-border-width, 1px) solid var(--office-input, #d4d4d8);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: var(--office-foreground, #18181b);
+  font: inherit;
+  font-size: var(--office-text-sm, 0.875rem);
+  padding: 6px 8px;
+}
+.xlsx-authoring__field select:focus-visible,
+.xlsx-authoring__field input:focus-visible,
+.xlsx-authoring__field textarea:focus-visible {
+  border-color: var(--office-ring, #a1a1aa);
+  outline: 2px solid color-mix(in oklab, var(--office-ring, #a1a1aa) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width, 1px);
+}
+.xlsx-authoring__check {
+  align-items: center;
+  display: flex;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: 6px;
+}
+.xlsx-authoring__check input { accent-color: var(--office-primary, #2563eb); }
+.xlsx-authoring__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--office-ui-space-2, 0.5rem);
+}
+.xlsx-authoring__button {
+  background: transparent;
+  border: var(--office-border-width, 1px) solid var(--office-border, #d4d4d8);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 6px 12px;
+}
+.xlsx-authoring__button--primary {
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
+}
+.xlsx-authoring__button:disabled { cursor: default; opacity: 0.5; }
+.xlsx-authoring__hint {
+  color: var(--office-muted-foreground, #71717a);
+  font-size: var(--office-text-xs, 0.75rem);
+  margin: 0;
+}
+.xlsx-authoring__rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.xlsx-authoring__rule {
+  align-items: center;
+  display: flex;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: var(--office-ui-space-2, 0.5rem);
+  justify-content: space-between;
+}
+.xlsx-authoring__link {
+  background: transparent;
+  border: 0;
+  color: var(--office-info-foreground, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 0;
+}
+</style>
 
 <style scoped>
 /*

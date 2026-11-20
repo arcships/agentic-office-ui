@@ -7,10 +7,9 @@
   -->
   <OfficeDropdownMenu
     :open="open"
-    :modal="false"
     :items="menuItems"
     :content-test-id="listTestId"
-    :content-aria-label="contentLabel"
+    :content-aria-label="isColumn ? m.xlsx.contextMenu.selectColumn : m.xlsx.contextMenu.selectRow"
     :content-class="'xlsx-headermenu'"
     :side-offset="-4"
     :restore-focus="restoreFocusTarget"
@@ -51,10 +50,6 @@ const m = useXlsxMessages();
 const open = ref(false);
 const isColumn = computed(() => props.kind === "column");
 const listTestId = computed(() => (isColumn.value ? "xlsx-column-menu-list" : "xlsx-row-menu-list"));
-const contentLabel = computed(() => (isColumn.value
-  ? m.value.xlsx.contextMenu.selectColumn
-  : m.value.xlsx.contextMenu.selectRow));
-
 onMounted(() => {
   open.value = true;
 });
