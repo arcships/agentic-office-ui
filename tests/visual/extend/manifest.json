@@ -124,9 +124,10 @@
       "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeErrorState.vue",
       "states": [
         "default",
-        "message"
+        "message",
+        "wrapped"
       ],
-      "files": 8
+      "files": 12
     },
     "office-loading-state": {
       "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeLoadingState.vue",
@@ -144,7 +145,7 @@
       "files": 4
     }
   },
-  "treeSha256": "8b9b1ade3859c39fa074669e1d4f9ce07b8cb142f891de0416abf578074559e5",
+  "treeSha256": "7a410ef75ef4569473e3cd11b47af2d690d7435a2157d04c659f6a6c5d79c994",
   "files": [
     {
       "path": "button/active/dark-1440x900.png",
@@ -1643,6 +1644,50 @@
       "sha256": "a2595efcb7a0d97d42c12d938c392e2f4d0a3ec9ef4dd243b70f9c1603dfd2da"
     },
     {
+      "path": "office-error-state/wrapped/dark-1440x900.png",
+      "surface": "office-error-state",
+      "state": "wrapped",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 656,
+      "height": 412,
+      "bytes": 26757,
+      "sha256": "0c1b968bf55d5db6797998cd21a4759462efa1f35af9e37ba0647bed19e1ec02"
+    },
+    {
+      "path": "office-error-state/wrapped/dark-390x844.png",
+      "surface": "office-error-state",
+      "state": "wrapped",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 620,
+      "height": 420,
+      "bytes": 27371,
+      "sha256": "1d40c7f30ac41b63b882a5f7da09878b42899ff65039833076f77f50abb1b267"
+    },
+    {
+      "path": "office-error-state/wrapped/light-1440x900.png",
+      "surface": "office-error-state",
+      "state": "wrapped",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 656,
+      "height": 412,
+      "bytes": 27685,
+      "sha256": "356e9e6666cbe1142fad969e92fa6881ad54b3276c5c19723e4f2ee350709bbc"
+    },
+    {
+      "path": "office-error-state/wrapped/light-390x844.png",
+      "surface": "office-error-state",
+      "state": "wrapped",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 620,
+      "height": 420,
+      "bytes": 28276,
+      "sha256": "375f5016dcae59dabb059abcd8a2d0c136fa76a46188e2eb250bd1c5ed54a5e5"
+    },
+    {
       "path": "office-loading-state/default/dark-1440x900.png",
       "surface": "office-loading-state",
       "state": "default",
@@ -2371,6 +2416,18 @@
       "updated": 0,
       "removed": 0,
       "gitHead": "750f7b7fd16b423a62cdeb59f465b9a804361d1c"
+    },
+    {
+      "date": "2026-11-20",
+      "reviewer": "dim-agent",
+      "issue": "#158",
+      "reason": "Add the wrapped-message error card state: the description now keeps the upstream card width (no 14rem cap), so a long message wraps like the pinned xlsx error card.",
+      "treeSha256": "7a410ef75ef4569473e3cd11b47af2d690d7435a2157d04c659f6a6c5d79c994",
+      "files": 204,
+      "added": 4,
+      "updated": 0,
+      "removed": 0,
+      "gitHead": "e07b53386503e5533aae09ed0b3d40a23c23231c"
     }
   ]
 }

@@ -74,7 +74,7 @@ pnpm ui:baseline:verify
 | `file-upload`, `file-thumbnail` | ✅ | blocking | #163 已收敛（含 AA 残差）；有基线 |
 | `pdf-toolbar`, `pdf-sidebar` | ✅ | blocking | #162 40/40、24/24 像素 0；有基线 |
 | `document-sidebar` | ❌ | blocking（#158） | inline open/closed/skeleton + overlay open/closed，40/40 像素 0；有基线 |
-| `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking（#158） | 共 56/56 像素 0；有基线 |
+| `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking（#158） | 共 64/64 像素 0（含长消息换行卡片）；有基线 |
 | `input` | ✅ | pending（#157） | 4 个 `focus/light` case 有 52px、单通道 1/255 残差；不阻断 |
 | `docx-toolbar`, `docx-sidebar` | ❌ | pending（#159） | 参考/对照仍有真实差距；不阻断 |
 | `document-blocks` | ❌ | pending（#164） | 只有 fixtures，参考侧不可渲染 |

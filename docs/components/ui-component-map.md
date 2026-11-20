@@ -56,7 +56,7 @@
 | `apps/v4/components/extend/pdf-viewer.tsx`（search） | reference-only | `OfficeSearchPopover` / `OfficeFindBar` | `docx-toolbar` | ⏳ #159 | 搜索浮层与 find bar |
 | `apps/v4/components/extend/document-viewer-sidebar.tsx` | reference-only | `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | `pdf-sidebar`, `document-sidebar` | ✅ blocking（40/40，#158） | 160px rail，inline/overlay，closed 用 `-ml-40` / `-translate-x-full` |
 | `apps/v4/components/extend/pdf-editor-shared.tsx`（`PdfEditorEmptyState`） | reference-only | `OfficeEmptyState` | `office-empty-state` | ✅ blocking（16/16，#158） | glyph 可选，`gap-2 px-4 py-10`，`max-w-56 text-xs` 描述 |
-| `apps/v4/components/extend/xlsx-viewer.tsx`（`loadError` 卡片） | reference-only | `OfficeErrorState` | `office-error-state` | ✅ blocking（16/16，#158） | `max-w-md rounded-lg border p-4 text-sm` + `mt-4` action |
+| `apps/v4/components/extend/xlsx-viewer.tsx`（`loadError` 卡片） | reference-only | `OfficeErrorState` | `office-error-state` | ✅ blocking（24/24，#158） | `max-w-md rounded-lg border p-4 text-sm` + `mt-4` action；长消息按卡片宽度换行 |
 | `apps/v4/components/extend/docx-viewer.tsx` / `xlsx-viewer.tsx`（`ViewerLoadingSurface`） | reference-only | `OfficeLoadingState` | `office-loading-state` | ✅ blocking（16/16，#158） | `grid min-h-52 place-items-center` + 16px spinner |
 | `apps/v4/components/extend/pdf-viewer.tsx`（footer 区） | reference-only | `OfficeStatusBar` | `office-status-bar` | ✅ blocking（8/8，#158） | `border-t bg-muted/40 px-3 py-2 text-xs`；左侧页码/状态、右侧文件名 |
 

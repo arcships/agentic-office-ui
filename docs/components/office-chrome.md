@@ -212,7 +212,7 @@ Extend 没有独立的 status bar 组件：`file-system.tsx` 的 `aria-live` foo
 | 组件 | 上游对照 | 形状 | 像素证据 |
 |---|---|---|---|
 | `OfficeEmptyState` | `PdfEditorEmptyState`（`pdf-editor-shared.tsx`） | 居中列，`gap-2 px-4 py-10`；40px `rounded-full bg-muted` glyph；标题 `text-sm font-medium`；描述 `max-w-56 text-xs`；操作区 `mt-2` | `office-empty-state` 16/16 |
-| `OfficeErrorState` | `xlsx-viewer.tsx` 的 `loadError` 卡片 | `max-w-md rounded-lg border bg-background p-4 text-sm`；标题 `font-medium`；说明 `mt-1` muted；操作 `mt-4` | `office-error-state` 16/16 |
+| `OfficeErrorState` | `xlsx-viewer.tsx` 的 `loadError` 卡片 | `max-w-md rounded-lg border bg-background p-4 text-sm`；标题 `font-medium`；说明 `mt-1` muted（不限制宽度，按卡片宽度换行）；操作 `mt-4` | `office-error-state` 24/24 |
 | `OfficeLoadingState` | `ViewerLoadingSurface`（`docx-viewer.tsx`/`xlsx-viewer.tsx`） | `grid min-h-52 place-items-center`；16px spinner | `office-loading-state` 16/16 |
 
 | 组件 | 关键 props | 可访问性 / 事件 |
@@ -375,7 +375,7 @@ region）。
 |---|---|---|---|
 | `document-sidebar` | open、closed、skeleton、overlay-open、overlay-closed | 40 | **40/40 `pass`**，0 diff px、几何 0 px |
 | `office-empty-state` | default、action | 16 | **16/16 `pass`** |
-| `office-error-state` | default、message | 16 | **16/16 `pass`** |
+| `office-error-state` | default、message、wrapped | 24 | **24/24 `pass`** |
 | `office-loading-state` | default、hidden | 16 | **16/16 `pass`** |
 | `office-status-bar` | default | 8 | **8/8 `pass`** |
 
