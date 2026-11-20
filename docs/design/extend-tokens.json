@@ -1,6 +1,6 @@
 {
   "generatedBy": "node scripts/ci/extract-extend-tokens.mjs",
-  "generatedAt": "2026-11-20T04:14:05.453Z",
+  "generatedAt": "2026-11-20T12:34:01.031Z",
   "provenance": {
     "repo": "extend-hq/ui",
     "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
@@ -1455,17 +1455,17 @@
       },
       {
         "group": "control",
-        "token": "control-padding-inline (px-[calc(--spacing(3)-1px)])",
+        "token": "control-padding-inline (full inset: px-[calc(--spacing(3)-1px)] + 1px border)",
         "extend": {
-          "raw": "11px",
-          "px": 11
+          "raw": "12px",
+          "px": 12
         },
         "office": {
           "raw": "0.75rem",
           "px": 12
         },
-        "note": "Extend subtracts the 1px border from the 12px spacing step; the office token is the full inline inset, so a 12px token + 1px border renders 13px unless the consumer subtracts it.",
-        "match": false
+        "note": "Extend paints 11px inline padding (calc(--spacing(3)-1px)) inside the control's 1px border, i.e. a 12px inset from the outer edge. The office token is that full inset, matching Extend's rendered inset; every consumer subtracts --office-border-width when it paints its own border (see packages/vue-ui/src/styles/ui.css), so the rendered padding is 11px on both sides.",
+        "match": true
       },
       {
         "group": "control",
@@ -1483,8 +1483,8 @@
     ],
     "summary": {
       "total": 27,
-      "matched": 26,
-      "mismatched": 1,
+      "matched": 27,
+      "mismatched": 0,
       "missing": 0
     }
   },
@@ -1533,13 +1533,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#fff"
-        }
-      ],
-      "currentRepoValue": "#fff"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--foreground",
@@ -1585,17 +1580,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#111827"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#111827"
-        }
-      ],
-      "currentRepoValue": "#111827"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--card",
@@ -1616,11 +1602,11 @@
         "kind": "color-mix-srgb"
       },
       "officeLight": {
-        "raw": "oklch(1 0 0)",
+        "raw": "white",
         "resolved": "rgb(255 255 255)",
         "hex": "#ffffff",
         "alpha": 1,
-        "kind": "oklch"
+        "kind": "keyword"
       },
       "officeDark": {
         "raw": "color-mix(in srgb, var(--office-background) 98%, white)",
@@ -1710,11 +1696,11 @@
         "kind": "color-mix-srgb"
       },
       "officeLight": {
-        "raw": "oklch(1 0 0)",
+        "raw": "white",
         "resolved": "rgb(255 255 255)",
         "hex": "#ffffff",
         "alpha": 1,
-        "kind": "oklch"
+        "kind": "keyword"
       },
       "officeDark": {
         "raw": "color-mix(in srgb, var(--office-background) 98%, white)",
@@ -2021,21 +2007,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#f5f5f5"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#f5f5f5"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#f5f5f5"
-        }
-      ],
-      "currentRepoValue": "#f5f5f5"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--muted-foreground",
@@ -2081,33 +2054,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#737373"
-        }
-      ],
-      "currentRepoValue": "#737373"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--accent",
@@ -2345,25 +2293,8 @@
         "maxChannelDelta": 0,
         "alphaDelta": 0
       },
-      "currentRepoUsage": [
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#e5e7eb"
-        },
-        {
-          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
-          "fallback": "#e5e7eb"
-        }
-      ],
-      "currentRepoValue": "#e5e7eb"
+      "currentRepoUsage": [],
+      "currentRepoValue": null
     },
     {
       "extendToken": "--input",
@@ -3173,7 +3104,7 @@
     {
       "extendToken": "--code",
       "officeToken": "--office-code",
-      "officeTokenStatus": "missing-in-token-layer",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--surface)",
         "resolved": "rgb(248 248 248)",
@@ -3188,28 +3119,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
-      "officeLight": null,
-      "officeDark": null,
+      "officeLight": {
+        "raw": "var(--office-surface)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "var(--office-surface)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
       "lightDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "darkDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
-      "currentRepoValue": null,
-      "note": "#156 does not declare --office-code; the pinned reference does declare --code."
+      "currentRepoValue": null
     },
     {
       "extendToken": "--code-foreground",
       "officeToken": "--office-code-foreground",
-      "officeTokenStatus": "missing-in-token-layer",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--surface-foreground)",
         "resolved": "rgb(38 38 38)",
@@ -3224,28 +3166,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
-      "officeLight": null,
-      "officeDark": null,
+      "officeLight": {
+        "raw": "var(--office-surface-foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "var(--office-surface-foreground)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
       "lightDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "darkDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
-      "currentRepoValue": null,
-      "note": "#156 does not declare --office-code-foreground; the pinned reference does declare --code-foreground."
+      "currentRepoValue": null
     },
     {
       "extendToken": "--code-highlight",
       "officeToken": "--office-code-highlight",
-      "officeTokenStatus": "missing-in-token-layer",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(0.96 0 0)",
         "resolved": "rgb(242 242 242)",
@@ -3260,28 +3213,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
-      "officeLight": null,
-      "officeDark": null,
+      "officeLight": {
+        "raw": "oklch(96% 0 0)",
+        "resolved": "rgb(242 242 242)",
+        "hex": "#f2f2f2",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(27% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
       "lightDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "darkDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
-      "currentRepoValue": null,
-      "note": "#156 does not declare --office-code-highlight; the pinned reference does declare --code-highlight."
+      "currentRepoValue": null
     },
     {
       "extendToken": "--code-number",
       "officeToken": "--office-code-number",
-      "officeTokenStatus": "missing-in-token-layer",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(0.56 0 0)",
         "resolved": "rgb(116 116 116)",
@@ -3296,23 +3260,34 @@
         "alpha": 1,
         "kind": "oklch"
       },
-      "officeLight": null,
-      "officeDark": null,
+      "officeLight": {
+        "raw": "oklch(56% 0 0)",
+        "resolved": "rgb(116 116 116)",
+        "hex": "#747474",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(72% 0 0)",
+        "resolved": "rgb(164 164 164)",
+        "hex": "#a4a4a4",
+        "alpha": 1,
+        "kind": "oklch"
+      },
       "lightDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "darkDelta": {
-        "comparable": false,
-        "matches": false,
-        "maxChannelDelta": null,
-        "alphaDelta": null
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
-      "currentRepoValue": null,
-      "note": "#156 does not declare --office-code-number; the pinned reference does declare --code-number."
+      "currentRepoValue": null
     },
     {
       "extendToken": "--selection",

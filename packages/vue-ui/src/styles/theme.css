@@ -77,6 +77,10 @@
 
   --office-surface: oklch(20% 0 0);
   --office-surface-foreground: oklch(70.8% 0 0);
+  --office-code: var(--office-surface);
+  --office-code-foreground: var(--office-surface-foreground);
+  --office-code-highlight: oklch(27% 0 0);
+  --office-code-number: oklch(72% 0 0);
   --office-selection: oklch(92.2% 0 0);
   --office-selection-foreground: oklch(20.5% 0 0);
 
@@ -136,6 +140,10 @@
 
     --office-surface: oklch(20% 0 0);
     --office-surface-foreground: oklch(70.8% 0 0);
+    --office-code: var(--office-surface);
+    --office-code-foreground: var(--office-surface-foreground);
+    --office-code-highlight: oklch(27% 0 0);
+    --office-code-number: oklch(72% 0 0);
     --office-selection: oklch(92.2% 0 0);
     --office-selection-foreground: oklch(20.5% 0 0);
 

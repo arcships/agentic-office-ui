@@ -28,9 +28,9 @@
 | 控件高度、内边距、gap | `--office-control-height`、`--office-control-height-sm/xs`、`--office-control-padding-inline`、`--office-control-gap` | token 层 |
 | 动效时长 | `--office-ui-duration-fast`（120ms）、`--office-ui-duration`（160ms） | `packages/vue-ui/src/styles/ui.css`（组件层变量） |
 | 焦点环 | `--office-ring`、`--office-ring-width`、`--office-ring-offset-width` | token 层 |
-| 其余 | `--office-border-width`、`--office-icon-size`、`--office-selection(-foreground)`、`--office-surface(-foreground)` | token 层 |
+| 其余 | `--office-border-width`、`--office-icon-size`、`--office-selection(-foreground)`、`--office-surface(-foreground)`、`--office-code(-foreground/-highlight/-number)` | token 层 |
 
-完整清单（88 个 `--office-*` 声明）见 [token 表](../design/office-theme.md)。
+完整清单（`tokens.css` 中 85 条 `--office-*` 声明，深色/系统主题另有覆盖）见 [token 表](../design/office-theme.md)。
 缓动暂时没有 token：`ease` / `linear` / `ease-in-out` 这类 CSS 关键字允许直接写，
 `cubic-bezier()` / `steps()` 这类无法用关键字表达的定时函数才会被 guard 拦住（应先加 token）。
 

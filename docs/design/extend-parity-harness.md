@@ -167,9 +167,11 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
   `ParitySurface` 现在按主题写入 `color-scheme`，避免 focus ring 因为原生控件配色不同而误报。
 
-- token 层：27 个标量 token 中 26 个与 #156 一致；唯一差异是 `--office-control-padding-inline`（12px）与
-  Extend 的 `px-[calc(--spacing(3)-1px)]`（11px）语义不同，已在报告里注明。#156 未声明的 4 个 `--office-code*`
-  token 由 token 报告标为 `missing-in-token-layer`。
+- token 层：27 个标量 token **27/27 一致**，46 个语义色 **46/46 一致**（0 missing）。
+  `--office-control-padding-inline` 按“完整内缩”比较（Extend 11px padding + 1px border = 12px，
+  Office token = 12px，消费方在自绘描边时减去 `--office-border-width`）；4 个 `--office-code*`
+  token 已补齐。`--office-card` / `--office-popover` 浅色改为 literal `white`（上游 `var(--color-white)`），
+  避开 `oklch(1 0 0)` 在 Chromium 中的 1/255 合成漂移。
 
 ## 8. 新增一个 surface
 
