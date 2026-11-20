@@ -1983,7 +1983,6 @@ defineExpose({
       :data-rotation="rotation"
     >
       <DocumentViewerSidebar
-        v-if="showThumbnails"
         :open="showThumbnails"
         :close-on-escape="false"
         :loading="numPages > 0 && Object.keys(thumbnailUrls).length === 0"
@@ -2203,7 +2202,7 @@ defineExpose({
 /* The toolbar is the shared `OfficeToolbar`; this class stays because it is the
    public print/touch hook (`.pdf-toolbar`). Geometry, colours and control
    metrics come from the `--office-*` tokens. */
-.pdf-toolbar { min-height: 48px; }
+.pdf-toolbar { min-height: 48px; font-size: var(--office-text-base); line-height: var(--office-leading-base); }
 .pdf-toolbar__leading { min-width: 0; }
 .pdf-toolbar__actions { min-width: 0; justify-content: flex-end; }
 .pdf-file-name {
@@ -2231,7 +2230,10 @@ defineExpose({
 .pdf-page-layout,
 .pdf-zoom-select {
   block-size: var(--office-control-height-sm);
+  box-sizing: border-box;
+  min-block-size: 0;
   min-inline-size: 0;
+  padding-block: 0;
   padding-inline: var(--office-ui-space-2);
   border: var(--office-border-width) solid var(--office-input);
   border-radius: var(--office-radius-md);
@@ -2254,8 +2256,20 @@ defineExpose({
 .pdf-zoom-select:disabled { cursor: not-allowed; opacity: 0.64; }
 .pdf-zoom-cluster { flex-wrap: nowrap; }
 .pdf-search { display: flex; align-items: center; gap: var(--office-ui-space-1); min-inline-size: 0; }
-.pdf-search__field { inline-size: 9.5rem; min-inline-size: 0; }
-.pdf-search__input { inline-size: 100%; }
+.pdf-search__field {
+  block-size: var(--office-control-height-sm);
+  box-sizing: border-box;
+  inline-size: 9.5rem;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+.pdf-search__input {
+  block-size: 100%;
+  min-block-size: 0;
+  inline-size: 100%;
+  padding-block: 0;
+  line-height: 1.4;
+}
 .search-result { font-size: var(--office-text-xs); color: var(--office-muted-foreground); white-space: nowrap; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .pdf-status-bar { flex: 0 0 auto; }
@@ -2341,6 +2355,17 @@ defineExpose({
   font-size: var(--office-text-xs);
 }
 .pdf-print-pages { display: none; }
+@container pdf-viewer (max-width: 1100px) {
+  /* The parity/reference toolbar has no file label or first/last pair; dropping
+     them at laptop and tablet widths keeps every remaining command on one
+     48px row. Page input, prev/next and Home/End keep full navigation. */
+  .pdf-file-name { display: none; }
+  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
+  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
+  .pdf-search__field { inline-size: 7.5rem; }
+  .pdf-zoom-select { inline-size: 5.5rem; }
+  .pdf-page-layout { max-inline-size: 7.5rem; }
+}
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
   .pdf-frame-wrap { padding: 12px; }
@@ -2350,7 +2375,13 @@ defineExpose({
 @container pdf-viewer (max-width: 520px) {
   .pdf-toolbar { padding-inline: var(--office-ui-space-2); }
   .pdf-file-name { display: none; }
-  .pdf-page-layout { display: none; }
+  .pdf-page-layout { max-inline-size: 6rem; }
+  /* Keep paging usable without three rows of navigation chrome. The first /
+     last buttons stay available at desktop widths and through the keyboard
+     map (Home/End) on narrow screens. */
+  .pdf-toolbar :deep([data-testid="pdf-first-page"]),
+  .pdf-toolbar :deep([data-testid="pdf-last-page"]) { display: none; }
+  .pdf-toolbar__actions { flex: 1 1 100%; justify-content: flex-end; }
   .pdf-search { order: 3; flex: 1 1 100%; }
   .pdf-search__field { flex: 1 1 auto; inline-size: auto; }
   .search-result { flex: 1 1 100%; order: 4; }
@@ -2358,6 +2389,7 @@ defineExpose({
 @container pdf-viewer (max-width: 390px) {
   .pdf-toolbar { gap: var(--office-ui-space-1); }
   .pdf-page-total { font-size: var(--office-text-xs); }
+  .pdf-page-layout { max-inline-size: 4.75rem; }
   .pdf-zoom-select { inline-size: 5.25rem; }
 }
 

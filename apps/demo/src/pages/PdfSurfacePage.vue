@@ -75,6 +75,8 @@
         :is-dark="isDark"
         locale="zh-CN"
         class="pdf-surface-embed"
+        show-status-bar
+        show-annotation-dialog
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
         @visible-page-change="visiblePage = $event"

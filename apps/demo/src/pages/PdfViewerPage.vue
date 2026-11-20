@@ -89,6 +89,7 @@
         :is-dark="isDark"
         locale="zh-CN"
         :file-name="fileName || 'verification.pdf'"
+        show-status-bar
         style="height: 80vh;"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
