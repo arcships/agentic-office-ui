@@ -242,7 +242,7 @@ function createFixture() {
   const adapted = path.join(fixtureRoot, "packages/vue-ui/src/components/ui/Button.vue");
   write(adapted, `${HEADER}\n<template><button><slot /></button></template>\n`);
   write(
-    path.join(fixtureRoot, "packages/vue-pdf/src/components/PdfViewer.vue"),
+    path.join(fixtureRoot, "packages/vue-pdf/src/components/UnindexedCopy.vue"),
     "<template><div /></template>\n",
   );
   return fixtureRoot;
@@ -349,13 +349,13 @@ test("attribution verifier fails when a header-bearing file is missing from the 
   const fixtureRoot = createFixture();
   try {
     write(
-      path.join(fixtureRoot, "packages/vue-pdf/src/components/PdfViewer.vue"),
+      path.join(fixtureRoot, "packages/vue-pdf/src/components/UnindexedHeaderCopy.vue"),
       `${HEADER}\n<template><div /></template>\n`,
     );
     const result = runVerifier(fixtureRoot);
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, /every file with an Extend header is in the index/);
-    assert.match(result.stderr, /packages\/vue-pdf\/src\/components\/PdfViewer\.vue/);
+    assert.match(result.stderr, /packages\/vue-pdf\/src\/components\/UnindexedHeaderCopy\.vue/);
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true });
   }
