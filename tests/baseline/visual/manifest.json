@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "product-visual-matrix-baseline",
   "label": "pre-ui-migration",
-  "generatedAt": "2026-11-21T06:24:59.900025+00:00",
-  "gitHead": "e47f192150675e062dc58e10cafb19682ad91448",
+  "generatedAt": "2026-11-21T09:45:29.012167+00:00",
+  "gitHead": "ad57eea8fb26aa40837bfdc6328f826ac6ef3cfa",
   "browser": "149.0.7827.55",
   "determinism": {
     "deviceScaleFactor": 1,
@@ -3082,10 +3082,10 @@
       "theme": "dark",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/dark-zoom050.webp",
-      "screenshotSha256": "bb87d490ff065bb757d899e50325a083e936197a319674bc522d4c19342ee7e0",
-      "screenshotBytes": 19290,
+      "screenshotSha256": "9e291df73d5051e046c4f3d3105f59b6c2c47921faa8cd05b32c0d51a31818bb",
+      "screenshotBytes": 20618,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/dark-zoom050.json",
-      "structureSha256": "be566e06a356a801a06a01139ef8b8d20e21d0ca9c7ccace7a7bc9c950f49488",
+      "structureSha256": "0bcd3c6493b08eb3bd6e688eae9a810636c5f82a9965f3e6fca1a7f3422d9e66",
       "structural": "PASS"
     },
     {
@@ -3096,10 +3096,10 @@
       "theme": "dark",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/dark-zoom100.webp",
-      "screenshotSha256": "040461db9351d5444aeaefd50541707f1af583201cfc2ec4512f107485dceff4",
-      "screenshotBytes": 32308,
+      "screenshotSha256": "ba83d5f92dc0c2bc63cfba1cc450f7f571a895cb34b33c8e08df54165a4966ed",
+      "screenshotBytes": 33674,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/dark-zoom100.json",
-      "structureSha256": "5c96bd38dd8ff7ed73bbf0fdacc2115ab53dd436b731affe2569dc759e0a12ff",
+      "structureSha256": "e54663bb274a2993781e9bc3b65d827c6d425137d5f7b19e4091a1f6175204a4",
       "structural": "PASS"
     },
     {
@@ -3110,10 +3110,10 @@
       "theme": "dark",
       "zoom": 200,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/dark-zoom200.webp",
-      "screenshotSha256": "2d4d88f085a986473ec17ae278bddcda2bf9a1ee673321dd10baeee0966929e4",
-      "screenshotBytes": 34706,
+      "screenshotSha256": "469813491cca39719a21e7854374eb661d761f4b71441352f547d9a70238cb03",
+      "screenshotBytes": 36304,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/dark-zoom200.json",
-      "structureSha256": "065f3d37a313f60dc1ce03c0baaef5ab83733ba3f9104aa0fc1ef19e047d81eb",
+      "structureSha256": "df50f7e1344139ae544921ce272d8b5c7eedd2b138981518e995a56f0d1c6741",
       "structural": "PASS"
     },
     {
@@ -3124,10 +3124,10 @@
       "theme": "light",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/light-zoom050.webp",
-      "screenshotSha256": "b009983b6f95bf4dfa805bbd6bbd450a48eb3e6e38a500736b326f2d6b76acd6",
-      "screenshotBytes": 19956,
+      "screenshotSha256": "fe6bd9e0451d9c1690bf70e7a50372821a2642f49e4061fd0a1476528a1878ef",
+      "screenshotBytes": 21312,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/light-zoom050.json",
-      "structureSha256": "6a8101b46ef0187ed1318b8fdfbcba122277653a8c9418a76bbd1cf62c66890f",
+      "structureSha256": "5628301ce9606b4e7d626bb5ee104b7f0a9cda621b440f08908922937c566c18",
       "structural": "PASS"
     },
     {
@@ -3138,10 +3138,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/light-zoom100.webp",
-      "screenshotSha256": "c279483b00c56d461da6fa2644c248a2809e223e2c91348382688c412bd30b67",
-      "screenshotBytes": 32404,
+      "screenshotSha256": "16fecb08b580391ef45e0b5e3d696b5f0f454c83ccb484ebf1d4660e23d0f549",
+      "screenshotBytes": 33836,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/light-zoom100.json",
-      "structureSha256": "350388ff6ad0c2193339910bc9dd2dbebb681e68a0ae89aab3d2fc2531388801",
+      "structureSha256": "d184396dc8ca159d620f287c1d38a7558f1b7109d43df28d097167dd09e8d309",
       "structural": "PASS"
     },
     {
@@ -3152,10 +3152,10 @@
       "theme": "light",
       "zoom": 200,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/desktop-1440x900/light-zoom200.webp",
-      "screenshotSha256": "ef449a507f6c5d660306b34a8e24bd4eff9b6c78ea4698c289519aaac53dbc73",
-      "screenshotBytes": 34682,
+      "screenshotSha256": "32bab12a9277e2caf31153dffcf5101cd4a8edfec14152328b7eeb7e10b231fa",
+      "screenshotBytes": 36276,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/desktop-1440x900/light-zoom200.json",
-      "structureSha256": "f30a79b30642733c4f34d7289be14e9d45772d2d63d3ad06db20b79d3ffe2813",
+      "structureSha256": "44df53709691bf030ad6224a14279cf1b40e7b83578509e48783a40a51c650d9",
       "structural": "PASS"
     },
     {
@@ -3166,10 +3166,10 @@
       "theme": "dark",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/laptop-1280x720/dark-zoom050.webp",
-      "screenshotSha256": "89ef395ec53d399d0737535b70d7483fb19442fb6712ab878453325028b51734",
-      "screenshotBytes": 18488,
+      "screenshotSha256": "c0639e8e3e2fdf15c68eba35457390b988b6288f42fb16a9471cda19950cd676",
+      "screenshotBytes": 19714,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/dark-zoom050.json",
-      "structureSha256": "c0c96283353fb9f6d30097d486a01d5554035862add48f37438953b543a592fd",
+      "structureSha256": "d5657af1f013aed33dce02bcf95bb853e6a108cdce11905ebfcc3b2a3c3e4bce",
       "structural": "PASS"
     },
     {
@@ -3180,10 +3180,10 @@
       "theme": "dark",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/laptop-1280x720/dark-zoom100.webp",
-      "screenshotSha256": "3d890cd83225da1dd3cf7076c87b1a3868a87d67e0853ea99e03a59a64bb697f",
-      "screenshotBytes": 27232,
+      "screenshotSha256": "6c8f96ac30bd7327f1d5edcc779788b0050be7656687fa88ff38e89f0c66752c",
+      "screenshotBytes": 28284,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/dark-zoom100.json",
-      "structureSha256": "9a4e8616e8fa1afd6077c8e3d0dee32f4982c36726a17f9a161c802b544ab67b",
+      "structureSha256": "ab130b033c94b26fbe443c7c3f621af1d2dccef2313833f4565143685f6fa09a",
       "structural": "PASS"
     },
     {
@@ -3197,7 +3197,7 @@
       "screenshotSha256": "514ec86b3631c12961e6b84a33f0f707ea1ef8d03ac72236d9c48fbdf27d4747",
       "screenshotBytes": 24826,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/dark-zoom200.json",
-      "structureSha256": "9686d4a6a53428e0a238b6d3134ca0e24c9792be17eb33b983af3ed1b0ed6a07",
+      "structureSha256": "8c2b44d0752715c35453df9677cb56ffd84a3cf022028858db56fd2a79d96a8f",
       "structural": "PASS"
     },
     {
@@ -3208,10 +3208,10 @@
       "theme": "light",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/laptop-1280x720/light-zoom050.webp",
-      "screenshotSha256": "6d2859d76b57d89e25e6483c0e82bc82a3c32d1b8d5ff18a69f14a450b95ede8",
-      "screenshotBytes": 18648,
+      "screenshotSha256": "a5c3519866396ed6f15e7c9bb2ceef11d8e58599280551cdda0e8ff85de48f79",
+      "screenshotBytes": 19898,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/light-zoom050.json",
-      "structureSha256": "6c78b3c1130ebe3009b941183da146288dfb5f92eb7c221504d09d78e4fd0839",
+      "structureSha256": "a3fc82d5e5588b8315d27e635eda6d8673d32a2a6133d6409bce8ba06e874a70",
       "structural": "PASS"
     },
     {
@@ -3222,10 +3222,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/laptop-1280x720/light-zoom100.webp",
-      "screenshotSha256": "378edb5842b09c559d9a25ed72528c700b2d0a8744368cdba8559e31f8cfd5a8",
-      "screenshotBytes": 27680,
+      "screenshotSha256": "f59b803258eaec4ee9d3a7c9e3fb5d0296a2303aac6632d72fd584f71f70b07f",
+      "screenshotBytes": 28388,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/light-zoom100.json",
-      "structureSha256": "0a95f8fb013515fef4defbf328e3986cb65feb690fa2a5ca6f47e078aa74ab86",
+      "structureSha256": "1abd9aabd73f476f95164b09416a12d40bc8982cbe282d8a425f73d75b15a4ec",
       "structural": "PASS"
     },
     {
@@ -3239,7 +3239,7 @@
       "screenshotSha256": "cd5d18f2eff34b98ebe359e0228abe8d10239d6fa44c8b6c02288f0913aab687",
       "screenshotBytes": 24796,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/laptop-1280x720/light-zoom200.json",
-      "structureSha256": "178987b6b3c7cf5ef3ce564c6c24eda8a5b8ce29808c5e0d1a5344244eb2900f",
+      "structureSha256": "60308ce1e6053057c2dca7ab4585e67bc8192d099e9a13bf864c04f14ff748fd",
       "structural": "PASS"
     },
     {
@@ -3250,10 +3250,10 @@
       "theme": "dark",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/mobile-390x844/dark-zoom050.webp",
-      "screenshotSha256": "19c02e6370de46a1406fa4fa386ed77a3b4130515f416a8fe2781d3f1298b5a6",
-      "screenshotBytes": 16878,
+      "screenshotSha256": "eccc2f27aed60f4af8dc81264cdb4407363c25990ef4375347efdede06af477a",
+      "screenshotBytes": 18026,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/dark-zoom050.json",
-      "structureSha256": "b4a0bc481a814815f2f5ed0c40ce52d5ec550182f44a6cbd12c94799064d1f87",
+      "structureSha256": "342d7afbb6c3c5ea145f62f6927f0b35f9455a6eeb02d3ce2ff8450c7c5f503c",
       "structural": "PASS"
     },
     {
@@ -3264,10 +3264,10 @@
       "theme": "dark",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/mobile-390x844/dark-zoom100.webp",
-      "screenshotSha256": "a7eef44c319f1502b4d6e7d9d79e03731f46c5a80a5a09853caa4e4c23b9efac",
-      "screenshotBytes": 15782,
+      "screenshotSha256": "d6d9789bf8bcbf24a202d305f5c4a6ab402fa44154788d8f6c96e9175eb074e7",
+      "screenshotBytes": 16274,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/dark-zoom100.json",
-      "structureSha256": "e180e63da3a9348aa02db71ea0aa27ffba650346ea6b212c4ff8c14dd807e499",
+      "structureSha256": "0a9f3d56e3140a6b850d57cca1aebba78e441a52a1dcdd1633e67e21178968cc",
       "structural": "PASS"
     },
     {
@@ -3281,7 +3281,7 @@
       "screenshotSha256": "c8b8f37f00cf90772b72f9ab7a8a110309cbba7451c00f8730d5652f138e3258",
       "screenshotBytes": 14270,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/dark-zoom200.json",
-      "structureSha256": "d134a8d1625f2717c8f5e55c47dd233e2885dbb1f3a2e053f9f70489718e6d72",
+      "structureSha256": "f3ebfd598cb0717454f3458754a3d1468d40341e490664b05da56c691be1304e",
       "structural": "PASS"
     },
     {
@@ -3292,10 +3292,10 @@
       "theme": "light",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/mobile-390x844/light-zoom050.webp",
-      "screenshotSha256": "3adc85b1933ff5a3ab1b14f34e7c69bb875ffd953e4fcd844a0920c6c68b6713",
-      "screenshotBytes": 17198,
+      "screenshotSha256": "3414b9883aae40b6c6b81a0e07bec6c8cbf88a281115bc9d88ea6917c72d2139",
+      "screenshotBytes": 18390,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/light-zoom050.json",
-      "structureSha256": "c8c1972c3b9a0f880d6839e87f0f7b5d57510315dee50023db6424b94613ed2d",
+      "structureSha256": "c4d66197945988eb42c473571a329e7bdd2146aeca7e43b684edb379493b4082",
       "structural": "PASS"
     },
     {
@@ -3306,10 +3306,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/mobile-390x844/light-zoom100.webp",
-      "screenshotSha256": "1badef2091b42956b6aa65a34decedaaa5645049d33acb8bfae73772cfe8a799",
-      "screenshotBytes": 16030,
+      "screenshotSha256": "e31d294550af685e85d6ea031e294add5a2d88fc4b7c1b91dd8d9b4ae93d1ab0",
+      "screenshotBytes": 16366,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/light-zoom100.json",
-      "structureSha256": "dd148dd3fb464609a8dfe4f9c6315dc6651edcd873bb3a67aa2b8a73a97455a6",
+      "structureSha256": "995fb0824727ddcf066cbb8c9bf8cc84a038d72aaaa19bbfb507c8fe4a27b892",
       "structural": "PASS"
     },
     {
@@ -3323,7 +3323,7 @@
       "screenshotSha256": "0a6c40f61aacbf05faadd5d5110e66ec3f24d27e04f2232387dcbca453cf0329",
       "screenshotBytes": 14240,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/mobile-390x844/light-zoom200.json",
-      "structureSha256": "92b73d5ca2cfbb245df48610021838f8b9b0855debdc9d8d444d8bfbb541fd58",
+      "structureSha256": "a257adb30347e313c02264bdca917544a051714b23d09987661bfac9a0694db8",
       "structural": "PASS"
     },
     {
@@ -3334,10 +3334,10 @@
       "theme": "dark",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/tablet-768x1024/dark-zoom050.webp",
-      "screenshotSha256": "b4dc1f36a3c7ecd063f125ab6f2be5356a91b2678812775573a31b1b482d5249",
-      "screenshotBytes": 19740,
+      "screenshotSha256": "0cd13069f5df9c6d73204a57fcb2338034ad5d66ac71c8b4ed8aa8c459825a8e",
+      "screenshotBytes": 21136,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/dark-zoom050.json",
-      "structureSha256": "4f0123f7ebce4ac94aae69c9389c6f2fc4dc69b3e963f43d741ac2b43ed18213",
+      "structureSha256": "675cf781fd70d050691fb79be9d708965b8c8d08918161577915ea3f4e066540",
       "structural": "PASS"
     },
     {
@@ -3348,10 +3348,10 @@
       "theme": "dark",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/tablet-768x1024/dark-zoom100.webp",
-      "screenshotSha256": "73705968849d87f8448a4becd19fb49bc0c34c850b9c7103bb55c5f5bd71d39c",
-      "screenshotBytes": 27830,
+      "screenshotSha256": "0f17a016a3182b48649021f918ebf266ef0a8b56c872d8a935a6201d38abda12",
+      "screenshotBytes": 29268,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/dark-zoom100.json",
-      "structureSha256": "946c87440f50fe4cd88349a96d748b31f6be17feccb752d72c97cd360749bcf8",
+      "structureSha256": "aa5354bf73778ab1a6830b6cd2f0285c1c6d50b441edf3f0a585d683cf35eb85",
       "structural": "PASS"
     },
     {
@@ -3365,7 +3365,7 @@
       "screenshotSha256": "5f7c036417f87ef335808102d837a1331c18928c4d33ead738ebd21ed5eaa7f2",
       "screenshotBytes": 27852,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/dark-zoom200.json",
-      "structureSha256": "a7b6e4c15f6815463a8a8e1be6c0e5c122468e4a6f749d7b0b327d66fdc91faa",
+      "structureSha256": "81053f40bf03dc9a3b569e01a9746d5119c2dde0cddaefe46f3091b4e9305e90",
       "structural": "PASS"
     },
     {
@@ -3376,10 +3376,10 @@
       "theme": "light",
       "zoom": 50,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/tablet-768x1024/light-zoom050.webp",
-      "screenshotSha256": "2154ee099e0beae002290d2f77cec45262b05c3ff521e5b15c89c08eadcde6ce",
-      "screenshotBytes": 19882,
+      "screenshotSha256": "cd21d0dad37b911938080bf22596561594cb1adc879e9a01cfc4aca8d0496ef4",
+      "screenshotBytes": 21264,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/light-zoom050.json",
-      "structureSha256": "bc1dcd4d591c89e57f6b17b587c1277d14dd582b666695c826c082619dd6de1e",
+      "structureSha256": "84e4d2ac4b4011ce8e6695ee29df097d4f5b3c1df0c8879a9a02de2ae40409fc",
       "structural": "PASS"
     },
     {
@@ -3390,10 +3390,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/screenshots/xlsx-viewer/tablet-768x1024/light-zoom100.webp",
-      "screenshotSha256": "1b8dcc30fef4fbb035960dac90e76ff9f4c25dd01652a1cc8173d1214db0e735",
-      "screenshotBytes": 28080,
+      "screenshotSha256": "6be275e44d34103b6200155fa434d3a01a8b3dbdda5d56d58c33b1767e6356ed",
+      "screenshotBytes": 29322,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/light-zoom100.json",
-      "structureSha256": "e58cdce381ab17a3cf88084a29852b10607e220d67b6c6b9374b1d23396350e1",
+      "structureSha256": "0186b0a32c7371f765c20808c0436ad4d7b98407655a74d5e3bc91a1a495bb53",
       "structural": "PASS"
     },
     {
@@ -3407,7 +3407,7 @@
       "screenshotSha256": "4bcd30bb063f2725d3c499bd09594398d784aa2350cbfecd2730b0e81e2d12d5",
       "screenshotBytes": 28010,
       "structure": "tests/baseline/visual/structure/xlsx-viewer/tablet-768x1024/light-zoom200.json",
-      "structureSha256": "88aabf9b3a92d72aa53536d544baf9b4562aff94592897ef805eed512a23aa61",
+      "structureSha256": "c2a47347d185a64093a23391079dd3c6e162fb3f1d3386cae41dd99957653b47",
       "structural": "PASS"
     },
     {
