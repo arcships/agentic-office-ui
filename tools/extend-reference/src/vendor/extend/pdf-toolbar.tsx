@@ -144,6 +144,7 @@ export function PdfToolbar({
             className="w-[104px] min-w-[104px]"
             aria-label="Zoom level"
             disabled={controlsDisabled}
+            icon="hugeicons"
           >
             <SelectValue placeholder="Zoom">
               {Math.round(zoomLevel * 100)}%

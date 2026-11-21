@@ -18,10 +18,11 @@ name: UI parity (Extend reference)
 # upstream-unreachable `pptx-presenter`, which is reported as unreachable and is
 # not captured (docs/testing/ui-parity-ci.md).
 #
-# L2 route parity (#182) runs report-only in `ui-parity-routes`: it compares the
-# whole `/pdf-viewer` product region against the pinned upstream route, uploads
-# the route matrix and captures, and does not block until the classified product
-# differences in tools/parity-fixtures/routes.json are fixed
+# L2 route parity (#182/#199) runs in `ui-parity-routes`: it compares the whole
+# `/pdf-viewer` product region against the pinned upstream route, uploads the
+# route matrix and captures. `/pdf-viewer` is blocking on chrome-only pixels,
+# landmarks and console errors (#199); other routes stay report-only until
+# their classified product differences are fixed
 # (docs/testing/ui-parity-routes.md).
 #
 # Everything is diffed against `tests/visual/extend/**`; those PNGs are only
@@ -290,7 +291,7 @@ jobs:
           retention-days: 30
 
   ui-parity-routes:
-    name: L2 route parity (report-only, #182)
+    name: L2 route parity (#182/#199)
     if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -336,12 +337,12 @@ jobs:
       - name: Install the Chromium browser
         run: playwright install --with-deps chromium
 
-      # Report-only until the classified product differences are fixed: the
-      # command builds the pinned upstream route reference and the demo, then
-      # captures reference/subject/diff/heatmap for every route x viewport x
-      # theme. `--gate-mode off` keeps the artifact non-blocking.
-      - name: Capture the L2 route matrix (report-only)
-        run: pnpm ui:parity:routes -- --gate-mode off
+      # `/pdf-viewer` is blocking on chrome-only pixels, landmarks and console
+      # errors (#199); full-page raster pixels stay diagnostic because the
+      # product and reference run different pinned EmbedPDF versions. Other
+      # routes remain report-only under `--gate-mode ready`.
+      - name: Capture the L2 route matrix (blocking for /pdf-viewer)
+        run: pnpm ui:parity:routes -- --gate-mode ready
 
       - name: Upload the route matrix and captures
         if: always()

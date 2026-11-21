@@ -274,24 +274,24 @@ pnpm ui:parity -- --only core --viewports 1440x900,390x844 --themes light,dark \
 
 Python 解释器由 `scripts/ci/run-python.mjs` 解析（`PYTHON=/tmp/bb-venv/bin/python` 或 PATH 里的 venv）。
 
-### 6.1 L2 路由对照（`pnpm ui:parity:routes`，#182）
+### 6.1 L2 路由对照（`pnpm ui:parity:routes`，#182 / #199）
 
 L1 只比较组件格子；L2 比较 `pnpm dev` 的**整块产品区域**与上游参考路由。入口与产物：
 
 ```bash
-pnpm ui:parity:routes                          # 构建 reference + demo，report-only 矩阵
+pnpm ui:parity:routes                          # 构建 reference + demo；PDF 路由 blocking
 pnpm ui:parity:routes -- --only pdf-viewer --viewports 1440x900 --themes light
 pnpm ui:parity:routes -- --self-check          # reference 自己跟自己比（采集确定性）
 ```
 
-配置源是 `tools/parity-fixtures/routes.json`（region/landmark 选择器、状态、排除项、分类差异、地标容差），reference 侧是 `tools/extend-reference/route.html` 原样 import 固定 commit 的上游 wrapper（R2），产物默认写到 `output/ui-parity-routes/`（`report.html` / `routes-matrix.json` / 每 case 的 reference-subject-diff-heatmap）。当前 pilot `/pdf-viewer` 是 `report-only`：chrome 与页面栅格的产品差异尚未清零，**不要把它设为 blocking**。区域定义、分类与剩余阻断项见 [ui-parity-routes.md](ui-parity-routes.md)。
+配置源是 `tools/parity-fixtures/routes.json`（region/landmark 选择器、状态、排除项、分类差异、`gate` 合同、地标容差），reference 侧是 `tools/extend-reference/route.html` 原样 import 固定 commit 的上游 wrapper（R2），产物默认写到 `output/ui-parity-routes/`（`report.html` / `routes-matrix.json` / 每 case 的 reference-subject-diff-heatmap）。`/pdf-viewer` 自 #199 起是 `blocking`：chrome-only 像素、landmarks 和 console 错误阻断；整页 page raster 因 EmbedPDF 版本不同只作诊断（`pass-with-diagnostic`）。其余路由仍 report-only。区域定义、分类与阻断合同见 [ui-parity-routes.md](ui-parity-routes.md)。
 
 ## 7. 已知例外（为什么现在不是全绿）
 
 | 例外 | 位置 | 负责 |
 |---|---|---|
 | `pptx-presenter` 无上游布局 | parity 报告（unreachable） | #161（组件测试覆盖） |
-| `/pdf-viewer` L2 路由仍是 `report-only`（画布背景、页面栅格、暗色反转等 6 条阻断差异，另 1 条亚像素差异不阻断） | `output/ui-parity-routes/` | #182 follow-up |
+| `/pdf-viewer` L2 路由 blocking 时整页像素仍有 13.6–26% 差异（EmbedPDF 2.14.4 vs 2.15.0 的 page raster）；gate 已按 `gate.fullPagePixels=false` 把它降为诊断 | `output/ui-parity-routes/` | #182/#199 合同；升级依赖另开 issue |
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` destructive 有意偏离上游 red-500 | manifest `expectedDiffs` + `tests/visual/extend/button/destructive/` 基线 | #169；参考页保持上游 red-500，gate 报告 `WAIVED`（bounded pixel-ratio waiver） |
 | 971 条存量组件 CSS 裸值 + 22 条 #161b PPTX parity literal | `tests/style/component-style-baseline.json` + `tests/style/parity-literal-allowlist.json` | #159–#164 收尾时逐步还债；parity 条目按 `reviewBy` 复核 |

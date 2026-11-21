@@ -28,7 +28,57 @@ test("PDF viewer exposes dark mode, fluid height and container breakpoints", () 
   assert.match(types, /isDark\?: boolean/, "PdfViewerProps must expose isDark");
   assert.match(viewer, /isDark: false/);
   assert.match(viewer, /pdf-viewer--dark/, "PdfViewer must render the dark root class");
-  assert.match(viewer, /--pdf-page-filter: var\(--pdf-dark-page-filter, invert\(1\) hue-rotate\(180deg\)\)/, "dark PDF pages must be invertible but overridable");
+  assert.doesNotMatch(
+    viewer,
+    /invert\(1\) hue-rotate\(180deg\)/,
+    "dark mode must not invert page content by default (#199)",
+  );
+  assert.match(
+    viewer,
+    /--pdf-page-filter: var\(--pdf-dark-page-filter, var\(--pdf-page-softening\)\)/,
+    "dark PDF pages keep the softening and only opt into a host filter",
+  );
+  assert.match(
+    viewer,
+    /--pdf-page-softening: blur\(0\.35px\)/,
+    "page rasters get the upstream 0.35px softening (#199)",
+  );
+  assert.match(
+    viewer,
+    /filter: var\(--pdf-page-filter\)/,
+    "the page image applies the softening token without changing its box",
+  );
+  assert.match(
+    viewer,
+    /--pdf-canvas-bg: color-mix\(in oklab, var\(--office-muted\) 30%, transparent\)/,
+    "the canvas must be the upstream bg-muted/30 surface (#199)",
+  );
+  assert.match(
+    viewer,
+    /--pdf-bg: var\(--office-background\)/,
+    "the viewer shell background follows the upstream bg-background token (#199)",
+  );
+  assert.doesNotMatch(
+    viewer,
+    /--pdf-canvas-bg: #(?:e5e7eb|020617)/,
+    "the old canvas literals must be gone (#199)",
+  );
+  assert.match(
+    viewer,
+    /\.pdf-frame-wrap \{[^}]*padding: 24px/,
+    "the canvas padding stays 24px at every container width (#199)",
+  );
+  assert.doesNotMatch(
+    viewer,
+    /\.pdf-frame-wrap \{ padding: 12px/,
+    "the mobile 12px canvas padding override must be gone (#199)",
+  );
+  assert.match(
+    viewer,
+    /const showThumbnails = ref\(false\)/,
+    "the thumbnails sidebar starts closed like upstream (#199)",
+  );
+  assert.match(viewer, /showStatusBar: false/, "the optional status bar stays opt-in (#199)");
   assert.doesNotMatch(viewer, /min-height: (?:620|540|220|180)px/, "viewer chrome must not use fixed min-heights that overflow short containers");
   assert.match(viewer, /container: pdf-viewer \/ inline-size/);
   assert.match(viewer, /@container pdf-viewer \(max-width: 760px\)/, "PDF breakpoints must follow the container, not the viewport");

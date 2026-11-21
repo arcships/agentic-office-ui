@@ -26,7 +26,7 @@
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
 | [design/viewer-editor-architecture.md](design/viewer-editor-architecture.md) | PDF/DOCX/XLSX/PPTX/CSV/FileSystem/SchemaBuilder 的上游组件树、包边界、层映射、参考可行性分类与 L1/L2 验收计划（#185） |
 | [testing/ui-parity-ci.md](testing/ui-parity-ci.md) | `ui-parity` / 样式 guard / axe 门禁：job、阈值、基线审批与最终开关（#165） |
-| [testing/ui-parity-routes.md](testing/ui-parity-routes.md) | L2 产品路由 parity：`/pdf-viewer` pilot、region/landmark 定义、R2 reference 构建、差异分类与剩余阻断项（#182） |
+| [testing/ui-parity-routes.md](testing/ui-parity-routes.md) | L2 产品路由 parity：`/pdf-viewer` blocking（#199）、region/landmark 定义、R2 reference 构建、差异分类与 gate 合同 |
 
 
 

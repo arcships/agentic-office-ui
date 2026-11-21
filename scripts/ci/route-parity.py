@@ -418,6 +418,23 @@ def build_url(origin: str, template: str, theme: str) -> str:
     return origin + template.replace("{theme}", theme)
 
 
+def route_gate(route: dict) -> dict:
+    """Resolve which checks block this route.
+
+    A route can only block on the product shell while its page bitmap is
+    produced by a different renderer version than the pinned reference. The
+    full-page pixel diff then stays in the report as a diagnostic; chrome-only
+    pixels, geometry and console errors remain blocking by default.
+    """
+    configured = route.get("gate") or {}
+    return {
+        "fullPagePixels": bool(configured.get("fullPagePixels", True)),
+        "chromePixels": bool(configured.get("chromePixels", True)),
+        "geometry": bool(configured.get("geometry", True)),
+        "consoleErrors": bool(configured.get("consoleErrors", True)),
+    }
+
+
 def run_case(
     *,
     browser,
@@ -576,18 +593,30 @@ def run_case(
             ),
         }
 
-        failures = []
-        if pixels["status"] == "fail":
-            failures.append("pixels")
-        if chrome["status"] == "fail":
-            failures.append("chrome-pixels")
-        if geometry["status"] == "fail":
-            failures.append("geometry")
-        if case["errors"]:
-            failures.append("console-errors")
+        gate = route_gate(route)
+        checks = {
+            "pixels": pixels["status"] == "fail",
+            "chrome-pixels": chrome["status"] == "fail",
+            "geometry": geometry["status"] == "fail",
+            "console-errors": bool(case["errors"]),
+        }
+        gating = {
+            "pixels": gate["fullPagePixels"],
+            "chrome-pixels": gate["chromePixels"],
+            "geometry": gate["geometry"],
+            "console-errors": gate["consoleErrors"],
+        }
+        failures = [name for name, failed in checks.items() if failed and gating[name]]
+        diagnostics = [name for name, failed in checks.items() if failed and not gating[name]]
+        case["gate"] = gate
+        case["failures"] = failures
+        if diagnostics:
+            case["diagnosticFailures"] = diagnostics
         if failures:
             case["status"] = "fail"
-            case["failures"] = failures
+        elif diagnostics:
+            # The check ran and is reported; the route contract does not gate it.
+            case["status"] = "pass-with-diagnostic"
         elif (
             pixels["status"] == "pass-with-antialiasing"
             or chrome["status"] == "pass-with-antialiasing"
@@ -633,11 +662,17 @@ def summarize_route(route: dict, cases: list[dict]) -> dict:
         "title": route["title"],
         "gateStatus": route.get("gateStatus", "report-only"),
         "blocking": route.get("gateStatus") == "blocking",
+        "gate": route_gate(route),
         "status": "fail" if blocking_cases else "pass",
         "caseCount": len(cases),
         "failedCases": [
             f"{case['viewport']}/{case['theme']}: {case['status']}"
             for case in blocking_cases
+        ],
+        "diagnosticCases": [
+            f"{case['viewport']}/{case['theme']}: {', '.join(case['diagnosticFailures'])}"
+            for case in cases
+            if case.get("diagnosticFailures")
         ],
         "worstDiffRatio": round(worst_pixels, 6),
         "worstChromeDiffRatio": round(worst_chrome, 6),
@@ -648,6 +683,11 @@ def summarize_route(route: dict, cases: list[dict]) -> dict:
         "exclusions": route.get("exclusions") or [],
         "differences": route.get("differences") or [],
     }
+
+
+def diagnostic_suffix(case: dict) -> str:
+    diagnostics = case.get("diagnosticFailures") or []
+    return f" (diagnostic: {', '.join(diagnostics)})" if diagnostics else ""
 
 
 def write_summary(report: dict, destination: Path) -> None:
@@ -673,6 +713,28 @@ def write_summary(report: dict, destination: Path) -> None:
             f"{route['worstChromeDiffRatio'] * 100:.3f}% | "
             f"{route['worstGeometryDeltaPx']:.2f}px |"
         )
+    lines += ["", "## Route gates", ""]
+    for route in report["routes"]:
+        gate = route.get("gate") or {}
+        enabled = [
+            label
+            for key, label in (
+                ("fullPagePixels", "full-page pixels"),
+                ("chromePixels", "chrome-only pixels"),
+                ("geometry", "landmarks"),
+                ("consoleErrors", "console errors"),
+            )
+            if gate.get(key)
+        ]
+        lines.append(
+            f"- `{route['id']}` ({route['gateStatus']}): blocking checks "
+            f"{', '.join(enabled) or '—'}"
+        )
+        if gate and not gate.get("fullPagePixels", True):
+            lines.append(
+                "  full-page pixels are reported as diagnostic because the page "
+                "bitmap comes from a different pinned renderer version than the reference"
+            )
     lines += ["", "## Cases", ""]
     for route in report["routes"]:
         lines.append(f"### `{route['id']}`")
@@ -688,7 +750,8 @@ def write_summary(report: dict, destination: Path) -> None:
                 f"{(pixels.get('diffRatio') or 0) * 100:.3f}% | "
                 f"{(chrome.get('diffRatio') or 0) * 100:.3f}% | "
                 f"{geometry.get('worstDeltaPx', 0):.2f}px | "
-                f"{', '.join(case.get('failures') or []) or '—'} |"
+                f"{', '.join(case.get('failures') or []) or '—'}"
+                f"{diagnostic_suffix(case)} |"
             )
         lines.append("")
         lines.append("Dominant chrome colours (background evidence):")
@@ -826,6 +889,8 @@ def write_html(report: dict, destination: Path) -> None:
   th {{ background: #f6f6f6; text-align: left; }}
   img {{ max-width: 260px; display: block; }}
   .pass {{ color: #067647; font-weight: 600; }}
+  .pass-with-antialiasing {{ color: #93370d; font-weight: 600; }}
+  .pass-with-diagnostic {{ color: #175cd3; font-weight: 600; }}
   .fail {{ color: #b42318; font-weight: 600; }}
   .error {{ color: #b54708; font-weight: 600; }}
   code {{ font-size: 11px; }}

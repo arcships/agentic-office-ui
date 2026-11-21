@@ -14,6 +14,8 @@
  * the icon class string is unchanged.
  */
 import type * as React from "react";
+import { ChevronDownIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../../lib/cn";
@@ -60,10 +62,14 @@ export function SelectTrigger({
   className,
   size = "default",
   disabled = false,
+  icon = "lucide",
   children,
   ...props
 }: React.ComponentProps<"button"> &
-  VariantProps<typeof selectTriggerVariants>): React.ReactElement {
+  VariantProps<typeof selectTriggerVariants> & {
+    /** Upstream chrome uses Hugeicons; the shared primitive default stays Lucide. */
+    icon?: "lucide" | "hugeicons";
+  }): React.ReactElement {
   return (
     <button
       className={cn(selectTriggerVariants({ size }), className)}
@@ -75,18 +81,26 @@ export function SelectTrigger({
     >
       {children}
       <span data-slot="select-icon">
-        <svg
-          aria-hidden="true"
-          className={selectTriggerIconClassName}
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        {icon === "hugeicons" ? (
+          <HugeiconsIcon
+            aria-hidden="true"
+            className={selectTriggerIconClassName}
+            icon={ChevronDownIcon}
+          />
+        ) : (
+          <svg
+            aria-hidden="true"
+            className={selectTriggerIconClassName}
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        )}
       </span>
     </button>
   );

@@ -81,6 +81,15 @@
 `PdfSurface` 仍是最小嵌入 Surface：不新增内部 toolbar（宿主拥有搜索/缩放/翻页控件，
 这是公开合同）；状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
 
+### #199 路由对齐后的默认值
+
+`PdfViewer` 的默认状态现在与上游 `PDFViewer` 一致：缩略图侧栏从关闭开始（工具栏
+toggle 仍可打开），可选状态栏默认不渲染（`showStatusBar` 仍是 host opt-in），页面画布使用
+`bg-muted/30` 等价 surface，页面位图带 0.35px softening，暗色不反相，窄容器下滚动内容
+仍保持 24px padding。`PdfSurface` 是独立的最小 Surface，本 issue 未改变它的默认值；它的
+`showThumbnails` 仍默认 `true`，`showStatusBar` 仍默认 `false`。公共 props、事件、test id
+和 `expose` 方法没有变化。
+
 ## 4. 保留的公共合同
 
 连续/单页/双页、对页渲染、缩略图跟随可见页、outline 键盘树、页标签、搜索命中导航、

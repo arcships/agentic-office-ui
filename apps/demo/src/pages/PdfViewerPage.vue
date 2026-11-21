@@ -87,7 +87,7 @@
         :password="pdfPassword.trim() || undefined"
         :default-zoom="defaultZoom"
         :is-dark="isDark"
-        locale="zh-CN"
+        :locale="viewerLocale"
         :file-name="fileName || 'verification.pdf'"
         :show-status-bar="showStatusBar"
         class="pdf-viewer-region"
@@ -124,6 +124,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue"
 import { PdfViewer, type PdfDiagnostic, type PdfLoadError, type PdfSource, type PdfUrlPolicy } from "@arcships/vue-pdf"
+import "@fontsource-variable/geist"
 import { readDemoTheme } from "../lib/demo-visual-settings"
 import { readRouteCapture } from "../lib/route-capture"
 
@@ -139,10 +140,12 @@ const samples = [
 
 const currentOrigin = globalThis.location.origin
 const DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024
-// L2 route parity switches (`?sample=`, `?zoom=`, `?statusbar=off`) are inert
-// unless the harness passes them; see docs/testing/ui-parity-routes.md.
+// L2 route parity switches (`?sample=`, `?zoom=`, `?statusbar=on`) are inert
+// unless the harness passes them; see docs/testing/ui-parity-routes.md. The
+// status bar is opt-in because the upstream viewer has no such bar.
 const routeCapture = readRouteCapture()
 const defaultZoom = routeCapture.zoom ?? 1
+const viewerLocale = routeCapture.locale ?? "zh-CN"
 const showStatusBar = routeCapture.statusBar
 const selectedSample = ref(
   routeCapture.sample && samples.some((sample) => sample.file === routeCapture.sample)
@@ -274,6 +277,23 @@ h2 { margin-bottom: 4px; }
 .error { color: #dc2626; font-size: 13px; margin: 0 0 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
 .viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; }
+/* L2 route parity: the reference route inherits the docs host font (Geist).
+ * The demo shell uses the system sans stack, so scope the same host font to the
+ * product region instead of restyling every demo page. */
+[data-testid="pdf-viewer-page"] .viewer-container {
+  font-family: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The product region is a fixed 560px viewer with its own scroll area, and
+     the reference docs card clips with `overflow-hidden`; matching the clip
+     mode keeps the rounded-corner antialiasing identical. */
+  overflow: hidden;
+  /* Match the reference docs preview card's border token (8% black / 6%
+     white); the demo's oklch(0.922) border is one step darker and shows at the
+     rounded corners. */
+  border-color: light-dark(
+    color-mix(in oklab, black 8%, transparent),
+    color-mix(in oklab, white 6%, transparent)
+  );
+}
 /* L2 route parity: the product region is pinned to the upstream docs preview
  * height (560px) instead of following the viewport (80vh). */
 .viewer-container :deep(.pdf-viewer-region) { height: 560px; }

@@ -11,6 +11,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
 import {
+  ChevronDownIcon,
   CircleMinusIcon,
   CirclePlusIcon,
   MoreHorizontalIcon,
@@ -389,15 +390,15 @@ defineExpose({
         <span class="pdf-toolbar__zoom" :data-disabled="disabled ? 'true' : undefined">
           <button
             type="button"
-            class="pdf-toolbar__zoom-trigger"
+            class="office-ui pdf-toolbar__zoom-trigger"
             tabindex="-1"
             aria-hidden="true"
           >
             <span class="pdf-toolbar__zoom-value">{{ zoomPercent }}%</span>
-            <OfficeIcon name="chevron-down" class="pdf-toolbar__zoom-icon" />
+            <HugeIcon :icon="ChevronDownIcon" class="pdf-toolbar__zoom-icon" />
           </button>
           <select
-            class="pdf-toolbar__zoom-native"
+            class="office-ui pdf-toolbar__zoom-native"
             :value="zoom"
             :disabled="disabled"
             :aria-label="m.common.zoom.level"
@@ -838,6 +839,8 @@ defineExpose({
 
 .pdf-toolbar__zoom-icon {
   flex: none;
+  inline-size: 16px;
+  block-size: 16px;
   margin-inline-end: -4px;
   opacity: 0.8;
 }

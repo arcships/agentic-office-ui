@@ -18,6 +18,7 @@
     "@arcships/vue-xlsx": "workspace:*",
     "@arcships/vue-pdf": "workspace:*",
     "@arcships/vue-ui": "workspace:*",
+    "@fontsource-variable/geist": "^5.2.0",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },
