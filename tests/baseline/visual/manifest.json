@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "product-visual-matrix-baseline",
   "label": "pre-ui-migration",
-  "generatedAt": "2026-11-21T06:09:18.729839+00:00",
-  "gitHead": "cd87cbd26333ada23efddb76cf72f109519bbedd",
+  "generatedAt": "2026-11-21T06:24:59.900025+00:00",
+  "gitHead": "e47f192150675e062dc58e10cafb19682ad91448",
   "browser": "149.0.7827.55",
   "determinism": {
     "deviceScaleFactor": 1,
@@ -3684,10 +3684,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/evidence/xlsx-viewer-chart-combos.webp",
-      "screenshotSha256": "1da3711fbd9756440701790d1055a8d75da87627139f5c54d5dbffee9b17b111",
-      "screenshotBytes": 35784,
+      "screenshotSha256": "18c55679be49bae29759b8f884d9ca5d36b7dd96f73ef2f13e4b6e57538f2436",
+      "screenshotBytes": 38086,
       "structure": "tests/baseline/visual/evidence/xlsx-viewer-chart-combos.json",
-      "structureSha256": "9c2889c9bc850f190b3221a850701af14e785058fbc52dcb88787b816cfde8c3",
+      "structureSha256": "52beaf3eca5cc808b5f38fb9567a1cac8019c8d0872fd2f3c810acb5be3973c9",
       "structural": "PASS"
     },
     {
