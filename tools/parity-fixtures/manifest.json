@@ -1331,7 +1331,7 @@
     }
   ],
   "coreSubset": {
-    "description": "Surfaces the pull-request parity job captures. Everything else only runs in the nightly full matrix.",
+    "description": "Surfaces and viewports the pull-request parity job captures. Everything else only runs in the nightly full matrix.",
     "surfaces": [
       "button",
       "input",
@@ -1349,7 +1349,12 @@
       "xlsx-toolbar",
       "xlsx-sheet-tabs",
       "xlsx-status-bar"
-    ]
+    ],
+    "viewports": [
+      "1440x900",
+      "390x844"
+    ],
+    "viewportsNote": "Fast pull-request gate: desktop + mobile, both themes. The nightly full matrix (#174) captures and baseline-compares all four viewports in `baselines.viewports`."
   },
   "baselines": {
     "directory": "tests/visual/extend",
@@ -1357,6 +1362,8 @@
     "naming": "<surface>/<state>/<theme>-<viewport>.png",
     "viewports": [
       "1440x900",
+      "1280x720",
+      "768x1024",
       "390x844"
     ],
     "themes": [
@@ -1364,7 +1371,7 @@
       "dark"
     ],
     "capturePaddingPx": 12,
-    "description": "Committed subject baselines for gate-blocking surfaces. `pnpm ui:baseline` manages them; the approval flow lives in tests/visual/extend/README.md."
+    "description": "Committed subject baselines for gate-blocking surfaces on every parity viewport (#174): 1440x900, 1280x720, 768x1024 and 390x844, light + dark. `pnpm ui:baseline` manages them; the approval flow lives in tests/visual/extend/README.md. The pull-request job only captures/compares `coreSubset.viewports`; the nightly full matrix compares all four."
   },
   "gate": {
     "modes": {

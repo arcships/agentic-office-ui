@@ -204,7 +204,20 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   assert.equal(manifest.baselines.directory, "tests/visual/extend");
   assert.equal(manifest.baselines.manifest, "tests/visual/extend/manifest.json");
   assert.equal(manifest.baselines.naming, "<surface>/<state>/<theme>-<viewport>.png");
-  assert.deepEqual(manifest.baselines.viewports, ["1440x900", "390x844"]);
+  // #174: the committed matrix covers every parity viewport (4 viewport ×
+  // light/dark × all states), not only the fast pull-request pair.
+  assert.deepEqual(
+    manifest.baselines.viewports,
+    manifest.viewports.map((viewport) => viewport.id),
+    "every parity viewport needs a committed baseline",
+  );
+  assert.deepEqual(manifest.baselines.viewports, ["1440x900", "1280x720", "768x1024", "390x844"]);
+  // The pull-request job stays on the fast pair; it must be a subset of the
+  // committed matrix so every captured case has a baseline to compare with.
+  assert.deepEqual(manifest.coreSubset.viewports, ["1440x900", "390x844"]);
+  for (const viewport of manifest.coreSubset.viewports) {
+    assert.ok(manifest.baselines.viewports.includes(viewport), `core viewport ${viewport} has baselines`);
+  }
   assert.deepEqual(manifest.baselines.themes, ["light", "dark"]);
   assert.equal(manifest.baselines.capturePaddingPx, 12);
 
@@ -227,7 +240,7 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 432);
+  assert.equal(baselineManifest.files.length, 864);
   assert.equal(baselineManifest.files.length, expected.size);
 
   for (const file of baselineManifest.files) {
@@ -378,6 +391,13 @@ test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the 
   for (const job of ["ui-contracts", "ui-parity-core", "ui-parity-nightly", "ui-a11y"]) {
     assert.match(workflow, new RegExp(`\\n  ${job}:`), `missing job ${job}`);
   }
+  const jobBlock = (name) => {
+    const start = workflow.indexOf(`\n  ${name}:`);
+    assert.notEqual(start, -1, `missing job ${name}`);
+    const rest = workflow.slice(start + 1);
+    const next = rest.slice(1).search(/\n {2}[a-z][a-z-]*:/u);
+    return next === -1 ? rest : rest.slice(0, next + 1);
+  };
   assert.match(workflow, /schedule:\s*\n(?:\s*#[^\n]*\n)*\s*- cron:/);
   assert.match(workflow, /--only "\$\{UI_PARITY_SUBSET\}"/);
   assert.match(workflow, /UI_PARITY_SUBSET: core/);
@@ -392,6 +412,24 @@ test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the 
   assert.ok(uploads.length >= 4, "every job must upload its report");
   assert.match(workflow, /path: output\/ui-parity\//);
   assert.match(workflow, /path: output\/a11y\//);
+
+  // #174: the PR job keeps the fast pair and the manifest owns that list; the
+  // nightly job must not narrow the matrix, otherwise 1280x720 / 768x1024
+  // baselines would be committed but never compared in CI.
+  const coreJob = jobBlock("ui-parity-core");
+  const coreViewports = /UI_PARITY_VIEWPORTS:\s*([0-9x,]+)/u.exec(coreJob);
+  assert.ok(coreViewports, "the core job declares its viewports");
+  assert.equal(coreViewports[1], manifest.coreSubset.viewports.join(","));
+  const nightlyJob = jobBlock("ui-parity-nightly");
+  assert.match(nightlyJob, /run: pnpm ui:parity -- --baseline --gate-mode all/);
+  const nightlyCommands = nightlyJob
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n");
+  assert.ok(
+    !nightlyCommands.includes("--viewports"),
+    "the nightly matrix must capture and baseline-compare all four viewports",
+  );
 });
 
 test("gate docs and release checklist stay in sync with the implementation", () => {

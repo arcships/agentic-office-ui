@@ -141,21 +141,25 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 历史 artifact 名 `ui-parity-report` 在 #165 拆成 `ui-parity-core-<sha>`（PR 核心子集）与
 `ui-parity-full-<sha>`（nightly 全矩阵），两者都包含同一份 `report.json` / `report.html` / `cases/**`。
 `.github/workflows/ui-parity.yml` 现在有四个 job：`ui-contracts`（样式 guard + 基线审批）、
-`ui-parity-core`（PR 核心子集 + 基线比对）、`ui-parity-nightly`（全矩阵）、
+`ui-parity-core`（PR 核心子集 × 1440/390 + 基线比对）、`ui-parity-nightly`（全矩阵 × 4 viewport +
+4 个 viewport 的基线比对）、
 `ui-a11y`（axe-core + 键盘 smoke）。所有 job 上传 artifact（含 diff/heatmap/baseline diff）。
 两个 parity job 现在都传 `--gate-mode all`：PR 子集与 nightly 全矩阵都严格阻断；
 `gateStatus: pending` 只剩上游不可达的 `pptx-presenter`，它只进 report 的 unreachable 表。
 
-## 6.1 提交基线（#165）
+## 6.1 提交基线（#165 / #174）
 
 `tests/visual/extend/<surface>/<state>/<theme>-<viewport>.png` 是**对照侧**的版本化基线：
 `ui-parity` 采集结束后额外与它比对（`--baseline`），因此即使参考页没变，组件改坏也会失败。
-矩阵为 1440×900 + 390×844 × light + dark，只覆盖 `gateStatus: blocking` 的 surface。
+矩阵为全部 4 个 parity viewport —— 1440×900、1280×720、768×1024、390×844 × light + dark，
+共 **864 张 / 14.0 MiB**（#174），只覆盖 `gateStatus: blocking` 的 surface。PR 的 `ui-parity-core`
+只采集并比对 `coreSubset.viewports`（1440×900 + 390×844，快速门槛），nightly 全矩阵比对全部 4 个
+viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
 更新必须走 `pnpm ui:baseline capture --approve --reviewer/--issue/--reason`，
 `pnpm ui:baseline:verify` 在 CI 校验哈希与审批记录；细节见
 [tests/visual/extend/README.md](../../tests/visual/extend/README.md)。
 
-## 7. 实施现状（2026-11-20，0.8 wave 2）
+## 7. 实施现状（2026-11-21，0.8 wave 2）
 
 - 参考侧全部非 fixtures-only surface 可渲染；Vue 侧 **25 个 surface** 完成端到端采集并提交基线
   （5 个 primitive + FileUpload / FileThumbnail / PdfToolbar+PdfSidebar / DOCX ×2 / PPTX ×2 /
@@ -189,6 +193,13 @@ CI 与门禁（#165）：详见 [testing/ui-parity-ci.md](../testing/ui-parity-c
 - `bounding-box-citations` / `layout-blocks` / `e-signature` / `document-splits` 已由 #164 完成：
   232/232 case、0px、0 AA；四条 surface 已补基线并切 `blocking`。FileSystem / SchemaBuilder 按
   [components/document-blocks.md](../components/document-blocks.md) 记录为延期，不建 surface。
+- **#174（2026-11-21）**：提交基线从 2 个 viewport 扩到全部 4 个（1440×900 / 1280×720 /
+  768×1024 / 390×844 × light + dark）：432 → **864 张**（+7.0 MiB，共 14.0 MiB），一轮
+  `pnpm ui:baseline capture` 写入 864 张、原有 432 张字节级不变（0 updated），本地 566 s。
+  `pnpm ui:parity:full` 在 4 viewport 下 **864 case / 837 pass + 19 AA + 8 waived / 0 fail**，
+  每个 viewport 216 次基线比对全部 `pass`，578 s；nightly job 不传 `--viewports`，因此
+  1280/768 的基线确实会被比对（单元测试锁住）。PR job 仍只跑 1440/390
+  （`coreSubset.viewports`），保持分钟级反馈。
 - `pptx-toolbar` / `pptx-sorter` 已收敛到 vendored 上游标记：40 + 24 个 case
   全部 pass，0 像素差、0 几何差；#165 在合并后的 0.8 树上复跑 64/64 后补基线并切
   `blocking`，两条都进 PR 子集（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。

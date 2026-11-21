@@ -13,6 +13,7 @@ fails when the committed tree is not covered by the most recent record.
 | 2026-11-20 | dim-agent | #165 | pin grayscale font rasterization so CI and local baselines match | 432 | `58d6dda6fc1a` |
 | 2026-11-20 | dim-agent | #165 | pin grayscale LCD text only; keep native font hinting metrics | 432 | `64ac2a03e7c0` |
 | 2026-11-21 | dim-agent | #169 | destructive filled button now uses the WCAG AA --office-destructive-contrast pair (red-600 + white, 4.83:1) instead of upstream red-500 (3.81:1); loading state keeps the same spinner/label pixels while adopting aria-disabled semantics (#169) | 432 | `4345df0638ca` |
+| 2026-11-21 | dim-agent | #174 | 4-viewport DoD baseline coverage (#174): add 1280x720 and 768x1024 for every gate-blocking surface; existing 1440x900 and 390x844 PNGs re-capture byte-identically. | 864 | `309cf6a38e62` |
 
 `pnpm ui:baseline capture --only <surface> --approve --reviewer <handle>`
 `--issue <#nnn> --reason <why>` is the only supported way to add a row.
