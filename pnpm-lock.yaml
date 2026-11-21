@@ -101,7 +101,7 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@chenglou/pretext':
         specifier: ^0.0.8
         version: 0.0.8
@@ -151,7 +151,7 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       echarts:
         specifier: ^6.0.0
         version: 6.1.0
@@ -176,13 +176,13 @@ importers:
     dependencies:
       '@arcships/docx-core':
         specifier: ^0.7.1
-        version: link:../docx-core
+        version: 0.7.1
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@arcships/vue-ui':
         specifier: ^0.7.1
-        version: link:../vue-ui
+        version: 0.7.1(vue@3.5.39(typescript@5.9.3))
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
         version: 4.4.0
@@ -210,10 +210,10 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@arcships/vue-ui':
         specifier: ^0.7.1
-        version: link:../vue-ui
+        version: 0.7.1(vue@3.5.39(typescript@5.9.3))
       '@embedpdf/core':
         specifier: 2.14.4
         version: 2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
@@ -286,13 +286,13 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@arcships/pptx-core':
         specifier: ^0.7.1
-        version: link:../pptx-core
+        version: 0.7.1
       '@arcships/vue-ui':
         specifier: ^0.7.1
-        version: link:../vue-ui
+        version: 0.7.1(vue@3.5.39(typescript@5.9.3))
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
         version: 4.4.0
@@ -317,7 +317,7 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
         version: 4.4.0
@@ -354,13 +354,13 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@arcships/vue-ui':
         specifier: ^0.7.1
-        version: link:../vue-ui
+        version: 0.7.1(vue@3.5.39(typescript@5.9.3))
       '@arcships/xlsx-core':
         specifier: ^0.7.1
-        version: link:../xlsx-core
+        version: 0.7.1
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
         version: 0.1.17
@@ -442,7 +442,7 @@ importers:
     dependencies:
       '@arcships/office-interaction':
         specifier: ^0.7.1
-        version: link:../office-interaction
+        version: 0.7.1
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
         version: 0.1.17
@@ -602,6 +602,28 @@ packages:
     peerDependenciesMeta:
       pdfjs-dist:
         optional: true
+
+  '@arcships/docx-core@0.7.1':
+    resolution: {integrity: sha512-XhOhIk7Vl1HbnhM69AypE3kWuRPjJox2Nk6MyPRZzC2D1W/4xg+0leWcjPtFk4tYrVQFjYuxzqVd58vMkpODlw==}
+    engines: {node: '>=18'}
+
+  '@arcships/office-interaction@0.7.1':
+    resolution: {integrity: sha512-dN+NCi3ddXgwDAawADiYwmQqtfiX9QqrIpLB7CFk16l4C9VVcMyL6RpNwOGaiysHa+tK+OFGM3doOojHdnhFYw==}
+    engines: {node: '>=18'}
+
+  '@arcships/pptx-core@0.7.1':
+    resolution: {integrity: sha512-VT61wbXGQI4jj/koEaRlmHqnoIeg7CRTb0nQjUlU2EpU8rzvrf9Vb/5LMp44UFSUCUNQEM7WQsze6eU9jm9AMg==}
+    engines: {node: '>=18'}
+
+  '@arcships/vue-ui@0.7.1':
+    resolution: {integrity: sha512-A6rTpbOYY8VAPdUSJA8V9T1wVzHK7YjxZWhLwEbVy7Sr37iOoxE+Od1Yg/QtR956AYoAptNGehsTo9/qa61Q9A==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      vue: '>=3.2.25 <4'
+
+  '@arcships/xlsx-core@0.7.1':
+    resolution: {integrity: sha512-s9oCjPoa5meAC1fMcxQH5+JpW+48orKkMmPv7gHZ3SHhvGOie2dg8r039QfeRF2wDQHYrwhePZ69AiQHvEeYgQ==}
+    engines: {node: '>=18'}
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -2859,6 +2881,45 @@ snapshots:
     dependencies:
       echarts: 6.1.0
       jszip: 3.10.1
+
+  '@arcships/docx-core@0.7.1':
+    dependencies:
+      '@arcships/office-interaction': 0.7.1
+      '@chenglou/pretext': 0.0.8
+      '@xmldom/xmldom': 0.9.10
+      fast-png: 8.0.0
+      fflate: 0.8.3
+      utif: 3.1.0
+
+  '@arcships/office-interaction@0.7.1': {}
+
+  '@arcships/pptx-core@0.7.1':
+    dependencies:
+      '@arcships/office-interaction': 0.7.1
+      echarts: 6.1.0
+      fflate: 0.8.3
+      jszip: 3.10.1
+
+  '@arcships/vue-ui@0.7.1(vue@3.5.39(typescript@5.9.3))':
+    dependencies:
+      '@arcships/office-interaction': 0.7.1
+      signature_pad: 5.1.3
+      vue: 3.5.39(typescript@5.9.3)
+
+  '@arcships/xlsx-core@0.7.1':
+    dependencies:
+      '@arcships/office-interaction': 0.7.1
+      '@dukelib/sheets-wasm': 0.1.17
+      '@xmldom/xmldom': 0.9.10
+      d3-geo: 3.1.1
+      d3-hierarchy: 3.1.2
+      d3-scale: 4.0.2
+      d3-shape: 3.2.0
+      fflate: 0.8.3
+      regl: 2.1.1
+      topojson-client: 3.1.0
+      us-atlas: 3.0.1
+      world-atlas: 2.0.2
 
   '@babel/code-frame@7.29.7':
     dependencies:

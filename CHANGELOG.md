@@ -2,6 +2,28 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [0.8.0] - 2026-11-21
+
+Extend UI pixel-level alignment: 25 blocking parity surfaces, 432 approved baselines, and a final `--gate-mode all` CI gate.
+
+### Design system
+- 100% token match: 27/27 scalar tokens, 46/46 semantic colors, light/dark channel delta 0; added the missing `--office-code*` tokens and exact `white` card/popover surfaces.
+- Reka-based primitive layer: 200/200 pixel-exact cases; Input focus 2×2 residual fixed at the compositor root.
+- Shared Office chrome: toolbar/page/zoom/search/actions, 160px inline/overlay sidebar, status bar, and empty/error/loading states.
+
+### Viewers
+- PDF: pixel-matched toolbar (40/40) and sidebar (24/24); extra commands moved into the upstream actions menu.
+- DOCX: pixel-matched toolbar (32/32) and sidebar (24/24); find/comments/edits/theme/upload/download in the actions menu.
+- XLSX: pixel-matched toolbar (32/32), sheet tabs (24/24) and status bar (8/8); ribbon/formula bar documented as upstream-private.
+- PPTX: pixel-matched toolbar (40/40) and sorter (24/24); presenter documented as upstream-unreachable.
+- Document blocks: citations/layout/e-signature/splits 232/232 pixel-exact; FileSystem/SchemaBuilder deferred with evidence.
+
+### Quality gates
+- `ui-parity` CI: 25 blocking surfaces, 432 approved baselines, core PR subset and nightly full matrix in `--gate-mode all`.
+- Stylelint token guards, axe WCAG A/AA + keyboard smoke, versioned baseline approvals.
+- Product visual matrix: 240 scenarios + 17 evidence scenes, 0 structural failures and 0 pixel diffs.
+- i18n hard-coded-copy cleanup, demo typecheck and attribution verifier fixes.
+
 ## [0.7.1] - 2026-11-19
 
 Batch B: 66 upstream/test-gap issues completed and independently audited.
