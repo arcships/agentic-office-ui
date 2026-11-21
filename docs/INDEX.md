@@ -33,6 +33,8 @@
 | [design/chart-internals-reference.md](design/chart-internals-reference.md) | OOXML/Excel 图表内部几何、LibreOffice/ONLYOFFICE/ECharts 对照、chart geometry provider 合同与 exact/approximate/provider 边界（#184） |
 | [testing/ui-parity-ci.md](testing/ui-parity-ci.md) | `ui-parity` / 样式 guard / axe 门禁：job、阈值、基线审批与最终开关（#165） |
 | [testing/ui-parity-routes.md](testing/ui-parity-routes.md) | L2 产品路由 parity：`/pdf-viewer` blocking（#199）、region/landmark 定义、R2 reference 构建、差异分类与 gate 合同 |
+| [testing/visual-audit.md](testing/visual-audit.md) | L3 视觉差异审计：vision 盲评、tile/coverage、DOM/组件确认、证据上传与修复后视觉验收（#212） |
+| [testing/visual-audit-calibration.md](testing/visual-audit-calibration.md) | L3 校准：PDF 旧 pair 的 text-only vs vision 结果、幻觉/漏报、locale 混淆与生产审计前置条件（#212） |
 
 
 
