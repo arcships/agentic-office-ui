@@ -406,7 +406,7 @@ test("XlsxRibbon exposes authoring entry points and toggles freeze panes", async
     revision: 0,
     selection: { start: { row: 2, col: 1 }, end: { row: 3, col: 2 } },
     selectedRangeAddress: "B3:C4",
-    tabs: [],
+    tabs: [{ name: "Sheet1" }],
     toggleFreezePanesAtActiveCell: () => calls.push("freeze"),
     zoomScale: 100,
   };

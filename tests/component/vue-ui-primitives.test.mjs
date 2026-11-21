@@ -250,7 +250,7 @@ test("Button applies variants, sizes, disabled and loading", async (t) => {
       h(OfficeButton, { loading: true, onClick: () => clicks.push("loading") }, () =>
         "Saving",
       ),
-      h(OfficeButton, { asChild: true }, () =>
+      h(OfficeButton, { asChild: true, onClick: () => clicks.push("link") }, () =>
         h("a", { href: "#target", "data-testid": "button-link" }, "Link"),
       ),
     ]),
@@ -271,7 +271,9 @@ test("Button applies variants, sizes, disabled and loading", async (t) => {
 
   assert.equal(loading.getAttribute("aria-busy"), "true");
   assert.equal(loading.getAttribute("data-loading"), "true");
-  assert.equal(loading.disabled, true);
+  assert.equal(loading.getAttribute("aria-disabled"), "true");
+  assert.equal(loading.disabled, false, "loading keeps the button focusable");
+  assert.equal(loading.getAttribute("aria-label"), "Saving");
   assert.ok(loading.querySelector('[data-slot="spinner"]'));
   assert.match(loading.textContent, /Saving/);
 
@@ -279,6 +281,78 @@ test("Button applies variants, sizes, disabled and loading", async (t) => {
   assert.equal(link.tagName, "A");
   assert.equal(link.getAttribute("href"), "#target");
   assert.match(link.className, /office-button--default/);
+  link.click();
+  assert.deepEqual(clicks, ["click", "link"], "asChild still forwards click");
+});
+
+test("loading Button keeps its name, focus and activation guard", async (t) => {
+  const clicks = [];
+  const loading = ref(true);
+  const { cleanup } = mountRoot(() =>
+    h("div", [
+      h(
+        OfficeButton,
+        { loading: loading.value, onClick: () => clicks.push("fallback") },
+        () => "Saving",
+      ),
+      h(
+        OfficeButton,
+        {
+          loading: true,
+          loadingLabel: "Saving document",
+          onClick: () => clicks.push("explicit"),
+        },
+        () => "Save",
+      ),
+      h(
+        OfficeButton,
+        { loading: true, onClick: () => clicks.push("icon-only") },
+        () => h("span", { "aria-hidden": "true" }),
+      ),
+      h(
+        OfficeButton,
+        { asChild: true, loading: true, onClick: () => clicks.push("as-child") },
+        () => h("a", { href: "#target", "data-testid": "loading-link" }, "Open"),
+      ),
+    ]),
+  );
+  t.after(cleanup);
+  await flush();
+
+  const [fallback, explicit, iconOnly] = [...document.querySelectorAll("button")];
+  assert.equal(fallback.getAttribute("aria-label"), "Saving");
+  assert.equal(explicit.getAttribute("aria-label"), "Saving document");
+  assert.equal(iconOnly.getAttribute("aria-label"), "Loading");
+  assert.equal(
+    document.querySelector('[data-testid="loading-link"]').getAttribute("aria-label"),
+    "Open",
+  );
+
+  fallback.focus();
+  assert.equal(document.activeElement, fallback, "loading button stays focusable");
+  fallback.click();
+  explicit.click();
+  iconOnly.click();
+  document.querySelector('[data-testid="loading-link"]').click();
+  assert.deepEqual(clicks, [], "loading suppresses activation");
+
+  loading.value = false;
+  await flush();
+  fallback.click();
+  assert.deepEqual(clicks, ["fallback"], "activation resumes when loading clears");
+});
+
+test("loading Button falls back to the localized loading label", async (t) => {
+  const { cleanup } = mountRoot(
+    () =>
+      h(OfficeButton, { loading: true }, () => h("span", { "aria-hidden": "true" })),
+    { locale: "zh-CN" },
+  );
+  t.after(cleanup);
+  await flush();
+
+  const button = bySlot("button");
+  assert.equal(button.getAttribute("aria-label"), "加载中");
 });
 
 test("IconButton keeps an accessible label and pressed state", async (t) => {
@@ -298,6 +372,26 @@ test("IconButton keeps an accessible label and pressed state", async (t) => {
   assert.equal(button.getAttribute("aria-pressed"), "true");
   assert.equal(button.getAttribute("data-active"), "true");
   assert.ok(button.querySelector("svg"));
+});
+
+test("IconButton keeps its label while loading", async (t) => {
+  const { cleanup } = mountRoot(() =>
+    h(OfficeIconButton, {
+      label: "More actions",
+      loading: true,
+      icon: "more-horizontal",
+    }),
+  );
+  t.after(cleanup);
+  await flush();
+
+  const button = bySlot("icon-button");
+  assert.equal(button.getAttribute("aria-label"), "More actions");
+  assert.equal(button.getAttribute("aria-busy"), "true");
+  assert.equal(button.getAttribute("aria-disabled"), "true");
+  assert.equal(button.disabled, false);
+  button.focus();
+  assert.equal(document.activeElement, button);
 });
 
 // ── Input / Textarea ──────────────────────────────────────────────────────

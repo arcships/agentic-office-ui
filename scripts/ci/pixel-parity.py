@@ -32,6 +32,13 @@ Modes:
 
 Baselines are named `<surface>/<state>/<theme>-<viewport>.png` and only the
 `manifest.baselines` viewport/theme combinations are compared.
+
+`manifest.expectedDiffs` declares bounded, owned divergences from the pinned
+upstream reference. A matching case whose pixel diff only exceeds the normal
+anti-aliasing thresholds (geometry still exact) is reported as `waived` when
+its `maxDiffPixelRatio` cap holds; the report keeps the screenshots and lists
+the actual ratio. Exceeding the cap, geometry changes, size mismatches, page
+errors and baseline failures still fail the gate.
 """
 
 from __future__ import annotations
@@ -704,6 +711,68 @@ def numeric_delta(left, right) -> float | None:
 
 
 # --------------------------------------------------------------------------
+# Expected diffs (approved upstream/subject divergences)
+# --------------------------------------------------------------------------
+
+
+def match_expected_diff(
+    expected_diffs: list[dict],
+    surface_id: str,
+    state_id: str,
+    theme: str,
+    viewport_id: str,
+) -> dict | None:
+    """Return the first declared waiver covering this exact case."""
+    for entry in expected_diffs:
+        if entry.get("surface") != surface_id or entry.get("state") != state_id:
+            continue
+        if theme not in (entry.get("themes") or []):
+            continue
+        if viewport_id not in (entry.get("viewports") or []):
+            continue
+        return entry
+    return None
+
+
+def waiver_covers(entry: dict, diff: dict, geometry: dict, pixel_status: str) -> bool:
+    """A waiver only covers a pixel diff that stays under its ratio cap.
+
+    Geometry and capture-size failures never qualify: a rebuilt button or a
+    layout shift is not the approved destructive-fill delta.
+    """
+    if pixel_status != "fail" or geometry.get("status") != "pass":
+        return False
+    if diff.get("sizeMismatch"):
+        return False
+    limit = entry.get("maxDiffPixelRatio")
+    ratio = diff.get("diffRatio")
+    if not isinstance(limit, (int, float)) or not isinstance(ratio, (int, float)):
+        return False
+    return ratio <= float(limit)
+
+
+def waiver_record(entry: dict, diff: dict) -> dict:
+    return {
+        "id": entry["id"],
+        "issue": entry["issue"],
+        "reason": entry["reason"],
+        "evidence": entry.get("evidence"),
+        "maxDiffPixelRatio": entry["maxDiffPixelRatio"],
+        "diffRatio": diff.get("diffRatio"),
+        "diffPixels": diff.get("diffPixels"),
+    }
+
+
+def waiver_exceeded_record(entry: dict, diff: dict) -> dict:
+    return {
+        "id": entry["id"],
+        "issue": entry["issue"],
+        "diffRatio": diff.get("diffRatio"),
+        "maxDiffPixelRatio": entry["maxDiffPixelRatio"],
+    }
+
+
+# --------------------------------------------------------------------------
 # Report rendering
 # --------------------------------------------------------------------------
 
@@ -756,6 +825,18 @@ def write_html_report(report: dict, destination: Path) -> None:
                     f"<figcaption>{caption}</figcaption></figure>"
                 )
         failures = []
+        waiver = case.get("waiver")
+        if waiver:
+            failures.append(
+                f"waived {waiver['issue']} ({waiver['id']}): "
+                f"diff ratio {waiver['diffRatio']:.6f} <= {waiver['maxDiffPixelRatio']}"
+            )
+        exceeded = case.get("waiverExceeded")
+        if exceeded:
+            failures.append(
+                f"waiver {exceeded['id']} ({exceeded['issue']}) exceeded: "
+                f"diff ratio {exceeded['diffRatio']} > {exceeded['maxDiffPixelRatio']}"
+            )
         if case.get("diff", {}).get("reasons"):
             failures.extend(case["diff"]["reasons"])
         for delta in case.get("geometry", {}).get("deltas", []):
@@ -821,6 +902,25 @@ def write_html_report(report: dict, destination: Path) -> None:
         )
 
     summary = report["summary"]
+    waiver_rows = []
+    for entry in (report.get("waivers") or {}).get("applied") or []:
+        waiver_rows.append(
+            f"<tr><td>{html.escape(entry['surface'])}/{html.escape(entry['state'])}/"
+            f"{html.escape(entry['viewport'])}/{html.escape(entry['theme'])}</td>"
+            f"<td><code>{html.escape(entry['id'])}</code></td>"
+            f"<td>{html.escape(entry['issue'])}</td>"
+            f"<td>{entry['diffRatio']:.6f}</td>"
+            f"<td>{entry['maxDiffPixelRatio']}</td>"
+            f"<td>{html.escape(str(entry.get('evidence') or '—'))}</td></tr>"
+        )
+    for entry in (report.get("waivers") or {}).get("unused") or []:
+        waiver_rows.append(
+            f"<tr><td>{html.escape(entry['surface'])}/{html.escape(entry['state'])}</td>"
+            f"<td><code>{html.escape(entry['id'])}</code></td>"
+            f"<td>{html.escape(entry['issue'])}</td>"
+            f"<td>unused</td><td>{entry['maxDiffPixelRatio']}</td>"
+            f"<td>{html.escape(str(entry.get('evidence') or '—'))}</td></tr>"
+        )
     unreachable_rows = []
     for entry in report.get("unreachable", []):
         unreachable_rows.append(
@@ -847,6 +947,7 @@ def write_html_report(report: dict, destination: Path) -> None:
   tr.status-pass td {{ background: #f6fff6; }}
   tr.status-pass-with-antialiasing td {{ background: #fffdf0; }}
   tr.status-baseline-only td {{ background: #f4f6ff; }}
+  tr.status-waived td {{ background: #fff8e6; }}
   code {{ background: #f3f3f3; padding: 1px 4px; }}
 </style>
 </head>
@@ -860,6 +961,7 @@ def write_html_report(report: dict, destination: Path) -> None:
 </p>
 <p>
   <strong>{summary["passed"]}</strong> pass ·
+  <strong>{summary["waived"]}</strong> waived ·
   <strong>{summary["failed"]}</strong> fail ·
   {summary["baselineOnly"]} reference-only ·
   {summary["total"]} cases
@@ -880,6 +982,11 @@ def write_html_report(report: dict, destination: Path) -> None:
 <table>
   <thead><tr><th>Color token</th><th>Extend light</th><th>Office light</th><th>Status</th></tr></thead>
   <tbody>{''.join(color_rows) or '<tr><td colspan="4">no color gaps or mismatches</td></tr>'}</tbody>
+</table>
+<h2>Expected diffs (waived)</h2>
+<table>
+  <thead><tr><th>Case</th><th>Waiver</th><th>Issue</th><th>Diff ratio</th><th>Limit</th><th>Evidence</th></tr></thead>
+  <tbody>{''.join(waiver_rows) or '<tr><td colspan="6">none</td></tr>'}</tbody>
 </table>
 <h2>Unreachable surfaces</h2>
 <table>
@@ -905,15 +1012,16 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
         f"- reference: `{report['reference']['repository']}@{report['reference']['commit']}`",
         f"- generated: `{report['generatedAt']}`",
         f"- chromium: `{report['environment']['browserVersion']}` at DPR {report['environment']['deviceScaleFactor']}",
-        f"- cases: {summary['total']} (pass {summary['passed']}, pass-with-AA {summary['passedWithAntialiasing']}, fail {summary['failed']}, reference-only {summary['baselineOnly']})",
+        f"- cases: {summary['total']} (pass {summary['passed']}, pass-with-AA {summary['passedWithAntialiasing']}, waived {summary['waived']}, fail {summary['failed']}, reference-only {summary['baselineOnly']})",
         f"- gate: `{summary['gate']}` (mode `{summary.get('gateMode')}`, baseline `{summary.get('baselineMode')}`)",
         f"- blocking failures: {summary.get('blockingFailures', 0)}; pending (reported only): {summary.get('pendingFailures', 0)}",
+        f"- expected diffs: {summary.get('waiversApplied', 0)} waived case(s), {summary.get('waiversUnused', 0)} declared waiver(s) unused",
         f"- baseline: {summary.get('baselineWritten', 0)} written, {summary.get('baselineFailed', 0)} failed, {summary.get('baselineMissing', 0)} missing",
         "",
         "## Per surface",
         "",
-        "| Surface | Subject | Core | Gate | Pending | Pass | Fail | Reference-only |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Surface | Subject | Core | Gate | Pending | Pass | Waived | Fail | Reference-only |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for surface in report["surfaces"]:
         counts = surface["counts"]
@@ -921,8 +1029,31 @@ def write_summary_markdown(report: dict, destination: Path) -> None:
             f"| {surface['id']} | {surface['subjectComponent'] or '—'} "
             f"| {'yes' if surface.get('core') else 'no'} | {surface.get('gateStatus') or '—'} "
             f"| {surface.get('gatePendingIssue') or surface['pendingIssue'] or '—'} "
-            f"| {counts['passed'] + counts['passedWithAntialiasing']} | {counts['failed']} | {counts['baselineOnly']} |"
+            f"| {counts['passed'] + counts['passedWithAntialiasing']} | {counts.get('waived', 0)} "
+            f"| {counts['failed']} | {counts['baselineOnly']} |"
         )
+    lines.extend(["", "## Expected diffs (waived)", ""])
+    applied = (report.get("waivers") or {}).get("applied") or []
+    unused = (report.get("waivers") or {}).get("unused") or []
+    if applied:
+        lines.extend([
+            "| Case | Waiver | Issue | Diff ratio | Limit | Evidence |",
+            "|---|---|---|---|---|---|",
+        ])
+        for entry in applied:
+            lines.append(
+                f"| `{entry['surface']}/{entry['state']}/{entry['viewport']}/{entry['theme']}` "
+                f"| `{entry['id']}` | {entry['issue']} | {entry['diffRatio']:.6f} "
+                f"| {entry['maxDiffPixelRatio']} | {entry.get('evidence') or '—'} |"
+            )
+    else:
+        lines.append("None.")
+    if unused:
+        lines.extend(["", "Declared but unused in this run:", ""])
+        for entry in unused:
+            lines.append(
+                f"- `{entry['id']}` ({entry['surface']}/{entry['state']}, {entry['issue']}): no diff matched"
+            )
     lines.extend(["", "## Unreachable surfaces", ""])
     if report.get("unreachable"):
         lines.extend([
@@ -1149,6 +1280,7 @@ def main() -> int:
     thresholds = manifest["thresholds"]
     if "topDiffRegions" not in thresholds:
         thresholds["topDiffRegions"] = (manifest.get("gate") or {}).get("topDiffRegions", 5)
+    expected_diffs = manifest.get("expectedDiffs") or []
     reference_server = Server(Path(args.reference_dir).resolve())
     subject_server = Server(Path(args.subject_dir).resolve())
 
@@ -1202,6 +1334,7 @@ def main() -> int:
                                 baseline_dir=baseline_dir,
                                 baseline_mode=baseline_mode,
                                 baseline_combos=baseline_combos,
+                                expected_diffs=expected_diffs,
                             )
                         cases.extend(case_batch)
                 context.close()
@@ -1234,6 +1367,7 @@ def main() -> int:
         "passedWithAntialiasing": sum(
             1 for case in cases if case["status"] == "pass-with-antialiasing"
         ),
+        "waived": sum(1 for case in cases if case["status"] == "waived"),
         "failed": sum(1 for case in cases if case["status"] == "fail"),
         "baselineOnly": sum(1 for case in cases if case["status"] == "baseline-only"),
         "errors": sum(1 for case in cases if case["status"] == "error"),
@@ -1253,6 +1387,28 @@ def main() -> int:
         "durationMs": int((time.time() - started) * 1000),
     }
     summary["gate"] = "FAIL" if blocking else "PASS"
+
+    applied_waivers = [
+        {
+            **case["waiver"],
+            "surface": case["surface"],
+            "state": case["state"],
+            "theme": case["theme"],
+            "viewport": case["viewport"],
+        }
+        for case in cases
+        if case["status"] == "waived"
+    ]
+    selected_surfaces = {surface["id"] for surface in surfaces}
+    applied_waiver_ids = {entry["id"] for entry in applied_waivers}
+    unused_waivers = [
+        entry
+        for entry in expected_diffs
+        if entry.get("surface") in selected_surfaces
+        and entry.get("id") not in applied_waiver_ids
+    ]
+    summary["waiversApplied"] = len(applied_waivers)
+    summary["waiversUnused"] = len(unused_waivers)
 
     tokens = build_token_summary(token_report)
     surface_summaries = build_surface_summaries(surfaces, cases)
@@ -1282,6 +1438,11 @@ def main() -> int:
         "thresholds": thresholds,
         "viewports": viewports,
         "themes": themes,
+        "expectedDiffs": expected_diffs,
+        "waivers": {
+            "applied": applied_waivers,
+            "unused": unused_waivers,
+        },
         "surfaces": surface_summaries,
         "unreachable": unreachable,
         "summary": summary,
@@ -1298,13 +1459,24 @@ def main() -> int:
     log("")
     log(
         f"pixel parity: {summary['gate']} — {summary['passed']} pass, "
-        f"{summary['passedWithAntialiasing']} pass-with-AA, {summary['failed']} fail, "
-        f"{summary['baselineOnly']} reference-only ({summary['durationMs']} ms)"
+        f"{summary['passedWithAntialiasing']} pass-with-AA, {summary['waived']} waived, "
+        f"{summary['failed']} fail, {summary['baselineOnly']} reference-only "
+        f"({summary['durationMs']} ms)"
     )
     log(
         f"gate: {summary['gate']} mode={gate_mode} "
-        f"baseline={baseline_mode} blocking={len(blocking)} pending={len(pending)}"
+        f"baseline={baseline_mode} blocking={len(blocking)} pending={len(pending)} "
+        f"waived={summary['waived']} unused-waivers={summary['waiversUnused']}"
     )
+    for waiver in applied_waivers:
+        log(
+            f"  WAIVED {waiver['surface']}/{waiver['state']}/{waiver['viewport']}/{waiver['theme']}: "
+            f"{waiver['issue']} diff ratio {waiver['diffRatio']:.5f} <= "
+            f"{waiver['maxDiffPixelRatio']} ({waiver['id']})"
+        )
+    for waiver in unused_waivers:
+        log(f"  UNUSED WAIVER {waiver['id']}: no diff in the selected cases")
+
     if baseline_mode != "off":
         log(
             f"baseline: {summary['baselineWritten']} written, "
@@ -1427,6 +1599,7 @@ def build_surface_summaries(surfaces: list[dict], cases: list[dict]) -> list[dic
                         for case in surface_cases
                         if case["status"] == "pass-with-antialiasing"
                     ),
+                    "waived": sum(1 for case in surface_cases if case["status"] == "waived"),
                     "failed": sum(1 for case in surface_cases if case["status"] == "fail"),
                     "baselineOnly": sum(
                         1 for case in surface_cases if case["status"] == "baseline-only"
@@ -1455,6 +1628,7 @@ def run_surface(
     baseline_dir: Path | None = None,
     baseline_mode: str = "off",
     baseline_combos: set | None = None,
+    expected_diffs: list[dict] | None = None,
 ) -> list[dict]:
     cases: list[dict] = []
     subject_status = "available" if self_check else surface.get("subjectStatus", "available")
@@ -1463,6 +1637,7 @@ def run_surface(
     )
     reference_selector = surface.get("referenceTargetSelector")
     states = resolve_states(surface, fixtures)
+    waivers = expected_diffs or []
 
     for state in states:
         case_dir = (
@@ -1482,6 +1657,9 @@ def run_surface(
             "status": "fail",
             "errors": [],
         }
+        waiver = match_expected_diff(
+            waivers, surface["id"], state["id"], theme, viewport["id"]
+        )
         reference_page = context.new_page()
         subject_page = None
         try:
@@ -1584,7 +1762,13 @@ def run_surface(
             if geometry["status"] == "fail":
                 failures.append("geometry")
             if failures:
-                case["status"] = "fail"
+                if waiver and waiver_covers(waiver, diff, geometry, prev_diff):
+                    case["status"] = "waived"
+                    case["waiver"] = waiver_record(waiver, diff)
+                else:
+                    case["status"] = "fail"
+                    if waiver and prev_diff == "fail":
+                        case["waiverExceeded"] = waiver_exceeded_record(waiver, diff)
             elif prev_diff == "pass-with-antialiasing":
                 case["status"] = "pass-with-antialiasing"
             else:

@@ -274,7 +274,7 @@
       "files": 4
     }
   },
-  "treeSha256": "64ac2a03e7c0bc1cb2f9bb1bba3b8e2ff66b2b28d624436642450fea069c6ee9",
+  "treeSha256": "4345df0638cab1c67c6f00df1117112d38832a558bd76fa2707f17f7454592fc",
   "files": [
     {
       "path": "bounding-box-citations/default/dark-1440x900.png",
@@ -724,8 +724,8 @@
       "viewport": "1440x900",
       "width": 184,
       "height": 112,
-      "bytes": 3644,
-      "sha256": "e9805489f8e7ce31d8c987279aefb8a9b1dd29692bce700d6ae13e7bc82fe7fe"
+      "bytes": 3406,
+      "sha256": "c25859d1f9deba73cfd5a8dab66df5d3d9f4c280e6c6f85cd7e244e8306a3fdd"
     },
     {
       "path": "button/destructive/dark-390x844.png",
@@ -735,8 +735,8 @@
       "viewport": "390x844",
       "width": 196,
       "height": 120,
-      "bytes": 3803,
-      "sha256": "fd4b44c82e0ee7d1edef64b7a9295e76038f7622ed2ab95cdec61a82641005e4"
+      "bytes": 3521,
+      "sha256": "6043af1907a8abf107618814332e5ba87541370075987ad1e92df4d21ea25b0d"
     },
     {
       "path": "button/destructive/light-1440x900.png",
@@ -746,8 +746,8 @@
       "viewport": "1440x900",
       "width": 184,
       "height": 112,
-      "bytes": 3480,
-      "sha256": "030ee23f6302811883ce0a5b9779e210373515d264bdda0dca16874aad4c82ef"
+      "bytes": 3653,
+      "sha256": "833c42c5392e9ef364615db4d898cad5a4f87a236d41be76e722c0afa8221233"
     },
     {
       "path": "button/destructive/light-390x844.png",
@@ -757,8 +757,8 @@
       "viewport": "390x844",
       "width": 196,
       "height": 120,
-      "bytes": 3655,
-      "sha256": "58ea07b6a8d5c9b5d9109b37ca505e97afbdfce3389108eee409dd9733cf739c"
+      "bytes": 3805,
+      "sha256": "e4e54db228fbe7c104a5811f592cd95d8df968ff196cd40ca42085caf176c45e"
     },
     {
       "path": "button/disabled/dark-1440x900.png",
@@ -5101,6 +5101,18 @@
       "updated": 376,
       "removed": 0,
       "gitHead": "5ea746dad6c2d5d767a585a28b998743e2363080"
+    },
+    {
+      "date": "2026-11-21",
+      "reviewer": "dim-agent",
+      "issue": "#169",
+      "reason": "destructive filled button now uses the WCAG AA --office-destructive-contrast pair (red-600 + white, 4.83:1) instead of upstream red-500 (3.81:1); loading state keeps the same spinner/label pixels while adopting aria-disabled semantics (#169)",
+      "treeSha256": "4345df0638cab1c67c6f00df1117112d38832a558bd76fa2707f17f7454592fc",
+      "files": 432,
+      "added": 0,
+      "updated": 4,
+      "removed": 0,
+      "gitHead": "f008771f473e387efde5c1adc6715a258c9dc110"
     }
   ]
 }

@@ -2,6 +2,14 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [Unreleased]
+
+### Accessibility (#169)
+- `OfficeButton`/`OfficeIconButton`: loading keeps a discernible name (`loadingLabel`, then visible text, then the localized loading label) via `aria-label` and stays focusable with `aria-disabled`; activation is suppressed internally. Added `loadingLabel` as an optional prop.
+- Destructive fill: new `--office-destructive-contrast` / `--office-destructive-contrast-foreground` tokens use red-600 + white (4.83:1, WCAG AA) for filled destructive Button/Badge; `--office-destructive` keeps the upstream red-500 for borders and text. The upstream reference stays on red-500; the bounded `expectedDiffs` waiver (`waived` in the parity report) records the pixel delta and the approved button baseline.
+- PDF thumbnail listbox: `:focus-visible` ring from `--office-ring`; Tab focus is visible without changing default pixels.
+- `tests/a11y/allowlist.json` is empty and `pnpm test:a11y` runs with 0 violations / 0 keyboard failures.
+
 ## [0.8.0] - 2026-11-21
 
 Extend UI pixel-level alignment: 25 blocking parity surfaces, 432 approved baselines, and a final `--gate-mode all` CI gate.

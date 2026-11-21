@@ -11,7 +11,7 @@
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844` × light/dark，参考页 vs 对照页 + 提交基线比对 | 是（`--gate-mode all`） |
 | `ui-parity-nightly` | nightly / dispatch | 全矩阵（25 surface × 4 viewport × 2 theme） | 是（`--gate-mode all`） |
-| `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，allowlist 之外的发现即失败 |
+| `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，`tests/a11y/allowlist.json` 为空，任何发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
 所有 job 都会上传 artifact：
@@ -33,6 +33,39 @@
 | 尺寸不一致 | 直接 `fail` | 另外对左上公共区域做诊断 diff |
 
 阈值只允许收紧或通过 manifest 变更（同时更新本文档）；脚本里没有第二套硬编码。
+
+### 2.1 Expected diffs（有界豁免）
+
+产品有意偏离上游参考时，不允许改参考页“抹平”差异，也不允许把 state 从矩阵里删掉。在
+`tools/parity-fixtures/manifest.json` 的根级 `expectedDiffs` 声明一条有界豁免，`pixel-parity.py`
+会把命中的差异记为 `waived`，并在 `report.json` / `report.html` / `SUMMARY.md` 和控制台
+`WAIVED ...` 行显式列出，不会静默通过。
+
+```json
+{
+  "id": "button-destructive-wcag-aa-169",
+  "surface": "button",
+  "state": "destructive",
+  "themes": ["light", "dark"],
+  "viewports": ["1440x900", "1280x720", "768x1024", "390x844"],
+  "maxDiffPixelRatio": 0.52,
+  "issue": "#169",
+  "reason": "subject 使用 WCAG AA red-600 …",
+  "evidence": "tests/visual/extend/button/destructive/"
+}
+```
+
+规则：
+
+- 必须精确匹配 surface + state + theme + viewport；不支持 `*` 通配。
+- 只豁免**像素差异**且实际 ratio 必须低于 `maxDiffPixelRatio`；几何、尺寸不一致、页面报错、基线 diff 仍然阻断。
+- `maxDiffPixelRatio` 是硬上限；超过上限仍报 `fail`，并在 case 上写 `waiverExceeded`。
+- `issue`、`reason`、`evidence` 必填；manifest 单元测试会校验 surface/state/theme/viewport 存在、
+  比例不超过 0.52，并确认参考页没有被改成和产品一样。
+- 报告会列出实际 diff ratio；每次 `ui:parity` 都会重新计算，不是永久白名单。
+
+当前唯一条目是 #169 的 button destructive：subject 使用 `--office-destructive-contrast`
+（red-600/white = 4.83:1），上游参考仍是 red-500（3.81:1）。
 
 ## 3. 视觉基线审批（不允许随手 `--update`）
 
@@ -93,6 +126,8 @@ DOCX/PPTX/XLSX chrome），9 个 chrome/block surface 只在 nightly 全矩阵�
    `all`，workflow 两个 parity job 都直接传 `--gate-mode all`。PR 核心子集与 nightly 全矩阵
    都以严格模式阻断；`strict` dispatch 输入已删除。合并 #158b 后的全矩阵实测：
    **864 case / 845 `pass` + 19 个 file-upload AA / 0 `fail`**，基线 432 张、4 条审批。
+   #169 之后 button destructive 的 8 个 matrix case（4 viewport × 2 theme）改为 `waived`；
+   `pnpm ui:parity -- --only button` 实测 **104 pass + 8 waived / 0 fail**。
 2. **以后新增 surface 时**：
    - 参考/对照通过后，把 `gateStatus` 改成 `blocking`（删掉 `gatePendingIssue`）；
    - 需要进 PR 子集的再加 `core: true`；否则只在 nightly 全矩阵里阻断；
@@ -127,10 +162,12 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（`PYTHON=/tmp/bb-venv/bi
 |---|---|---|
 | `pptx-presenter` 无上游布局 | parity 报告（unreachable） | #161（组件测试覆盖） |
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
-| `button` loading 无可访问名（`visibility: hidden`） | `tests/a11y/allowlist.json` | #157 |
-| `button` destructive 对比度 3.8:1（继承上游 token） | `tests/a11y/allowlist.json` | #157 |
-| `pdf-sidebar` 缩略图列表无焦点环 | `tests/a11y/allowlist.json` | #162 |
+| `button` destructive 有意偏离上游 red-500 | manifest `expectedDiffs` + `tests/visual/extend/button/destructive/` 基线 | #169；参考页保持上游 red-500，gate 报告 `WAIVED`（bounded pixel-ratio waiver） |
 | 1,015 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
+
+`tests/a11y/allowlist.json` 在 #169 后为空：button loading 通过 `aria-label` + `aria-disabled`
+保留可访问名与焦点，destructive 实心按钮使用 4.83:1 的 token 对，PDF 缩略图列表补上
+`:focus-visible` token 焦点环；`pnpm test:a11y` 必须 0 violation / 0 keyboard failure。
 
 除这些已登记项外，任何新增视觉漂移、裸值或无无障碍回归都会在 PR 阶段失败。
 

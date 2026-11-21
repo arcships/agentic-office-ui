@@ -42,6 +42,19 @@
     "heatmapAmplification": 16,
     "topDiffRegions": 5
   },
+  "expectedDiffs": [
+    {
+      "id": "button-destructive-wcag-aa-169",
+      "surface": "button",
+      "state": "destructive",
+      "themes": ["light", "dark"],
+      "viewports": ["1440x900", "1280x720", "768x1024", "390x844"],
+      "maxDiffPixelRatio": 0.52,
+      "issue": "#169",
+      "reason": "The subject uses the WCAG AA --office-destructive-contrast fill (red-600, white text 4.83:1) while the pinned upstream reference stays on red-500 (3.81:1). Geometry, typography, size and every other state remain exact; only the fill colour differs.",
+      "evidence": "tests/visual/extend/button/destructive/"
+    }
+  ],
   "surfaces": [
     {
       "id": "button",
@@ -50,7 +63,7 @@
       "subjectComponent": "packages/vue-ui/src/components/ui/OfficeButton.vue",
       "subjectStatus": "available",
       "cellWidth": 240,
-      "notes": "Primitive layer #157. Reference and subject use the same copy, Geist font, variants, sizes and interaction states.",
+      "notes": "Primitive layer #157. Reference and subject use the same copy, Geist font, variants, sizes and interaction states. The destructive cell has a documented expected diff (#169): the subject uses the WCAG AA red-600 fill while the pinned upstream reference keeps red-500; expectedDiffs records the bounded fill-colour delta.",
       "states": [
         {
           "id": "default",

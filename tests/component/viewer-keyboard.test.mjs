@@ -424,4 +424,9 @@ test("viewer roots expose a visible keyboard focus ring", () => {
   assert.match(source("packages/vue-pdf/src/components/PdfSurface.vue"), /\.pdf-surface:focus-visible\s*\{[^}]*outline:/);
   assert.match(source("packages/vue-pptx/src/style.css"), /\.pptx-viewer:focus-visible\s*\{[^}]*outline:/);
   assert.match(source("packages/vue-xlsx/src/components/XlsxViewer.vue"), /\.xlsx-viewer:focus-visible\s*\{[^}]*outline:/);
+  assert.match(
+    source("packages/vue-pdf/src/components/PdfThumbnailStrip.vue"),
+    /\.pdf-thumbnails__viewport:focus-visible\s*\{[^}]*outline:[^;]*var\(--office-ring\)/,
+    "the thumbnail listbox paints a token focus ring",
+  );
 });

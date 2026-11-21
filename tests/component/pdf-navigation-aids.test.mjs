@@ -358,6 +358,31 @@ test("thumbnail strip follows the visible page and clicking a thumbnail scrolls 
   }
 });
 
+test("thumbnail list is a labelled keyboard focus target", async (t) => {
+  stubObjectUrls(t);
+  const mounted = await mountSurface({ showThumbnails: true });
+  try {
+    await waitFor(() => byTestId(mounted.root, "pdf-surface-thumbnail").length === 4, "thumbnails");
+    const strip = byTestId(mounted.root, "pdf-surface-thumbnails")[0];
+    const viewport = walk(strip).find((node) => node.props?.role === "listbox");
+    assert.ok(viewport, "thumbnail viewport exists");
+    assert.equal(viewport.props.tabindex, "0", "the listbox is a tab stop");
+    assert.match(
+      String(viewport.props["aria-label"]),
+      /thumbnail/i,
+      "the listbox is labelled",
+    );
+    assert.equal(
+      viewport.props["aria-activedescendant"],
+      "pdf-thumbnail-option-1",
+      "the active page is announced on the listbox",
+    );
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
 test("PdfSurface hides the outline panel when showOutline is false", async (t) => {
   stubObjectUrls(t);
   const mounted = await mountSurface({ showOutline: false });

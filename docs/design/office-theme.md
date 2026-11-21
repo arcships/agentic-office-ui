@@ -99,6 +99,8 @@ SSR：主题属性由 props 直接决定，`system` 的首屏由 CSS 媒体查�
 | `--office-accent-foreground` | `oklch(26.9% 0 0)` | `oklch(97% 0 0)` | `--accent-foreground` |
 | `--office-destructive` | red-500 | red-500 90% + white | `--destructive` |
 | `--office-destructive-foreground` | red-700 | red-400 | `--destructive-foreground` |
+| `--office-destructive-contrast` | red-600（#169） | red-600（#169） | 无；WCAG AA 派生 token |
+| `--office-destructive-contrast-foreground` | white | white | 无；WCAG AA 派生 token |
 | `--office-border` | black 8% alpha | white 6% alpha | `--border`（参考值 8% alpha） |
 | `--office-input` | black 10% alpha | white 8% alpha | `--input` |
 | `--office-ring` | neutral-400 | neutral-500 | `--ring` |
@@ -132,6 +134,14 @@ Extend 用 `var(--color-white)` 声明 card / popover；这两项必须写成 `w
 `oklch(1 0 0)`（Chromium 会序列化为 `color(srgb 0.999871 1.00005 1.00007)`，在描边、焦点环
 或阴影合成后偏 1/255；#157 的 input 焦点对照即由此产生）。`--office-background` 仍与上游一样
 使用 `oklch(1 0 0)`，保持与参考页同一表示。
+
+`--office-destructive-contrast` / `--office-destructive-contrast-foreground` 是 #169 新增的
+WCAG AA 派生对：红-600 + 白字在 light/dark 下均为 **4.83:1**，而上游 `--office-destructive`
+（红-500）的实心白字只有 3.81:1。实心 destructive Button/Badge 使用这对 token，
+`--office-destructive` 仍用于描边、文本和低强度强调。上游参考页保持 red-500；parity harness 在
+`tools/parity-fixtures/manifest.json` 的 `expectedDiffs` 中为 button destructive 声明了有界像素豁免
+（报告状态 `waived`，含 issue/reason/evidence 和实际 diff ratio），基线见
+`tests/visual/extend/button/destructive/`。
 
 ### 3.2 圆角、描边与阴影
 
