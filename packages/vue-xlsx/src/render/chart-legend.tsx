@@ -1,6 +1,7 @@
 /** @jsxImportSource vue */
 import type { XlsxChart, XlsxImageRect } from "@arcships/xlsx-core";
 import {
+  buildComboGroups,
   buildHierarchyData,
   buildPieEntries,
   buildRegionMapLegendItems,
@@ -18,6 +19,7 @@ import {
   normalizeCategoryLabel,
   normalizeLegendPosition,
   resolveChartAxisTextColor,
+  resolveComboSecondaryValueAxis,
   safeNumber,
   wrapSvgText,
 } from "./chart-renderer";
@@ -144,6 +146,42 @@ function estimateValueAxisLabelWidth(chart: XlsxChart, width: number) {
   return Math.min(maxLabelWidth + 12, Math.max(40, width * 0.36));
 }
 
+function estimateSecondaryAxisLabelWidth(chart: XlsxChart, width: number) {
+  const axis = resolveComboSecondaryValueAxis(chart);
+  if (!axis || axis.labelPosition === "none" || axis.delete === true) {
+    return 0;
+  }
+  const formatter = createChartAxisTickFormatter(axis, chart);
+  const candidates: number[] = [0];
+  if (typeof axis.min === "number" && Number.isFinite(axis.min)) {
+    candidates.push(axis.min);
+  }
+  if (typeof axis.max === "number" && Number.isFinite(axis.max)) {
+    candidates.push(axis.max);
+  }
+  const group = buildComboGroups(chart).find((entry) => entry.valueAxis === axis);
+  for (const series of group?.series ?? chart.series) {
+    for (const rawValue of series.values) {
+      const value = safeNumber(rawValue);
+      if (value != null) {
+        candidates.push(value);
+      }
+      if (candidates.length >= 200) {
+        break;
+      }
+    }
+    if (candidates.length >= 200) {
+      break;
+    }
+  }
+  const maxLabelWidth = candidates.reduce(
+    (widest, value) => Math.max(widest, estimateSvgTextWidth(formatter(value), LEGEND_FONT_SIZE)),
+    0
+  );
+  const titleWidth = typeof axis.title === "string" && axis.title.trim().length > 0 ? 14 : 0;
+  return Math.min(maxLabelWidth + 18 + titleWidth, Math.max(40, width * 0.3));
+}
+
 function estimateCategoryAxisLabelWidth(chart: XlsxChart, width: number) {
   const categoryAxis = chart.categoryAxis;
   if (!categoryAxis || categoryAxis.labelPosition === "none" || categoryAxis.delete === true) {
@@ -267,6 +305,7 @@ export function buildLayout(chart: XlsxChart, rect: XlsxImageRect, legendItems: 
   const cartesian = usesCartesianAxes(chart);
   const isHorizontalBar = isHorizontalBarChart(chart);
   const valueLabelWidth = cartesian ? estimateValueAxisLabelWidth(chart, width) : 0;
+  const secondaryAxisWidth = cartesian ? estimateSecondaryAxisLabelWidth(chart, width) : 0;
   const categoryLabelWidth = cartesian && isHorizontalBar ? estimateCategoryAxisLabelWidth(chart, width) : 0;
   const baseLeft = Math.max(42, isHorizontalBar ? categoryLabelWidth + 12 : valueLabelWidth + 12);
   const baseBottom = cartesian && !isHorizontalBar
@@ -274,7 +313,7 @@ export function buildLayout(chart: XlsxChart, rect: XlsxImageRect, legendItems: 
     : 28;
 
   const plotLeft = baseLeft + (finalLegendPosition === "left" ? legendWidth : 0);
-  const plotRight = 16 + (finalLegendPosition === "right" ? legendWidth : 0);
+  const plotRight = 16 + secondaryAxisWidth + (finalLegendPosition === "right" ? legendWidth : 0);
   const plotTop = titleHeight + (finalLegendPosition === "top" ? legendHeight + 4 : 0);
   const plotBottom = baseBottom + (finalLegendPosition === "bottom" ? legendHeight + 4 : 0);
 
@@ -289,6 +328,7 @@ export function buildLayout(chart: XlsxChart, rect: XlsxImageRect, legendItems: 
       top: plotTop,
       width: Math.max(40, width - plotLeft - plotRight)
     },
+    secondaryAxisWidth,
     titleHeight,
     width
   };
@@ -312,7 +352,7 @@ export function renderLegend(chart: XlsxChart, layout: ChartLayout, palette: Cha
 
   if (legendPos === "left" || legendPos === "right") {
     const x = legendPos === "right"
-      ? layout.plot.left + layout.plot.width + 8
+      ? layout.plot.left + layout.plot.width + 8 + (layout.secondaryAxisWidth ?? 0)
       : 8;
     let cursorY = layout.plot.top + 6;
     return (

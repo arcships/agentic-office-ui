@@ -1473,6 +1473,10 @@ def evidence_assertions(
             any(text.strip() in {"Q1", "Q2", "Q3", "Q4"} for text in texts),
             "combo category ticks render",
         )
+        result.check(
+            len(result.metrics["secondaryAxisLabels"]) >= 1,
+            "the two-axis combo renders its secondary axis title",
+        )
 
     if "xlsx-conditional-formats" in spec.checks:
         grid = snapshot["xlsx"] or {}

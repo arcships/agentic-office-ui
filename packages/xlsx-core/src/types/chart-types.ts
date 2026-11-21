@@ -85,6 +85,8 @@ export interface XlsxChartAxis {
   shapeProperties?: Record<string, unknown>;
   tickLabelSkip?: number;
   tickMarkSkip?: number;
+  /** Axis title text (`c:catAx/c:title`, `c:valAx/c:title`, …). */
+  title?: string;
 }
 
 // ── Point style ──────────────────────────────────────────────────────────
