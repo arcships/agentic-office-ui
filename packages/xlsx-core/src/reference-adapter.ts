@@ -58,7 +58,13 @@ export interface XlsxReferenceDrawing {
   sheet: XlsxReferenceSheet;
   name?: string;
   alt?: string;
+  /** Drawing z-order from the worksheet drawing part, when the host can read it. */
+  zIndex?: number;
 }
+
+export type XlsxTableSubObjectTarget =
+  | { kind: "table-row"; rowIndex: number }
+  | { kind: "table-cell"; rowIndex: number; cellIndex: number };
 
 /** One cell comment. */
 export interface XlsxReferenceComment {
@@ -113,6 +119,13 @@ const XLSX_TABLE_RELIABILITY: OfficeObjectReliability = {
   boundary: { level: "exact", score: 1, reasonCodes: ["xlsx.table-a1"] },
   hierarchy: { level: "exact", score: 1, reasonCodes: ["xlsx.table-sheet"] },
   relocation: { level: "likely", reasonCodes: ["xlsx.table-name"] },
+};
+
+const XLSX_TABLE_SUB_OBJECT_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["xlsx.native-table-sub-object"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["xlsx.table-a1-index"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["xlsx.table-row-hierarchy"] },
+  relocation: { level: "likely", reasonCodes: ["xlsx.table-name-and-index"] },
 };
 
 const XLSX_DRAWING_RELIABILITY: OfficeObjectReliability = {
@@ -505,6 +518,159 @@ export function createXlsxTableReferenceDraft(
   };
 }
 
+interface CurrentXlsxTable {
+  table: XlsxReferenceTable;
+  sheet: XlsxReferenceSheet;
+  range: XlsxCellRange;
+}
+
+function currentTableRange(
+  context: XlsxReferenceContext,
+  requested: XlsxReferenceTable,
+): CurrentXlsxTable {
+  assertContext(context);
+  const sheet = requireContextSheet(context, requested.sheet);
+  const candidates = (context.tables ?? []).filter((candidate) =>
+    candidate.name === requested.name && sameSheet(candidate.sheet, sheet));
+  if (candidates.length === 0) throw new RangeError("XLSX table is not present in the reference context");
+  if (candidates.length > 1) throw new RangeError("XLSX table name is ambiguous in the reference context");
+  const table = candidates[0]!;
+  const range = rangeFromA1(table.a1);
+  if (!range) throw new RangeError("XLSX table requires a valid A1 body range");
+  return { table, sheet, range };
+}
+
+function assertTableTarget(
+  range: XlsxCellRange,
+  target: XlsxTableSubObjectTarget,
+): void {
+  if (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0) {
+    throw new TypeError("XLSX table rowIndex must be a non-negative safe integer");
+  }
+  const rowCount = range.end.row - range.start.row + 1;
+  if (target.rowIndex >= rowCount) {
+    throw new RangeError("XLSX table row is outside the current table range");
+  }
+  if (target.kind === "table-cell") {
+    if (!Number.isSafeInteger(target.cellIndex) || target.cellIndex < 0) {
+      throw new TypeError("XLSX table cellIndex must be a non-negative safe integer");
+    }
+    const columnCount = range.end.col - range.start.col + 1;
+    if (target.cellIndex >= columnCount) {
+      throw new RangeError("XLSX table cell is outside the current table range");
+    }
+  }
+}
+
+function tableColumnCell(range: XlsxCellRange, rowIndex: number, cellIndex: number): XlsxCellAddress {
+  return { row: range.start.row + rowIndex, col: range.start.col + cellIndex };
+}
+
+function tableSubObjectA1(table: CurrentXlsxTable, target: XlsxTableSubObjectTarget): string {
+  const cell = tableColumnCell(table.range, target.rowIndex, target.kind === "table-cell" ? target.cellIndex : 0);
+  return `${columnLabel(cell.col)}${cell.row + 1}`;
+}
+
+function tableRowText(context: XlsxReferenceContext, table: CurrentXlsxTable, rowIndex: number): string {
+  const values: string[] = [];
+  let hasSnapshot = false;
+  for (let cellIndex = 0; cellIndex < table.range.end.col - table.range.start.col + 1; cellIndex += 1) {
+    const snapshot = context.getCellSnapshot?.(table.sheet, tableColumnCell(table.range, rowIndex, cellIndex));
+    if (snapshot?.displayValue !== undefined || snapshot?.formula !== undefined) {
+      hasSnapshot = true;
+      values.push(snapshot.displayValue ?? snapshot.formula ?? "");
+    } else {
+      values.push("");
+    }
+  }
+  return hasSnapshot ? values.join("\t") : "";
+}
+
+function tableSubObjectFingerprint(
+  table: CurrentXlsxTable,
+  target: XlsxTableSubObjectTarget,
+  text: string | undefined,
+): OfficeObjectFingerprint {
+  const a1 = tableSubObjectA1(table, target);
+  return {
+    ...(text ? { contentHash: textContentHash(text) } : {}),
+    ancestorKeys: [
+      `xlsx.sheet:${sheetKey(table.sheet)}`,
+      `xlsx.table:${table.table.name}`,
+      `xlsx.a1:${a1}`,
+      `xlsx.table-${target.kind === "table-row" ? "row" : "cell"}:${target.rowIndex}${target.kind === "table-cell" ? `:${target.cellIndex}` : ""}`,
+    ],
+  };
+}
+
+/** Create a stable reference to one row of a workbook table part. */
+export function createXlsxTableRowReferenceDraft(
+  context: XlsxReferenceContext,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+): XlsxOfficeReferenceDraft {
+  const target: XlsxTableSubObjectTarget = { kind: "table-row", rowIndex };
+  const current = currentTableRange(context, table);
+  assertTableTarget(current.range, target);
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "table-row",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "xlsx",
+      value: {
+        kind: "table-row",
+        sheet: sheetLocator(current.sheet),
+        tableName: current.table.name,
+        rowIndex,
+        ...(current.table.id ? { id: current.table.id } : {}),
+      },
+    },
+    fingerprint: tableSubObjectFingerprint(current, target, tableRowText(context, current, rowIndex)),
+    reliability: copyReliability(XLSX_TABLE_SUB_OBJECT_RELIABILITY),
+  };
+}
+
+/** Create a stable reference to one cell of a workbook table part. */
+export function createXlsxTableCellReferenceDraft(
+  context: XlsxReferenceContext,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+  cellIndex: number,
+): XlsxOfficeReferenceDraft {
+  const target: XlsxTableSubObjectTarget = { kind: "table-cell", rowIndex, cellIndex };
+  const current = currentTableRange(context, table);
+  assertTableTarget(current.range, target);
+  const snapshot = context.getCellSnapshot?.(current.sheet, tableColumnCell(current.range, rowIndex, cellIndex));
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "table-cell",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "xlsx",
+      value: {
+        kind: "table-cell",
+        sheet: sheetLocator(current.sheet),
+        tableName: current.table.name,
+        rowIndex,
+        cellIndex,
+        a1: tableSubObjectA1(current, target),
+        ...(current.table.id ? { id: current.table.id } : {}),
+      },
+    },
+    fingerprint: tableSubObjectFingerprint(
+      current,
+      target,
+      snapshot?.displayValue ?? snapshot?.formula,
+    ),
+    reliability: copyReliability(XLSX_TABLE_SUB_OBJECT_RELIABILITY),
+  };
+}
+
 function drawingFingerprint(drawing: XlsxReferenceDrawing): OfficeObjectFingerprint {
   const name = drawing.name?.trim() || drawing.alt?.trim();
   return {
@@ -757,6 +923,42 @@ export function describeXlsxTable(
   table: XlsxReferenceTable,
 ): OfficeObjectDescriptor {
   return tableDescriptor(referenceFromDraft(createXlsxTableReferenceDraft(context, table)), table.sheet, table);
+}
+
+/** Describe one table row without committing a reference. */
+export function describeXlsxTableRow(
+  context: XlsxReferenceContext,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+): OfficeObjectDescriptor {
+  const current = currentTableRange(context, table);
+  assertTableTarget(current.range, { kind: "table-row", rowIndex });
+  return tableRowDescriptor(
+    referenceFromDraft(createXlsxTableRowReferenceDraft(context, table, rowIndex)),
+    current.sheet,
+    current.table,
+    rowIndex,
+    tableRowText(context, current, rowIndex),
+  );
+}
+
+/** Describe one table cell without committing a reference. */
+export function describeXlsxTableCell(
+  context: XlsxReferenceContext,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+  cellIndex: number,
+): OfficeObjectDescriptor {
+  const current = currentTableRange(context, table);
+  assertTableTarget(current.range, { kind: "table-cell", rowIndex, cellIndex });
+  return tableCellDescriptor(
+    referenceFromDraft(createXlsxTableCellReferenceDraft(context, table, rowIndex, cellIndex)),
+    current.sheet,
+    current.table,
+    rowIndex,
+    cellIndex,
+    context.getCellSnapshot?.(current.sheet, tableColumnCell(current.range, rowIndex, cellIndex)),
+  );
 }
 
 /** Describe a drawing object without committing a reference. */
@@ -1012,8 +1214,13 @@ function chartDescriptor(
       chartId: chart.id,
       chartType: chart.chartType,
       seriesCount: chart.series.length,
+      zIndex: chart.zIndex,
     },
   };
+}
+
+function xlsxTableObjectId(sheet: XlsxReferenceSheet, table: XlsxReferenceTable): string {
+  return `xlsx:table:${sheetKey(sheet)}:${table.name}`;
 }
 
 function tableDescriptor(
@@ -1022,7 +1229,7 @@ function tableDescriptor(
   table: XlsxReferenceTable,
 ): OfficeObjectDescriptor {
   return {
-    objectId: `xlsx:table:${sheetKey(sheet)}:${table.name}`,
+    objectId: xlsxTableObjectId(sheet, table),
     draft: draftFromReference(reference),
     label: table.displayName?.trim() || table.name,
     path: [
@@ -1035,6 +1242,89 @@ function tableDescriptor(
       sheetId: sheetKey(sheet),
       tableName: table.name,
       a1: table.a1,
+      ...(table.id ? { tableId: table.id } : {}),
+    },
+  };
+}
+
+function tableRowObjectId(sheet: XlsxReferenceSheet, table: XlsxReferenceTable, rowIndex: number): string {
+  return `${xlsxTableObjectId(sheet, table)}:row:${rowIndex}`;
+}
+
+function tableCellObjectId(
+  sheet: XlsxReferenceSheet,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+  cellIndex: number,
+): string {
+  return `${tableRowObjectId(sheet, table, rowIndex)}:cell:${cellIndex}`;
+}
+
+function tableRowDescriptor(
+  reference: XlsxOfficeReference,
+  sheet: XlsxReferenceSheet,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+  text: string,
+): OfficeObjectDescriptor {
+  const label = `Row ${rowIndex + 1}`;
+  return {
+    objectId: tableRowObjectId(sheet, table, rowIndex),
+    draft: draftFromReference(reference),
+    label,
+    path: [
+      { kind: "workbook", label: "Workbook" },
+      { kind: "worksheet", label: sheet.name },
+      { kind: "table", label: table.name },
+      { kind: "table-row", label },
+    ],
+    parentObjectId: xlsxTableObjectId(sheet, table),
+    childrenState: "available",
+    ...(text ? { content: { text } } : {}),
+    facets: {
+      sheetId: sheetKey(sheet),
+      tableName: table.name,
+      rowIndex,
+      ...(table.id ? { tableId: table.id } : {}),
+    },
+  };
+}
+
+function tableCellDescriptor(
+  reference: XlsxOfficeReference,
+  sheet: XlsxReferenceSheet,
+  table: XlsxReferenceTable,
+  rowIndex: number,
+  cellIndex: number,
+  snapshot: XlsxReferenceCellSnapshot | undefined,
+): OfficeObjectDescriptor {
+  const label = `Cell ${rowIndex + 1}, ${cellIndex + 1}`;
+  return {
+    objectId: tableCellObjectId(sheet, table, rowIndex, cellIndex),
+    draft: draftFromReference(reference),
+    label,
+    path: [
+      { kind: "workbook", label: "Workbook" },
+      { kind: "worksheet", label: sheet.name },
+      { kind: "table", label: table.name },
+      { kind: "table-row", label: `Row ${rowIndex + 1}` },
+      { kind: "table-cell", label },
+    ],
+    parentObjectId: tableRowObjectId(sheet, table, rowIndex),
+    childrenState: "none",
+    ...((snapshot?.displayValue !== undefined || snapshot?.formula !== undefined)
+      ? {
+          content: {
+            ...(snapshot.displayValue !== undefined ? { value: snapshot.displayValue } : {}),
+            ...(snapshot.formula !== undefined ? { formula: snapshot.formula } : {}),
+          },
+        }
+      : {}),
+    facets: {
+      sheetId: sheetKey(sheet),
+      tableName: table.name,
+      rowIndex,
+      cellIndex,
       ...(table.id ? { tableId: table.id } : {}),
     },
   };
@@ -1070,7 +1360,7 @@ function drawingDescriptor(
     childrenState: "none",
     ...(drawing.alt ? { content: { text: drawing.alt } } : {}),
     ...(visual ? { visual } : {}),
-    facets: { sheetId: sheetKey(sheet), drawingId: drawing.id, objectType: drawing.objectType },
+    facets: { sheetId: sheetKey(sheet), drawingId: drawing.id, objectType: drawing.objectType, ...(drawing.zIndex === undefined ? {} : { zIndex: drawing.zIndex }) },
   };
 }
 
@@ -1117,6 +1407,7 @@ function chartElementDescriptor(
   const kind = XLSX_CHART_ELEMENT_KIND[target.element];
   const pointIndex = target.element === "point" ? target.pointIndex : undefined;
   const value = pointIndex === undefined ? undefined : series.values[pointIndex];
+  const seriesIndex = target.element === "legend-entry" ? target.seriesIndex ?? target.legendIndex : target.seriesIndex;
   return {
     objectId: `xlsx:chart-element:${sheetKey(sheet)}:${chart.id}:${target.element}:${pointIndex ?? (target.element === "legend-entry" ? target.legendIndex : target.seriesIndex)}`,
     draft: draftFromReference(reference),
@@ -1132,10 +1423,15 @@ function chartElementDescriptor(
     facets: {
       sheetId: sheetKey(sheet),
       chartId: chart.id,
-      seriesIndex: target.element === "legend-entry" ? target.seriesIndex ?? target.legendIndex : target.seriesIndex,
+      seriesIndex,
       ...(pointIndex === undefined ? {} : { pointIndex }),
       ...(target.element === "legend-entry" ? { legendIndex: target.legendIndex } : {}),
       seriesName,
+      chartZIndex: chart.zIndex,
+      // Series paint in order; later series sit above earlier series in the
+      // same plot. This is the format-specific z evidence the candidate
+      // ranker uses when two chart internals share the same area/depth.
+      zIndex: chart.zIndex * 1_000 + seriesIndex,
     },
   };
 }
@@ -1199,7 +1495,7 @@ function ambiguousSheets(
 function tableOnSheet(
   context: XlsxReferenceContext,
   sheet: XlsxReferenceSheet,
-  locator: Extract<XlsxObjectLocator, { kind: "table" }>,
+  locator: Extract<XlsxObjectLocator, { kind: "table" | "table-row" | "table-cell" }>,
 ): readonly XlsxReferenceTable[] {
   return (context.tables ?? []).filter((table) =>
     sameSheet(table.sheet, sheet)
@@ -1308,6 +1604,50 @@ function resolveXlsxTableOrDrawingOrComment(
       reference: relocated,
       descriptor: tableDescriptor(relocated, sheet, table),
       reasonCodes: ["xlsx.revision-changed", "xlsx.table-name-match"],
+    };
+  }
+  if (locator.kind === "table-row" || locator.kind === "table-cell") {
+    const matches = tableOnSheet(context, sheet, locator);
+    if (matches.length === 0) return { status: "not-found", reasonCode: "xlsx.table-not-found" };
+    if (matches.length > 1) return { status: "ambiguous", candidates: [], reasonCodes: ["xlsx.multiple-table-matches"] };
+    const table = matches[0]!;
+    const current = currentTableRange(context, { ...table, sheet });
+    const target: XlsxTableSubObjectTarget = locator.kind === "table-row"
+      ? { kind: "table-row", rowIndex: locator.rowIndex }
+      : { kind: "table-cell", rowIndex: locator.rowIndex, cellIndex: locator.cellIndex };
+    try {
+      assertTableTarget(current.range, target);
+    } catch {
+      return { status: "not-found", reasonCode: "xlsx.table-sub-object-not-found" };
+    }
+    const text = target.kind === "table-row"
+      ? tableRowText(context, current, target.rowIndex)
+      : context.getCellSnapshot?.(current.sheet, tableColumnCell(current.range, target.rowIndex, target.cellIndex))?.displayValue;
+    const descriptorFor = (currentReference: XlsxOfficeReference): OfficeObjectDescriptor => target.kind === "table-row"
+      ? tableRowDescriptor(currentReference, current.sheet, current.table, target.rowIndex, text ?? "")
+      : tableCellDescriptor(
+          currentReference,
+          current.sheet,
+          current.table,
+          target.rowIndex,
+          target.cellIndex,
+          context.getCellSnapshot?.(current.sheet, tableColumnCell(current.range, target.rowIndex, target.cellIndex)),
+        );
+    if (currentRevision) return { status: "exact", reference, descriptor: descriptorFor(reference) };
+    const currentLocator = target.kind === "table-cell"
+      ? { ...locator, sheet: sheetLocator(sheet), a1: tableSubObjectA1(current, target) }
+      : { ...locator, sheet: sheetLocator(sheet) };
+    const relocated = currentFormatReference(
+      context,
+      reference,
+      currentLocator,
+      tableSubObjectFingerprint(current, target, text),
+    );
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: descriptorFor(relocated),
+      reasonCodes: ["xlsx.revision-changed", "xlsx.table-name-and-index"],
     };
   }
   if (locator.kind === "drawing") {
@@ -1474,16 +1814,50 @@ export function resolveXlsxReference(
         }));
       return { status: "ambiguous", candidates, reasonCodes: ["xlsx.multiple-sheet-matches"] };
     }
-    if (locator.kind === "table" || locator.kind === "drawing" || locator.kind === "comment") {
+    if (locator.kind === "table" || locator.kind === "table-row" || locator.kind === "table-cell"
+      || locator.kind === "drawing" || locator.kind === "comment") {
       const candidates: OfficeObjectDescriptor[] = [];
       for (const candidateSheet of sheetResult.sheets) {
         const descriptorReference = currentFormatReference(context, xlsxReference, {
           ...locator,
           sheet: sheetLocator(candidateSheet),
         });
-        if (locator.kind === "table") {
+        if (locator.kind === "table" || locator.kind === "table-row" || locator.kind === "table-cell") {
           const table = tableOnSheet(context, candidateSheet, locator)[0];
-          if (table) candidates.push(tableDescriptor(descriptorReference, candidateSheet, table));
+          if (!table) continue;
+          if (locator.kind === "table") {
+            candidates.push(tableDescriptor(descriptorReference, candidateSheet, table));
+            continue;
+          }
+          const range = rangeFromA1(table.a1);
+          if (!range) continue;
+          const current = { table, sheet: candidateSheet, range };
+          const target: XlsxTableSubObjectTarget = locator.kind === "table-row"
+            ? { kind: "table-row", rowIndex: locator.rowIndex }
+            : { kind: "table-cell", rowIndex: locator.rowIndex, cellIndex: locator.cellIndex };
+          try {
+            assertTableTarget(range, target);
+          } catch {
+            continue;
+          }
+          if (target.kind === "table-row") {
+            candidates.push(tableRowDescriptor(
+              descriptorReference,
+              candidateSheet,
+              table,
+              target.rowIndex,
+              tableRowText(context, current, target.rowIndex),
+            ));
+          } else {
+            candidates.push(tableCellDescriptor(
+              descriptorReference,
+              candidateSheet,
+              table,
+              target.rowIndex,
+              target.cellIndex,
+              context.getCellSnapshot?.(candidateSheet, tableColumnCell(range, target.rowIndex, target.cellIndex)),
+            ));
+          }
         } else if (locator.kind === "drawing") {
           const drawing = drawingOnSheet(context, candidateSheet, locator)[0];
           if (drawing) candidates.push(drawingDescriptor(descriptorReference, candidateSheet, drawing));
@@ -1505,7 +1879,8 @@ export function resolveXlsxReference(
   }
   const sheet = sheetResult.sheets[0]!;
 
-  if (locator.kind === "table" || locator.kind === "comment"
+  if (locator.kind === "table" || locator.kind === "table-row" || locator.kind === "table-cell"
+    || locator.kind === "comment"
     || (locator.kind === "drawing" && locator.objectType !== "chart")) {
     const result = resolveXlsxTableOrDrawingOrComment(context, xlsxReference, sheet, currentRevision);
     if (result) return result;

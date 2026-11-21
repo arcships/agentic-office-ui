@@ -1,6 +1,7 @@
 import type {
   ChartGeometrySnapshot,
   ManualRegionLocator,
+  NormalizedRect,
   OfficeDocumentRevision,
   OfficeObjectDescriptor,
   OfficeObjectFingerprint,
@@ -79,6 +80,15 @@ export interface PptxChartSnapshot {
    * still work with the series/point label evidence above.
    */
   geometry?: ChartGeometrySnapshot;
+  /**
+   * Normalized slide rectangle where the chart's `geometry.frame` is painted.
+   *
+   * `ChartGeometrySnapshot` uses chart-local CSS pixels; the object index needs
+   * slide-normalized rectangles to build visual fragments. The host supplies
+   * this viewport together with `geometry`, keeping the chart geometry contract
+   * (#184) free of page/slide placement concerns.
+   */
+  geometryViewport?: NormalizedRect;
 }
 
 export interface PptxObjectReferenceOptions {
@@ -438,18 +448,25 @@ function assertSubObjectTarget(
   target: PptxSubObjectTarget,
 ): void {
   const nodeType = identity.nodeType.toLowerCase();
-  if (target.kind === "table-cell") {
+  if (target.kind === "table-row" || target.kind === "table-cell") {
     if (nodeType !== "table") {
-      throw new RangeError("PPTX table-cell references require a table object");
+      throw new RangeError("PPTX table sub-object references require a table object");
     }
-    if (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0
-      || !Number.isSafeInteger(target.cellIndex) || target.cellIndex < 0) {
-      throw new TypeError("PPTX table cell indices must be non-negative safe integers");
+    if (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0) {
+      throw new TypeError("PPTX table row indices must be non-negative safe integers");
     }
     const snapshot = tableSnapshot(context, slideIndex, identity);
     const row = snapshot.rows[target.rowIndex];
-    if (!row || !row[target.cellIndex]) {
-      throw new RangeError("PPTX table cell is outside the rendered table grid");
+    if (!row) {
+      throw new RangeError("PPTX table row is outside the rendered table grid");
+    }
+    if (target.kind === "table-cell") {
+      if (!Number.isSafeInteger(target.cellIndex) || target.cellIndex < 0) {
+        throw new TypeError("PPTX table cell indices must be non-negative safe integers");
+      }
+      if (!row[target.cellIndex]) {
+        throw new RangeError("PPTX table cell is outside the rendered table grid");
+      }
     }
     return;
   }
@@ -505,6 +522,10 @@ function subObjectText(
   identity: PptxObjectIdentity,
   target: PptxSubObjectTarget,
 ): string | undefined {
+  if (target.kind === "table-row") {
+    const row = context.getObjectTable?.(slideIndex, identity.key)?.rows[target.rowIndex];
+    return row ? row.join("\t") : undefined;
+  }
   if (target.kind === "table-cell") {
     return context.getObjectTable?.(slideIndex, identity.key)?.rows[target.rowIndex]?.[target.cellIndex];
   }
@@ -514,8 +535,11 @@ function subObjectText(
   if (target.kind === "chart-point") {
     return chart.series[target.seriesIndex]?.points?.[target.pointIndex];
   }
-  const seriesIndex = target.seriesIndex ?? target.legendIndex;
-  return chart.series[seriesIndex]?.name;
+  if (target.kind === "chart-legend-entry") {
+    const seriesIndex = target.seriesIndex ?? target.legendIndex;
+    return chart.series[seriesIndex]?.name;
+  }
+  return undefined;
 }
 
 /**
@@ -536,11 +560,13 @@ export function createPptxSubObjectReferenceDraft(
   const identity = slide.objects.find((object) => object.key === objectKey);
   if (!identity) throw new RangeError("PPTX objectKey is not present on the selected slide");
   assertSubObjectTarget(context, slideIndex, identity, target);
-  const kind = target.kind === "table-cell"
-    ? "table-cell"
-    : target.kind === "chart-series"
-      ? "chart-series"
-      : target.kind === "chart-point" ? "chart-point" : "chart-legend-entry";
+  const kind = target.kind === "table-row"
+    ? "table-row"
+    : target.kind === "table-cell"
+      ? "table-cell"
+      : target.kind === "chart-series"
+        ? "chart-series"
+        : target.kind === "chart-point" ? "chart-point" : "chart-legend-entry";
   return {
     schemaVersion: 1,
     document: context.revision,
@@ -570,6 +596,11 @@ function subObjectLabel(
   target: PptxSubObjectTarget,
   text: string | undefined,
 ): string {
+  if (target.kind === "table-row") {
+    return text?.trim()
+      ? `Row ${target.rowIndex + 1}: ${text.replace(/\s+/gu, " ").trim().slice(0, 80)}`
+      : `Row ${target.rowIndex + 1}`;
+  }
   if (target.kind === "table-cell") {
     return text?.trim()
       ? `Cell ${target.rowIndex + 1}, ${target.cellIndex + 1}: ${text.replace(/\s+/gu, " ").trim().slice(0, 60)}`
@@ -579,11 +610,110 @@ function subObjectLabel(
   if (target.kind === "chart-point") {
     return text?.trim() ? `Point ${target.pointIndex + 1}: ${text.slice(0, 60)}` : `Point ${target.pointIndex + 1}`;
   }
-  return `Legend entry ${target.legendIndex + 1}`;
+  if (target.kind === "chart-legend-entry") return `Legend entry ${target.legendIndex + 1}`;
+  return "Sub-object";
+}
+
+function unionNormalizedRects(rects: readonly NormalizedRect[]): NormalizedRect | undefined {
+  if (rects.length === 0) return undefined;
+  let left = 1;
+  let top = 1;
+  let right = 0;
+  let bottom = 0;
+  for (const rect of rects) {
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
+  }
+  if (right <= left || bottom <= top) return undefined;
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function chartLocalRectToSlide(
+  rect: { x: number; y: number; width: number; height: number },
+  geometry: ChartGeometrySnapshot,
+  viewport: NormalizedRect,
+): NormalizedRect | undefined {
+  const width = geometry.frame.width;
+  const height = geometry.frame.height;
+  if (!(width > 0) || !(height > 0)) return undefined;
+  return {
+    x: viewport.x + (rect.x / width) * viewport.width,
+    y: viewport.y + (rect.y / height) * viewport.height,
+    width: (rect.width / width) * viewport.width,
+    height: (rect.height / height) * viewport.height,
+  };
+}
+
+function chartSubObjectRect(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): NormalizedRect | undefined {
+  const snapshot = context.getObjectChart?.(slideIndex, identity.key);
+  const geometry = snapshot?.geometry;
+  const viewport = snapshot?.geometryViewport;
+  if (!geometry || !viewport) return undefined;
+  if (target.kind === "chart-series") {
+    const series = geometry.series.find((entry) => entry.index === target.seriesIndex);
+    if (!series) return undefined;
+    const rects = series.points
+      .map((point) => point.rect)
+      .filter((rect): rect is NonNullable<typeof rect> => rect !== undefined)
+      .map((rect) => chartLocalRectToSlide(rect, geometry, viewport))
+      .filter((rect): rect is NormalizedRect => rect !== undefined);
+    return unionNormalizedRects(rects);
+  }
+  if (target.kind === "chart-point") {
+    const point = geometry.series
+      .find((entry) => entry.index === target.seriesIndex)
+      ?.points.find((entry) => entry.index === target.pointIndex);
+    return point?.rect ? chartLocalRectToSlide(point.rect, geometry, viewport) : undefined;
+  }
+  if (target.kind === "chart-legend-entry") {
+    const item = geometry.layout.legend?.items.find((entry) =>
+      entry.index === target.legendIndex
+      && (target.seriesIndex === undefined || entry.seriesIndex === target.seriesIndex));
+    return item ? chartLocalRectToSlide(item.rect, geometry, viewport) : undefined;
+  }
+  return undefined;
+}
+
+function subObjectZIndex(target: PptxSubObjectTarget): number | undefined {
+  if (target.kind === "chart-series" || target.kind === "chart-point") {
+    return 1_000 + target.seriesIndex;
+  }
+  if (target.kind === "chart-legend-entry") return 2_000 + target.legendIndex;
+  return undefined;
+}
+
+function subObjectVisual(
+  reference: PptxOfficeReference,
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): Pick<OfficeObjectDescriptor, "visual"> | undefined {
+  const rect = chartSubObjectRect(context, slideIndex, identity, target);
+  if (!rect) return undefined;
+  const zIndex = subObjectZIndex(target);
+  return {
+    visual: {
+      fragments: [{
+        container: { space: "slide", slideIndex },
+        rect,
+        ...(zIndex === undefined ? {} : { zIndex }),
+      }],
+      layoutVersion: reference.document.revision,
+    },
+  };
 }
 
 function subObjectDescriptor(
   reference: PptxOfficeReference,
+  context: PptxReferenceContext,
   slideIndex: number,
   identity: PptxObjectIdentity,
   target: PptxSubObjectTarget,
@@ -602,13 +732,15 @@ function subObjectDescriptor(
       { kind: identity.nodeType === "table" ? "table" : "chart", label: objectLabel },
       { kind, label: subObjectLabel(target, text) },
     ],
-    childrenState: "none",
+    childrenState: target.kind === "table-row" ? "available" : "none",
     ...(text ? { content: { text } } : {}),
+    ...(subObjectVisual(reference, context, slideIndex, identity, target) ?? {}),
     facets: {
       slideIndex,
       objectKey: identity.key,
       nodeType: identity.nodeType,
       path: [subObjectSegment(target)],
+      ...(subObjectZIndex(target) === undefined ? {} : { zIndex: subObjectZIndex(target) }),
     },
   };
 }
@@ -637,7 +769,7 @@ function resolvePptxSubObjectReference(
     return {
       status: "exact",
       reference,
-      descriptor: subObjectDescriptor(reference, slideIndex, identity, segment, text),
+      descriptor: subObjectDescriptor(reference, context, slideIndex, identity, segment, text),
     };
   }
   const relocated = currentFormatReference(context, reference, {
@@ -649,7 +781,7 @@ function resolvePptxSubObjectReference(
   return {
     status: "relocated",
     reference: relocated,
-    descriptor: subObjectDescriptor(relocated, slideIndex, identity, segment, text),
+    descriptor: subObjectDescriptor(relocated, context, slideIndex, identity, segment, text),
     reasonCodes: ["pptx.revision-changed", "pptx.object-key-and-index"],
   };
 }
@@ -1135,6 +1267,7 @@ export function resolvePptxReference(
             });
             return [subObjectDescriptor(
               current,
+              context,
               index,
               identity,
               segment,
@@ -1227,7 +1360,7 @@ export function resolvePptxReference(
           } catch {
             return [];
           }
-          return [subObjectDescriptor(pptxReference, index, identity, segment, subObjectText(context, index, identity, segment))];
+          return [subObjectDescriptor(pptxReference, context, index, identity, segment, subObjectText(context, index, identity, segment))];
         }),
         reasonCodes: ["pptx.multiple-object-matches"],
       };

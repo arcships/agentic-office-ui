@@ -366,7 +366,7 @@ step = axis.majorUnit if > 0
 
 - `PptxChartSnapshot` 原有 `series[].name` 与 `series[].points`（标签），`getObjectChart?` 由宿主提供（[reference-adapter.ts:54](../../packages/pptx-core/src/reference-adapter.ts#L54)）。
 - PPTX 图表实际由 `@aiden0z/pptx-renderer`（ECharts）绘制；ECharts 的 plot/legend/axis 几何只在 renderer 内。
-- 本轮在 `PptxChartSnapshot` 增加可选 `geometry?: ChartGeometrySnapshot`。这是**接缝**，不是实现；未提供时行为与原来一致。
+- 本轮在 `PptxChartSnapshot` 增加可选 `geometry?: ChartGeometrySnapshot`。这是**接缝**，不是实现；未提供时行为与原来一致。`pptx-core` 的对象索引（#176）可通过同一 snapshot 的 `geometryViewport` 把 chart-local 几何投影成 slide 归一化 sub-object 轮廓；Surface 渲染和 ECharts 适配仍是 follow-up。
 
 ## 5. Provider 合同
 

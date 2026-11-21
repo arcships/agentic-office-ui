@@ -22,6 +22,7 @@ import {
   describePdfBehavior,
   describePdfNativeObject,
   describePdfVisualObject,
+  resolvePdfBehaviorRecords,
 } from "./pdf-reference-adapter";
 
 export const PDF_STAGE2_KINDS: readonly OfficeObjectKind[] = Object.freeze([
@@ -89,7 +90,7 @@ export const PDF_BEHAVIOR_OBJECT_PROVIDER: OfficeObjectProvider<PdfReferenceCont
   format: "pdf",
   kinds: PDF_STAGE4_KINDS,
   list(context) {
-    return (context.behaviors ?? []).flatMap((record: PdfBehaviorRecord) => {
+    return resolvePdfBehaviorRecords(context).flatMap((record: PdfBehaviorRecord) => {
       try {
         return [describePdfBehavior(context, record)];
       } catch {

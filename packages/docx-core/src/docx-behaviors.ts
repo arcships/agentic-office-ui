@@ -58,48 +58,106 @@ function pathKey(path: readonly DocxPathSegment[]): string {
   return path.map((segment) => `${segment.kind}:${segment.index}`).join("/");
 }
 
-function nodePath(index: number): readonly DocxPathSegment[] {
-  return [{ kind: "paragraph", index }];
+interface DocxStoryParagraph {
+  paragraph: ParagraphNode;
+  path: readonly DocxPathSegment[];
+  part: DocxPartLocator;
 }
 
-function cellPath(
-  tableIndex: number,
-  rowIndex: number,
-  cellIndex: number,
-  paragraphIndex: number,
-): readonly DocxPathSegment[] {
-  return [
-    { kind: "table", index: tableIndex },
-    { kind: "row", index: rowIndex },
-    { kind: "cell", index: cellIndex },
-    { kind: "paragraph", index: paragraphIndex },
-  ];
-}
-
-function paragraphTexts(nodes: readonly DocNode[]): string[] {
-  return nodes.map((node) => node.type === "paragraph" ? paragraphText(node) : "");
-}
-
-/** Flatten body paragraphs with the structural path needed by a behavior owner. */
-function eachBodyParagraph(
-  model: DocModel,
-  visit: (paragraph: ParagraphNode, path: readonly DocxPathSegment[], tableIndex?: number) => void,
+function storyParagraphsInNodes(
+  nodes: readonly DocNode[],
+  prefix: readonly DocxPathSegment[],
+  part: DocxPartLocator,
+  visit: (entry: DocxStoryParagraph) => void,
 ): void {
-  model.nodes.forEach((node, nodeIndex) => {
+  nodes.forEach((node, nodeIndex) => {
     if (node.type === "paragraph") {
-      visit(node, nodePath(nodeIndex));
+      visit({ paragraph: node, path: [...prefix, { kind: "paragraph", index: nodeIndex }], part });
       return;
     }
-    const table = node as TableNode;
+    const table: TableNode = node;
     table.rows.forEach((row, rowIndex) => {
       row.cells.forEach((cell, cellIndex) => {
-        cell.nodes.forEach((entry, paragraphIndex) => {
-          if (entry.type !== "paragraph") return;
-          visit(entry, cellPath(nodeIndex, rowIndex, cellIndex, paragraphIndex), nodeIndex);
-        });
+        storyParagraphsInNodes(
+          cell.nodes,
+          [
+            ...prefix,
+            { kind: "table", index: nodeIndex },
+            { kind: "row", index: rowIndex },
+            { kind: "cell", index: cellIndex },
+          ],
+          part,
+          visit,
+        );
       });
     });
   });
+}
+
+function collectStoryParts(model: DocModel): readonly { part: DocxPartLocator; nodes: readonly DocNode[] }[] {
+  const parts: { part: DocxPartLocator; nodes: readonly DocNode[] }[] = [
+    { part: { kind: "body" }, nodes: model.nodes },
+  ];
+  const seen = new Set<string>(["body"]);
+  const addStory = (kind: "header" | "footer", partName: string, nodes: readonly DocNode[]): void => {
+    const key = `${kind}:${partName}`;
+    if (seen.has(key) || nodes.length === 0) return;
+    seen.add(key);
+    parts.push({ part: { kind, partName }, nodes });
+  };
+  for (const section of model.metadata.headerSections ?? []) {
+    addStory("header", section.partName, section.nodes);
+  }
+  for (const section of model.metadata.footerSections ?? []) {
+    addStory("footer", section.partName, section.nodes);
+  }
+  for (const section of model.metadata.sections ?? []) {
+    for (const header of section.headerSections) addStory("header", header.partName, header.nodes);
+    for (const footer of section.footerSections) addStory("footer", footer.partName, footer.nodes);
+  }
+  for (const note of model.metadata.footnotes ?? []) {
+    if (note.nodes?.length) parts.push({ part: { kind: "footnote", noteId: String(note.id) }, nodes: note.nodes });
+  }
+  for (const note of model.metadata.endnotes ?? []) {
+    if (note.nodes?.length) parts.push({ part: { kind: "endnote", noteId: String(note.id) }, nodes: note.nodes });
+  }
+  return parts;
+}
+
+/**
+ * Flatten every paragraph of every story part (body, headers, footers,
+ * footnotes, endnotes) with the structural path needed by a behavior owner.
+ * Fields and revisions inside header/footer and note stories are behavior
+ * targets exactly like body paragraphs; omitting them made stage 4 silently
+ * body-only.
+ */
+function eachStoryParagraph(
+  model: DocModel,
+  visit: (entry: DocxStoryParagraph) => void,
+): void {
+  for (const story of collectStoryParts(model)) {
+    storyParagraphsInNodes(story.nodes, [], story.part, visit);
+  }
+}
+
+function storyKey(part: DocxPartLocator): string {
+  if (part.kind === "body") return "body";
+  if (part.kind === "header" || part.kind === "footer") return `${part.kind}:${part.partName}`;
+  if (part.kind === "footnote" || part.kind === "endnote") return `${part.kind}:${part.noteId}`;
+  return "body";
+}
+
+function storyPath(part: DocxPartLocator): readonly { kind: OfficeObjectKind; label: string }[] {
+  if (part.kind === "body") return [];
+  if (part.kind === "header") return [{ kind: "section", label: `Header ${part.partName}` }];
+  if (part.kind === "footer") return [{ kind: "section", label: `Footer ${part.partName}` }];
+  if (part.kind === "footnote" || part.kind === "endnote") {
+    return [{
+      kind: "note",
+      label: `${part.kind === "footnote" ? "Footnote" : "Endnote"} ${part.noteId}`,
+    }];
+  }
+  return [];
 }
 
 function firstToken(instruction: string): string {
@@ -126,8 +184,7 @@ function messageHash(value: string): string {
   return `fnv1a32:${value.length}:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function ownerFor(path: readonly DocxPathSegment[]): DocxBehaviorOwner {
-  const part: DocxPartLocator = { kind: "body" };
+function ownerFor(path: readonly DocxPathSegment[], part: DocxPartLocator): DocxBehaviorOwner {
   return { scope: "part", part, path };
 }
 
@@ -208,10 +265,11 @@ function bookmarkRecords(model: DocModel): DocxBehaviorRecord[] {
 
 function fieldRecords(model: DocModel): DocxBehaviorRecord[] {
   const records: DocxBehaviorRecord[] = [];
-  eachBodyParagraph(model, (paragraph, path) => {
+  eachStoryParagraph(model, ({ paragraph, path, part }) => {
     const xml = paragraph.sourceXml;
     if (!xml) return;
     const key = pathKey(path);
+    const story = storyKey(part);
     let ordinal = 0;
     FIELD_INSTRUCTION.lastIndex = 0;
     for (let match = FIELD_INSTRUCTION.exec(xml); match; match = FIELD_INSTRUCTION.exec(xml)) {
@@ -226,11 +284,12 @@ function fieldRecords(model: DocModel): DocxBehaviorRecord[] {
         : `Field: ${target ?? token}`;
       records.push({
         behavior,
-        instanceId: `docx.${behavior}:${key}:${ordinal}:${messageHash(instruction)}`,
-        owner: ownerFor(path),
+        instanceId: `docx.${behavior}:${story}:${key}:${ordinal}:${messageHash(instruction)}`,
+        owner: ownerFor(path, part),
         label,
         path: [
           { kind: "document", label: "Document" },
+          ...storyPath(part),
           { kind: crossReference ? "cross-reference" : "field", label },
         ],
         content: { text: instruction },
@@ -239,6 +298,7 @@ function fieldRecords(model: DocModel): DocxBehaviorRecord[] {
           fieldType: token,
           ...(target ? { target } : {}),
           path: key,
+          part: story,
           ordinal,
         },
       });
@@ -250,10 +310,11 @@ function fieldRecords(model: DocModel): DocxBehaviorRecord[] {
 
 function trackedChangeRecords(model: DocModel): DocxBehaviorRecord[] {
   const records: DocxBehaviorRecord[] = [];
-  eachBodyParagraph(model, (paragraph, path) => {
+  eachStoryParagraph(model, ({ paragraph, path, part }) => {
     const xml = paragraph.sourceXml;
     if (!xml) return;
     const key = pathKey(path);
+    const story = storyKey(part);
     for (const [type, pattern] of [["insertion", TRACKED_INSERTION], ["deletion", TRACKED_DELETION]] as const) {
       pattern.lastIndex = 0;
       let ordinal = 0;
@@ -261,15 +322,16 @@ function trackedChangeRecords(model: DocModel): DocxBehaviorRecord[] {
         const author = AUTHOR_ATTRIBUTE.exec(match[1] ?? "")?.[1] ?? "";
         records.push({
           behavior: "tracked-change-state",
-          instanceId: `docx.tracked-changes:${key}:${type}:${ordinal}:${messageHash(author)}`,
-          owner: ownerFor(path),
+          instanceId: `docx.tracked-changes:${story}:${key}:${type}:${ordinal}:${messageHash(author)}`,
+          owner: ownerFor(path, part),
           label: `Revision by ${author || "unknown author"}`,
           path: [
             { kind: "document", label: "Document" },
+            ...storyPath(part),
             { kind: "tracked-change", label: `Revision by ${author || "unknown author"}` },
           ],
           content: { text: paragraphText(paragraph) },
-          facets: { changeType: type, author, path: key, ordinal },
+          facets: { changeType: type, author, path: key, part: story, ordinal },
         });
         ordinal += 1;
       }

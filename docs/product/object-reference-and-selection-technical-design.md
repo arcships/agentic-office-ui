@@ -805,7 +805,7 @@ export interface OfficeReferenceResolveEvent {
 兼容策略：
 
 - `selectionChange` 继续表达当前格式已有的原始选区；
-- `objectClick` 在阶段二以前保留，阶段二完成后标记为被 `referenceConfirm` 取代；
+- `objectClick` 在所有 Surface 中继续发送；阶段二完成前不移除，阶段二完成后按 §12.1.5 发布替换说明；
 - `0.x` 不删除旧事件，最早在 `1.0.0` 按迁移指南移除；
 - 新 API 只从各包根入口导出，不要求消费端深层导入；
 - 公开事件只含引用和序列化数据，不泄漏格式内部模型实例。
@@ -832,7 +832,7 @@ export interface OfficeReferenceResolveEvent {
 
 工作表索引不是稳定身份。定位时优先 sheet id，再用名称和索引校验；表格优先使用名称，单元格和范围使用 A1 语义而不是像素坐标。
 
-当前 `@arcships/xlsx-core` 根入口已实现工作表、单元格、A1 范围、整行、整列、图表和人工 sheet 区域草稿，以及同步解析与描述；`XlsxSheetSurface` 已把普通单元格/范围选择、表头行列/工作表命中和区域模式转换为统一确认事件。工作表重命名或重排时优先按 tab id 迁移；图表 drawing id 变化后，仅在名称与图表类型形成唯一候选时迁移，重复候选返回 `ambiguous`。表格、图片、形状和图表内部元素仍按阶段二、三矩阵后续补齐。
+当前 `@arcships/xlsx-core` 根入口已实现工作表、单元格、A1 范围、整行、整列、表格行/单元格、图表和人工 sheet 区域草稿，以及同步解析与描述；`XlsxSheetSurface` 已把普通单元格/范围选择、表头行列/工作表命中和区域模式转换为统一确认事件。工作表重命名或重排时优先按 tab id 迁移；图表 drawing id 变化后，仅在名称与图表类型形成唯一候选时迁移，重复候选返回 `ambiguous`。表格、图片、形状、图表内部元素和表格行/单元格已有对象 descriptor 与解析；重叠候选的绘制顺序由 `rankXlsxObjectCandidates` 投影。
 
 ### 10.3 PPTX
 
@@ -843,14 +843,14 @@ export interface OfficeReferenceResolveEvent {
 
 `objectKey` 是同一解析结果内的主键，跨修订时仍要结合 slide id、shape id、source、group path、名称和内容摘要校验。
 
-当前 `@arcships/pptx-core` 根入口已实现幻灯片、对象内精确文本范围、形状/图片/表格/图表、嵌套组合对象和人工 slide 区域草稿；`PptxStage` 已把原生文字选择、渲染对象命中和区域模式转换为统一确认事件。解析时先按 slide part id 和 `objectKey`，再按 shape id、source、group path 校验；原生 id 变化后只有名称与节点类型唯一时迁移，精确文字只有唯一 quote 候选时迁移。表格单元格、图表内部元素和动画等不可见对象仍属于阶段三、四增量。
+当前 `@arcships/pptx-core` 根入口已实现幻灯片、对象内精确文本范围、形状/图片/表格/图表、嵌套组合对象、表格行/单元格、图表内部元素引用和人工 slide 区域草稿；`PptxStage` 已把原生文字选择、渲染对象命中和区域模式转换为统一确认事件。解析时先按 slide part id 和 `objectKey`，再按 shape id、source、group path 校验；原生 id 变化后只有名称与节点类型唯一时迁移，精确文字只有唯一 quote 候选时迁移。图表内部轮廓在宿主同时提供 #184 `PptxChartSnapshot.geometry` 与归一化 `geometryViewport` 时可见，否则仍是可引用但无几何的 provider-dependent 对象；动画等不可见对象使用阶段四 reference kind。
 
 ### 10.4 PDF
 
 - 阶段一：复用 `PageTextSlice` 和字符几何生成精确文字引用；新增页面与规范化人工区域；
 - 阶段二：优先暴露 PDF 原生链接、表单和批注；图片、文字块和表格通过可插拔视觉识别器生成候选；
 - 阶段三：视觉识别器可补充版面块、表格行列和重叠标记层级；
-- 阶段四：从 PDF 原生结构暴露链接动作、表单规则、批注状态、附件、可选内容组、签名和权限。
+- 阶段四：从 PDF 原生结构暴露链接动作、表单规则、批注状态；附件、可选内容组、签名和权限由宿主通过 `PdfReferenceContext.behaviorSource` 提供记录，库只转成行为引用，不内置结构解析。
 
 视觉识别是可选 provider，不作为 `vue-pdf` 默认包体的一部分：
 
@@ -959,12 +959,12 @@ provider 只返回检测结果，不生成 `referenceId`；PDF 适配器把 `pro
 
 | 格式 | 新增入口（包根导出） | 阶段 |
 |---|---|---|
-| DOCX | `createDocxObjectIndex`、`createDocxObjectRegistry`、`enumerateDocxBehaviors`、`createDocxBehaviorReferenceDraft`、`docxBlockReferenceKind`；`createDocxTableReferenceDraft` / `createDocxBlockReferenceDraft` / `createDocxImageReferenceDraft` 增加 fingerprint | 2 / 3 / 4 |
-| XLSX | `createXlsxTableReferenceDraft`、`createXlsxDrawingReferenceDraft`、`createXlsxCommentReferenceDraft`、`createXlsxChartElementReferenceDraft`、`createXlsxBehaviorReferenceDraft`、`createXlsxBehaviorRecords`、`createXlsxObjectRegistry`、`describeXlsx*` | 2 / 3 / 4 |
-| PPTX | `createPptxSubObjectReferenceDraft`、`createPptxBehaviorReferenceDraft`、`createPptxBehaviorDraftFromRecord`、`enumeratePptxBehaviors`、`createPptxObjectIndex`、`createPptxObjectRegistry`；`PptxReferenceContext` 增加可选 `getObjectTable` / `getObjectChart` | 2 / 3 / 4 |
-| PDF | `createPdfNativeObjectReferenceDraft`、`createPdfVisualObjectReferenceDraft`、`createPdfBehaviorReferenceDraft`、`createPdfBehaviorRecords`、`createPdfObjectRegistry`、`PdfVisualObjectProvider` / `PdfVisualObjectDetection`；`PdfReferenceContext` 增加可选 `annotations` / `visualObjects` / `behaviors` | 2 / 3 / 4 |
+| DOCX | `createDocxObjectIndex`、`createDocxObjectRegistry`、`enumerateDocxBehaviors`、`createDocxBehaviorReferenceDraft`、`docxBlockReferenceKind`；`createDocxTableReferenceDraft` / `createDocxBlockReferenceDraft` / `createDocxImageReferenceDraft` 增加 fingerprint；行为枚举覆盖 header/footer/footnote/endnote story；嵌套表格按自身结构路径建立 `table → row → cell` | 2 / 3 / 4 |
+| XLSX | `createXlsxTableReferenceDraft`、`createXlsxTableRowReferenceDraft`、`createXlsxTableCellReferenceDraft`、`createXlsxDrawingReferenceDraft`、`createXlsxCommentReferenceDraft`、`createXlsxChartElementReferenceDraft`、`createXlsxBehaviorReferenceDraft`、`createXlsxBehaviorRecords`、`createXlsxObjectRegistry`、`describeXlsx*`、`rankXlsxObjectCandidates` / `xlsxObjectCandidateZIndex` | 2 / 3 / 4 |
+| PPTX | `createPptxSubObjectReferenceDraft`（新增 `table-row` target）、`createPptxBehaviorReferenceDraft`、`createPptxBehaviorDraftFromRecord`、`enumeratePptxBehaviors`、`createPptxObjectIndex`、`createPptxObjectRegistry`；`PptxReferenceContext` 增加可选 `getObjectTable` / `getObjectChart`；`PptxChartSnapshot` 使用 #184 `geometry` 并新增 `geometryViewport` | 2 / 3 / 4 |
+| PDF | `createPdfNativeObjectReferenceDraft`、`createPdfVisualObjectReferenceDraft`、`createPdfBehaviorReferenceDraft`、`createPdfBehaviorRecords`、`resolvePdfBehaviorRecords`、`createPdfObjectRegistry`、`PdfVisualObjectProvider` / `PdfVisualObjectDetection`；`PdfReferenceContext` 增加可选 `annotations` / `visualObjects` / `behaviors` / `behaviorSource` | 2 / 3 / 4 |
 
-行为 locator 的 `instanceId` / `nativeId` 全部由原生 id、规范路径、规则索引和内容哈希确定性生成；重新解析同一字节得到同一身份。PPTX 与 PDF 的表格/图表内部证据由宿主提供时才能建立子对象引用；缺少证据返回 `unsupported` 或拒绝创建，而不是猜测。
+行为 locator 的 `instanceId` / `nativeId` 全部由原生 id、规范路径、规则索引和内容哈希确定性生成；重新解析同一字节得到同一身份。PPTX 与 PDF 的表格/图表内部证据由宿主提供时才能建立子对象引用；缺少证据返回 `unsupported` 或拒绝创建，而不是猜测。`PdfReferenceContext.behaviorSource` 接受宿主提供的附件、OCG/页面图层、签名和权限记录，库不内置 PDF 结构解析器。
 
 #### 12.1.3 Surface 轮廓与候选
 
@@ -972,17 +972,25 @@ provider 只返回检测结果，不生成 `referenceId`；PDF 适配器把 `pro
 - 悬停时渲染一个弱样式的轮廓层（DOCX/PPTX/XLSX 为绝对定位或表格单元格矩形；PDF 使用页面归一化矩形），标签来自候选 `preview.label`；指针离开或切换模式时清除。
 - 阶段四行为只从 `describeReference`/对象索引返回，用于宿主结构树、时间线或属性面板，不进入轮廓层。
 - XLSX 图表元素依赖渲染 SVG 的 `data-xlsx-chart-series-index` / `data-xlsx-chart-point-index`；图表项、图片、形状、表单控件新增 `data-chart-id` / `data-drawing-id` / `data-drawing-kind` 标记，均不影响既有 DOM 契约。
-- PPTX 表格单元格从宿主提供的渲染表格网格生成 `getObjectTable` 证据；PDF 注释命中层新增 `data-annotation-id`。
-- `objectClick` 在四种 Surface 中保持发送，阶段二验收完成后另行发布替换说明。
+- PPTX 表格行/单元格从宿主提供的渲染表格网格生成 `getObjectTable` 证据；PDF 注释命中层新增 `data-annotation-id`。
+- PPTX 图表内部元素在宿主提供 #184 `PptxChartSnapshot.geometry` 与归一化 `geometryViewport` 时带可见轮廓与 zIndex；未提供时仍可从系列/点标签建立引用，但不会伪造未测量几何。
+- `objectClick` 在四种 Surface 中保持发送，阶段二验收完成后另行发布替换说明；删除条件见 §12.1.5。
 
-#### 12.1.4 延期项
+#### 12.1.4 剩余依赖与不计划项
 
-- DOCX：嵌套表格独立层级、页眉/脚注中的字段与修订扫描。
-- XLSX：表格行/单元格对象、Worker 工作簿的公式枚举、图表内部重叠候选的专门排序。
-- PPTX：图表内部元素在默认 Surface 的几何来源（渲染器不暴露系列几何），表格行对象。
-- PDF：内置视觉识别（按设计不进入包体）、视觉表格行列层级、附件/OCG/签名/权限的 PDF 解析（库只接受宿主提供的记录）。
+- DOCX：无剩余延期项；未列出的长尾 OOXML 特性按页面区域兜底。
+- XLSX：Worker 工作簿的公式枚举依赖宿主提供 `XlsxBehaviorSource.formulas` 单元格清单；图表内部像素几何不进入对象引用合同（选择使用系列/点索引）。
+- PPTX：图表内部元素的可见几何依赖宿主把 renderer/ECharts 的 `ChartGeometrySnapshot` 与归一化 `geometryViewport` 填入 `PptxChartSnapshot`；默认 Surface 不内置 ECharts 几何适配器（provider-dependent，不是延期缺口）。
+- PDF：不内置 OCR/视觉识别器；视觉表格行列层级由 provider 给出 parent；附件/OCG/签名/权限只接受宿主 `behaviorSource` 记录，不内置解析器；权限策略执行不由查看器层承担。
 
-延期项不影响阶段一–四现有引用合同的兼容性，也不改变产品矩阵的阶段完成口径。
+这些项不影响阶段一–四现有引用合同的兼容性，也不改变产品矩阵的阶段完成口径。
+
+#### 12.1.5 `objectClick` 迁移说明
+
+- 当前状态：四种 Surface 继续发送 `objectClick`，同时发送 `referenceCandidateChange` / `referenceConfirm`；统一引用是新增并行通道，不是替换。
+- 阶段二完成条件：产品矩阵“阶段二”列出的对象全部实现并通过验收，且 §4.1.2 中阶段二相关行不再有 `依赖宿主/provider` 证据缺口。当前仍有 provider-dependent 行，因此不得移除 `objectClick`。
+- 迁移方式：宿主可继续消费 `objectClick`；需要稳定引用时改为消费 `referenceConfirm`，用 `reference.referenceId` 代替格式内 `id/nodeIndex`，并处理 `exact` / `relocated` / `ambiguous` / `not-found` / `unsupported`。
+- 删除条件：阶段二验收完成 + 发布迁移说明 + 至少一个 `0.x` 兼容周期；最早在 `1.0.0` 删除。删除前必须提供迁移示例并用真实发布包验证新旧入口。
 
 ## 13. 测试与发布门禁
 

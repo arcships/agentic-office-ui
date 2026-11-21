@@ -61,9 +61,11 @@ function onReferenceConfirm(event: OfficeReferenceConfirmEvent) {
 | Surface | 基础输入 | 阶段一引用 |
 |---|---|---|
 | `DocxDocumentSurface` | DOCX 文档模型与分页状态 | 精确文字、页面、页面区域 |
-| `XlsxSheetSurface` | XLSX viewer controller | 工作表、单元格、范围、行列、图表、工作表区域 |
-| `PptxStage` | PPTX 文档会话 | 幻灯片、对象内精确文字、可见对象、组合层级、幻灯片区域 |
+| `XlsxSheetSurface` | XLSX viewer controller | 工作表、单元格、范围、行列、表格行/单元格、图表、工作表区域 |
+| `PptxStage` | PPTX 文档会话 | 幻灯片、对象内精确文字、可见对象、组合/表格行层级、幻灯片区域 |
 | `PdfSurface` | PDF render document | 精确字符范围、页面、页面区域 |
+
+对象矩阵的逐行状态（`已实现` / `依赖宿主/provider` / `不计划`）与 owner 见[对象语义与选择设计](../product/object-semantics-and-selection.md) §4.1.2。XLSX 表格行/单元格和 PPTX 表格行由对象索引提供；PDF 附件、页面图层、签名和权限需要宿主在 `PdfReferenceContext.behaviorSource` 提供记录；PPTX 图表内部轮廓需要宿主提供 `PptxChartSnapshot.geometry` 和归一化 `geometryViewport`。
 
 共同属性：
 

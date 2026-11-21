@@ -1,8 +1,8 @@
 # Office 对象语义与意图选择
 
-> 状态：阶段一已完成；阶段二至阶段四在 `0.8` 批次实现首批对象，未覆盖行明确延期（见 §4.1）
+> 状态：阶段一已完成；阶段二至阶段四的可实现行已在本批次落地，`依赖宿主/provider` 与 `不计划` 行按 §4.1.2 逐行标记；阶段完成仍以第 4 节矩阵为准
 >
-> 本文定义 Agentic Office UI 下一阶段的人机交互目标，不是数据协议。当前 `0.8` 源码分支已提供跨格式引用合同、短生命周期选择状态、基础选择原语、四种 Surface 的阶段一统一选择事件，以及阶段二可见对象、阶段三父子层级和阶段四不可见行为的可扩展对象注册与首批候选。阶段完成仍以第 4 节矩阵为准；§4.1 逐行记录已实现、延期及证据。
+> 本文定义 Agentic Office UI 下一阶段的人机交互目标，不是数据协议。当前 `0.8` 源码分支已提供跨格式引用合同、短生命周期选择状态、基础选择原语、四种 Surface 的阶段一统一选择事件，以及阶段二可见对象、阶段三父子层级和阶段四不可见行为的可扩展对象注册与首批候选。阶段完成仍以第 4 节矩阵为准；§4.1 逐行记录已实现、依赖宿主、不计划的原因和证据。
 
 ## 1. 产品命题
 
@@ -196,29 +196,63 @@ Office 文件中还有一类无法通过普通画布点击表达的目标：公�
 
 本节是第 4 节矩阵的执行回执。阶段完成口径不变：只有矩阵中该阶段列出的对象全部实现并通过验收，才能宣布阶段完成；以下只记录本批次实际实现的范围与证据。
 
-对象候选通过 `@arcships/office-interaction` 的可注册 provider 产出 `OfficeObjectDescriptor`（含 draft、fingerprint 和四维可靠度）。Surface 在对象模式下悬停渲染轮廓、单击确认 `referenceConfirm`；阶段四行为只产生 reference kind，不绘制画布轮廓。`objectClick` 在所有 Surface 中继续发出，等阶段二验收完成后再按迁移指南替换。
+对象候选通过 `@arcships/office-interaction` 的可注册 provider 产出 `OfficeObjectDescriptor`（含 draft、fingerprint 和四维可靠度）。Surface 在对象模式下悬停渲染轮廓、单击确认 `referenceConfirm`；阶段四行为只产生 reference kind，不绘制画布轮廓。`objectClick` 在所有 Surface 中继续发出，迁移与删除条件见 §4.1.3。
 
 #### 4.1.1 验收对象与可靠度
 
 | 格式 | 验收对象 | reference kind | 语义 / 边界 / 层级 / 重定位 | 证据 |
 |---|---|---|---|---|
-| DOCX | 表格 | `table` | exact / likely / exact / likely | `tests/unit/docx-object-index.test.mjs`、`tests/component/docx-object-selection.test.mjs` |
+| DOCX | 表格 | `table` | exact / likely / exact / likely | `tests/unit/docx-object-index.test.mjs`、`tests/component/docx-reference-surfaces.test.mjs` |
+| DOCX | 嵌套表格单元格 | `table-cell` | exact / exact / exact / likely | `tests/unit/docx-object-index.test.mjs` |
+| DOCX | 页眉/页脚/脚注字段 | `field` | likely / likely / likely / uncertain | `tests/unit/docx-object-index.test.mjs` |
 | XLSX | 图表系列 | `chart-series` | exact / likely / exact / likely | `tests/unit/xlsx-object-index.test.mjs` |
-| PPTX | 表格单元格 | `table-cell` | exact / likely / exact / likely | `tests/unit/pptx-object-index.test.mjs` |
+| XLSX | 表格行 / 表格单元格 | `table-row` / `table-cell` | exact / exact / exact / likely | `tests/unit/xlsx-object-index.test.mjs` |
+| PPTX | 表格单元格 / 表格行 | `table-cell` / `table-row` | exact / likely / exact / likely | `tests/unit/pptx-object-index.test.mjs` |
+| PPTX | 带宿主几何的图表系列 | `chart-series` | exact / likely / exact / likely | `tests/unit/pptx-object-index.test.mjs` |
 | PDF | 链接 | `link` | exact / exact / exact / likely | `tests/unit/pdf-object-index.test.mjs` |
+| PDF | 附件 / 页面图层 / 签名 / 权限 | `attachment` / `layer` / `signature` / `permission` | exact / exact / exact / likely | `tests/unit/pdf-object-index.test.mjs` |
 
-四项验收均产生带 descriptor、fingerprint 和可靠度状态的 confirmed reference：先经 `confirmOfficeReferenceDraft` 生成引用，再由各格式 `resolveXxxReference` 在同一修订返回 `exact`、在修订变化后返回 `relocated`。
+以上验收均产生带 descriptor、fingerprint 和可靠度状态的 confirmed reference：先经 `confirmOfficeReferenceDraft` 生成引用，再由各格式 `resolveXxxReference` 在同一修订返回 `exact`、在修订变化后返回 `relocated`。阶段四（字段、附件、图层、签名、权限）只返回 reference kind 和 descriptor，不带 `visual`。
 
-#### 4.1.2 逐格式实现与延期
+#### 4.1.2 逐格式实现与延期（2026-11-21）
 
-| 格式 | 本批次已实现 | 明确延期 |
-|---|---|---|
-| DOCX | 段落、标题、列表项、表格、表格行、表格单元格、图片、页眉页脚容器、批注（阶段二/三）；样式、字段、书签、分节、修订、批注状态、交叉引用（阶段四） | 嵌套表格的独立父子层级仍由结构路径表达；正文以外的页眉、脚注字段扫描尚未纳入行为枚举 |
-| XLSX | 表格、图表、图片、形状、表单控件、批注（阶段二）；图表系列、数据点、图例项与图表父子层级（阶段三）；公式、条件格式、数据验证、命名区域、保护（阶段四）；图表内部几何 provider（2-D bar/line/area/combo，`computeXlsxChartGeometry`） | 表格行/单元格对象；Worker 工作簿中公式枚举需宿主提供单元格清单；对象重叠的 z 序候选排序仍由通用排序处理；pie/scatter/radar/3-D/surface 的几何仍为 provider |
-| PPTX | 文本框、形状、图片、表格、图表、组合及组合父子层级（阶段二/三）；动画、切换、动作、母版、备注（阶段四）；表格单元格（阶段三，依赖宿主提供渲染表格网格）；`PptxChartSnapshot.geometry?` 几何接缝 | 图表内部元素已具备 provider 与引用/解析实现，但外部渲染器暂不暴露系列几何，Surface 端未接入；ECharts → `ChartGeometrySnapshot` 适配待做；表格行的独立对象 |
-| PDF | 原生链接、表单控件、批注（阶段二）；可插拔视觉识别 provider 接口（image、text-block、table、table-row、table-cell）；链接动作、表单规则、批注状态（阶段四） | 不内置 OCR/视觉识别器；视觉表格的行列层级需 provider 自行给出 parent；附件、可选内容组、签名与权限的解析仍由宿主提供数据，库只提供行为记录与引用 |
+状态口径：`已实现` 表示库内有 descriptor、fingerprint、confirmed reference 与解析测试；`依赖宿主/provider` 表示引用合同已实现，但对象证据必须由宿主在运行时提供，缺失时返回结构化 `unsupported` 而不是猜测；`不计划` 表示本批次明确不做，并写明产品理由。owner 是后续维护该行合同的包。
 
-矩阵中其余未列出的长尾特性仍按原则 5 以页面区域兜底。延期项不改变第 4 节的阶段完成口径。
+| 格式 | 能力行 | 状态 | 实现与合同 | owner | 证据 |
+|---|---|---|---|---|---|
+| DOCX | 段落、标题、列表项、表格、表格行、表格单元格、图片、页眉页脚容器、批注 | 已实现 | 可见对象 descriptor、结构定位符、fingerprint 和四维可靠度；表格行与单元格共享 `table → row → cell` 层级 | `docx-core` | `tests/unit/docx-object-index.test.mjs`、`tests/component/docx-reference-surfaces.test.mjs` |
+| DOCX | 嵌套表格的独立父子层级 | 已实现 | 表格块按自身结构路径生成行/单元格对象；嵌套表格挂在所属单元格下，不再按顶层 `tableIndex/rowIndex` 重挂到错误的行 | `docx-core` | `tests/unit/docx-object-index.test.mjs`（nested table row/cell ancestors） |
+| DOCX | 页眉、页脚、脚注、尾注中的字段与修订扫描 | 已实现 | 行为枚举遍历全部 story part；`owner.part` 分别使用 header/footer/footnote/endnote locator，字段与修订 ID 按 part 命名空间去重 | `docx-core` | `tests/unit/docx-object-index.test.mjs`（header/footer/note fields） |
+| DOCX | 样式、字段、书签、分节、修订状态、批注状态、交叉引用 | 已实现 | 阶段四行为只产生 reference kind，不绘制画布轮廓 | `docx-core` | `tests/unit/docx-object-index.test.mjs` |
+| XLSX | 表格、图表、图片、形状、表单控件、批注 | 已实现 | 原生 drawing/table/comment descriptor 与可解析引用 | `xlsx-core` | `tests/unit/xlsx-object-index.test.mjs` |
+| XLSX | 图表系列、数据点、图例项与图表父子层级 | 已实现 | 系列/点/图例项来自图表模型，点挂在系列下、系列挂在图表下 | `xlsx-core` | `tests/unit/xlsx-object-index.test.mjs` |
+| XLSX | 表格行与表格单元格对象 | 已实现 | `table-row` / `table-cell` locator 以表名和表内行列索引定位；单元格 A1 在修订变化后由当前表格范围重算；行/单元格挂在 `table → row → cell` 下 | `xlsx-core` | `tests/unit/xlsx-object-index.test.mjs` |
+| XLSX | 对象重叠的 z 序候选排序 | 已实现 | 系列按绘制顺序、drawing 按 worksheet `zIndex` 投影为候选 `zIndex`，再复用共享 ranker；`rankXlsxObjectCandidates` 是格式专用入口 | `xlsx-core` / `office-interaction` | `tests/unit/xlsx-object-index.test.mjs`（series paint order、drawing z-index） |
+| XLSX | 公式、条件格式、数据验证、命名区域、保护规则 | 已实现 | 阶段四行为引用；行为只从结构树/属性面板消费，不进入轮廓层 | `xlsx-core` | `tests/unit/xlsx-object-index.test.mjs` |
+| XLSX | 图表内部几何 provider（#184） | 已实现（不进入对象引用合同） | `computeXlsxChartGeometry` / `createXlsxChartGeometryProvider` 覆盖 2-D bar/line/area/combo，返回 chart-local 几何与 limitations；对象选择仍使用系列/点/图例索引 | `office-interaction` / `vue-xlsx` | `tests/unit/xlsx-chart-geometry.test.mjs`、`tests/component/xlsx-chart-geometry-parity.test.mjs` |
+| XLSX | Worker 工作簿的公式枚举 | 依赖宿主/provider | Worker 只返回宿主请求的单元格清单；宿主通过 `XlsxBehaviorSource.formulas` 提供 `a1/formula/displayValue` 后库生成公式行为，未提供时公式对象不存在 | `xlsx-core` / Surface | `tests/unit/xlsx-object-index.test.mjs`、`apps/demo` 控制器接入 |
+| XLSX | 对象引用使用像素几何 | 不计划 | 对象选择只需要系列/点/图例索引；像素几何由 #184 provider 单独提供，不写入对象引用合同，避免伪造未测量坐标 | `xlsx-core` | `docs/design/viewer-editor-architecture.md` |
+| PPTX | 文本框、形状、图片、表格、图表、组合及组合父子层级 | 已实现 | 原生对象身份、group path、对象 descriptor 与解析 | `pptx-core` | `tests/unit/pptx-object-index.test.mjs` |
+| PPTX | 表格行与表格单元格 | 已实现 | 行/单元格由宿主 `getObjectTable` 渲染网格生成；`table → row → cell` 层级；缺少网格证据时拒绝创建而不是猜测 | `pptx-core` / Surface | `tests/unit/pptx-object-index.test.mjs` |
+| PPTX | 图表内部元素引用 | 已实现 | `getObjectChart` 提供系列/点/图例标签，生成 `chart-series`、`chart-point`、`chart-legend-entry` 引用与解析；点挂在系列下 | `pptx-core` | `tests/unit/pptx-object-index.test.mjs` |
+| PPTX | 图表内部元素的可见几何 | 依赖宿主/provider | `PptxChartSnapshot.geometry` 使用 #184 `ChartGeometrySnapshot`（chart-local px）；宿主同时提供 `geometryViewport` 后，对象索引把 series/point/legend 矩形投影为 slide 归一化轮廓与 zIndex。未提供时仍可引用但无轮廓 | `pptx-core` / Surface | `tests/unit/pptx-object-index.test.mjs`（geometry seam） |
+| PPTX | 动画、切换、动作、母版、备注 | 已实现 | 阶段四行为只产生 reference kind | `pptx-core` | `tests/unit/pptx-object-index.test.mjs` |
+| PDF | 原生链接、表单控件、批注 | 已实现 | 原生注释对象、页面归一化矩形和引用解析 | `vue-pdf` | `tests/unit/pdf-object-index.test.mjs` |
+| PDF | 可插拔视觉识别 provider | 依赖宿主/provider | `PdfVisualObjectProvider` 接收页面位图并返回文本块/图片/表格；库不内置 OCR。视觉表格行列层级由 provider 给出 `parentObjectId` | `vue-pdf` | `tests/unit/pdf-object-index.test.mjs` |
+| PDF | 链接动作、表单规则、批注状态 | 已实现 | 阶段四行为引用，无画布轮廓 | `vue-pdf` | `tests/unit/pdf-object-index.test.mjs` |
+| PDF | 附件、可选内容组（OCG/页面图层）、数字签名、权限信息 | 已实现（宿主数据） | `PdfReferenceContext.behaviorSource` 接受附件/图层/签名/权限记录，`createPdfBehaviorRecords` 生成 `attachment` / `layer` / `signature` / `permission` 行为引用；库只保存记录和引用，不解析 PDF 结构 | `vue-pdf` | `tests/unit/pdf-object-index.test.mjs`（behaviorSource） |
+| PDF | 内置附件/OCG/签名/权限解析器 | 不计划 | 这些结构不在当前渲染依赖的公开 API 内；内置解析会扩大信任边界并制造与阅读器不一致的结果，产品明确由宿主提供数据 | `vue-pdf` | 本表及 `docs/guide/pdf.md` |
+| PDF | 权限策略执行 | 不计划 | 库只暴露权限记录供宿主/策略层判断；在渲染层强制执行复制/打印限制超出查看器职责，且不同阅读器策略不一致 | `vue-pdf` | `docs/guide/pdf.md` |
+
+矩阵中其余未列出的长尾特性仍按原则 5 以页面区域兜底。`不计划` 行是本批次的产品结论，不是遗漏；`依赖宿主/provider` 行在缺少证据时由解析器返回 `unsupported` 或拒绝创建引用。延期/不计划项不改变第 4 节的阶段完成口径。
+
+#### 4.1.3 `objectClick` 迁移状态
+
+- `DocxDocumentSurface`、`XlsxSheetSurface`、`PptxStage` 和 `PdfSurface` 继续发送格式原有的 `objectClick`；本批次没有删除任何旧事件。
+- 新对象模式并行发送 `referenceCandidateChange` 与 `referenceConfirm`；宿主可以只消费统一引用，也可以暂时继续消费 `objectClick`。
+- 阶段二完成口径仍是第 4 节“阶段二：单个可见对象”列出的对象全部实现并通过验收。当前矩阵仍有 `依赖宿主/provider` 行，所以阶段二尚未宣布完成，`objectClick` 的删除条件不成立。
+- 迁移步骤和删除条件记录在 [对象引用与选择技术设计](./object-reference-and-selection-technical-design.md) §12.1.5；在阶段二验收完成并发布迁移说明前，不得移除 `objectClick`。
+
 
 
 

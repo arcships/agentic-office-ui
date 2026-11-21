@@ -442,7 +442,9 @@ export {
   createXlsxRangeReferenceDraft,
   createXlsxRegionReferenceDraft,
   createXlsxRowReferenceDraft,
+  createXlsxTableCellReferenceDraft,
   createXlsxTableReferenceDraft,
+  createXlsxTableRowReferenceDraft,
   createXlsxWorksheetReferenceDraft,
   describeXlsxBehavior,
   describeXlsxChart,
@@ -451,6 +453,8 @@ export {
   describeXlsxDrawing,
   describeXlsxReference,
   describeXlsxTable,
+  describeXlsxTableCell,
+  describeXlsxTableRow,
   resolveXlsxReference,
 } from "./reference-adapter";
 export type {
@@ -463,6 +467,7 @@ export type {
   XlsxReferenceDrawing,
   XlsxReferenceSheet,
   XlsxReferenceTable,
+  XlsxTableSubObjectTarget,
 } from "./reference-adapter";
 export {
   createXlsxBehaviorRecords,
@@ -483,11 +488,13 @@ export type {
 } from "./xlsx-behaviors";
 export {
   createXlsxObjectRegistry,
+  rankXlsxObjectCandidates,
   withXlsxBehaviors,
   xlsxBehaviorRecordsFromSource,
   xlsxChartObjectId,
   xlsxCommentDescriptor,
   xlsxDrawingDescriptor,
+  xlsxObjectCandidateZIndex,
   xlsxStructuralObjectReliability,
   xlsxTableDescriptor,
   XLSX_BEHAVIOR_OBJECT_PROVIDER,

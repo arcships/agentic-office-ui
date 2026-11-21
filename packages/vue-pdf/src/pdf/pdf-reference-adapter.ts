@@ -22,10 +22,12 @@ import type {
 } from "./pdf-render-runtime"
 import type {
   PdfBehaviorRecord,
+  PdfBehaviorSource,
   PdfVisualObjectDetection,
 } from "./pdf-native-objects"
 import {
   PDF_BEHAVIOR_REFERENCE_KIND,
+  createPdfBehaviorRecords,
   pdfBehaviorLocatorValue,
   pdfNativeObjectType,
 } from "./pdf-native-objects"
@@ -72,6 +74,34 @@ export interface PdfReferenceContext {
   visualObjects?: readonly (PdfVisualObjectDetection & { pageIndex: number })[]
   /** Stage 4 behaviors: link actions, form rules, annotation state, … */
   behaviors?: readonly PdfBehaviorRecord[]
+  /**
+   * Host-provided document-level behavior data (attachments, OCG layers,
+   * signatures, permissions) plus native annotations. The library never parses
+   * these PDF structures: it turns the records into stage 4 references. When
+   * both `behaviors` and `behaviorSource` are present, `behaviors` wins.
+   */
+  behaviorSource?: PdfBehaviorSource
+}
+
+const behaviorSourceCache = new WeakMap<PdfReferenceContext, readonly PdfBehaviorRecord[]>()
+
+/**
+ * Resolve the stage 4 behaviors of a context.
+ *
+ * Hosts can either pre-build records with `createPdfBehaviorRecords()` (so the
+ * host owns localization) or pass raw `behaviorSource` data; both routes end in
+ * the same reference contract. No PDF attachment/OCG/signature/permission
+ * parser is bundled.
+ */
+export function resolvePdfBehaviorRecords(context: PdfReferenceContext): readonly PdfBehaviorRecord[] {
+  if (context.behaviors !== undefined) return context.behaviors
+  const source = context.behaviorSource
+  if (!source) return []
+  const cached = behaviorSourceCache.get(context)
+  if (cached) return cached
+  const records = createPdfBehaviorRecords(source)
+  behaviorSourceCache.set(context, records)
+  return records
 }
 
 export interface PdfTextReferenceSelection {
@@ -428,7 +458,7 @@ export function createPdfBehaviorReferenceDraft(
   record: PdfBehaviorRecord,
 ): PdfOfficeReferenceDraft {
   assertContext(context)
-  const current = (context.behaviors ?? []).find((candidate) => candidate.instanceId === record.instanceId)
+  const current = resolvePdfBehaviorRecords(context).find((candidate) => candidate.instanceId === record.instanceId)
   if (!current) throw new RangeError("PDF behavior is not present in the reference context")
   return {
     schemaVersion: 1,
@@ -880,10 +910,11 @@ export async function resolvePdfReference(
   }
 
   if (locator?.kind === "behavior") {
-    if (context.behaviors === undefined) {
+    const behaviors = resolvePdfBehaviorRecords(context)
+    if (context.behaviors === undefined && context.behaviorSource === undefined) {
       return { status: "unsupported", reasonCode: "pdf.behavior-evidence-unavailable" }
     }
-    const record = context.behaviors.find((candidate) => candidate.instanceId === locator.nativeId)
+    const record = behaviors.find((candidate) => candidate.instanceId === locator.nativeId)
     if (!record || record.behavior !== locator.behavior) {
       return { status: "not-found", reasonCode: "pdf.behavior-not-found" }
     }

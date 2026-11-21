@@ -324,13 +324,13 @@ function sheetDrawings(sheet: XlsxReferenceSheet): XlsxReferenceDrawing[] {
   const sheetIndex = props.controller.activeSheetIndex
   const drawings: XlsxReferenceDrawing[] = []
   for (const image of props.controller.getSheetImages?.(sheetIndex) ?? []) {
-    drawings.push({ id: image.id, objectType: "image", sheet, ...(image.name ? { name: image.name } : {}), ...(image.description ? { alt: image.description } : {}) })
+    drawings.push({ id: image.id, objectType: "image", sheet, ...(image.name ? { name: image.name } : {}), ...(image.description ? { alt: image.description } : {}), zIndex: image.zIndex })
   }
   for (const shape of props.controller.getSheetShapes?.(sheetIndex) ?? []) {
-    drawings.push({ id: shape.id, objectType: "shape", sheet, ...(shape.name ? { name: shape.name } : {}) })
+    drawings.push({ id: shape.id, objectType: "shape", sheet, ...(shape.name ? { name: shape.name } : {}), zIndex: shape.zIndex })
   }
   for (const control of props.controller.getSheetFormControls?.(sheetIndex) ?? []) {
-    drawings.push({ id: control.id, objectType: "form-control", sheet, ...(control.name ? { name: control.name } : {}) })
+    drawings.push({ id: control.id, objectType: "form-control", sheet, ...(control.name ? { name: control.name } : {}), zIndex: control.zIndex })
   }
   return drawings
 }
