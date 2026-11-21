@@ -583,7 +583,7 @@ test("the ribbon exposes structural, paste-special, number-format and name entry
     readOnly: false,
     revision: 0,
     selection: { start: { row: 2, col: 1 }, end: { row: 2, col: 1 } },
-    tabs: [],
+    tabs: [{ name: "Sheet1" }],
     zoomScale: 100,
     cutSelection: () => calls.push(["cut"]),
     copySelectionToClipboard: async () => { calls.push(["copy"]); return true; },
