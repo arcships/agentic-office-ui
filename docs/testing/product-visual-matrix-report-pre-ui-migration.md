@@ -1,5 +1,10 @@
 # Product visual matrix
 
+> Historical report: this is the pre-UI-migration capture (12 matrix
+> scenarios). The current 240-scenario report and verdicts live in
+> [`product-visual-matrix-report.md`](./product-visual-matrix-report.md) and
+> [`verdicts.json`](../../tests/baseline/visual/verdicts.json).
+
 - Mode: `report-only`
 - Generated: 2026-11-19T19:15:05.515406+00:00
 - Git HEAD: `3e0f13ddb2ad1bd5d0e1499dbc54b855ccad57b3`

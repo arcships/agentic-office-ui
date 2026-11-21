@@ -6,26 +6,27 @@ independent from the upstream Extend reference harness
 upstream React checkout, while this matrix only captures the local demo's
 product routes and their structural invariants.
 
-## Current status: pre-UI-migration snapshot
+## Current status: post-UI-migration baseline
 
-The repository is in the middle of the 0.8 UI migration (#157 primitives,
-#158–#164 page parity). The full `route × viewport × theme × zoom` matrix will
-change underneath those branches, so the committed baseline is deliberately
-small:
+The full `route × viewport × theme × zoom` matrix is committed:
 
-- `docx-viewer`, `xlsx-viewer`, `pdf-viewer`, `pptx-viewer`
-- `desktop-1440x900` in light and dark
-- `mobile-390x844` in light
-- 100% zoom
+- 10 routes (`docx-viewer`, `docx-editor`, `docx-surface`, `docx-parity`,
+  `xlsx-viewer`, `xlsx-surface`, `pdf-viewer`, `pdf-surface`, `pptx-viewer`,
+  `pptx-surface`)
+- 4 viewports (`desktop-1440x900`, `laptop-1280x720`, `tablet-768x1024`,
+  `mobile-390x844`)
+- 2 themes (light/dark) and 3 zooms (50/100/200%)
 
-That is **12 matrix baselines** plus **17 issue-evidence baselines**
-(`evidence/`). The capture script still reproduces the full matrix (10 routes ×
-4 viewports × 2 themes × 3 zooms = 240 scenarios). Recapture and commit the full
-matrix after #159–#164 land:
+That is **240 matrix baselines** plus **21 issue-evidence baselines**
+(`evidence/`). The `product-visual-matrix.test.mjs` contract keeps the matrix at
+240 scenarios.
+
+To refresh only the issue evidence, keep the matrix baselines untouched:
 
 ```bash
-python3 scripts/ci/capture-visual-matrix.py --update-baseline \
-  --baseline-label post-ui-migration
+python3 scripts/ci/capture-visual-matrix.py --evidence-only \
+  --evidence-filter docx-viewer-floating,docx-editor-floating-behind \
+  --update-baseline --baseline-label post-ui-migration
 ```
 
 See `manifest.json` for the exact files, SHA-256 hashes and captured Git HEAD.
@@ -137,24 +138,37 @@ rendering findings:
 | `docx-viewer-thumbnails` | #44 / #48 thumbnail panel content and rendering |
 | `docx-viewer-page-sizes` | #27 mixed page sizes and per-page thumbnail aspect ratios |
 | `docx-viewer-tables` | #30 merged/nested tables and repeating headers |
-| `docx-viewer-embedded` | #36 embedded objects; the fixture does **not** contain a floating image |
-| `docx-editor-default` | #28 editor shell (interaction behaviour needs another fixture) |
+| `docx-viewer-embedded` | #36 embedded text boxes, shapes and chart/OLE objects |
+| `docx-viewer-floating` | #36 column-anchored floating image with square wrap (`docx-svg-pictures.docx`) |
+| `docx-editor-floating-behind` | #36 behind-text conversion in edit mode (records the misplaced column anchor) |
+| `docx-editor-default` | #28 editor shell and toolbar |
 | `xlsx-viewer-freeze-merge`, `xlsx-surface-freeze-merge` | #14 / #15 freeze panes and merged regions after scrolling |
 | `xlsx-viewer-databar-icons`, `xlsx-viewer-iconsets` | #15 data bars and icon sets |
+| `xlsx-viewer-conditional-formats` | #13 data bars, colour scale and icon set from the #72 corpus |
 | `xlsx-viewer-dpr2` | #15 DPR 2 canvas backing store |
 | `xlsx-viewer-charts` | #67 / #70 chart families, ticks, legend, combo charts |
+| `xlsx-viewer-chart-combos` | #67 one-axis and two-axis combination charts |
 | `pdf-viewer-rotated`, `pptx-viewer-deck`, `pptx-surface-stack` | general route coverage |
 
 ## Known gaps
 
-- #13 is a performance finding; screenshots cannot observe per-frame allocations.
+- #13's per-frame counters live in `tests/component/xlsx-render-perf.test.mjs`;
+  the evidence screenshot only proves the conditional formats still paint.
 - #28's keydown scope, context menu, paste and dirty tracking are interaction
-  behaviours; a screenshot only confirms the editor shell.
-- #36 needs a DOCX fixture with an actual floating image (none of the current
-  samples contains one).
-- #67/#70 need percent/date axis and long-legend fixtures to observe every
-  sub-claim. The current `xlsx-chart-families.xlsx` covers families, combo
-  charts, categories and basic value ticks.
+  behaviours, observed by `tests/component/docx-edit-interactions.test.mjs`; a
+  screenshot only confirms the editor shell.
+- #36 is **confirmed** for edit mode: the absolute image layer positions a
+  column-anchored float from the page edge (96 px too far left). View mode and
+  the wrap/exclusion/drag paths are refuted. No committed fixture has a
+  page-anchored wrapNone or a rotated image.
+- #67 is **confirmed** for the two-axis combo: the classic chart parser keeps
+  only the first value axis in `chart.axes`, so `Combo Two Axes` renders one
+  axis. The data-label, percent, log, smooth/marker and date-axis paths are
+  refuted by `tests/component/xlsx-chart-rendering.test.mjs`.
+- #67/#70 have no workbook fixture with `dLbls`, `logBase`, `dateAx`, 12 long
+  category labels or a long legend; those configurations are asserted with chart
+  models in `tests/component/xlsx-chart-rendering.test.mjs` and
+  `tests/component/xlsx-chart-axis.test.mjs`.
 - #27's stale page-height cache and thumbnail cache thrash need a scripted
   document switch, not a single snapshot.
 - Cross-OS font rendering still differs; that is why pixel diffs remain

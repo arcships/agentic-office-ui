@@ -10,30 +10,30 @@ deterministic screenshot + DOM-structure matrix:
 - **2 themes**: light / dark (URL `?theme=`)
 - **3 zooms**: 50% / 100% / 200% (CSS `zoom`)
 
-The full matrix is 240 scenarios. It also captures 17 issue-evidence scenarios
-(comments, thumbnails, frozen panes/merges, data bars/icons, DPR 2, charts,
-embedded objects) used by the verdict table for #13–#15, #27–#30, #36, #44,
-#48, #67 and #70.
+The full matrix is 240 scenarios. It also captures 21 issue-evidence scenarios
+(comments, thumbnails, frozen panes/merges, data bars/icons, conditional
+formats, DPR 2, charts, combo charts, floating DOCX images, embedded objects)
+used by the verdict table for #13–#15, #27–#30, #36, #44, #48, #67 and #70.
 
-## Current status (pre-UI-migration)
+## Current status
 
-The 0.8 UI migration (#157, #158–#164) is still landing, so the committed
-baseline under [`tests/baseline/visual/`](../../tests/baseline/visual) is a
-deliberately small snapshot:
+The 0.8 UI migration (#157, #158–#164) and the four-viewport parity baselines
+(#174) are committed, so the baseline under
+[`tests/baseline/visual/`](../../tests/baseline/visual) is the full matrix:
 
 | Routes | Viewports | Themes | Zoom | Baselines |
 |---|---|---|---|---:|
-| docx-viewer, xlsx-viewer, pdf-viewer, pptx-viewer | 1440×900, 390×844 | light, dark (1440 only) | 100% | 12 |
-| evidence scenarios | 1440×900 (DPR 2 for one case) | light | 100% | 17 |
+| all 10 product routes | 1440×900, 1280×720, 768×1024, 390×844 | light, dark | 50/100/200% | 240 |
+| evidence scenarios | 1440×900 (DPR 2 for one case) | light | 100% | 21 |
 
-The full matrix was captured locally while developing the script (240/240
-structural assertions passed), but it is not committed while the UI is changing.
-After #159–#164 merge:
+`--evidence-only` / `--evidence-filter` refresh a subset of the evidence without
+rewriting the 240 matrix screenshots:
 
 ```bash
 pnpm --filter demo... build
-python3 scripts/ci/capture-visual-matrix.py --skip-build --update-baseline \
-  --baseline-label post-ui-migration
+python3 scripts/ci/capture-visual-matrix.py --skip-build --evidence-only \
+  --evidence-filter docx-viewer-floating,docx-editor-floating-behind \
+  --update-baseline --baseline-label post-ui-migration
 ```
 
 ## Blocking policy
@@ -55,9 +55,12 @@ failures fail the job; pixel differences only appear in the report.
 ## Report
 
 The checked-in report for the current baseline is
-[`product-visual-matrix-report-pre-ui-migration.md`](./product-visual-matrix-report-pre-ui-migration.md).
-It contains the route × scenario → screenshot → status table, the evidence
-scenario table and the confirmed/refuted/needs-another-fixture verdict table.
+[`product-visual-matrix-report.md`](./product-visual-matrix-report.md). The
+pre-UI-migration report
+([`product-visual-matrix-report-pre-ui-migration.md`](./product-visual-matrix-report-pre-ui-migration.md))
+is kept as the historical 12-scenario snapshot. The current report contains the
+route × scenario → screenshot → status table, the evidence scenario table and
+the confirmed/refuted verdict table.
 
 Regenerate it without a browser:
 

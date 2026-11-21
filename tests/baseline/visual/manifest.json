@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "kind": "product-visual-matrix-baseline",
   "label": "post-ui-migration",
-  "generatedAt": "2026-11-20T15:57:59.037945+00:00",
-  "gitHead": "cc12aa8e42d5b6a9ad15f3c0c05c4ec13b4277e3",
+  "generatedAt": "2026-11-21T05:38:28.292116+00:00",
+  "gitHead": "ba6da77652944156e6e9a3e67360c67727ef0752",
   "browser": "149.0.7827.55",
   "determinism": {
     "deviceScaleFactor": 1,
@@ -46,8 +46,8 @@
   "screenshotFormat": "lossless WebP",
   "counts": {
     "matrix": 240,
-    "evidence": 17,
-    "total": 257
+    "evidence": 21,
+    "total": 261
   },
   "entries": [
     {
@@ -3425,6 +3425,20 @@
       "structural": "PASS"
     },
     {
+      "id": "docx-editor-floating-behind",
+      "kind": "evidence",
+      "route": "/docx-editor",
+      "viewport": "desktop-1440x900",
+      "theme": "light",
+      "zoom": 100,
+      "screenshot": "tests/baseline/visual/evidence/docx-editor-floating-behind.webp",
+      "screenshotSha256": "e1c282e518c821938d65907255fe3f6bb8320b7dd4f160c9e62c6fb820830fa6",
+      "screenshotBytes": 32510,
+      "structure": "tests/baseline/visual/evidence/docx-editor-floating-behind.json",
+      "structureSha256": "171a92f44937de5b2f2685d29cbfd12940c6ad0e00f56a8904862afe8f758a01",
+      "structural": "PASS"
+    },
+    {
       "id": "docx-viewer-comments-zoom50",
       "kind": "evidence",
       "route": "/docx-viewer",
@@ -3506,6 +3520,20 @@
       "screenshotBytes": 38694,
       "structure": "tests/baseline/visual/evidence/docx-viewer-embedded.json",
       "structureSha256": "c440698239819a3eb3d0a74dedd0cea0e233f29545734e012872c3e8877f19eb",
+      "structural": "PASS"
+    },
+    {
+      "id": "docx-viewer-floating",
+      "kind": "evidence",
+      "route": "/docx-viewer",
+      "viewport": "desktop-1440x900",
+      "theme": "light",
+      "zoom": 100,
+      "screenshot": "tests/baseline/visual/evidence/docx-viewer-floating.webp",
+      "screenshotSha256": "4c22368b72725068c262d69289d64b3f7e9529e77ee754b13c8450e12e16db0b",
+      "screenshotBytes": 25868,
+      "structure": "tests/baseline/visual/evidence/docx-viewer-floating.json",
+      "structureSha256": "160cc76cc7b0485c3c049ec30bec4d60897085f3e91e8eadc1751b7940f50a27",
       "structural": "PASS"
     },
     {
@@ -3646,6 +3674,34 @@
       "screenshotBytes": 96618,
       "structure": "tests/baseline/visual/evidence/xlsx-viewer-dpr2.json",
       "structureSha256": "754d7273e441f45b2fc7478753d7527eb20d8d444d36b921ce817eb6a194ea51",
+      "structural": "PASS"
+    },
+    {
+      "id": "xlsx-viewer-chart-combos",
+      "kind": "evidence",
+      "route": "/xlsx-viewer",
+      "viewport": "desktop-1440x900",
+      "theme": "light",
+      "zoom": 100,
+      "screenshot": "tests/baseline/visual/evidence/xlsx-viewer-chart-combos.webp",
+      "screenshotSha256": "1da3711fbd9756440701790d1055a8d75da87627139f5c54d5dbffee9b17b111",
+      "screenshotBytes": 35784,
+      "structure": "tests/baseline/visual/evidence/xlsx-viewer-chart-combos.json",
+      "structureSha256": "9c2889c9bc850f190b3221a850701af14e785058fbc52dcb88787b816cfde8c3",
+      "structural": "PASS"
+    },
+    {
+      "id": "xlsx-viewer-conditional-formats",
+      "kind": "evidence",
+      "route": "/xlsx-viewer",
+      "viewport": "desktop-1440x900",
+      "theme": "light",
+      "zoom": 100,
+      "screenshot": "tests/baseline/visual/evidence/xlsx-viewer-conditional-formats.webp",
+      "screenshotSha256": "5f0e5477a766fe3718bcd8177798805388238dbb4e91073cebac43062bf67054",
+      "screenshotBytes": 32820,
+      "structure": "tests/baseline/visual/evidence/xlsx-viewer-conditional-formats.json",
+      "structureSha256": "5b363da5978b1f4583e1d7731c3c3817dc316a8efd8773411709e6e5f5f6fd54",
       "structural": "PASS"
     }
   ]
