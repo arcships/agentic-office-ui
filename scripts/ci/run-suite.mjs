@@ -67,6 +67,7 @@ const suites = {
       "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/extend-parity-harness.test.mjs",
       "tests/unit/ui-parity-gate.test.mjs",
+      "tests/unit/style-parity-allowlist.test.mjs",
       "tests/unit/ui-parity-routes.test.mjs",
       "tests/unit/vue-ui-primitives-contract.test.mjs",
       "tests/unit/product-visual-matrix.test.mjs",
@@ -717,8 +718,9 @@ command("vue-component-behavior-5", process.execPath, [
   check: [
     command("typecheck", pnpm, ["typecheck"]),
     command("build", pnpm, ["-r", "build"]),
-    // #165 component style guards: new bare hex/radius/font-size/shadow/
-    // transition values in packages/*/src fail against the frozen baseline.
+    // #165/#175 component style guards: new bare hex/radius/font-size/shadow/
+    // transition values in packages/*/src fail unless they are exact entries
+    // in the parity-literal allowlist.
     command("style-token-guard", process.execPath, [
       "scripts/ci/lint-styles.mjs",
     ], {

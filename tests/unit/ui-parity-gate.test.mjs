@@ -43,6 +43,7 @@ function run(args, env = {}) {
 const manifest = readJson("tools/parity-fixtures/manifest.json");
 const baselineManifest = readJson("tests/visual/extend/manifest.json");
 const styleBaseline = readJson("tests/style/component-style-baseline.json");
+const parityAllowlist = readJson("tests/style/parity-literal-allowlist.json");
 const a11yConfig = readJson("tests/a11y/config.json");
 const a11yAllowlist = readJson("tests/a11y/allowlist.json");
 const workflow = read(".github/workflows/ui-parity.yml");
@@ -330,11 +331,30 @@ test("component style guards keep the four token rules and freeze only existing 
   for (const rules of counts) {
     for (const value of Object.values(rules)) assert.ok(Number.isInteger(value) && value > 0);
   }
+  // #175: the generic baseline is legacy-only; the #161b parity literals live
+  // in the exact allowlist instead of being double-frozen here.
+  assert.equal(parityAllowlist.schemaVersion, 1);
+  assert.equal(parityAllowlist.entries.length, 3);
+  assert.equal(
+    parityAllowlist.entries.reduce((total, entry) => total + entry.count, 0),
+    22,
+  );
+  for (const entry of parityAllowlist.entries) {
+    assert.ok(entry.file && !entry.file.includes("*"));
+    assert.ok(entry.rule && entry.property !== undefined && entry.value);
+    assert.match(entry.issue, /^#\d+$/);
+    assert.ok(entry.reason.length >= 40);
+    assert.match(entry.reviewBy, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(entry.upstreamPath && entry.upstreamCommit);
+  }
+  assert.ok(!styleBaseline.counts["packages/vue-pptx/src/PptxViewerToolbar.vue"]);
+  assert.ok(!styleBaseline.counts["packages/vue-pptx/src/PptxSlideCard.vue"]);
 
   const lint = run(["scripts/ci/lint-styles.mjs", "--report-only"], {
     STYLE_GUARD_EVIDENCE_DIR: path.join(rootPath, "output/style-guard-test"),
   });
   assert.equal(lint.status, 0, `${lint.stdout}\n${lint.stderr}`);
+  assert.match(lint.stdout, /22 parity-literal/);
   assert.match(lint.stdout, /0 new/);
 });
 

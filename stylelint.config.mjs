@@ -7,11 +7,15 @@
  * value; the token layer (`packages/*\/src/styles/tokens.css` and the theme
  * file that maps it) is exempt because defining those values is its job.
  *
- * Existing violations are frozen in `tests/style/component-style-baseline.json`
+ * Historical violations are frozen in `tests/style/component-style-baseline.json`
  * and policed by `scripts/ci/lint-styles.mjs`: the guard fails on new
- * violations only, and the baseline can only grow through an approved update
- * (`pnpm lint:style:baseline --approve ...`). The rules themselves are never
- * disabled for a whole directory.
+ * violations only. Deliberate upstream pixel-parity literals are listed
+ * separately, one exact file/rule/property/value/count per entry, in
+ * `tests/style/parity-literal-allowlist.json`; they are deducted before the
+ * baseline comparison and never grow the generic baseline. The legacy baseline
+ * is shrink-only (`pnpm lint:style:baseline --approve ...` records a refresh);
+ * new bare values must be tokenised or added to the parity allowlist. The
+ * rules themselves are never disabled for a whole directory.
  */
 export default {
   // Vue SFC <style> blocks are linted through postcss-html; plain CSS uses

@@ -8,9 +8,9 @@
   ],
   "approved": {
     "reviewer": "dim-agent",
-    "issue": "#161",
-    "reason": "PptxViewerToolbar ring/shadow offsets and PptxSlideCard 150ms transitions mirror the pinned upstream Tailwind utilities landed by #161b; freeze the remaining 22 occurrences. The #fff preview was switched to the identical CSS white keyword, which keeps pixels and removes one violation.",
-    "date": "2026-11-20"
+    "issue": "#175",
+    "reason": "Move the 22 #161b PPTX parity literals to the exact parity-literal allowlist and refresh the legacy ledger to actual remaining debt; no new debt is approved.",
+    "date": "2026-11-21"
   },
   "counts": {
     "packages/vue-docx/src/components/DocxContextMenu.vue": {
@@ -32,9 +32,8 @@
       "declaration-property-unit-disallowed-list": 5
     },
     "packages/vue-docx/src/components/DocxFormFieldDialog.vue": {
-      "color-no-hex": 24,
-      "declaration-property-unit-disallowed-list": 8,
-      "declaration-property-value-disallowed-list": 1
+      "color-no-hex": 17,
+      "declaration-property-unit-disallowed-list": 5
     },
     "packages/vue-docx/src/components/DocxFormFieldLayer.vue": {
       "color-no-hex": 10,
@@ -52,7 +51,7 @@
       "declaration-property-value-disallowed-list": 1
     },
     "packages/vue-docx/src/components/DocxLinkHoverCard.vue": {
-      "color-no-hex": 18,
+      "color-no-hex": 15,
       "declaration-property-unit-disallowed-list": 4
     },
     "packages/vue-docx/src/components/DocxNotesSection.vue": {
@@ -136,14 +135,8 @@
     "packages/vue-pdf/src/components/PdfViewerToolbar.vue": {
       "declaration-property-unit-disallowed-list": 10
     },
-    "packages/vue-pptx/src/PptxSlideCard.vue": {
-      "declaration-property-unit-disallowed-list": 3
-    },
     "packages/vue-pptx/src/PptxStage.vue": {
       "color-no-hex": 1
-    },
-    "packages/vue-pptx/src/PptxViewerToolbar.vue": {
-      "declaration-property-unit-disallowed-list": 19
     },
     "packages/vue-pptx/src/style.css": {
       "color-no-hex": 32,
@@ -198,10 +191,6 @@
     },
     "packages/vue-ui/src/print.css": {
       "color-no-hex": 2
-    },
-    "packages/vue-ui/src/styles/chrome.css": {
-      "declaration-property-unit-disallowed-list": 7,
-      "declaration-property-value-disallowed-list": 1
     },
     "packages/vue-ui/src/styles/ui.css": {
       "declaration-property-unit-disallowed-list": 6
@@ -282,12 +271,12 @@
     }
   },
   "totals": {
-    "files": 64,
-    "warnings": 1015,
+    "files": 61,
+    "warnings": 971,
     "byRule": {
-      "color-no-hex": 537,
-      "declaration-property-unit-disallowed-list": 434,
-      "declaration-property-value-disallowed-list": 44
+      "color-no-hex": 527,
+      "declaration-property-unit-disallowed-list": 402,
+      "declaration-property-value-disallowed-list": 42
     }
   }
 }
