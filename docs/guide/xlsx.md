@@ -189,6 +189,7 @@ controller.clearHighlightedRanges()
 - 显式 `chartColorStyle` 部件或系列 `spPr` 填充仍然优先；只有没有自定义颜色样式且图表带经典 `style` 时才使用内置调色板。带 `fillImage` 的系列/数据点仍保留图片填充，不会被内置颜色覆盖。
 - 三维曲面图继续使用专用曲面调色板，同时从同一套内置样式取得墙面/底面填充和主网格线颜色；`chartStyleId` 为 140–148 的深色变体保留深色图表区与浅色文字。
 - `XlsxChartAxis.majorGridlineColor` 会记录网格线颜色（作者 XML 中显式设置时优先），自定义渲染层可以直接使用。
+- `XlsxChart.axes` 保留图表部件声明的全部 `catAx` / `dateAx` / `valAx` / `serAx`，包括 `id`、`title`、`position`、`crossId` / `crosses`、`min` / `max` 与 `numberFormat`。组合图按 `typeGroups[].axisIds` 把每个系列组绑定到自己的数值轴：双轴组合图在右侧绘制第二个 `valAx` 的刻度、轴线和标题，单轴组合图仍只画一个数值轴。
 
 ## 形状预设几何与连接线
 

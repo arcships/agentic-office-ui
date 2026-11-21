@@ -90,6 +90,7 @@ import { parseChartExChartXml } from "./chart-ex-parser";
 import {
   normalizeChartAxis,
   mergeChartAxis,
+  mergeChartAxes,
   readChartAxisFromXml,
   readChartWallFromXml,
   normalizeChartDataLabels,
@@ -924,7 +925,8 @@ function applyChartStyleFromXml(
     ...getLocalChildren(plotArea, "dateAx")
   ];
   const valueAxisNodes = getLocalChildren(plotArea, "valAx");
-  const seriesAxisNode = getLocalChildren(plotArea, "serAx")[0] ?? null;
+  const seriesAxisNodes = getLocalChildren(plotArea, "serAx");
+  const seriesAxisNode = seriesAxisNodes[0] ?? null;
   const isScatterLikeChart = (
     chart.chartType === "Scatter"
     || chart.chartType === "ScatterLines"
@@ -946,21 +948,13 @@ function applyChartStyleFromXml(
   chart.categoryAxis = mergeChartAxis(chart.categoryAxis, readChartAxisFromXml(categoryAxisNode, themePalette));
   chart.valueAxis = mergeChartAxis(chart.valueAxis, readChartAxisFromXml(valueAxisNode, themePalette));
   chart.seriesAxis = mergeChartAxis(chart.seriesAxis, readChartAxisFromXml(seriesAxisNode, themePalette));
-  chart.axes = chart.axes.length > 0
-    ? chart.axes.map((axis, index) => (
-      index === 0 && categoryAxisNode
-        ? { ...axis, ...readChartAxisFromXml(categoryAxisNode, themePalette) }
-        : index === 1 && valueAxisNode
-          ? { ...axis, ...readChartAxisFromXml(valueAxisNode, themePalette) }
-          : axis
-    ))
-    : chart.axes;
-  if (seriesAxisNode) {
-    const seriesAxis = readChartAxisFromXml(seriesAxisNode, themePalette);
-    if (seriesAxis && !chart.axes.some((axis) => axis.id != null && axis.id === seriesAxis.id)) {
-      chart.axes = [...chart.axes, seriesAxis as XlsxChartAxis];
-    }
-  }
+  // Keep every declared axis, not only the first catAx/valAx pair: two-axis
+  // combo charts reference a second value axis from their line/area group.
+  chart.axes = mergeChartAxes(chart.axes, [
+    ...categoryAxisNodes.map((axisNode) => readChartAxisFromXml(axisNode, themePalette)),
+    ...valueAxisNodes.map((axisNode) => readChartAxisFromXml(axisNode, themePalette)),
+    ...seriesAxisNodes.map((axisNode) => readChartAxisFromXml(axisNode, themePalette))
+  ]);
 
   applyChartSeriesStyleFromXml(chart, chartTypeNode, themePalette);
   applyFallbackSeriesStyles();

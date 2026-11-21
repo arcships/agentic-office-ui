@@ -608,11 +608,18 @@ export function findAxisForGroup(
   chart: XlsxChart,
   axisIds: number[],
   positionMatcher: (position: string | undefined) => boolean,
-  allowAnyMatch = false
+  allowAnyMatch = false,
+  axisTypes?: Array<XlsxChartAxis["axisType"]>
 ) {
+  const matchesAxisType = (axis: XlsxChartAxis) => (
+    axisTypes == null
+    || axis.axisType == null
+    || axisTypes.includes(axis.axisType)
+  );
   const positionedMatch = chart.axes.find((axis) => (
     axis.id != null
     && axisIds.includes(axis.id)
+    && matchesAxisType(axis)
     && positionMatcher(axis.position)
   ));
   if (positionedMatch) {
@@ -621,16 +628,32 @@ export function findAxisForGroup(
   if (!allowAnyMatch) {
     return null;
   }
-  return chart.axes.find((axis) => axis.id != null && axisIds.includes(axis.id)) ?? null;
+  return chart.axes.find((axis) => (
+    axis.id != null
+    && axisIds.includes(axis.id)
+    && matchesAxisType(axis)
+  )) ?? null;
 }
 
 export function buildComboGroups(chart: XlsxChart): ComboRenderableGroup[] {
   return (chart.typeGroups ?? []).map((group) => {
     const axisIds = group.axisIds ?? [];
-    const categoryAxis = findAxisForGroup(chart, axisIds, (position) => position === "b" || position === "t")
+    const categoryAxis = findAxisForGroup(
+      chart,
+      axisIds,
+      (position) => position === "b" || position === "t",
+      false,
+      ["category", "date"]
+    )
       ?? chart.categoryAxis
       ?? null;
-    const valueAxis = findAxisForGroup(chart, axisIds, (position) => position === "l" || position === "r", true)
+    const valueAxis = findAxisForGroup(
+      chart,
+      axisIds,
+      (position) => position === "l" || position === "r",
+      true,
+      ["value"]
+    )
       ?? chart.valueAxis
       ?? null;
     return {
@@ -645,6 +668,33 @@ export function buildComboGroups(chart: XlsxChart): ComboRenderableGroup[] {
       valueAxis
     };
   }).filter((group) => group.series.length > 0);
+}
+
+/**
+ * Returns the value axis used by a second combo group when it differs from the
+ * first group's axis. A combo chart that declares both groups on the same
+ * `axId` has no secondary axis.
+ */
+export function resolveComboSecondaryValueAxis(chart: XlsxChart): XlsxChartAxis | null {
+  const groups = buildComboGroups(chart);
+  if (groups.length < 2) {
+    return null;
+  }
+  const primary = groups[0]?.valueAxis ?? null;
+  for (const group of groups.slice(1)) {
+    const axis = group.valueAxis;
+    if (!axis) {
+      continue;
+    }
+    if (primary && (
+      axis === primary
+      || (axis.id != null && primary.id != null && axis.id === primary.id)
+    )) {
+      continue;
+    }
+    return axis;
+  }
+  return null;
 }
 
 export function resolveRenderableSeriesValue(rawValue: unknown, displayBlanksAs: string | undefined) {

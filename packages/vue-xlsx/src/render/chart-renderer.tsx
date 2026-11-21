@@ -66,6 +66,7 @@ export {
   getComboLegendSeries,
   findAxisForGroup,
   buildComboGroups,
+  resolveComboSecondaryValueAxis,
   resolveRenderableSeriesValue,
   coerceLooseNumber,
   buildPieEntries,

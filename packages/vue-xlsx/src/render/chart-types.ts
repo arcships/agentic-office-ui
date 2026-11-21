@@ -58,6 +58,8 @@ export type ChartLayout = {
   legendMetrics?: ChartLegendMetrics;
   legendPosition: string | undefined;
   plot: PlotRect;
+  /** Right-hand gutter reserved for a combo chart's secondary value axis. */
+  secondaryAxisWidth?: number;
   titleHeight: number;
   width: number;
 };

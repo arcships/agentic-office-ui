@@ -110,7 +110,8 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
       ? axis.shapeProperties as Record<string, unknown>
       : undefined,
     tickLabelSkip: typeof axis.tickLabelSkip === "number" && Number.isFinite(axis.tickLabelSkip) ? axis.tickLabelSkip : undefined,
-    tickMarkSkip: typeof axis.tickMarkSkip === "number" && Number.isFinite(axis.tickMarkSkip) ? axis.tickMarkSkip : undefined
+    tickMarkSkip: typeof axis.tickMarkSkip === "number" && Number.isFinite(axis.tickMarkSkip) ? axis.tickMarkSkip : undefined,
+    title: typeof axis.title === "string" ? axis.title : undefined
   };
 }
 
@@ -122,6 +123,64 @@ export function mergeChartAxis(target: XlsxChartAxis | null | undefined, patch: 
     ...(target ?? {}),
     ...patch
   };
+}
+
+function compactChartAxisPatch(patch: Partial<XlsxChartAxis>): Partial<XlsxChartAxis> {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined)
+  ) as Partial<XlsxChartAxis>;
+}
+
+/**
+ * Merges the axes declared by a chart part into the axes an engine already
+ * reported. `c:catAx`/`c:valAx`/`c:serAx` entries are kept in document order
+ * and matched to existing entries by `axId`, so a secondary value axis is not
+ * dropped when the engine only reports the first one.
+ */
+export function mergeChartAxes(
+  target: XlsxChartAxis[] | null | undefined,
+  patches: Array<Partial<XlsxChartAxis> | null | undefined>
+): XlsxChartAxis[] {
+  const existing = Array.isArray(target) ? target : [];
+  const merged: XlsxChartAxis[] = [];
+  for (const patch of patches) {
+    if (!patch) {
+      continue;
+    }
+    const match = patch.id != null
+      ? existing.find((axis) => axis.id === patch.id)
+      : undefined;
+    merged.push(match
+      ? { ...match, ...compactChartAxisPatch(patch) }
+      : patch as XlsxChartAxis);
+  }
+  for (const axis of existing) {
+    const alreadyMerged = axis.id != null
+      ? merged.some((candidate) => candidate.id === axis.id)
+      : merged.includes(axis);
+    if (!alreadyMerged) {
+      merged.push(axis);
+    }
+  }
+  return merged;
+}
+
+export function readChartAxisTitleFromXml(axisNode: Element | null): string | undefined {
+  if (!axisNode) {
+    return undefined;
+  }
+  const titleNode = getFirstLocalChild(axisNode, "title");
+  if (!titleNode) {
+    return undefined;
+  }
+  const richText = getLocalDescendants(titleNode, "t")
+    .map((node) => node.textContent ?? "")
+    .join("")
+    .trim();
+  if (richText) {
+    return richText;
+  }
+  return getFirstLocalDescendant(titleNode, "v")?.textContent?.trim() || undefined;
 }
 
 export function readChartAxisFromXml(axisNode: Element | null, themePalette?: XlsxThemePalette | null): Partial<XlsxChartAxis> | null {
@@ -182,7 +241,8 @@ export function readChartAxisFromXml(axisNode: Element | null, themePalette?: Xl
       : undefined,
     position: getFirstLocalChild(axisNode, "axPos")?.getAttribute("val") ?? undefined,
     tickLabelSkip: readChartNumericAttribute(axisNode, "tickLblSkip"),
-    tickMarkSkip: readChartNumericAttribute(axisNode, "tickMarkSkip")
+    tickMarkSkip: readChartNumericAttribute(axisNode, "tickMarkSkip"),
+    title: readChartAxisTitleFromXml(axisNode)
   };
 }
 

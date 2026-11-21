@@ -252,7 +252,9 @@ test("combo charts sharing a value axis do not render a second axis", async () =
 
   const sharedRoot = await renderChart(makeCombo(true));
   const splitRoot = await renderChart(makeCombo(false));
-  const secondaryAxisLabels = (root) => textNodes(root).filter((node) => node.x > rect.width - 20);
+  const secondaryAxisLabels = (root) => textNodes(root).filter((node) => (
+    node.anchor === "start" && node.x > rect.width / 2
+  ));
   assert.equal(secondaryAxisLabels(sharedRoot).length, 0, "shared axis has no right-hand labels");
   assert.ok(secondaryAxisLabels(splitRoot).length > 0, "independent axes still render the right-hand axis");
   const sharedTickValues = textNodes(sharedRoot)
