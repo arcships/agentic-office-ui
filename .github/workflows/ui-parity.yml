@@ -5,9 +5,11 @@ name: UI parity (Extend reference)
 # Gate behaviour:
 #   - `ui-contracts`      style-token guards + committed-baseline approval contract.
 #   - `ui-parity-core`    pull-request core subset against the pinned reference AND
-#                         the committed baselines, in the final `--gate-mode all`.
-#   - `ui-parity-nightly` the full 4-viewport × light/dark matrix, nightly and on
-#                         dispatch, also in `--gate-mode all`.
+#                         the committed baselines at the fast 1440x900 + 390x844
+#                         viewports, in the final `--gate-mode all`.
+#   - `ui-parity-nightly` the full 4-viewport × light/dark matrix for every surface,
+#                         baseline-compared against all four committed viewports
+#                         (#174), nightly and on dispatch, also in `--gate-mode all`.
 #   - `ui-a11y`           axe-core WCAG A/AA + keyboard smoke for the core components.
 #
 # The final gate is on: both parity jobs pass `--gate-mode all`, so any captured
@@ -158,6 +160,9 @@ jobs:
 
       # Final gate: live reference parity and committed-baseline diffs both
       # block. `pptx-presenter` is unreachable and is skipped, not faked.
+      # This pair is the fast pull-request gate and must stay in sync with
+      # `coreSubset.viewports` in tools/parity-fixtures/manifest.json (unit-tested);
+      # the 1280x720 / 768x1024 baselines are compared by the nightly job.
       - name: Capture and gate the core parity subset
         run: >-
           pnpm ui:parity -- --only "${UI_PARITY_SUBSET}"
@@ -233,9 +238,11 @@ jobs:
       - name: Verify the Extend token report is current
         run: pnpm ui:tokens:check
 
-      # Full 4-viewport × light/dark matrix for every renderable surface.
-      # Baseline comparisons only cover the committed baseline matrix
-      # (1440x900 + 390x844 × light + dark); the rest is live parity.
+      # Full 4-viewport × light/dark matrix for every renderable surface (#174).
+      # Every captured viewport/theme has a committed baseline, so this job
+      # baseline-compares all 864 cases: a missing, hand-edited or drifted PNG
+      # blocks. Do not add `--viewports` here — narrowing the matrix would leave
+      # the 1280x720 / 768x1024 baselines uncompared (tests/unit/ui-parity-gate.test.mjs).
       - name: Capture and gate the full parity matrix
         run: pnpm ui:parity -- --baseline --gate-mode all
 

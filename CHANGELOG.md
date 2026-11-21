@@ -10,6 +10,10 @@ All notable changes to the `@arcships` package family are documented in this fil
 - PDF thumbnail listbox: `:focus-visible` ring from `--office-ring`; Tab focus is visible without changing default pixels.
 - `tests/a11y/allowlist.json` is empty and `pnpm test:a11y` runs with 0 violations / 0 keyboard failures.
 
+### Visual regression (#174)
+- Committed parity baselines now cover the full 4-viewport DoD matrix: 1440x900, 1280x720, 768x1024 and 390x844 × light/dark × every state of the 25 gate-blocking surfaces — 432 → 864 PNGs (14.0 MiB), one approval record, existing 1440/390 PNGs unchanged byte-for-byte.
+- `ui-parity-nightly` captures and baseline-compares all four viewports (864 cases, `--gate-mode all`); the pull-request `ui-parity-core` job keeps the fast 1440x900 + 390x844 pair via the new `coreSubset.viewports`, and a unit test fails if the nightly job ever narrows the matrix.
+
 ## [0.8.0] - 2026-11-21
 
 Extend UI pixel-level alignment: 25 blocking parity surfaces, 432 approved baselines, and a final `--gate-mode all` CI gate.

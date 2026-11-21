@@ -7,8 +7,14 @@ change.
 
 - Naming: `<surface>/<state>/<theme>-<viewport>.png` (e.g.
   `pdf-toolbar/default/dark-1440x900.png`).
-- Matrix: `1440x900` and `390x844`, `light` and `dark`, DPR 2, 12px capture
-  padding around the measured target.
+- Matrix: all four parity viewports — `1440x900`, `1280x720`, `768x1024` and
+  `390x844` — × `light` and `dark`, DPR 2, 12px capture padding around the
+  measured target (#174). 25 gate-blocking surfaces × their states × 4
+  viewports × 2 themes = **864 PNGs** (~14 MiB).
+- CI coverage: the pull-request job captures and compares the fast pair
+  (`coreSubset.viewports` = `1440x900` + `390x844`); the nightly full matrix
+  captures and compares all four viewports, so a 1280x720 or 768x1024
+  regression blocks there even when the upstream reference is unchanged.
 - Only surfaces with `gateStatus: blocking` in
   `tools/parity-fixtures/manifest.json` have baselines.
 - `manifest.json` records every file's SHA-256, size and dimensions, the
