@@ -506,3 +506,69 @@ test("sheet shortcuts and undo stay out of an open cell editor", async () => {
     mounted.app.unmount();
   }
 });
+
+// Regression for the #191 CI flake: the strip swaps its 40px viewport for 50px
+// when the tabs overflow, and that measurement used to run once on mount. A web
+// font swap changes the tab widths without resizing the scroll element, so the
+// stale `overflowing` value survived and the same cell was captured at 684x162
+// on one page load and 684x182 on the next. The strip now re-measures when the
+// tab list resizes and once the fonts are ready.
+test("the overflow viewport re-measures after the tab list or fonts settle", async () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+  const originalDocument = globalThis.document;
+  const observers = [];
+  let resolveFonts;
+  const fontsReady = new Promise((resolve) => {
+    resolveFonts = resolve;
+  });
+
+  class FakeResizeObserver {
+    constructor(callback) {
+      this.callback = callback;
+      observers.push(callback);
+    }
+    observe() {}
+    disconnect() {}
+  }
+
+  globalThis.ResizeObserver = FakeResizeObserver;
+  globalThis.document = {
+    ...(originalDocument || {}),
+    fonts: { ready: fontsReady },
+  };
+
+  const { app, root } = await mountTabs("financial-model.xlsx");
+  try {
+    const scroll = walk(root).find((node) =>
+      String(node.props?.class || "").includes("xlsx-sheettabs__scroll"),
+    );
+    assert.ok(scroll, "the scroll viewport exists");
+    assert.equal(scroll.props["data-has-overflow-x"], undefined, "40px by default");
+    assert.equal(observers.length, 2, "the scroller and the tab list are observed");
+
+    Object.defineProperty(scroll, "scrollWidth", { configurable: true, value: 400 });
+    Object.defineProperty(scroll, "clientWidth", { configurable: true, value: 300 });
+    observers[1]([]);
+    await vue.nextTick();
+    assert.equal(scroll.props["data-has-overflow-x"], "", "overflow grows the viewport");
+
+    // Font swap: the tabs now fit, but the scroll element's own box did not
+    // change, so only the fonts.ready re-measure can catch it.
+    Object.defineProperty(scroll, "scrollWidth", { configurable: true, value: 300 });
+    resolveFonts();
+    await fontsReady;
+    await vue.nextTick();
+    await vue.nextTick();
+    assert.equal(
+      scroll.props["data-has-overflow-x"],
+      undefined,
+      "the 50px state is not left behind by a stale pre-font measurement",
+    );
+  } finally {
+    app.unmount();
+    if (originalResizeObserver === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = originalResizeObserver;
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
