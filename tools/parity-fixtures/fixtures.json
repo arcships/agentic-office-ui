@@ -476,6 +476,20 @@
     "thumbnailWidth": 132,
     "cardCount": 6,
     "columns": 3
-
+  },
+  "xlsxRibbon": {
+    "canMerge": true,
+    "canRedo": false,
+    "canUndo": false,
+    "controlsDisabled": false,
+    "fillColor": "#fde68a",
+    "fontFamily": "Arial",
+    "fontSize": 11,
+    "horizontalAlignment": "left",
+    "isMerged": false,
+    "numberFormat": "general",
+    "borderColor": "#111827",
+    "textColor": "#111827",
+    "verticalAlignment": "bottom"
   }
 }

@@ -46,6 +46,10 @@ SOFTWARE.
 | `ui/input.tsx` | `apps/v4/registry/new-york-v4/ui/input.tsx` | Base UI Input replaced by a native `<input>`; wrapper/input class strings unchanged |
 | `ui/dialog.tsx` | `apps/v4/registry/new-york-v4/ui/dialog.tsx` | Base UI dialog/portal/backdrop replaced by static divs with the same class strings so the open surface can be measured |
 | `ui/tooltip.tsx` | `apps/v4/registry/new-york-v4/ui/tooltip.tsx` | Base UI tooltip popup replaced by static markup with the same class strings and `data-parity-tooltip-content` |
+| `ui/toggle.tsx` | `apps/v4/components/ui/toggle.tsx` | Base UI `Toggle`/`ToggleGroup` replaced by static `<button>`/`<div>` markup with the same class strings and `data-pressed`/`data-state` attributes; `pressed`/`disabled` are props (#170) |
+| `ui/group.tsx` | `apps/v4/components/ui/group.tsx` | `useRender`/`mergeProps` replaced by plain elements; class strings unchanged; used by the toggle group's `spacing="none"` branch (#170) |
+| `ui/color-picker.tsx` | `apps/v4/components/ui/color-picker.tsx` | Swatch trigger only (`ColorPickerTrigger`): ghost `icon-sm` button, `size-4` glyph and the 16x4 colour bar; popover panel, editors, eyedropper and `lib/color-picker-utils` dropped (#170) |
+| `ui/registry-icon-props.ts` | `apps/v4/lib/registry-icon-props.ts` | Verbatim type (#170) |
 | `extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | Rendered markup and classes unchanged |
 | `extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | `border-beam` dependency dropped (`BorderBeam` only paints while dragging); icons resolved directly; vendored `Card` |
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
@@ -61,6 +65,7 @@ SOFTWARE.
 | `extend/xlsx-toolbar.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` | `WorkbookToolbar` + tooltip/search/actions triggers only; engine hooks become props; popups dropped (#160) |
 | `extend/xlsx-sheet-tabs.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` + registry `tabs.tsx` / `components/ui/scroll-area.tsx` | `WorkbookSheetTabsInner` without the hover thumbnail portal; Base UI Tabs/ScrollArea replaced by static elements with the same classes (#160) |
 | `extend/xlsx-status-bar.tsx` | `apps/v4/components/extend/file-system.tsx` | the `aria-live` status strip; the pinned XLSX viewer has no status bar (#160) |
+| `extend/xlsx-ribbon.tsx` | `apps/v4/components/extend/xlsx-editor.tsx` (`EditorToolbar` format row, ~L1840-L2270) | Static resting-state format row: undo/redo, font family + size, B/I/U/S, text/fill colour, alignment, wrap, number format, borders, merge. Private `useXlsxViewer*` hooks become props; select/dropdown/popover popups dropped; ColorPicker swatch trigger only; pivot, sheet selector, zoom and formula row belong to other surfaces (#170) |
 | `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
 | `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |
 | `../lib/cn.ts` | `apps/v4/lib/utils.ts` | `siteConfig`/`absoluteUrl` dropped |

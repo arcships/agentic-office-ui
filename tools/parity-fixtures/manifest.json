@@ -1328,6 +1328,55 @@
       ],
       "core": true,
       "gateStatus": "blocking"
+    },
+    {
+      "id": "xlsx-ribbon",
+      "title": "XLSX editor ribbon (format row)",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx (apps/v4/components/extend/xlsx-editor.tsx EditorToolbar format row)",
+      "subjectComponent": "tools/vue-reference/src/surfaces/XlsxRibbonSurface.vue (OfficeToolbar + OfficeButton/OfficeIconButton/OfficeToggle + HugeIcon)",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-parity-xlsx-ribbon]",
+      "referenceTargetSelector": "[data-parity-xlsx-ribbon]",
+      "cellWidth": 1000,
+      "notes": "Pinned Extend editor format row: undo/redo, font family + size, B/I/U/S, text and fill colour, horizontal + vertical alignment, wrap text, number format, cell borders and merge. Both sides render one resting row with the shared fixture values; select/dropdown popovers, the cell grid, pivot controls, the sheet selector, the zoom cluster and the formula row are not part of this surface (sheet tabs, toolbar and formula row are separate surfaces). The Vue subject composes the production Office primitives (OfficeToolbar shell, OfficeToolbarGroup clusters, OfficeButton/OfficeIconButton controls, OfficeToggle for the toggle groups, Hugeicons glyphs) and paints the closed SelectTrigger by hand, exactly like XlsxToolbar's zoom trigger. Clipboard, structure and authoring clusters that the upstream editor row does not have are covered by the ribbon's component tests and the xlsx-chrome capture, not by this pixel surface.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default (resting row)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (font family trigger)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[aria-label='Font family']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (font family trigger)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[aria-label='Font family']"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "read-only / no selection (style controls disabled)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
     }
   ],
   "coreSubset": {

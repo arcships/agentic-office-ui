@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844`（`coreSubset.viewports`，快速门槛）× light/dark，参考页 vs 对照页 + 提交基线比对 | 是（`--gate-mode all`） |
-| `ui-parity-nightly` | nightly / dispatch | 全矩阵（25 surface × 4 viewport × 2 theme）+ **4 个 viewport** 的提交基线比对（864 case） | 是（`--gate-mode all`） |
+| `ui-parity-nightly` | nightly / dispatch | 全矩阵（26 surface × 4 viewport × 2 theme）+ **4 个 viewport** 的提交基线比对（896 case） | 是（`--gate-mode all`） |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，`tests/a11y/allowlist.json` 为空，任何发现即失败 |
 | `ci.yml` `check` job | push / PR | 额外跑一次 `pnpm lint:style` | 是 |
 
@@ -126,24 +126,20 @@ pnpm ui:baseline:verify
 | `office-empty-state`, `office-error-state`, `office-loading-state`, `office-status-bar` | ❌ | blocking | #158 共 64/64 像素 0（含长消息换行卡片）；有基线 |
 | `bounding-box-citations`, `layout-blocks`, `e-signature`, `document-splits` | ❌ | blocking | #164 232/232 像素 0；有基线（nightly 阻断） |
 | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ | blocking | #160 64/64 像素 0；有基线，PR 即阻断 |
+| `xlsx-ribbon` | ❌ | blocking | #170 32/32 像素 0（4 viewport × light/dark × default/hover/focus/disabled）；有基线（nightly 阻断） |
 | `pptx-presenter` | ❌ | pending（#161） | 上游无 presenter 布局（`referenceStatus: unreachable`），由组件测试覆盖 |
 
-25 个可渲染 surface 已全部 `blocking` 并提交 4 个 viewport 的基线（864 张）；16 个进 PR 子集（全部 primitive、
-file、PDF、DOCX/PPTX/XLSX chrome），9 个 chrome/block surface 只在 nightly 全矩阵跑。`pptx-presenter` 是
+26 个可渲染 surface 已全部 `blocking` 并提交 4 个 viewport 的基线（896 张）；16 个进 PR 子集（全部 primitive、
+file、PDF、DOCX/PPTX/XLSX chrome），10 个 chrome/block surface 只在 nightly 全矩阵跑。`pptx-presenter` 是
 登记在案的无上游布局 surface，不参与像素计数，也是唯一的 pending。
 
 ## 5. 最终开关
 
-1. **当前形态（2026-11-21，含 #174）**：所有可渲染 surface 已 `blocking`，`manifest.gate.prMode`
-   为 `all`，workflow 两个 parity job 都直接传 `--gate-mode all`；`strict` dispatch 输入已删除。
-   4 个 viewport 全部有提交基线（864 张 / 14.0 MiB / 8 条审批），nightly 全矩阵逐 case 与基线
-   比对（每个 viewport 216 次，全部 `pass`）：`pnpm ui:parity:full` 实测
-   **864 case / 837 `pass` + 19 个 file-upload AA + 8 `waived` / 0 `fail`**，本地 578 s
-   （含两侧采集与 864 次基线 diff）。core 子集 × 4 viewport 实测 528 case / 501 pass +
-   19 AA + 8 waived / 0 fail（346 s）；CI 的 PR job 只跑 `1440x900,390x844`，实测 264 case /
-   251 pass + 9 AA + 4 waived / 0 fail（174 s，每个 viewport 132 次基线比对全部 `pass`）。
-   #169 之后 button destructive 的 8 个 matrix case（4 viewport × 2 theme）为 `waived`；
-   `pnpm ui:parity -- --only button` 实测 **104 pass + 8 waived / 0 fail**。
+1. **当前形态（2026-11-21，含 #174/#170）**：26 个可渲染 surface 全部 `blocking`，4 个 viewport
+   都有提交基线（896 张 / 9 条审批）。PR core 仍只跑 `1440x900,390x844`（264 case）；`strict` dispatch 输入已删除；nightly
+   全矩阵跑 4 个 viewport 并逐 case 比对基线（896 case）。`pptx-presenter` 仍是无上游布局的
+   pending surface，不参与像素计数。`#169` 的 8 个 destructive button case 为 `waived`；
+   `xlsx-ribbon` 32/32（4 state × 4 viewport × 2 theme）为 `pass`。
 2. **以后新增 surface 时**：
    - 参考/对照通过后，把 `gateStatus` 改成 `blocking`（删掉 `gatePendingIssue`）；
    - 需要进 PR 子集的再加 `core: true`；否则只在 nightly 全矩阵里阻断；

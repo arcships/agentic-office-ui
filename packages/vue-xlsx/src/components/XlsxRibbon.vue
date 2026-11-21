@@ -14,20 +14,18 @@
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-undo"
             :label="m.xlsx.ribbon.undo"
-            icon="undo-2"
             size="icon-sm"
             :disabled="controlsDisabled || !controller.canUndo"
             @click="controller.undo()"
-          />
+          ><HugeIcon :icon="Undo02Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-redo"
             :label="m.xlsx.ribbon.redo"
-            icon="redo-2"
             size="icon-sm"
             :disabled="controlsDisabled || !controller.canRedo"
             @click="controller.redo()"
-          />
+          ><HugeIcon :icon="Redo02Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
       </OfficeToolbarGroup>
 
         <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
@@ -81,7 +79,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="insertRow('above')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 8v8M8 12h8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="InsertRowUpIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-insert-row-below"
@@ -89,7 +87,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="insertRow('below')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 6v8M8 10h8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="InsertRowDownIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-delete-row"
@@ -97,7 +95,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="deleteRow"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M8 12h8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="DeleteRowIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-insert-column-left"
@@ -105,7 +103,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="insertColumn('left')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="ColumnInsertIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-insert-column-right"
@@ -113,7 +111,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="insertColumn('right')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="ColumnInsertIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-delete-column"
@@ -121,7 +119,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="deleteColumn"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="ColumnDeleteIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
         </OfficeToolbarGroup>
 
         <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
@@ -161,7 +159,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyFont({ bold: !fontState.bold })"
-          ><strong aria-hidden="true">B</strong></OfficeIconButton>
+          ><HugeIcon :icon="TextBoldIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.italic"
@@ -170,7 +168,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyFont({ italic: !fontState.italic })"
-          ><em aria-hidden="true">I</em></OfficeIconButton>
+          ><HugeIcon :icon="TextItalicIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.underline"
@@ -179,7 +177,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyFont({ underline: fontState.underline ? 'none' : 'single' })"
-          ><u aria-hidden="true">U</u></OfficeIconButton>
+          ><HugeIcon :icon="TextUnderlineIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__text-button"
             :active="fontState.strikethrough"
@@ -188,13 +186,13 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyFont({ strikethrough: !fontState.strikethrough })"
-          ><s aria-hidden="true">S</s></OfficeIconButton>
+          ><HugeIcon :icon="TextStrikethroughIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.textColor">
             <span aria-hidden="true">A</span><i :style="{ backgroundColor: textColor }" />
             <input v-model="textColor" type="color" :aria-label="m.xlsx.ribbon.textColor" :disabled="controlsDisabled" @change="applyTextColor" />
           </label>
           <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.fillColor">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 10 10-5 5-7-7zM14 6l2-2 4 4-2 2" /></svg><i :style="{ backgroundColor: fillColor }" />
+            <HugeIcon :icon="PaintBucketIcon" class="xlsx-ribbon__icon" /><i :style="{ backgroundColor: fillColor }" />
             <input v-model="fillColor" type="color" :aria-label="m.xlsx.ribbon.fillColor" :disabled="controlsDisabled" @change="applyFillColor" />
           </label>
         </OfficeToolbarGroup>
@@ -207,31 +205,28 @@
             :active="alignmentState.horizontal === 'left'"
             :aria-pressed="alignmentState.horizontal === 'left'"
             :label="m.xlsx.ribbon.alignLeft"
-            icon="align-left"
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ horizontal: 'left' })"
-          />
+          ><HugeIcon :icon="TextAlignLeft01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.horizontal === 'center'"
             :aria-pressed="alignmentState.horizontal === 'center'"
             :label="m.xlsx.ribbon.alignCenter"
-            icon="align-center"
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ horizontal: 'center' })"
-          />
+          ><HugeIcon :icon="TextAlignCenterIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.horizontal === 'right'"
             :aria-pressed="alignmentState.horizontal === 'right'"
             :label="m.xlsx.ribbon.alignRight"
-            icon="align-right"
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ horizontal: 'right' })"
-          />
+          ><HugeIcon :icon="TextAlignRight01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'top'"
@@ -240,7 +235,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ vertical: 'top' })"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M7 8h10M9 12h6" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="AlignBoxTopCenterIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'center'"
@@ -249,7 +244,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ vertical: 'center' })"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M7 9h10M7 15h10M5 19h14" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="AlignBoxMiddleCenterIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.vertical === 'bottom'"
@@ -258,7 +253,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ vertical: 'bottom' })"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6M7 16h10M5 20h14" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="AlignBoxBottomCenterIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="alignmentState.wrapText"
@@ -267,7 +262,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyAlignment({ wrapText: !alignmentState.wrapText })"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h12a3 3 0 0 1 0 6h-3M16 13l-3 3 3 3M4 20h7" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="TextWrapIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
         </OfficeToolbarGroup>
 
         <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
@@ -346,7 +341,7 @@
             <option v-for="preset in borderPresets" :key="preset" :value="preset">{{ borderLabels[preset] }}</option>
           </select>
           <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.borderColor">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /></svg><i :style="{ backgroundColor: borderColor }" />
+            <HugeIcon :icon="BorderAll01Icon" class="xlsx-ribbon__icon" /><i :style="{ backgroundColor: borderColor }" />
             <input v-model="borderColor" data-testid="xlsx-ribbon-border-color" type="color" :aria-label="m.xlsx.ribbon.borderColor" :disabled="controlsDisabled" @change="applyBorderColor" />
           </label>
           <OfficeIconButton
@@ -356,7 +351,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="applyBorders('all')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="BorderAll01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
         </OfficeToolbarGroup>
 
         <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
@@ -369,7 +364,7 @@
             size="icon-sm"
             :disabled="controlsDisabled"
             @click="emit('authoring', 'chart')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="ChartColumnIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-comment"
@@ -377,25 +372,23 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="emit('authoring', 'comment')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="Comment01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-hyperlink"
             :label="m.xlsx.authoring.hyperlink.title"
-            icon="link"
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="emit('authoring', 'hyperlink')"
-          />
+          ><HugeIcon :icon="Link02Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-table"
             :label="m.xlsx.authoring.table.title"
-            icon="table"
             size="icon-sm"
             :disabled="controlsDisabled || !hasSelection"
             @click="emit('authoring', 'table')"
-          />
+          ><HugeIcon :icon="Table01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-conditional"
@@ -403,16 +396,15 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasSelection"
             @click="emit('authoring', 'conditional')"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="Grid2X2Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             data-testid="xlsx-ribbon-validation"
             :label="m.xlsx.authoring.validation.title"
-            icon="check"
             size="icon-sm"
             :disabled="controlsDisabled || !hasSelection"
             @click="emit('authoring', 'validation')"
-          />
+          ><HugeIcon :icon="CheckmarkCircle01Icon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeIconButton
             class="xlsx-ribbon__icon-button"
             :active="isFrozen"
@@ -422,7 +414,7 @@
             size="icon-sm"
             :disabled="controlsDisabled || !hasActiveCell"
             @click="toggleFreeze"
-          ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></OfficeIconButton>
+          ><HugeIcon :icon="SnowflakeIcon" class="xlsx-ribbon__icon" /></OfficeIconButton>
           <OfficeButton
             data-testid="xlsx-ribbon-names"
             class="xlsx-ribbon__action-button"
@@ -446,6 +438,35 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import {
+  AlignBoxBottomCenterIcon,
+  AlignBoxMiddleCenterIcon,
+  AlignBoxTopCenterIcon,
+  BorderAll01Icon,
+  ChartColumnIcon,
+  CheckmarkCircle01Icon,
+  ColumnDeleteIcon,
+  ColumnInsertIcon,
+  Comment01Icon,
+  DeleteRowIcon,
+  Grid2X2Icon,
+  InsertRowDownIcon,
+  InsertRowUpIcon,
+  Link02Icon,
+  PaintBucketIcon,
+  Redo02Icon,
+  SnowflakeIcon,
+  Table01Icon,
+  TextAlignCenterIcon,
+  TextAlignLeft01Icon,
+  TextAlignRight01Icon,
+  TextBoldIcon,
+  TextItalicIcon,
+  TextStrikethroughIcon,
+  TextUnderlineIcon,
+  TextWrapIcon,
+  Undo02Icon,
+} from "@hugeicons/core-free-icons";
+import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
   type XlsxBorderPreset,
@@ -456,6 +477,7 @@ import {
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
 import {
+  HugeIcon,
   OfficeButton,
   OfficeIconButton,
   OfficeThemeProvider,
@@ -756,13 +778,19 @@ function deleteColumn(): void {
 .xlsx-ribbon__number { inline-size: 92px; }
 .xlsx-ribbon__borders { inline-size: 104px; }
 
-.xlsx-ribbon__text-button strong,
-.xlsx-ribbon__text-button em,
-.xlsx-ribbon__text-button u,
-.xlsx-ribbon__text-button s,
 .xlsx-ribbon__text-button span {
   font-size: var(--office-text-sm);
   line-height: 1;
+}
+
+/*
+ * Hugeicons render the upstream glyph data unchanged: the shared Office button
+ * already supplies the 16px box, the 2px optical margin and the 80% opacity
+ * that Extend's `[&_svg]` utilities apply, so no stroke-width override here.
+ */
+.xlsx-ribbon__icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 .xlsx-ribbon__action-button {
@@ -797,11 +825,6 @@ function deleteColumn(): void {
 
 .xlsx-ribbon__color svg {
   block-size: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
   inline-size: 14px;
 }
 
@@ -830,16 +853,6 @@ function deleteColumn(): void {
 
 .xlsx-ribbon__readonly input {
   accent-color: var(--office-primary);
-}
-
-.xlsx-ribbon :deep(.office-button svg:not(.office-icon)) {
-  block-size: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-  inline-size: 16px;
 }
 
 /* Tablet/narrow hosts: wrapped clusters stay scrollable (about four rows)

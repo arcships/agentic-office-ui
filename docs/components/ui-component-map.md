@@ -77,7 +77,8 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 | `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookToolbar`） | reference-only | `XlsxToolbar`（`OfficeToolbar` + `OfficeIconButton` + `HugeIcon`） | `xlsx-toolbar` | ✅ blocking | 4 viewport × light/dark 共 32 case 全部 0px；下载/导出/上传/打印/分页在 ⋯ 菜单 |
 | `apps/v4/components/extend/xlsx-viewer.tsx`（`WorkbookSheetTabsInner`） | reference-only | `XlsxSheetTabs` | `xlsx-sheet-tabs` | ✅ blocking | 24 case 全部 0px；新增/删除/翻页按钮改成 `show-sheet-actions`（默认关） |
 | `apps/v4/components/extend/file-system.tsx`（`aria-live` 状态条） | reference-only | `XlsxStatusBar`（`OfficeStatusBar`） | `xlsx-status-bar` | ✅ blocking | 上游 XLSX 没有状态栏，取 Extend 自己的状态条 markup 作参考；8 case 全部 0px |
-| `apps/v4/components/extend/xlsx-editor.tsx`（格式行/公式行） | reference-only | `XlsxRibbon` / `XlsxFormulaBar` | — | — | 上游 editor 的公式行是私有包内部的 `Group`，暂无对照 surface |
+| `apps/v4/components/extend/xlsx-editor.tsx`（格式行） | adapted（静态 resting 子集，`vendor/extend/xlsx-ribbon.tsx`） | `XlsxRibbon`（`OfficeToolbar` + `OfficeButton`/`OfficeIconButton` + `HugeIcon`） | `xlsx-ribbon` | ✅ blocking（#170：32 case 全 0px） | undo/redo、字体/字号、B/I/U/S、文字/填充色、对齐、换行、数字格式、边框、合并；17 个 inline `<svg>` 全部换成 Hugeicons |
+| `apps/v4/components/extend/xlsx-editor.tsx`（公式行） | reference-only | `XlsxFormulaBar` | — | — | 公式行编辑态依赖私有 `@extend-ai/react-xlsx` hook，暂无独立静息态对照 |
 
 ## 5. Block 组件（文档内容块，#164）
 
@@ -97,7 +98,7 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 |---|---|---|---|---|
 | `@arcships/vue-pdf` | `PdfViewer` | `apps/v4/components/extend/pdf-viewer.tsx` | `pdf-toolbar`, `pdf-sidebar` | ✅ blocking（#162） |
 | `@arcships/vue-docx` | `DocxViewer` / `DocxEditor` | `apps/v4/components/extend/docx-viewer.tsx`, `docx-editor.tsx` | `docx-toolbar`, `docx-sidebar` | ✅ blocking（#159：32/32 + 24/24） |
-| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ blocking（#160：32 + 24 + 8 case 全 0px） |
+| `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar`, `xlsx-ribbon` | ✅ blocking（#160：32 + 24 + 8 case；#170：32 case，全部 0px） |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface（presenter 布局私有） | 见 [pptx-chrome.md](pptx-chrome.md) |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxViewerToolbar` / `PptxSlideCard` / `PptxPresenterPanel` | `apps/v4/components/extend/pptx-viewer.tsx` | `pptx-toolbar`, `pptx-sorter`（presenter 无上游布局） | ✅ blocking（#161：40/40 + 24/24 像素 0；`pptx-presenter` 为 unreachable） |
 

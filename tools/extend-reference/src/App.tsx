@@ -23,6 +23,7 @@ import { PptxSorterSurface } from "./surfaces/PptxSorterSurface";
 import { PptxToolbarSurface } from "./surfaces/PptxToolbarSurface";
 import { SelectSurface } from "./surfaces/SelectSurface";
 import { TooltipSurface } from "./surfaces/TooltipSurface";
+import { XlsxRibbonSurface } from "./surfaces/XlsxRibbonSurface";
 import { XlsxSheetTabsSurface } from "./surfaces/XlsxSheetTabsSurface";
 import { XlsxStatusBarSurface } from "./surfaces/XlsxStatusBarSurface";
 import { XlsxToolbarSurface } from "./surfaces/XlsxToolbarSurface";
@@ -55,6 +56,7 @@ const renderers: Record<
   "layout-blocks": LayoutBlocksSurface,
   "e-signature": ESignatureSurface,
   "document-splits": DocumentSplitsSurface,
+  "xlsx-ribbon": XlsxRibbonSurface,
   "xlsx-toolbar": XlsxToolbarSurface,
   "xlsx-sheet-tabs": XlsxSheetTabsSurface,
   "xlsx-status-bar": XlsxStatusBarSurface,
