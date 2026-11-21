@@ -24,6 +24,7 @@
     >
     <div class="xlsx-sheettabs__row">
     <div
+      ref="listRef"
       class="xlsx-sheettabs__list"
       role="tablist"
       aria-orientation="horizontal"
@@ -952,8 +953,10 @@ const tabsStyle = computed<CSSProperties>(() => ({}));
  * the scrollbar gutter never clips the tabs.
  */
 const scrollRef = ref<HTMLElement | null>(null);
+const listRef = ref<HTMLElement | null>(null);
 const overflowing = ref(false);
 let scrollObserver: ResizeObserver | null = null;
+let listObserver: ResizeObserver | null = null;
 
 function measureOverflow(): void {
   const element = scrollRef.value;
@@ -962,8 +965,39 @@ function measureOverflow(): void {
   overflowing.value = element.scrollWidth - element.clientWidth > 1;
 }
 
+/**
+ * Overflow drives a 10px layout change (40px → 50px viewport), so it must not
+ * depend on whether the first measurement ran before or after the web font
+ * swapped in. A font swap changes the tab widths but not the scroll element's
+ * own box, so observing only the scroller leaves a stale `overflowing` value
+ * (the #191 CI flake: the same cell captured at 684x162 and 684x182). Observe
+ * the tab list too and re-measure once fonts are ready.
+ */
+function observeTabList(): void {
+  const list = listRef.value;
+  const HostResizeObserver = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+  if (!list || typeof HostResizeObserver !== "function" || listObserver) return;
+  listObserver = new HostResizeObserver(() => measureOverflow());
+  listObserver.observe(list);
+}
+
+async function measureOverflowAfterFonts(): Promise<void> {
+  const fonts = (globalThis as { document?: Document }).document?.fonts;
+  if (!fonts || typeof fonts.ready?.then !== "function") return;
+  try {
+    await fonts.ready;
+  } catch {
+    return;
+  }
+  measureOverflow();
+}
+
 onMounted(() => {
   measureOverflow();
+  // Child tabs can settle a frame after mount; measure again once laid out.
+  void nextTick(() => measureOverflow());
+  observeTabList();
+  void measureOverflowAfterFonts();
   const element = scrollRef.value;
   const HostResizeObserver = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
   if (!element || typeof HostResizeObserver !== "function") return;
@@ -1079,6 +1113,8 @@ onUnmounted(() => {
   if (popupTimer) clearTimeout(popupTimer);
   scrollObserver?.disconnect();
   scrollObserver = null;
+  listObserver?.disconnect();
+  listObserver = null;
 });
 </script>
 

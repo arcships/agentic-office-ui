@@ -78,19 +78,19 @@
       {{ pageError.code }}: {{ pageError.message }}
     </div>
 
-    <div class="viewer-container">
+    <div class="viewer-container" data-route-region="viewer" data-testid="pdf-viewer-region">
       <PdfViewer
         v-if="source"
         :source="source"
         :url-policy="urlPolicy"
         :max-file-size="maxFileSize"
         :password="pdfPassword.trim() || undefined"
-        :default-zoom="1"
+        :default-zoom="defaultZoom"
         :is-dark="isDark"
         locale="zh-CN"
         :file-name="fileName || 'verification.pdf'"
-        show-status-bar
-        style="height: 80vh;"
+        :show-status-bar="showStatusBar"
+        class="pdf-viewer-region"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
         @active-page-change="activePage = $event"
@@ -125,6 +125,7 @@
 import { computed, ref, shallowRef } from "vue"
 import { PdfViewer, type PdfDiagnostic, type PdfLoadError, type PdfSource, type PdfUrlPolicy } from "@arcships/vue-pdf"
 import { readDemoTheme } from "../lib/demo-visual-settings"
+import { readRouteCapture } from "../lib/route-capture"
 
 const samples = [
   { file: "sample.pdf", label: "文本 PDF" },
@@ -138,7 +139,16 @@ const samples = [
 
 const currentOrigin = globalThis.location.origin
 const DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024
-const selectedSample = ref(samples[0].file)
+// L2 route parity switches (`?sample=`, `?zoom=`, `?statusbar=off`) are inert
+// unless the harness passes them; see docs/testing/ui-parity-routes.md.
+const routeCapture = readRouteCapture()
+const defaultZoom = routeCapture.zoom ?? 1
+const showStatusBar = routeCapture.statusBar
+const selectedSample = ref(
+  routeCapture.sample && samples.some((sample) => sample.file === routeCapture.sample)
+    ? routeCapture.sample
+    : samples[0].file,
+)
 const source = shallowRef<PdfSource | undefined>()
 const fileName = ref("")
 const sourceKind = ref("未选择")
@@ -264,6 +274,9 @@ h2 { margin-bottom: 4px; }
 .error { color: #dc2626; font-size: 13px; margin: 0 0 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
 .viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; }
+/* L2 route parity: the product region is pinned to the upstream docs preview
+ * height (560px) instead of following the viewport (80vh). */
+.viewer-container :deep(.pdf-viewer-region) { height: 560px; }
 .empty { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted-foreground); }
 .diagnostics { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; }
 .diagnostics h3 { margin: 0 0 8px; }

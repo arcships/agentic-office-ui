@@ -46,6 +46,8 @@
     "ui:parity:core": "node scripts/ci/pixel-parity.mjs --only core --gate-mode all --baseline --skip-tokens",
     "ui:parity:full": "node scripts/ci/pixel-parity.mjs --gate-mode all --baseline --skip-tokens",
     "ui:parity:self-check": "node scripts/ci/pixel-parity.mjs --self-check --out output/ui-parity-selfcheck",
+    "ui:parity:routes": "node scripts/ci/route-parity.mjs",
+    "ui:parity:routes:report": "node scripts/ci/route-parity.mjs -- --gate-mode off",
     "ui:baseline": "node scripts/ci/visual-baseline.mjs",
     "ui:baseline:verify": "node scripts/ci/visual-baseline.mjs verify --require-approval",
     "ui:baseline:status": "node scripts/ci/visual-baseline.mjs status",

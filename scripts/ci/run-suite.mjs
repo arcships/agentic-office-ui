@@ -67,6 +67,7 @@ const suites = {
       "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/extend-parity-harness.test.mjs",
       "tests/unit/ui-parity-gate.test.mjs",
+      "tests/unit/ui-parity-routes.test.mjs",
       "tests/unit/vue-ui-primitives-contract.test.mjs",
       "tests/unit/product-visual-matrix.test.mjs",
       "tests/unit/vue-ui-chrome-contract.test.mjs",

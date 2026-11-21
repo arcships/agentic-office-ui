@@ -69,6 +69,12 @@ SOFTWARE.
 | `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
 | `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |
 | `../lib/cn.ts` | `apps/v4/lib/utils.ts` | `siteConfig`/`absoluteUrl` dropped |
+| `../upstream/components/extend/pdf-viewer.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Byte-identical body (attribution header only). L2 route reference (#182), rendered through `route.html` with the real EmbedPDF plugins |
+| `../upstream/components/extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Byte-identical body (attribution header only) |
+| `../upstream/components/{icon-placeholder.tsx,ui/*.tsx}` | `apps/v4/components/{icon-placeholder.tsx,ui/*.tsx}` | Byte-identical bodies (attribution header only); these re-export the registry primitives below |
+| `../upstream/registry/new-york-v4/ui/*.tsx` | `apps/v4/registry/new-york-v4/ui/*.tsx` | Byte-identical bodies (attribution header only) |
+| `../upstream/lib/{utils,config}.ts` | `apps/v4/lib/{utils,config}.ts` | Byte-identical bodies (attribution header only) |
+| `../upstream/lib/pdf-thumbnail-utils.ts` | `apps/v4/lib/pdf-thumbnail-utils.ts` | Body unchanged except `PDFIUM_WASM_URL`: upstream fetches `@embedpdf/pdfium@2.15.0` from jsDelivr, this app serves the same file from its own origin (`scripts/copy-pdfium.mjs`) so a capture never needs the network |
 
 Hugeicons (`@hugeicons/react`, `@hugeicons/core-free-icons`) is the icon set the
 pinned reference resolves by default (`apps/v4/components/icon-placeholder.tsx`).

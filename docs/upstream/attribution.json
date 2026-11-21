@@ -850,8 +850,16 @@
       "target": "tools/extend-reference/src/styles/",
       "status": "adapted",
       "issues": ["#155"],
-      "notes": "extend-globals.css narrows only the @import graph; the rest is verified byte-for-byte against the pinned upstream body hash by scripts/ci/extract-extend-tokens.mjs. extend-shadcn-tailwind.css is byte-identical below its provenance header. parity.css is harness-authored and excluded.",
-      "exclude": ["parity.css"]
+      "notes": "extend-globals.css narrows only the @import graph; the rest is verified byte-for-byte against the pinned upstream body hash by scripts/ci/extract-extend-tokens.mjs. extend-shadcn-tailwind.css is byte-identical below its provenance header. parity.css and route.css are harness-authored and excluded.",
+      "exclude": ["parity.css", "route.css"]
+    },
+    {
+      "upstreamFile": "apps/v4 pinned PDF viewer route tree (pdf-viewer.tsx + ui primitives + lib)",
+      "purpose": "L2 route reference: the upstream PDF viewer wrapper and the public primitives it imports, rendered at its own route instead of a hand-written cell composition.",
+      "target": "tools/extend-reference/src/upstream/",
+      "status": "copied",
+      "issues": ["#182"],
+      "notes": "R2 reference for /pdf-viewer. Files are the pinned upstream bodies with only an attribution header prepended, except lib/pdf-thumbnail-utils.ts, whose pdfium wasm URL points at the harness origin (same @embedpdf/pdfium@2.15.0 file copied at build time) instead of jsDelivr. See tools/extend-reference/src/vendor/NOTICE.md."
     }
   ],
   "urlChecks": [

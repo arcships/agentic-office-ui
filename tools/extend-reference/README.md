@@ -29,6 +29,32 @@ The comparison page is [`tools/vue-reference`](../vue-reference). The matrix and
 thresholds live in [`tools/parity-fixtures/manifest.json`](../parity-fixtures/manifest.json)
 and are executed by `pnpm ui:parity`.
 
+## Route (L2) reference
+
+`route.html` renders the pinned upstream wrapper for a whole product route
+instead of a hand-composed surface (build strategy R2). It is the reference side
+of `pnpm ui:parity:routes` (#182); the region contract lives in
+[`tools/parity-fixtures/routes.json`](../parity-fixtures/routes.json) and
+[`docs/testing/ui-parity-routes.md`](../../docs/testing/ui-parity-routes.md).
+
+```bash
+pnpm --filter @aou/extend-reference build
+# served by the harness, not by hand:
+#   /route.html?route=pdf-viewer&theme=light&zoom=1&doc=/fixtures/sample.pdf
+```
+
+| Parameter | Values | Meaning |
+|---|---|---|
+| `route` | `pdf-viewer` | route to render (one entry per pilot route) |
+| `theme` | `light` (default), `dark` | toggles the `.dark` class on `<html>`, same as the docs site |
+| `doc` | URL | PDF fixture; the harness serves `/fixtures/<name>` from `tools/parity-fixtures` |
+| `zoom` | number | initial zoom, passed through as `defaultZoom` |
+
+The route entry imports `src/upstream/**` with the upstream `@/…` specifiers
+aliased to that directory, so the component tree is the pinned one. The pdfium
+wasm is copied from `@embedpdf/pdfium@2.15.0` into `public/` by
+`scripts/copy-pdfium.mjs` (git-ignored) instead of being fetched from a CDN.
+
 ## Shared harness DOM contract
 
 ```html
