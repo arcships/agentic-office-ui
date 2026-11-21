@@ -33,6 +33,8 @@ export interface PdfViewerToolbarProps {
   totalPages: number
   disabled?: boolean
   sidebarOpen: boolean
+  /** Disable the sidebar toggle when the surface has no navigation content. */
+  sidebarDisabled?: boolean
   /** Zoom factor; 1 = 100%. */
   zoom: number
   pageLayout: PdfPageLayout
@@ -41,6 +43,12 @@ export interface PdfViewerToolbarProps {
   showPrint?: boolean
   showRotateControls?: boolean
   canDownload?: boolean
+  /**
+   * Disable the layout group. Surfaces whose layout is host-controlled (for
+   * example `PdfSurface.pageLayout`) pass `true` so the menu cannot diverge
+   * from the host's prop.
+   */
+  pageLayoutDisabled?: boolean
   /** Controlled search draft. */
   searchQuery?: string
   /** Announced search result, for example `Result 1 / 1, page 3`. */
@@ -51,10 +59,12 @@ export interface PdfViewerToolbarProps {
 
 const props = withDefaults(defineProps<PdfViewerToolbarProps>(), {
   disabled: false,
+  sidebarDisabled: false,
   showDownload: true,
   showPrint: true,
   showRotateControls: true,
   canDownload: false,
+  pageLayoutDisabled: false,
   searchQuery: "",
   searchResult: "",
   searchHasHits: false,
@@ -73,6 +83,8 @@ const emit = defineEmits<{
   searchClose: []
   download: []
   print: []
+  /** Escape was pressed with neither search nor the actions menu open. */
+  escape: []
 }>()
 
 const m = usePdfMessages()
@@ -201,7 +213,7 @@ function onZoomSelect(event: Event): void {
 }
 
 function selectLayout(layout: PdfPageLayout): void {
-  if (props.disabled || layout === props.pageLayout) return
+  if (props.disabled || props.pageLayoutDisabled || layout === props.pageLayout) return
   emit("update:pageLayout", layout)
   closeActions()
 }
@@ -242,6 +254,17 @@ function closeActions(): void {
 function toggleActions(): void {
   if (actionsOpen.value) closeActions()
   else openActions()
+}
+
+/**
+ * Escape closes the toolbar's own overlays. When none is open the event is
+ * forwarded so a narrow surface can close its overlay sidebar.
+ */
+function onToolbarEscape(): void {
+  const hadOverlay = searchOpen.value || actionsOpen.value
+  closeActions()
+  closeSearch()
+  if (!hadOverlay) emit("escape")
 }
 
 function runAction(action: "download" | "print" | "first" | "previous" | "next" | "last"): void {
@@ -296,7 +319,7 @@ defineExpose({
     role="toolbar"
     :aria-label="m.common.chrome.toolbar"
     data-testid="pdf-toolbar"
-    @keydown.esc.stop.prevent="closeActions(); closeSearch()"
+    @keydown.esc.stop.prevent="onToolbarEscape"
   >
     <div class="pdf-toolbar__leading">
       <span class="pdf-toolbar__tooltip-trigger">
@@ -306,7 +329,7 @@ defineExpose({
           data-testid="pdf-sidebar-toggle"
           :label="m.pdf.viewer.toggleThumbnails"
           :active="sidebarOpen"
-          :disabled="disabled"
+          :disabled="disabled || sidebarDisabled"
           @click="emit('toggleSidebar')"
         >
           <HugeIcon :icon="SidebarLeftIcon" class="pdf-toolbar__icon" />
@@ -536,6 +559,7 @@ defineExpose({
             class="pdf-toolbar__menu-group"
             role="group"
             :aria-label="m.pdf.viewer.pageLayout"
+            :data-layout-disabled="pageLayoutDisabled ? 'true' : undefined"
             data-testid="pdf-page-layout"
           >
             <button
@@ -547,7 +571,7 @@ defineExpose({
               :aria-checked="layout === pageLayout"
               :data-layout-active="layout === pageLayout ? 'true' : undefined"
               :data-testid="`pdf-page-layout-${layout}`"
-              :disabled="disabled"
+              :disabled="disabled || pageLayoutDisabled"
               @click="selectLayout(layout)"
             >
               <OfficeIcon

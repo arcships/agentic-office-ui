@@ -43,8 +43,8 @@ DOCX、PDF 和 PPTX 查看器共用同一套键盘映射。映射由 `@arcships/
 
 - `PageDown`/`PageUp`、`Home`/`End`：按页滚动连续页面；连续按 `PageDown` 会以最后一次键盘目标页为基准继续前进。
 - `Ctrl/Cmd` + `+`/`=`、`-`、`0`：在 50%–200% 之间缩放或重置到 100%；受控 `zoom` 通过 `update:zoom` 通知宿主。
-- `Escape`：取消当前选择或区域选择。
-- Surface 没有搜索栏，因此不占用 `Ctrl/Cmd + F`。
+- `Escape`：取消当前选择或区域选择；开启 `showToolbar` 时，先关闭 toolbar 的搜索/actions，再关闭窄容器 overlay 侧栏。
+- `Ctrl/Cmd + F`：仅在 `showToolbar` 开启时打开并聚焦 Surface 工具栏搜索框；默认关闭时 Surface 不占用该快捷键。
 
 大纲面板（`showOutline`，文档有书签时默认显示）使用 WAI-ARIA tree 键盘语义：`↓`/`↑` 在可见条目间移动焦点，`→` 展开当前条目或进入第一个子条目，`←` 收起当前条目或回到父条目，`Home`/`End` 跳到第一个/最后一个可见条目，`Enter`/`Space` 激活条目并跳到目标页。焦点在大纲条目上时，这些键不会传给页面的翻页快捷键。
 

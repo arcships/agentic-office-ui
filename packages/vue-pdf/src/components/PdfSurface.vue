@@ -5,16 +5,47 @@
     :data-office-theme="props.isDark ? 'dark' : 'light'"
     :style="minHeightStyle"
     data-testid="pdf-surface-shell"
+    @keydown="onSurfaceShellKeydown"
   >    
+    <PdfViewerToolbar
+      v-if="props.showToolbar"
+      ref="surfaceToolbarRef"
+      :active-page="activePageIndex + 1"
+      :total-pages="renderDocument?.pageCount ?? 0"
+      :disabled="surfaceToolbarDisabled"
+      :sidebar-open="navOpen && navigationVisible"
+      :sidebar-disabled="!navigationVisible"
+      :zoom="zoom"
+      :page-layout="pageLayoutMode"
+      :page-layout-disabled="true"
+      :file-name="surfaceFileName"
+      :can-download="!!verifiedBlob && !loadError"
+      :search-query="toolbarSearchQuery"
+      :search-result="surfaceSearchResult"
+      :search-has-hits="searchState.matches.length > 0"
+      @toggle-sidebar="toggleSurfaceSidebar"
+      @select-page="onToolbarSelectPage"
+      @update:zoom="onToolbarZoom"
+      @rotate="rotateSurfaceBy"
+      @update:search-query="toolbarSearchQuery = $event"
+      @submit-search="submitSurfaceSearch"
+      @search-previous="moveSurfaceSearch(-1)"
+      @search-next="moveSurfaceSearch(1)"
+      @search-close="closeSurfaceSearch"
+      @download="downloadSurfaceDocument"
+      @print="printSurfaceDocument"
+      @escape="onToolbarEscape"
+    />
     <div class="pdf-surface__body">
     <DocumentViewerSidebar
       v-if="navigationVisible"
       v-model:open="navOpen"
-      :close-on-escape="false"
+      :close-on-escape="props.showToolbar"
       flush
       :label="m.pdf.surface.outline"
       class="pdf-surface__nav"
       data-testid="pdf-surface-nav"
+      @mode-change="navMode = $event"
     >
       <PdfOutlinePanel
         v-if="showOutline && outlineItems.length > 0"
@@ -454,6 +485,7 @@ import type { PdfOutlineItem } from "../pdf/pdf-outline"
 import PdfOutlinePanel from "./PdfOutlinePanel.vue"
 import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
 import PdfFieldTooltip from "./PdfFieldTooltip.vue"
+import PdfViewerToolbar from "./PdfViewerToolbar.vue"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -517,6 +549,13 @@ const props = withDefaults(
      */
     showStatusBar?: boolean
     /**
+     * Render the shared viewer toolbar above the pages. Defaults to false so
+     * the minimal Surface keeps its previous footprint. Page, zoom, rotate,
+     * sidebar, search, download and print drive the Surface's own state; the
+     * layout menu stays disabled because `pageLayout` is host-controlled.
+     */
+    showToolbar?: boolean
+    /**
      * Open an `OfficeDialog` with the annotation or form-field details when a
      * reader activates one. Defaults to false; hosts that own their annotation
      * UI keep receiving `annotationActivate` without an extra dialog.
@@ -546,6 +585,7 @@ const props = withDefaults(
     isDark: false,
     showOutline: true,
     showThumbnails: true,
+    showToolbar: false,
     showStatusBar: false,
     showAnnotationDialog: false,
     locale: "en",
@@ -618,6 +658,7 @@ const emit = defineEmits<{
 
 // ── Runtime & loading ────────────────────────────────────────────────
 const scrollRef = ref<HTMLElement | null>(null)
+const surfaceToolbarRef = ref<InstanceType<typeof PdfViewerToolbar> | null>(null)
 const m = providePdfMessages(() => props.locale, () => props.messages)
 const descriptor = (
   key: keyof typeof m.value.common.descriptors,
@@ -689,6 +730,10 @@ const navigationVisible = computed(() => !!renderDocument.value && (
   (props.showOutline && outlineItems.value.length > 0)
   || props.showThumbnails
 ))
+/** Resolved sidebar layout, used to keep Escape scoped to the mobile overlay. */
+const navMode = ref<"inline" | "overlay">("inline")
+/** Toolbar controls need a document and stay disabled through load failures. */
+const surfaceToolbarDisabled = computed(() => !renderDocument.value || !!loadError.value)
 /** Thumbnails are still rasterizing; show the shared sidebar skeleton. */
 const thumbnailsLoading = computed(() =>
   !!renderDocument.value
@@ -729,6 +774,21 @@ const searchState = ref<PdfSearchState>({
   query: "",
   matches: [],
   activeIndex: -1,
+})
+/** Controlled draft of the opt-in toolbar search field. */
+const toolbarSearchQuery = ref("")
+const surfaceSearchResult = computed(() => {
+  const state = searchState.value
+  if (!state.query) return ""
+  if (state.status === "searching") return m.value.pdf.viewer.searchSearching
+  if (state.status === "error") return m.value.pdf.viewer.searchError
+  if (!state.matches.length) return m.value.pdf.viewer.searchNoResults
+  const index = Math.min(Math.max(state.activeIndex, 0), state.matches.length - 1)
+  return formatOfficeMessage(m.value.pdf.viewer.searchResult, {
+    current: index + 1,
+    total: state.matches.length,
+    page: state.matches[index].pageIndex + 1,
+  })
 })
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
 const selectionVisual = ref<{ ranges: readonly PageSelectionRects[] } | null>(null)
@@ -1080,6 +1140,30 @@ surfaceSearch.subscribe((next) => {
   emit("searchStateChange", next)
 })
 
+function submitSurfaceSearch(): void {
+  const query = toolbarSearchQuery.value.trim()
+  if (!query) {
+    surfaceSearch.clearSearch()
+    return
+  }
+  // Activation failures are reflected in `searchState`; the toolbar renders
+  // that state instead of surfacing an unhandled rejection to the host.
+  void surfaceSearch.search(query).catch(() => undefined)
+}
+
+function moveSurfaceSearch(direction: 1 | -1): void {
+  const request = direction > 0 ? surfaceSearch.searchNext() : surfaceSearch.searchPrevious()
+  void request.catch(() => undefined)
+}
+
+function closeSurfaceSearch(): void {
+  toolbarSearchQuery.value = ""
+  surfaceSearch.clearSearch()
+  // The toolbar closes the popover (and unmounts the input); keep keyboard
+  // focus in the Surface instead of dropping it to the document body.
+  void nextTick(() => scrollRef.value?.focus?.({ preventScroll: true }))
+}
+
 const pdfRuntimeId = `pdf-surface-${
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -1426,6 +1510,8 @@ function setupPrintDetection(): void {
 async function releaseDocument(): Promise<void> {
   cancelRender()
   surfaceSearch.clearSearch()
+  toolbarSearchQuery.value = ""
+  verifiedBlob.value = null
   clearSelection()
   outlineItems.value = []
   pdfPageLabels.value = []
@@ -3134,6 +3220,59 @@ function scrollToPage(pageIndex: number): void {
   scheduleVisibleRender()
 }
 
+// ── Toolbar bridge (opt-in `showToolbar`) ────────────────────────────
+function onToolbarSelectPage(page: number): void {
+  if (!renderDocument.value) return
+  scrollToPage(page - 1)
+}
+
+function onToolbarZoom(next: number): void {
+  zoom.value = next
+}
+
+function rotateSurfaceBy(direction: 1 | -1): void {
+  const next = (((rotation.value + direction * 90) % 360) + 360) % 360
+  rotation.value = next as PdfRotation
+}
+
+function toggleSurfaceSidebar(): void {
+  if (!navigationVisible.value) return
+  navOpen.value = !navOpen.value
+}
+
+/** Toolbar Escape forwards here only when its search/actions overlays are closed. */
+function onToolbarEscape(): void {
+  if (navMode.value !== "overlay" || !navigationVisible.value) return
+  navOpen.value = false
+}
+
+function downloadSurfaceDocument(): void {
+  const blob = verifiedBlob.value
+  if (!blob || typeof document === "undefined") return
+  if (typeof document.createElement !== "function") return
+  const body = document.body
+  if (!body || typeof body.append !== "function") return
+  try {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = surfaceFileName.value
+    anchor.rel = "noopener"
+    body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  } catch {
+    // Download is best-effort: sandboxed hosts keep the source bytes and a
+    // working toolbar instead of receiving an unhandled exception.
+  }
+}
+
+function printSurfaceDocument(): void {
+  if (typeof window === "undefined" || typeof window.print !== "function") return
+  window.print()
+}
+
 // Switching page layout keeps the reader on the same page. A spread shifts the
 // row offsets, so the scroll position is realigned with the page that was
 // current before the switch instead of keeping the raw offset.
@@ -3152,16 +3291,27 @@ function onSurfaceEscape(event?: KeyboardEvent): void {
 /**
  * PDF Surface keyboard map: PageDown/PageUp move one page, Home/End jump to
  * the first/last page, Ctrl/Cmd +/−/0 zoom, Escape cancels the active
- * selection or region. There is no search field in the minimal surface.
+ * selection or region. When the opt-in toolbar is mounted, Ctrl/Cmd + F opens
+ * and focuses its search field; the handler is also attached to the shell so
+ * shortcuts work while a toolbar control has focus.
  */
 const surfaceKeys = useViewerKeys({
   pageNavigation: true,
   zoom: true,
+  search: () => props.showToolbar,
   escape: true,
   onCommand: onSurfaceKeyCommand,
 })
 
 function onSurfaceKeydown(event: KeyboardEvent): void {
+  surfaceKeys.onKeydown(event)
+}
+
+function onSurfaceShellKeydown(event: KeyboardEvent): void {
+  // The opt-in toolbar mounts outside the scroll surface, so the same map is
+  // attached to the shell when the toolbar is present; the default Surface
+  // keeps its previous scope.
+  if (!props.showToolbar) return
   surfaceKeys.onKeydown(event)
 }
 
@@ -3214,6 +3364,10 @@ function onSurfaceKeyCommand(command: ViewerKeyCommand): boolean {
     case "zoom-reset":
       if (zoom.value === 1) return false
       zoom.value = 1
+      return true
+    case "search":
+      if (!props.showToolbar) return false
+      surfaceToolbarRef.value?.openSearch()
       return true
     case "escape":
       if (selectionState.value.kind === "none" && selectionMode.value === "content") return false

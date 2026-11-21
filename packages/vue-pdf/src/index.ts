@@ -22,16 +22,20 @@ export type {
 export { default as PdfViewer } from "./components/PdfViewer.vue"
 /**
  * Minimal embeddable PDF renderer with vertical scroll through all pages.
- * No toolbar or search bar — host owns all controls. A bookmark outline is
- * shown when the document has one, and page thumbnails use the shared viewer
- * strip; both can be disabled through `showOutline` / `showThumbnails`.
- * Renders every page as a stacked image in a scrollable container.
+ * Toolbar-free by default — hosts own all controls. Set `showToolbar` to render
+ * the shared `PdfViewerToolbar` (page, zoom, rotate, sidebar, search, download,
+ * print); layout stays host-controlled through `pageLayout`, so its menu items
+ * are disabled. A bookmark outline is shown when the document has one, and page
+ * thumbnails use the shared viewer strip; both can be disabled through
+ * `showOutline` / `showThumbnails`. Renders every page as a stacked image in a
+ * scrollable container.
  *
  * @example
  * ```vue
  * <PdfSurface
  *   ref="surfaceRef"
  *   :source="{ kind: 'url', url: '/doc.pdf' }"
+ *   :show-toolbar="true"
  *   @document-load-success="pages = $event"
  * />
  * // surfaceRef.value.scrollToPage(3)

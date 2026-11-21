@@ -364,6 +364,7 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/pdf-view-modes.test.mjs",
       "tests/component/pdf-navigation-aids.test.mjs",
       "tests/component/pdf-chrome.test.mjs",
+      "tests/component/pdf-surface-toolbar.test.mjs",
       "tests/component/pptx-slide-sorter.test.mjs",
       "tests/component/pptx-presenter-view.test.mjs",
       "tests/component/pptx-context-menu.test.mjs",

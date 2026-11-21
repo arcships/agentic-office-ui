@@ -32,7 +32,7 @@ import "@arcships/vue-pdf/style.css"
 | `defaultZoom` | `number` | `1` | 初始缩放倍率，范围由组件约束 |
 | `pageLayout` | `"continuous" \| "single" \| "spread" \| null` | `null` | 页面布局；`null` 跟随内部工具栏状态 |
 | `defaultPageLayout` | `"continuous" \| "single" \| "spread"` | `"single"` | 未受控时的初始页面布局 |
-| `showToolbar` | `boolean` | `true` | 工具栏 |
+| `showToolbar` | `boolean` | `PdfViewer: true`；`PdfSurface: false` | 工具栏。`PdfSurface` 在 #172 起可 opt-in 复用同一个 viewer toolbar；默认关闭，保持最小嵌入足迹 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
 | `showPrint` | `boolean` | `true` | 打印按钮（#162 新增） |
@@ -42,11 +42,11 @@ import "@arcships/vue-pdf/style.css"
 | `showOutline` | `boolean` | `true` | `PdfSurface` 在文档带书签时显示大纲面板；无书签时不显示 |
 | `showThumbnails` | `boolean` | `true` | `PdfSurface` 显示共享的页面缩略图栏；`PdfViewer` 内置侧栏默认关闭，由工具栏 toggle 打开（#199） |
 
-`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图、大纲面板和可见状态栏会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
+`PdfSurface` 也接受 `isDark` 和 `minHeight`。自 #172 起它还可选 `showToolbar`（默认 `false`）：开启后页面区上方渲染与 `PdfViewer` 相同的 `PdfViewerToolbar`，页码/翻页、zoom、rotate、侧栏、search、download 和 print 都接到 Surface 自己的状态与已加载字节；layout 菜单项保持 disabled，因为 `PdfSurface.pageLayout` 仍是宿主控制的 prop，本 issue 不新增 `update:pageLayout`。打印时工具栏、缩略图、大纲面板和可见状态栏会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
 路由对齐（#199）：`PdfViewer` 的画布使用上游 `bg-muted/30` 的等价 surface（light `#fcfcfc` / dark `#0d0d0d`），页面位图带 `blur(0.35px)`、暗色不反色，滚动内容在窄容器下也保持 24px 内边距；缩略图侧栏默认关闭，可见状态栏是 host opt-in。以上都只改变默认表现，未新增/移除公共 props。
 
-自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
+自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）与 #172 的 `showToolbar`（默认 `false`）；开启后复用同一 toolbar，390px 仍按 `flex-wrap` 换行且不横向溢出，侧栏在窄容器为 overlay，`Escape` 可先关搜索/actions 再关 overlay。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
 
 ### 页面布局
 
@@ -56,7 +56,7 @@ import "@arcships/vue-pdf/style.css"
 - `continuous`：整份文档纵向堆叠、按可视窗口懒加载。`PdfSurface` 一直是这个模式。
 - `spread`：两页并排，按 (1,2)、(3,4) 分组；行高取两页中较高的一页，落单的最后一页居中占满整个跨页宽度。两部分都把对页栅格化成独立位图，每页保留自己的页码（`data-page-number`、`alt` 文案）。
 
-切换布局不会丢失当前页：新布局会把滚动位置对齐到当前页所在的行。`PdfViewer` 工具栏的下拉框（`data-testid="pdf-page-layout"`）驱动未受控的布局，并抛出 `update:pageLayout`；`PdfSurface` 只接受受控属性。渲染窗口按模式收敛：`single` 只保留当前页的位图，`continuous`/`spread` 按可视行懒加载。
+切换布局不会丢失当前页：新布局会把滚动位置对齐到当前页所在的行。`PdfViewer` 工具栏的下拉框（`data-testid="pdf-page-layout"`）驱动未受控的布局，并抛出 `update:pageLayout`；`PdfSurface` 只接受受控属性，即使开启 `showToolbar` 也把 layout 菜单渲染为 disabled，避免内部状态与 prop 分叉。渲染窗口按模式收敛：`single` 只保留当前页的位图，`continuous`/`spread` 按可视行懒加载。
 
 需要自建 PDF 表面时使用根入口导出的纯函数 `resolvePdfPageLayoutMetrics()`、`pdfPageLayoutRows()`、`pdfRowIndexAtOffset()`、`pdfPageIndexAtOffset()`、`pdfSnapTopForRow()`、`pdfPageAtPoint()`、`pdfRowsInViewport()`、`pdfSpreadPagePair()`、`pdfSpreadStepPage()`、`normalizePdfPageLayout()`、`isPdfSpreadLayout()` 和 `PDF_PAGE_LAYOUTS`，类型为 `PdfPageLayout`、`PdfPageLayoutMetrics`、`PdfPageLayoutRow`、`PdfPageLayoutOptions`、`PdfPageDisplaySize`。
 
@@ -76,6 +76,6 @@ import "@arcships/vue-pdf/style.css"
 
 ## 键盘导航
 
-`PdfViewer` 的快捷键与 DOCX 共用同一套映射：`PageDown`/`PageUp` 翻一页，`Home`/`End` 跳到第一页/最后一页，`Ctrl/Cmd` + `+`/`=`、`-`、`0` 缩放或重置到 100%，`Ctrl/Cmd + F` 聚焦搜索框，`Escape` 先取消搜索再清除选择；`Ctrl/Cmd + P` 保留为打印。`PdfSurface` 的 `PageDown`/`PageUp`、`Home`/`End` 按页滚动连续页面，`Ctrl/Cmd` 缩放通过受控 `update:zoom` 通知宿主，`Escape` 取消选择或区域。焦点在输入框、文本域、下拉框或 `contenteditable` 内时，查看器不会拦截这些按键。完整映射见[查看器键盘导航](viewer-keyboard.md)。
+`PdfViewer` 的快捷键与 DOCX 共用同一套映射：`PageDown`/`PageUp` 翻一页，`Home`/`End` 跳到第一页/最后一页，`Ctrl/Cmd` + `+`/`=`、`-`、`0` 缩放或重置到 100%，`Ctrl/Cmd + F` 聚焦搜索框，`Escape` 先取消搜索再清除选择；`Ctrl/Cmd + P` 保留为打印。`PdfSurface` 的 `PageDown`/`PageUp`、`Home`/`End` 按页滚动连续页面，`Ctrl/Cmd` 缩放通过受控 `update:zoom` 通知宿主，`Escape` 取消选择或区域；开启 `showToolbar` 后增加 `Ctrl/Cmd + F` 打开工具栏搜索，并在搜索/actions 未打开时用 `Escape` 关闭 overlay 侧栏。焦点在输入框、文本域、下拉框或 `contenteditable` 内时，查看器不会拦截这些按键。完整映射见[查看器键盘导航](viewer-keyboard.md)。
 
 需要完全控制 Runtime 时，可以使用 `createPdfRenderRuntime()`。调用方传入的 Runtime 必须由调用方销毁。单页渲染会在进入 PDFium 前校验 `scale`、`dpr` 和旋转，并按 `maxRenderPixels`（默认 32 兆像素）拒绝超出预算的请求，避免一次渲染耗尽内存。

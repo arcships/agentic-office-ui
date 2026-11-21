@@ -28,7 +28,7 @@
 |---|---|---|
 | `DocxDocumentSurface` | `@arcships/vue-docx` | DOCX 分页文档面、批注 gutter、搜索、选择与引用事件 |
 | `XlsxSheetSurface` | `@arcships/vue-xlsx` | XLSX 网格、对象层、搜索、选择与引用事件 |
-| `PdfSurface` | `@arcships/vue-pdf` | PDF 连续页面、搜索、glyph 文字选择与引用事件 |
+| `PdfSurface` | `@arcships/vue-pdf` | PDF 连续页面、搜索、glyph 文字选择与引用事件；可选共享 toolbar（默认关闭） |
 | `PptxStage` | `@arcships/vue-pptx` | PPTX 纵向或单页舞台、搜索、对象交互与引用事件 |
 
 四个 Surface 统一接受 `documentId`、受控 `selectionMode` 和候选事件开关。具体接入见[引用选择接入指南](../guide/reference-selection.md)。
