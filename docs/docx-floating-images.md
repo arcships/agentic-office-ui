@@ -17,6 +17,14 @@
 DocxTableHost → renderParagraphRuns` 传递。缺少基准时 `absoluteFloatingImageStyle`
 会把 `margin|page|column` 锚点退化到纸张 (0, 0)，图片整体偏移一个页边距。
 
+锚点基准只有一处实现：`resolveFloatingAnchorOriginPx(floating, origin)` 按
+`wp:anchor` 的 `relativeFrom` 把模型偏移换算成页面坐标，`absoluteFloatingImageStyle`
+（只读视图）与编辑模式的 `DocxImageLayer` 都调用它。编辑模式的图片层是
+`.docx-page-surface` 的绝对定位子元素，坐标原点同样是纸张边缘，因此
+`DocxPageSurface` 通过 `floatingPageOriginPx` 把同一个基准对象下传；`margin` /
+`column` 锚点不再少加一个页边距（issue #194）。`DocxImageLayer` 单独挂载且未传基准
+时退化到纸张 (0, 0)，与旧行为一致。
+
 ## 层级（z-order）
 
 - 只读视图：浮动图片随段落渲染，`behindDocument` 使用负 z-index（`-100000`），

@@ -128,6 +128,66 @@ test("a margin-anchored image lands at the left margin instead of the page edge"
   assert.equal(withoutOrigin.left, 10);
 });
 
+test("the anchor origin helper is the single source for relativeFrom offsets", () => {
+  const origin = {
+    pageOriginLeft: 0,
+    pageOriginTop: 0,
+    marginOriginLeft: 96,
+    marginOriginTop: 72,
+    columnOriginLeft: 96,
+    columnOriginTop: 72,
+    paragraphOriginLeft: 140,
+    paragraphOriginTop: 200,
+  };
+  const cases = [
+    // `relativeFrom` name, expected left, expected top.
+    ["page", 75.591, 12],
+    ["margin", 171.591, 84],
+    ["column", 171.591, 84],
+    ["paragraph", 215.591, 212],
+    ["line", 215.591, 212],
+    [undefined, 75.591, 12],
+  ];
+  for (const [relativeTo, expectedLeft, expectedTop] of cases) {
+    const floating = {
+      xPx: 75.591,
+      yPx: 12,
+      horizontalRelativeTo: relativeTo,
+      verticalRelativeTo: relativeTo,
+    };
+    assert.deepEqual(
+      core.resolveFloatingAnchorOriginPx(floating, origin),
+      { leftPx: expectedLeft, topPx: expectedTop },
+      `${relativeTo}: the helper resolves the anchor origin`,
+    );
+    const style = core.absoluteFloatingImageStyle(imageRun({ floating }), origin);
+    assert.equal(style.left, expectedLeft, `${relativeTo}: view mode uses the helper's left`);
+    assert.equal(style.top, expectedTop, `${relativeTo}: view mode uses the helper's top`);
+  }
+
+  // `simplePos` is always page-relative, whatever `relativeFrom` says.
+  assert.deepEqual(
+    core.resolveFloatingAnchorOriginPx(
+      {
+        xPx: 5,
+        yPx: 6,
+        horizontalRelativeTo: "column",
+        verticalRelativeTo: "column",
+        simplePos: true,
+      },
+      origin,
+    ),
+    { leftPx: 5, topPx: 6 },
+  );
+  // Only an explicit offset produces a resolved position; a missing anchor has
+  // no origin to add.
+  assert.deepEqual(core.resolveFloatingAnchorOriginPx({ yPx: 6 }), {
+    leftPx: undefined,
+    topPx: 6,
+  });
+  assert.deepEqual(core.resolveFloatingAnchorOriginPx(undefined), {});
+});
+
 // --- 2. Behind-text z-order ---------------------------------------------
 
 test("behind-text images get a negative z-index while in-front images stay above the text", () => {

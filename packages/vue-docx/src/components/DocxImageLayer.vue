@@ -87,11 +87,14 @@ import type {
   DocxEditorController,
   DocxImageLocation,
   DocxImageWrapMode,
+  DocxFloatingPageOriginPx,
   DocumentPageNodeSegment,
   ImageRunNode,
 } from "@arcships/docx-core"
 import {
+  resolveFloatingAnchorOriginPx,
   resolveFloatingImageStackingZIndex,
+  resolveFloatingPageOriginPx,
   resolveRenderableImageSource,
   shouldRenderWrappedFloatingImage,
   unsupportedImageFallbackLabel,
@@ -109,6 +112,12 @@ interface FloatingImageEntry {
   heightPx: number
   xPx: number
   yPx: number
+  /**
+   * Page-space offset contributed by the anchor's `relativeFrom` origin
+   * (`margin`/`column`); `0` for `page`-anchored and flow-wrapped floats.
+   */
+  anchorOffsetLeftPx: number
+  anchorOffsetTopPx: number
   flowWrapped: boolean
   behindDocument: boolean
   /** CSS paint order derived from the model's Word `relativeHeight`. */
@@ -136,6 +145,12 @@ const props = withDefaults(
     pageNodeSegments: DocumentPageNodeSegment[]
     editable?: boolean
     zoomFactor?: number
+    /**
+     * Page-relative origin for `margin`/`column`-anchored absolute floats.
+     * `DocxPageSurface` hands down the same object the flow renderer uses;
+     * without it those anchors degrade to the page corner.
+     */
+    floatingPageOriginPx?: DocxFloatingPageOriginPx
     /** Image keys (`nodeIndex:childIndex`) rendered by the page cover layer. */
     skipImageKeys?: readonly string[]
   }>(),
@@ -175,10 +190,20 @@ function imageSourceFailureKey(src: string | undefined): string {
 }
 
 // ── Computed ───────────────────────────────────────────────────────
+// The page surface is the positioned ancestor of this layer (padding box at
+// the paper edge), and the flow renderer positions absolute floats against the
+// same box. Absolute floats therefore resolve their anchor origin here instead
+// of using the raw model offset; flow-wrapped floats keep their measured box.
+const anchorOrigin = computed<DocxFloatingPageOriginPx>(() =>
+  props.floatingPageOriginPx ??
+  resolveFloatingPageOriginPx(props.pageWidthPx)
+)
+
 const floatingImages = computed<FloatingImageEntry[]>(() => {
   const model = props.controller.model
   if (!model) return []
 
+  const origin = anchorOrigin.value
   const images: FloatingImageEntry[] = []
   const skippedImageKeys = new Set(props.skipImageKeys ?? [])
   const pageNodeIndexes = new Set(
@@ -195,6 +220,21 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
       const run = child as ImageRunNode
       const src = resolveRenderableImageSource(run) ?? undefined
       const selection = props.controller.selection
+      const flowWrapped = shouldRenderWrappedFloatingImage(run)
+      const xPx = run.floating?.xPx ?? 0
+      const yPx = run.floating?.yPx ?? 0
+      // A wrapped float is measured from the DOM in page coordinates, so only
+      // the absolute path has to apply the page+margin/column origin.
+      const anchor = flowWrapped
+        ? undefined
+        : resolveFloatingAnchorOriginPx(run.floating, {
+            pageOriginLeft: origin.left,
+            pageOriginTop: origin.top,
+            marginOriginLeft: origin.marginLeft,
+            marginOriginTop: origin.marginTop,
+            columnOriginLeft: origin.columnLeft,
+            columnOriginTop: origin.columnTop,
+          })
       images.push({
         key: `img-${nodeIndex}-${childIndex}`,
         nodeIndex,
@@ -203,9 +243,11 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         alt: run.alt,
         widthPx: run.widthPx ?? 120,
         heightPx: run.heightPx ?? 80,
-        xPx: run.floating?.xPx ?? 0,
-        yPx: run.floating?.yPx ?? 0,
-        flowWrapped: shouldRenderWrappedFloatingImage(run),
+        xPx,
+        yPx,
+        anchorOffsetLeftPx: (anchor?.leftPx ?? xPx) - xPx,
+        anchorOffsetTopPx: (anchor?.topPx ?? yPx) - yPx,
+        flowWrapped,
         behindDocument: run.floating?.behindDocument === true,
         zIndex: resolveFloatingImageStackingZIndex(run.floating),
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
@@ -266,8 +308,16 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
   const flowBox = image.flowWrapped ? wrappedImageBox(image) : undefined
   const dragDeltaX = drag ? drag.xPx - image.xPx : 0
   const dragDeltaY = drag ? drag.yPx - image.yPx : 0
-  const leftPx = flowBox ? flowBox.left + dragDeltaX : (drag?.xPx ?? image.xPx)
-  const topPx = flowBox ? flowBox.top + dragDeltaY : (drag?.yPx ?? image.yPx)
+  // Absolute floats live in page coordinates: the model keeps the
+  // `relativeFrom` offset (e.g. 75.6 px from the column), the anchor origin adds
+  // the page margin exactly like the read-only renderer. A wrapped float is
+  // measured from the DOM instead and needs no origin.
+  const leftPx = flowBox
+    ? flowBox.left + dragDeltaX
+    : (drag?.xPx ?? image.xPx) + image.anchorOffsetLeftPx
+  const topPx = flowBox
+    ? flowBox.top + dragDeltaY
+    : (drag?.yPx ?? image.yPx) + image.anchorOffsetTopPx
   const style: Record<string, string> = {
     position: "absolute",
     left: `${leftPx}px`,
@@ -477,10 +527,21 @@ function updatePointerPreview(event: MouseEvent): void {
     const image = draggingImage.value
     const xPx = Math.round(dragStartPosX.value + (event.clientX - dragStartX.value) / scale)
     const yPx = Math.round(dragStartPosY.value + (event.clientY - dragStartY.value) / scale)
+    // The drag clamp is a page-space bound, while the committed model offset is
+    // relative to the anchor origin. Clamp the painted position and convert back
+    // so a margin-/column-anchored float cannot leave the paper.
+    const pageX = Math.max(
+      -image.widthPx + 16,
+      Math.min(props.pageWidthPx - 16, xPx + image.anchorOffsetLeftPx),
+    )
+    const pageY = Math.max(
+      -image.heightPx + 16,
+      Math.min(props.pageHeightPx - 16, yPx + image.anchorOffsetTopPx),
+    )
     dragPreview.value = {
       key: image.key,
-      xPx: Math.max(-image.widthPx + 16, Math.min(props.pageWidthPx - 16, xPx)),
-      yPx: Math.max(-image.heightPx + 16, Math.min(props.pageHeightPx - 16, yPx)),
+      xPx: pageX - image.anchorOffsetLeftPx,
+      yPx: pageY - image.anchorOffsetTopPx,
     }
   }
 
