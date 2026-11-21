@@ -6,6 +6,8 @@
 // grids and chart snapshots; it never touches the DOM.
 
 import type {
+  ChartGeometrySnapshot,
+  NormalizedRect,
   OfficeObjectDescriptor,
   OfficeObjectKind,
   OfficeObjectProvider,
@@ -208,6 +210,7 @@ function subObjectTargets(
   if (nodeType === "table") {
     const table: PptxTableSnapshot | undefined = context.getObjectTable?.(slideIndex, identity.key);
     table?.rows.forEach((row, rowIndex) => {
+      targets.push({ kind: "table-row", rowIndex });
       row.forEach((_cell, cellIndex) => {
         targets.push({ kind: "table-cell", rowIndex, cellIndex });
       });
@@ -235,6 +238,117 @@ function seriesObjectId(identity: PptxObjectIdentity, seriesIndex: number): stri
   return subObjectObjectId(identity, { kind: "chart-series", seriesIndex });
 }
 
+function rowObjectId(identity: PptxObjectIdentity, rowIndex: number): string {
+  return subObjectObjectId(identity, { kind: "table-row", rowIndex });
+}
+
+function chartLocalRectToSlide(
+  rect: { x: number; y: number; width: number; height: number },
+  geometry: ChartGeometrySnapshot,
+  viewport: NormalizedRect,
+): NormalizedRect | undefined {
+  if (!(geometry.frame.width > 0) || !(geometry.frame.height > 0)) return undefined;
+  return {
+    x: viewport.x + (rect.x / geometry.frame.width) * viewport.width,
+    y: viewport.y + (rect.y / geometry.frame.height) * viewport.height,
+    width: (rect.width / geometry.frame.width) * viewport.width,
+    height: (rect.height / geometry.frame.height) * viewport.height,
+  };
+}
+
+function unionChartRects(rects: readonly NormalizedRect[]): NormalizedRect | undefined {
+  if (rects.length === 0) return undefined;
+  let left = 1;
+  let top = 1;
+  let right = 0;
+  let bottom = 0;
+  for (const rect of rects) {
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.width);
+    bottom = Math.max(bottom, rect.y + rect.height);
+  }
+  return right > left && bottom > top
+    ? { x: left, y: top, width: right - left, height: bottom - top }
+    : undefined;
+}
+
+function chartSubObjectRect(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): NormalizedRect | undefined {
+  const snapshot = context.getObjectChart?.(slideIndex, identity.key);
+  const geometry = snapshot?.geometry;
+  const viewport = snapshot?.geometryViewport;
+  if (!geometry || !viewport) return undefined;
+  if (target.kind === "chart-series") {
+    const series = geometry.series.find((entry) => entry.index === target.seriesIndex);
+    if (!series) return undefined;
+    return unionChartRects(series.points.flatMap((point) => {
+      const mapped = point.rect ? chartLocalRectToSlide(point.rect, geometry, viewport) : undefined;
+      return mapped ? [mapped] : [];
+    }));
+  }
+  if (target.kind === "chart-point") {
+    const point = geometry.series
+      .find((entry) => entry.index === target.seriesIndex)
+      ?.points.find((entry) => entry.index === target.pointIndex);
+    return point?.rect ? chartLocalRectToSlide(point.rect, geometry, viewport) : undefined;
+  }
+  if (target.kind === "chart-legend-entry") {
+    const item = geometry.layout.legend?.items.find((entry) =>
+      entry.index === target.legendIndex
+      && (target.seriesIndex === undefined || entry.seriesIndex === target.seriesIndex));
+    return item ? chartLocalRectToSlide(item.rect, geometry, viewport) : undefined;
+  }
+  return undefined;
+}
+
+function subObjectZIndex(target: PptxSubObjectTarget): number | undefined {
+  if (target.kind === "chart-series" || target.kind === "chart-point") {
+    return 1_000 + target.seriesIndex;
+  }
+  if (target.kind === "chart-legend-entry") return 2_000 + target.legendIndex;
+  return undefined;
+}
+
+function subObjectContentText(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): string | undefined {
+  if (target.kind === "table-row") {
+    const row = context.getObjectTable?.(slideIndex, identity.key)?.rows[target.rowIndex];
+    return row && row.length > 0 ? row.join("\t") : undefined;
+  }
+  if (target.kind === "table-cell") {
+    return context.getObjectTable?.(slideIndex, identity.key)?.rows[target.rowIndex]?.[target.cellIndex];
+  }
+  return undefined;
+}
+
+function subObjectVisual(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): OfficeObjectDescriptor["visual"] {
+  const rect = chartSubObjectRect(context, slideIndex, identity, target);
+  if (!rect) return undefined;
+  const zIndex = subObjectZIndex(target);
+  return {
+    fragments: [{
+      container: { space: "slide", slideIndex },
+      rect,
+      ...(zIndex === undefined ? {} : { zIndex }),
+    }],
+    layoutVersion: context.revision.revision,
+  };
+}
+
 function subObjectDescriptors(
   context: PptxReferenceContext,
   slideIndex: number,
@@ -244,13 +358,17 @@ function subObjectDescriptors(
   return subObjectTargets(slideIndex, identity, context).flatMap((target) => {
     try {
       const draft = createPptxSubObjectReferenceDraft(context, slideIndex, identity.key, target);
-      const label = target.kind === "table-cell"
-        ? `Cell ${target.rowIndex + 1}, ${target.cellIndex + 1}`
-        : target.kind === "chart-series"
-          ? `Series: ${context.getObjectChart?.(slideIndex, identity.key)?.series[target.seriesIndex]?.name ?? `Series ${target.seriesIndex + 1}`}`
-          : target.kind === "chart-point"
-            ? `Point ${target.pointIndex + 1}`
-            : `Legend entry ${target.legendIndex + 1}`;
+      const label = target.kind === "table-row"
+        ? `Row ${target.rowIndex + 1}`
+        : target.kind === "table-cell"
+          ? `Cell ${target.rowIndex + 1}, ${target.cellIndex + 1}`
+          : target.kind === "chart-series"
+            ? `Series: ${context.getObjectChart?.(slideIndex, identity.key)?.series[target.seriesIndex]?.name ?? `Series ${target.seriesIndex + 1}`}`
+            : target.kind === "chart-point"
+              ? `Point ${target.pointIndex + 1}`
+              : `Legend entry ${target.legendIndex + 1}`;
+      const visual = subObjectVisual(context, slideIndex, identity, target);
+      const text = subObjectContentText(context, slideIndex, identity, target);
       return [createOfficeObjectDescriptor({
         objectId: subObjectObjectId(identity, target),
         draft,
@@ -264,9 +382,18 @@ function subObjectDescriptors(
         ],
         parentObjectId: target.kind === "chart-point"
           ? seriesObjectId(identity, target.seriesIndex)
-          : parentObjectId,
-        childrenState: "none",
-        facets: { slideIndex, objectKey: identity.key, target },
+          : target.kind === "table-cell"
+            ? rowObjectId(identity, target.rowIndex)
+            : parentObjectId,
+        childrenState: target.kind === "table-row" ? "available" : "none",
+        ...(text === undefined ? {} : { content: { text } }),
+        ...(visual === undefined ? {} : { visual }),
+        facets: {
+          slideIndex,
+          objectKey: identity.key,
+          target,
+          ...(subObjectZIndex(target) === undefined ? {} : { zIndex: subObjectZIndex(target) }),
+        },
       })];
     } catch {
       return [];

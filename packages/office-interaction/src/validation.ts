@@ -358,6 +358,21 @@ function validateXlsxLocator(value: unknown, path: string): XlsxObjectLocator {
       stringValue(input.tableName, `${path}.tableName`, { max: 512 })
       optionalString(input.id, `${path}.id`, 512)
       break
+    case "table-row":
+      validateSheet(input.sheet, `${path}.sheet`)
+      stringValue(input.tableName, `${path}.tableName`, { max: 512 })
+      integer(input.rowIndex, `${path}.rowIndex`)
+      optionalString(input.id, `${path}.id`, 512)
+      break
+    case "table-cell":
+      validateSheet(input.sheet, `${path}.sheet`)
+      stringValue(input.tableName, `${path}.tableName`, { max: 512 })
+      integer(input.rowIndex, `${path}.rowIndex`)
+      integer(input.cellIndex, `${path}.cellIndex`)
+      validateA1(input.a1, `${path}.a1`)
+      if (!isSingleA1(input.a1 as string)) fail("INVALID_VALUE", `${path}.a1`, "table cell must be one cell")
+      optionalString(input.id, `${path}.id`, 512)
+      break
     case "drawing":
       validateSheet(input.sheet, `${path}.sheet`)
       enumValue(input.objectType, new Set(["chart", "image", "shape", "form-control"]), `${path}.objectType`)
@@ -435,7 +450,9 @@ function validatePptxLocator(value: unknown, path: string): PptxObjectLocator {
       if (segments.length === 0) fail("INVALID_VALUE", `${path}.path`, "must not be empty")
       segments.forEach((value, index) => {
         const segment = record(value, `${path}.path[${index}]`)
-        if (segment.kind === "table-cell") {
+        if (segment.kind === "table-row") {
+          integer(segment.rowIndex, `${path}.path[${index}].rowIndex`)
+        } else if (segment.kind === "table-cell") {
           integer(segment.rowIndex, `${path}.path[${index}].rowIndex`)
           integer(segment.cellIndex, `${path}.path[${index}].cellIndex`)
         } else if (segment.kind === "chart-series") {
@@ -593,7 +610,7 @@ function validateKindLocator(
   } else if (format === "xlsx") {
     if (value.kind === "worksheet") allowed = ["worksheet"]
     else if (value.kind === "range") allowed = [isSingleA1(String(value.a1)) ? "cell" : "cell-range"]
-    else if (value.kind === "row" || value.kind === "column" || value.kind === "table" || value.kind === "comment") allowed = [value.kind]
+    else if (value.kind === "row" || value.kind === "column" || value.kind === "table" || value.kind === "table-row" || value.kind === "table-cell" || value.kind === "comment") allowed = [value.kind]
     else if (value.kind === "drawing") allowed = [value.objectType as OfficeObjectKind]
     else if (value.kind === "chart-element") allowed = [{ series: "chart-series", point: "chart-point", "legend-entry": "chart-legend-entry" }[String(value.element)] as OfficeObjectKind]
     else if (value.kind === "behavior") allowed = [behaviorKind(format, value)!]

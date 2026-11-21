@@ -1280,17 +1280,22 @@ function blockDescriptor(
       childrenState: "available",
     };
   }
+  const structurePath = reference.locator.type === "format"
+    && reference.locator.value.kind === "structure"
+    ? reference.locator.value.path
+    : [];
+  const structureEntries: { kind: OfficeObjectKind; label: string }[] = [];
+  for (const segment of structurePath) {
+    if (segment.kind === "table") structureEntries.push({ kind: "table", label: `Table ${segment.index + 1}` });
+    else if (segment.kind === "row") structureEntries.push({ kind: "table-row", label: `Row ${segment.index + 1}` });
+    else if (segment.kind === "cell") structureEntries.push({ kind: "table-cell", label: `Cell ${segment.index + 1}` });
+  }
   if (resolved.kind === "table") {
-    const tableIndex =
-      reference.locator.type === "format" &&
-      reference.locator.value.kind === "structure" &&
-      reference.locator.value.path[0]?.kind === "table"
-        ? reference.locator.value.path[0].index
-        : undefined;
+    const tableIndex = [...structurePath].reverse().find((segment) => segment.kind === "table")?.index;
     return {
       ...common,
       label: tableIndex === undefined ? "Table" : `Table ${tableIndex + 1}`,
-      path: [...basePath, { kind: "table", label: "Table" }],
+      path: [...basePath, ...structureEntries],
       childrenState: "available",
     };
   }
@@ -1298,11 +1303,7 @@ function blockDescriptor(
     return {
       ...common,
       label: `Row ${resolved.rowIndex + 1}`,
-      path: [
-        ...basePath,
-        { kind: "table", label: "Table" },
-        { kind: "table-row", label: `Row ${resolved.rowIndex + 1}` },
-      ],
+      path: [...basePath, ...structureEntries],
       childrenState: "available",
     };
   }
@@ -1310,18 +1311,14 @@ function blockDescriptor(
     return {
       ...common,
       label: `Cell ${resolved.rowIndex + 1}, ${resolved.cellIndex + 1}`,
-      path: [
-        ...basePath,
-        { kind: "table", label: "Table" },
-        { kind: "table-row", label: `Row ${resolved.rowIndex + 1}` },
-        { kind: "table-cell", label: `Cell ${resolved.cellIndex + 1}` },
-      ],
+      path: [...basePath, ...structureEntries],
       childrenState: "available",
     };
   }
   const labelText = text.replace(/\s+/gu, " ").trim();
   const heading = reference.kind === "heading";
   const listItem = reference.kind === "list-item";
+  const paragraphEntries = structureEntries;
   return {
     ...common,
     label: labelText
@@ -1333,6 +1330,7 @@ function blockDescriptor(
           : "Paragraph",
     path: [
       ...basePath,
+      ...paragraphEntries,
       { kind: "paragraph", label: heading ? "Heading" : listItem ? "List item" : "Paragraph" },
     ],
     childrenState: "none",

@@ -130,6 +130,26 @@ export type XlsxObjectLocator =
   | { kind: "row" | "column"; sheet: XlsxSheetLocator; start: number; end: number }
   | { kind: "table"; sheet: XlsxSheetLocator; tableName: string; id?: string }
   | {
+      kind: "table-row"
+      sheet: XlsxSheetLocator
+      tableName: string
+      /** Zero-based row index relative to the table body range. */
+      rowIndex: number
+      id?: string
+    }
+  | {
+      kind: "table-cell"
+      sheet: XlsxSheetLocator
+      tableName: string
+      /** Zero-based row index relative to the table body range. */
+      rowIndex: number
+      /** Zero-based column index relative to the table body range. */
+      cellIndex: number
+      /** Current A1 address; the resolver recomputes it from the table range. */
+      a1: string
+      id?: string
+    }
+  | {
       kind: "drawing"
       sheet: XlsxSheetLocator
       objectType: "chart" | "image" | "shape" | "form-control"
@@ -169,6 +189,7 @@ export interface PptxObjectKeyLocator {
 }
 
 export type PptxSubObjectPathSegment =
+  | { kind: "table-row"; rowIndex: number }
   | { kind: "table-cell"; rowIndex: number; cellIndex: number }
   | { kind: "chart-series"; seriesIndex: number }
   | { kind: "chart-point"; seriesIndex: number; pointIndex: number }
@@ -232,13 +253,13 @@ export type DocxReferenceKind =
   | "style" | "field" | "bookmark" | "tracked-change" | "cross-reference"
 
 export type XlsxReferenceKind =
-  | "worksheet" | "cell" | "cell-range" | "row" | "column" | "table" | "chart"
+  | "worksheet" | "cell" | "cell-range" | "row" | "column" | "table" | "table-row" | "table-cell" | "chart"
   | "chart-series" | "chart-point" | "chart-legend-entry" | "image" | "shape" | "form-control" | "comment" | "region"
   | "formula" | "conditional-format" | "data-validation" | "named-range" | "protection"
 
 export type PptxReferenceKind =
   | "slide" | "text-range" | "text-box" | "shape" | "image" | "table" | "chart" | "group"
-  | "table-cell" | "chart-series" | "chart-point" | "chart-legend-entry" | "region"
+  | "table-row" | "table-cell" | "chart-series" | "chart-point" | "chart-legend-entry" | "region"
   | "animation" | "transition" | "action" | "master" | "note"
 
 export type PdfReferenceKind =

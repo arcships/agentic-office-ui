@@ -248,3 +248,65 @@ test("PDF object registry lists native, visual and behavior families", () => {
   assert.equal(nativeOnly.length, 1)
   assert.equal(nativeOnly[0].label, "Link")
 })
+
+test("PDF attachments, OCG layers, signatures and permissions resolve from host behaviorSource", async () => {
+  const behaviorSource = {
+    attachments: [{ id: "attach-1", name: "source.csv", description: "Original export" }],
+    layers: [{ id: "ocg-2", name: "Draft watermark", visible: false }],
+    signatures: [{ id: "sig-1", name: "Approval", signer: "Ada", valid: true }],
+    permissions: { copying: false, printing: true },
+  }
+  const ctx = context("pdf-rev-1", { behaviorSource })
+  const records = pdf.resolvePdfBehaviorRecords(ctx)
+  assert.deepEqual(records.map((record) => record.behavior), [
+    "attachment", "layer", "signature", "permission",
+  ])
+  assert.equal(pdf.resolvePdfBehaviorRecords(ctx), records, "behaviorSource records are cached per context")
+
+  const expectedKinds = {
+    attachment: "attachment",
+    layer: "layer",
+    signature: "signature",
+    permission: "permission",
+  }
+  const registry = pdf.createPdfObjectRegistry()
+  const listed = registry.list(ctx, { kinds: ["attachment", "layer", "signature", "permission"] })
+  assert.equal(listed.length, 4)
+  assert.ok(listed.every((descriptor) => interaction.isOfficeObjectVisible(descriptor) === false))
+
+  for (const record of records) {
+    const descriptor = pdf.describePdfBehavior(ctx, record)
+    assert.equal(descriptor.draft.kind, expectedKinds[record.behavior])
+    assert.equal(descriptor.draft.locator.value.kind, "behavior")
+    assert.equal(descriptor.draft.locator.value.nativeId, record.instanceId)
+    assert.ok(descriptor.draft.fingerprint.ancestorKeys.includes(
+      `pdf.behavior-instance:${record.instanceId}`,
+    ))
+    assert.equal("visual" in descriptor, false)
+
+    const draft = pdf.createPdfBehaviorReferenceDraft(ctx, record)
+    const confirmed = confirm(draft, `ref-pdf-${record.behavior}`)
+    const resolved = await pdf.resolvePdfReference(ctx, confirmed.reference)
+    assert.equal(resolved.status, "exact")
+    assert.equal(resolved.descriptor.label, record.label)
+    assert.equal(resolved.descriptor.draft.kind, expectedKinds[record.behavior])
+    assert.deepEqual(resolved.descriptor.path.map((entry) => entry.kind), record.path.map((entry) => entry.kind))
+
+    const moved = await pdf.resolvePdfReference(context("pdf-rev-2", { behaviorSource }), confirmed.reference)
+    assert.equal(moved.status, "relocated")
+    assert.equal(moved.reference.document.revision, "pdf-rev-2")
+  }
+
+  const localized = interaction.localizeOfficeDescriptorLabel(
+    listed.find((descriptor) => descriptor.draft.kind === "attachment").label,
+    interaction.resolveOfficeMessages("zh-CN").common,
+  )
+  assert.equal(localized, "附件：source.csv")
+
+  const withPrebuilt = context("pdf-rev-1", { behaviorSource, behaviors: [] })
+  assert.deepEqual(pdf.resolvePdfBehaviorRecords(withPrebuilt), [])
+  assert.throws(
+    () => pdf.createPdfBehaviorReferenceDraft(context("pdf-rev-3"), records[0]),
+    /not present in the reference context/u,
+  )
+})

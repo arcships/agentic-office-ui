@@ -160,6 +160,12 @@ type PptxStageContextMenu = Position & (
 
 `pptx-core` 根入口公开同一套能力判断：`pptxTransitionCapability()`、`isPptxTransitionExecutable()`，以及方向、擦除裁剪、分割遮罩换算和进度换算工具（`pptxTransitionDirection()`、`pptxTransitionWipeInsets()`、`pptxTransitionWipeClip()`、`pptxTransitionSplitMask()`、`pptxTransitionProgress()`），宿主自建播放器时可直接复用。
 
+### 对象引用与宿主证据
+
+`createPptxObjectRegistry()` 和 `createPptxObjectIndex()` 把幻灯片、形状、图片、表格、图表、组合、表格行/单元格、图表内部元素与阶段四行为组织为统一 descriptor。表格行/单元格需要宿主 `getObjectTable(slideIndex, objectKey)` 返回渲染网格；图表内部元素需要 `getObjectChart(slideIndex, objectKey)` 返回系列名称和点标签。缺少这些证据时引用创建被拒绝，解析返回结构化 `unsupported`。
+
+图表内部元素的可见轮廓是 provider-dependent：`PptxChartSnapshot.geometry` 使用 #184 的 `ChartGeometrySnapshot`（chart-local CSS px），宿主再用 `geometryViewport` 给出该 frame 在 slide 上的归一化矩形。对象索引把 series/point/legend 矩形投影为 `visual` 和 zIndex；不提供时仍可从系列/点标签创建引用，但不会伪造坐标。默认 ECharts adapter 仍由宿主提供。
+
 ### 从右到左 (RTL) 段落
 
 渲染器会把 `a:pPr/@rtl="1"` 的段落画成 `direction: rtl`。渲染完成后查看器会把同一决定同步到标准 `dir` 属性（并写入 `data-pptx-paragraph-direction`），因此宿主 CSS、文本选择和引用范围都能按段落方向处理。能力报告同时记录：

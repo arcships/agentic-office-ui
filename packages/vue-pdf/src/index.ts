@@ -79,6 +79,7 @@ export {
   describePdfReference,
   describePdfVisualObject,
   normalizePdfReferenceRect,
+  resolvePdfBehaviorRecords,
   resolvePdfReference,
 } from "./pdf/pdf-reference-adapter"
 export type {

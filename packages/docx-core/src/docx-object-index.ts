@@ -33,7 +33,7 @@ import type {
   StructuredDocument,
 } from "./blocks/types";
 import { extractDocumentBlocksSync } from "./blocks/extract";
-import type { DocModel, ParagraphNode } from "./engine/types";
+import type { DocModel, DocNode, ParagraphNode, TableNode } from "./engine/types";
 import { paragraphText } from "./editor/helpers/paragraph-inspect";
 import { DOCX_BEHAVIOR_REFERENCE_KIND, enumerateDocxBehaviors } from "./docx-behaviors";
 
@@ -97,19 +97,96 @@ function docxTextHash(text: string): string {
   return `fnv1a32:${text.length}:${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-function tableRowObjectId(tableIndex: number, rowIndex: number): string {
-  return `docx:table-row:${tableIndex}:${rowIndex}`;
+function tableRowObjectId(tablePath: readonly DocxBlockPathSegment[], rowIndex: number): string {
+  return `docx:table-row:${modelPathKey(tablePath)}/${rowIndex}`;
+}
+
+function lastPathIndex(
+  path: readonly DocxBlockPathSegment[] | undefined,
+  kind: DocxBlockPathSegment["kind"],
+): number | undefined {
+  const segments = path ?? [];
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index]!.kind === kind) return segments[index]!.index;
+  }
+  return undefined;
+}
+
+function storyNodesForPart(model: DocModel, part: DocumentBlock["details"]["part"]): readonly DocNode[] | undefined {
+  if (!part || part.kind === "body") return model.nodes;
+  if (part.kind === "header" || part.kind === "footer") {
+    const flat = part.kind === "header"
+      ? model.metadata.headerSections
+      : model.metadata.footerSections;
+    const direct = flat?.find((section) => section.partName === part.partName);
+    if (direct) return direct.nodes;
+    for (const section of model.metadata.sections ?? []) {
+      const nested = (part.kind === "header"
+        ? section.headerSections
+        : section.footerSections)?.find((entry) => entry.partName === part.partName);
+      if (nested) return nested.nodes;
+    }
+    return undefined;
+  }
+  if (part.kind === "footnote" || part.kind === "endnote") {
+    const notes = part.kind === "footnote"
+      ? model.metadata.footnotes
+      : model.metadata.endnotes;
+    return notes?.find((note) => String(note.id) === part.noteId)?.nodes;
+  }
+  return undefined;
+}
+
+/** Resolve a table node from a structural path that starts with a table segment. */
+function tableNodeAtPath(
+  nodes: readonly DocNode[],
+  path: readonly DocxBlockPathSegment[],
+  index = 0,
+): TableNode | undefined {
+  const tableSegment = path[index];
+  if (!tableSegment || tableSegment.kind !== "table") return undefined;
+  const node = nodes[tableSegment.index];
+  if (node?.type !== "table") return undefined;
+  if (index === path.length - 1) return node;
+  const rowSegment = path[index + 1];
+  const cellSegment = path[index + 2];
+  const nestedSegment = path[index + 3];
+  if (!rowSegment || rowSegment.kind !== "row" || !cellSegment || cellSegment.kind !== "cell"
+    || !nestedSegment || nestedSegment.kind !== "table") {
+    return undefined;
+  }
+  const cell = node.rows[rowSegment.index]?.cells[cellSegment.index];
+  return cell ? tableNodeAtPath(cell.nodes, path, index + 3) : undefined;
 }
 
 function rowDescriptor(
   context: DocxReferenceContext,
-  tableIndex: number,
+  part: DocumentBlock["details"]["part"],
+  tablePath: readonly DocxBlockPathSegment[],
   rowIndex: number,
   tableObjectId: string | undefined,
   rowText: string,
 ): OfficeObjectDescriptor {
+  const path = [...tablePath, { kind: "row" as const, index: rowIndex }];
+  const tableIndex = lastPathIndex(tablePath, "table") ?? 0;
+  const pathParts: { kind: OfficeObjectKind; label: string }[] = [
+    { kind: "document", label: "Document" },
+    ...(part?.kind === "header"
+      ? [{ kind: "section" as const, label: `Header ${part.partName}` }]
+      : part?.kind === "footer"
+        ? [{ kind: "section" as const, label: `Footer ${part.partName}` }]
+        : part?.kind === "footnote" || part?.kind === "endnote"
+          ? [{ kind: "note" as const, label: `${part.kind === "footnote" ? "Footnote" : "Endnote"} ${part.noteId}` }]
+          : []),
+  ];
+  for (const segment of tablePath) {
+    if (segment.kind === "table") pathParts.push({ kind: "table", label: `Table ${segment.index + 1}` });
+    else if (segment.kind === "row") pathParts.push({ kind: "table-row", label: `Row ${segment.index + 1}` });
+    else if (segment.kind === "cell") pathParts.push({ kind: "table-cell", label: `Cell ${segment.index + 1}` });
+  }
+  pathParts.push({ kind: "table-row", label: `Row ${rowIndex + 1}` });
   return createOfficeObjectDescriptor({
-    objectId: tableRowObjectId(tableIndex, rowIndex),
+    objectId: tableRowObjectId(tablePath, rowIndex),
     draft: {
       schemaVersion: 1,
       document: context.revision,
@@ -120,15 +197,15 @@ function rowDescriptor(
         format: "docx",
         value: {
           kind: "structure",
-          part: { kind: "body" },
-          path: [{ kind: "table", index: tableIndex }, { kind: "row", index: rowIndex }],
+          part: part ?? { kind: "body" },
+          path,
         },
       },
       fingerprint: {
         ...(rowText ? { contentHash: docxTextHash(rowText) } : {}),
         ancestorKeys: [
-          "docx.part:body",
-          `docx.table:${tableIndex}`,
+          `docx.part:${part?.kind ?? "body"}`,
+          ...tablePath.map((segment) => `docx.${segment.kind}:${segment.index}`),
           `docx.row:${rowIndex}`,
         ],
       },
@@ -140,14 +217,15 @@ function rowDescriptor(
       ),
     },
     label: `Row ${rowIndex + 1}`,
-    path: [
-      { kind: "document", label: "Document" },
-      { kind: "table", label: `Table ${tableIndex + 1}` },
-      { kind: "table-row", label: `Row ${rowIndex + 1}` },
-    ],
+    path: pathParts,
     ...(tableObjectId === undefined ? {} : { parentObjectId: tableObjectId }),
     childrenState: "available",
-    facets: { tableIndex, rowIndex, path: `table:${tableIndex}/row:${rowIndex}` },
+    facets: {
+      tableIndex,
+      rowIndex,
+      part: part?.kind ?? "body",
+      path: modelPathKey(path),
+    },
   });
 }
 
@@ -165,31 +243,13 @@ function blockPath(block: DocumentBlock): readonly { kind: OfficeObjectKind; lab
     });
   }
   const kind = docxBlockReferenceKind(block);
-  if (block.type === "table") {
-    const index = block.details.tableIndex;
-    path.push({ kind: "table", label: index === undefined ? "Table" : `Table ${index + 1}` });
-    return path;
+  const modelPath = block.details.modelPath ?? [];
+  for (const segment of modelPath) {
+    if (segment.kind === "table") path.push({ kind: "table", label: `Table ${segment.index + 1}` });
+    else if (segment.kind === "row") path.push({ kind: "table-row", label: `Row ${segment.index + 1}` });
+    else if (segment.kind === "cell") path.push({ kind: "table-cell", label: `Cell ${segment.index + 1}` });
   }
-  if (block.type === "table_head") {
-    const tableIndex = block.details.tableIndex;
-    path.push({ kind: "table", label: tableIndex === undefined ? "Table" : `Table ${tableIndex + 1}` });
-    path.push({
-      kind: "table-row",
-      label: block.details.rowIndex === undefined ? "Row" : `Row ${block.details.rowIndex + 1}`,
-    });
-    return path;
-  }
-  if (block.type === "table_cell") {
-    const tableIndex = block.details.tableIndex;
-    path.push({ kind: "table", label: tableIndex === undefined ? "Table" : `Table ${tableIndex + 1}` });
-    path.push({
-      kind: "table-row",
-      label: block.details.rowIndex === undefined ? "Row" : `Row ${block.details.rowIndex + 1}`,
-    });
-    path.push({
-      kind: "table-cell",
-      label: block.details.cellIndex === undefined ? "Cell" : `Cell ${block.details.cellIndex + 1}`,
-    });
+  if (block.type === "table" || block.type === "table_head" || block.type === "table_cell") {
     return path;
   }
   path.push({ kind, label: blockLabel(block, kind, compactLabel(block)) });
@@ -198,17 +258,20 @@ function blockPath(block: DocumentBlock): readonly { kind: OfficeObjectKind; lab
 
 function blockLabel(block: DocumentBlock, kind: OfficeObjectKind, compact: string): string {
   if (kind === "table") {
-    const index = block.details.tableIndex;
+    const index = lastPathIndex(block.details.modelPath, "table") ?? block.details.tableIndex;
     return index === undefined ? "Table" : `Table ${index + 1}`;
   }
   if (kind === "table-row") {
-    return block.details.rowIndex === undefined ? "Row" : `Row ${block.details.rowIndex + 1}`;
+    const rowIndex = lastPathIndex(block.details.modelPath, "row") ?? block.details.rowIndex;
+    return rowIndex === undefined ? "Row" : `Row ${rowIndex + 1}`;
   }
   if (kind === "table-cell") {
-    if (block.details.cellIndex === undefined) return "Cell";
-    return block.details.rowIndex === undefined
-      ? `Cell ${block.details.cellIndex + 1}`
-      : `Cell ${block.details.rowIndex + 1}, ${block.details.cellIndex + 1}`;
+    const cellIndex = lastPathIndex(block.details.modelPath, "cell") ?? block.details.cellIndex;
+    const rowIndex = lastPathIndex(block.details.modelPath, "row") ?? block.details.rowIndex;
+    if (cellIndex === undefined) return "Cell";
+    return rowIndex === undefined
+      ? `Cell ${cellIndex + 1}`
+      : `Cell ${rowIndex + 1}, ${cellIndex + 1}`;
   }
   if (kind === "image") {
     const alt = block.details.alt?.replace(/\s+/gu, " ").trim();
@@ -253,8 +316,7 @@ function blockReliability(kind: OfficeObjectKind) {
 function blockDescriptor(
   context: DocxReferenceContext,
   block: DocumentBlock,
-  objectIdsByBlockId: ReadonlyMap<string, string>,
-  parentOverride?: string,
+  parentId: string | undefined,
 ): OfficeObjectDescriptor | undefined {
   if (!block.sourceRefs.length) return undefined;
   let draft;
@@ -265,8 +327,6 @@ function blockDescriptor(
   }
   const kind = docxBlockReferenceKind(block);
   const compact = block.content.replace(/\s+/gu, " ").trim();
-  const parentId = parentOverride
-    ?? (block.parentBlockId === undefined ? undefined : objectIdsByBlockId.get(block.parentBlockId));
   return createOfficeObjectDescriptor({
     objectId: `${BLOCK_OBJECT_PREFIX}${block.id}`,
     draft: { ...draft, reliability: blockReliability(kind) },
@@ -439,45 +499,83 @@ function buildDocxObjectIndex(
   const blockIdByPath = new Map<string, string>();
   for (const block of blocks) blockIdByPath.set(modelPathKey(block.details.modelPath), block.id);
 
-  // Rows are not separate extraction blocks, but they are stage 3 objects:
-  // build one per model row and park every cell/paragraph under it.
-  const rowObjectIdByPath = new Map<string, string>();
-  const rowDescriptors: OfficeObjectDescriptor[] = [];
-  const tableObjectIdByIndex = new Map<number, string>();
+  // Rows are not separate extraction blocks except for repeating header rows.
+  // Build the row map from each table block's own structural path so nested
+  // tables keep `table -> row -> cell` inside the cell that owns them instead
+  // of being re-parented to a top-level row with the same numeric index.
+  const rowBlockByPath = new Map<string, DocumentBlock>();
   for (const block of blocks) {
-    if (block.type !== "table" || block.details.tableIndex === undefined) continue;
-    tableObjectIdByIndex.set(block.details.tableIndex, `${BLOCK_OBJECT_PREFIX}${block.id}`);
+    if (block.type === "table_head") {
+      rowBlockByPath.set(modelPathKey(block.details.modelPath), block);
+    }
   }
-  for (const [nodeIndex, node] of context.model.nodes.entries()) {
-    if (node.type !== "table") continue;
-    node.rows.forEach((row, rowIndex) => {
-      const path = `table:${nodeIndex}/row:${rowIndex}`;
-      rowObjectIdByPath.set(path, tableRowObjectId(nodeIndex, rowIndex));
-      const text = row.cells
+  const tableBlocks = blocks.filter((block) => block.type === "table");
+  const tableObjectIdByPath = new Map<string, string>();
+  for (const block of tableBlocks) {
+    tableObjectIdByPath.set(modelPathKey(block.details.modelPath), `${BLOCK_OBJECT_PREFIX}${block.id}`);
+  }
+  const rowObjectIdByPath = new Map<string, string>();
+  const tableRows = new Map<DocumentBlock, { node: TableNode; rows: { index: number; text: string }[] }>();
+  for (const block of tableBlocks) {
+    const tablePath = block.details.modelPath ?? [];
+    const nodes = storyNodesForPart(context.model, block.details.part);
+    const node = nodes ? tableNodeAtPath(nodes, tablePath) : undefined;
+    if (!node) continue;
+    const rows = node.rows.map((row, index) => ({
+      index,
+      text: row.cells
         .map((cell) => cell.nodes
           .map((entry) => (entry.type === "paragraph" ? paragraphText(entry) : ""))
           .filter(Boolean)
           .join(" "))
         .filter(Boolean)
-        .join("\t");
+        .join("\t"),
+    }));
+    tableRows.set(block, { node, rows });
+    for (const row of rows) {
+      const rowPath = [...tablePath, { kind: "row" as const, index: row.index }];
+      const key = modelPathKey(rowPath);
+      const rowBlock = rowBlockByPath.get(key);
+      rowObjectIdByPath.set(
+        key,
+        rowBlock ? `${BLOCK_OBJECT_PREFIX}${rowBlock.id}` : tableRowObjectId(tablePath, row.index),
+      );
+    }
+  }
+  const rowDescriptors: OfficeObjectDescriptor[] = [];
+  for (const block of tableBlocks) {
+    const tablePath = block.details.modelPath ?? [];
+    const tableRowsEntry = tableRows.get(block);
+    if (!tableRowsEntry) continue;
+    const tableObjectId = `${BLOCK_OBJECT_PREFIX}${block.id}`;
+    for (const row of tableRowsEntry.rows) {
+      const rowPath = [...tablePath, { kind: "row" as const, index: row.index }];
+      if (rowBlockByPath.has(modelPathKey(rowPath))) continue;
       rowDescriptors.push(rowDescriptor(
         context,
-        nodeIndex,
-        rowIndex,
-        tableObjectIdByIndex.get(nodeIndex),
-        text,
+        block.details.part,
+        tablePath,
+        row.index,
+        tableObjectId,
+        row.text,
       ));
-    });
+    }
   }
 
   const descriptors: OfficeObjectDescriptor[] = [...rowDescriptors];
   const blockByObjectId = new Map<string, DocumentBlock>();
   const blockBySourceId = new Map<string, DocumentBlock>();
   for (const block of blocks) {
-    const tableRowParent = block.details.rowIndex === undefined || block.details.tableIndex === undefined
-      ? undefined
-      : rowObjectIdByPath.get(`table:${block.details.tableIndex}/row:${block.details.rowIndex}`);
-    const descriptor = blockDescriptor(context, block, objectIdByBlockId, tableRowParent);
+    const blockPathSegments = block.details.modelPath ?? [];
+    let parentId: string | undefined;
+    if (block.type === "table_cell") {
+      parentId = rowObjectIdByPath.get(modelPathKey(blockPathSegments.slice(0, -1)));
+    } else if (block.type === "table_head") {
+      parentId = tableObjectIdByPath.get(modelPathKey(blockPathSegments.slice(0, -1)));
+    } else if (block.parentBlockId !== undefined) {
+      parentId = objectIdByBlockId.get(block.parentBlockId);
+    }
+    const descriptor = blockDescriptor(context, block, parentId);
     if (!descriptor) continue;
     descriptors.push(descriptor);
     blockByObjectId.set(descriptor.objectId, block);

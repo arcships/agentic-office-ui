@@ -89,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 436,
-        "sha256": "5027059cbb70e09b07182a7cf333279888ffc9e5b74530676b8a0b6db4c12e07"
+        "count": 443,
+        "sha256": "39e99c171c95513fd636a9974bf76c5df1d395ca236134017f06b48283583801"
       }
     },
     {
@@ -199,8 +199,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 131,
-        "sha256": "6774168936645fc6fd6114d5fa5f8ea978827312293dd17b86c2479e1f9105b5"
+        "count": 132,
+        "sha256": "4b9440663b83a71ed56bdb36976a5a34a0b81264d8536db5127dc5299fb88e1e"
       }
     },
     {

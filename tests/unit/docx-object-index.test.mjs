@@ -21,17 +21,19 @@ function tableNode(rows) {
   }
 }
 
-function model({ nodes, comments, styles = [], sections } = {}) {
+function model({ nodes, comments, styles = [], sections, headerSections = [], footerSections = [], footnotes, endnotes } = {}) {
   return {
     nodes: nodes ?? [paragraph("Quarterly report")],
     metadata: {
       sourceParts: 1,
       warnings: [],
-      headerSections: [],
-      footerSections: [],
+      headerSections,
+      footerSections,
       paragraphStyles: styles,
       ...(comments ? { comments } : {}),
       ...(sections ? { sections } : {}),
+      ...(footnotes ? { footnotes } : {}),
+      ...(endnotes ? { endnotes } : {}),
     },
   }
 }
@@ -217,4 +219,125 @@ test("DOCX object registration is extensible and captured per model", () => {
   unregister()
   assert.equal(registry.providers().length, 3)
   assert.equal(docx.createDocxObjectIndex(context(docModel)), docx.createDocxObjectIndex(context(docModel)))
+})
+
+test("DOCX fields and revisions inside headers, footers and notes become stage 4 behaviors", () => {
+  const withField = (text, instruction) => paragraph(text, {
+    sourceXml: `<w:p><w:r><w:instrText> ${instruction} </w:instrText></w:r></w:p>`,
+  })
+  const docModel = model({
+    nodes: [withField("Body", "DATE")],
+    headerSections: [{
+      partName: "word/header1.xml",
+      nodes: [withField("Header", "PAGE")],
+    }],
+    footerSections: [{
+      partName: "word/footer1.xml",
+      nodes: [withField("Footer", "REF Intro")],
+    }],
+    footnotes: [{ id: 1, text: "note", nodes: [withField("Note", "NUMPAGES")] }],
+    endnotes: [{ id: 2, text: "endnote", nodes: [withField("Endnote", "PAGEREF Target")] }],
+  })
+  const contextValue = context(docModel)
+  const index = docx.createDocxObjectIndex(contextValue)
+  const fields = index.behaviors.filter((descriptor) =>
+    descriptor.draft.kind === "field" || descriptor.draft.kind === "cross-reference")
+  const byPart = (part) => fields.filter((descriptor) => descriptor.facets.part === part)
+
+  assert.equal(byPart("body").length, 1)
+  assert.equal(byPart("header:word/header1.xml").length, 1)
+  assert.equal(byPart("footer:word/footer1.xml").length, 1)
+  assert.equal(byPart("footnote:1").length, 1)
+  assert.equal(byPart("endnote:2").length, 1)
+
+  const headerField = byPart("header:word/header1.xml")[0]
+  assert.equal(headerField.label, "Field: PAGE")
+  assert.deepEqual(headerField.draft.locator.value.owner.part, {
+    kind: "header",
+    partName: "word/header1.xml",
+  })
+  assert.equal(headerField.draft.locator.value.owner.path[0].kind, "paragraph")
+  assert.deepEqual(headerField.path.map((entry) => entry.kind), [
+    "document", "section", "field",
+  ])
+  assert.equal(interaction.isOfficeObjectVisible(headerField), false)
+  assert.ok(headerField.draft.fingerprint.ancestorKeys.includes(
+    `docx.behavior-instance:${headerField.draft.locator.value.instanceId}`,
+  ))
+
+  const footerField = byPart("footer:word/footer1.xml")[0]
+  assert.equal(footerField.draft.kind, "cross-reference")
+  assert.equal(footerField.label, "Cross-reference: Intro")
+  const confirmed = interaction.confirmOfficeReferenceDraft(headerField.draft, {
+    referenceId: "ref-docx-header-field",
+    trigger: "programmatic",
+  })
+  const resolved = docx.resolveDocxReference(contextValue, confirmed.reference)
+  assert.equal(resolved.status, "exact")
+  assert.equal(resolved.descriptor.draft.kind, "field")
+  assert.match(resolved.descriptor.label, /^Field: PAGE$/u)
+  assert.equal("visual" in resolved.descriptor, false)
+
+  const relocated = docx.resolveDocxReference(context(docModel, "docx-rev-2"), confirmed.reference)
+  assert.equal(relocated.status, "relocated")
+  assert.equal(relocated.reference.document.revision, "docx-rev-2")
+  assert.equal(relocated.descriptor.label, "Field: PAGE")
+
+  const ids = fields.map((descriptor) => descriptor.draft.locator.value.instanceId)
+  assert.equal(new Set(ids).size, ids.length, "field instances stay unique across story parts")
+})
+
+test("DOCX nested tables keep their own table, row and cell hierarchy", () => {
+  const nestedTable = tableNode([["inner"]])
+  const outerTable = {
+    type: "table",
+    rows: [{
+      cells: [{ nodes: [paragraph("outer"), nestedTable] }],
+    }],
+  }
+  const docModel = model({ nodes: [outerTable] })
+  const contextValue = context(docModel)
+  const index = docx.createDocxObjectIndex(contextValue)
+  const tables = index.descriptors.filter((descriptor) => descriptor.draft.kind === "table")
+  assert.equal(tables.length, 2, "both the outer and nested table are objects")
+  const nestedTableObject = tables.find((descriptor) =>
+    descriptor.path.filter((entry) => entry.kind === "table").length === 2)
+  const outerCell = index.descriptors.find((descriptor) =>
+    descriptor.draft.kind === "table-cell" && descriptor.facets.path === "table:0/row:0/cell:0")
+  assert.ok(nestedTableObject)
+  assert.ok(outerCell)
+  assert.equal(nestedTableObject.parentObjectId, outerCell.objectId)
+
+  const nestedRow = index.descriptors.find((descriptor) =>
+    descriptor.draft.kind === "table-row"
+    && descriptor.facets.path === "table:0/row:0/cell:0/table:1/row:0")
+  const nestedCell = index.descriptors.find((descriptor) =>
+    descriptor.draft.kind === "table-cell"
+    && descriptor.facets.path === "table:0/row:0/cell:0/table:1/row:0/cell:0")
+  assert.ok(nestedRow)
+  assert.ok(nestedCell)
+  assert.equal(nestedRow.parentObjectId, nestedTableObject.objectId)
+  assert.equal(nestedCell.parentObjectId, nestedRow.objectId)
+  assert.deepEqual(
+    interaction.officeObjectAncestors(index.descriptors, nestedCell.objectId).map((entry) => entry.draft.kind),
+    ["table", "table-row", "table-cell", "table", "table-row", "table-cell"],
+  )
+
+  const confirmed = interaction.confirmOfficeReferenceDraft(nestedCell.draft, {
+    referenceId: "ref-docx-nested-cell",
+    trigger: "pointer",
+  })
+  const resolved = docx.resolveDocxReference(contextValue, confirmed.reference)
+  assert.equal(resolved.status, "exact")
+  assert.equal(resolved.descriptor.draft.kind, "table-cell")
+  assert.equal(resolved.descriptor.label, "Cell 1, 1")
+  assert.deepEqual(resolved.descriptor.path.map((entry) => entry.kind), [
+    "document", "table", "table-row", "table-cell", "table", "table-row", "table-cell",
+  ])
+  assert.ok(nestedCell.draft.fingerprint.ancestorKeys.includes("docx.table:1"))
+  assert.equal(
+    index.descriptors.filter((descriptor) => descriptor.objectId === nestedCell.objectId).length,
+    1,
+    "nested row indices must not collide with top-level row object ids",
+  )
 })

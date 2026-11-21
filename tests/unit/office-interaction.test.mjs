@@ -495,3 +495,66 @@ test("resolve failures map onto declared error codes without flattening revision
     "DESCRIBE_FAILED",
   )
 })
+
+test("reference validation accepts XLSX table rows/cells and PPTX table rows", () => {
+  const xlsxRevision = { format: "xlsx", documentId: "book.xlsx", revision: "xlsx-v1" }
+  const sheet = { sheetId: "sheet-1", name: "Data", index: 0 }
+  const tableRow = {
+    schemaVersion: 1,
+    referenceId: "ref-xlsx-row",
+    document: xlsxRevision,
+    kind: "table-row",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "xlsx",
+      value: { kind: "table-row", sheet, tableName: "Sales", rowIndex: 2 },
+    },
+    fingerprint: { ancestorKeys: ["xlsx.table:Sales", "xlsx.table-row:2"] },
+    reliability,
+  }
+  assert.equal(interaction.parseOfficeObjectReference(tableRow).kind, "table-row")
+  expectInvalid({ ...tableRow, kind: "table" }, "KIND_LOCATOR_MISMATCH")
+
+  const tableCell = {
+    ...tableRow,
+    referenceId: "ref-xlsx-cell",
+    kind: "table-cell",
+    locator: {
+      type: "format",
+      format: "xlsx",
+      value: {
+        kind: "table-cell",
+        sheet,
+        tableName: "Sales",
+        rowIndex: 2,
+        cellIndex: 1,
+        a1: "C4",
+      },
+    },
+  }
+  assert.equal(interaction.parseOfficeObjectReference(tableCell).kind, "table-cell")
+  expectInvalid({ ...tableCell, kind: "cell" }, "KIND_LOCATOR_MISMATCH")
+
+  const pptxRow = {
+    schemaVersion: 1,
+    referenceId: "ref-pptx-row",
+    document: { format: "pptx", documentId: "deck.pptx", revision: "pptx-v1" },
+    kind: "table-row",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "pptx",
+      value: {
+        kind: "sub-object",
+        slide: { slideId: "ppt/slides/slide1.xml", index: 0 },
+        object: { objectKey: "key", shapeId: "2", source: "slide", groupPath: [] },
+        path: [{ kind: "table-row", rowIndex: 1 }],
+      },
+    },
+    fingerprint: { ancestorKeys: ["pptx.sub-object:table-row"] },
+    reliability,
+  }
+  assert.equal(interaction.parseOfficeObjectReference(pptxRow).kind, "table-row")
+  expectInvalid({ ...pptxRow, kind: "chart-series" }, "KIND_LOCATOR_MISMATCH")
+})

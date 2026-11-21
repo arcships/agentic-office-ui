@@ -68,7 +68,7 @@
 | **XLSX viewer/editor** | done（worker + duke-sheets wasm + chart 解析/authoring） | done | done（`XlsxViewer` 含 ribbon/sheet tabs/authoring） | done（4 条 surface 96/96，含 `xlsx-ribbon`） | partial（公式行无上游对照） | public-vendored（chrome + ribbon 格式行）+ office-reference（page setup）+ product-gap（pivot） | #160 / #170 / #171 |
 | **PPTX viewer** | done（解析 + playback + 对象索引） | done | done（`PptxViewer`/`PptxStage`/sorter） | done（`pptx-toolbar`/`pptx-sorter` 0px） | done（2 条 blocking；presenter pending） | public-vendored（chrome） | #161 |
 | **PPTX presenter** | done（notes 自 OOXML 读取） | done（timer/next） | done（`PptxPresenterPanel`） | done（Extend primitives 重组） | **missing**（上游无布局，private 包也无） | **office-reference** | #183 |
-| **PPTX chart internals** | partial（`getObjectChart` + snapshot + 可选 `geometry` 接缝） | partial（geometry 合同已定义；Surface 未接入） | missing | — | missing | **provider-dependent** | #184 / #176 |
+| **PPTX chart internals** | partial（`getObjectChart` + #184 `geometry` + `geometryViewport`；系列/点/图例引用已接入对象索引） | partial（geometry 合同已定义；Surface 需宿主 adapter） | partial（对象索引消费 geometry + viewport） | — | missing | **provider-dependent**（几何由宿主 renderer 提供） | #184 / #176 |
 | **CSV** | done（解析/序列化/搜索/窗口在 `vue-ui/src/csv.ts`） | missing | done（`CsvViewer`） | done（toolbar/zoom/search/states） | structural（无 canvas 像素对照） | **public-vendored，已实现** | #178 |
 | **FileSystem** | missing（无文件树模型） | missing | missing | missing | missing | **product-gap** | #179 |
 | **SchemaBuilder** | missing（无 schema 持久化模型） | missing | missing | missing | missing | **product-gap** | #179 |
@@ -95,7 +95,7 @@
 | XLSX page setup dialog | office-reference | **实现（#171）** | 上游 `xlsx-editor.tsx` 没有独立 dialog，因此参考 Excel 页面设置（四选项卡的可写子集）；`XlsxPageSetupDialog` + `setPageSetup` + `_xlnm.Print_Area` | #171 |
 | XLSX pivot 控件 | product-gap | **不计划（0.8/0.9）** | 上游 pivot 是 2,034+503 行专用 UI，且需要 pivot 编辑能力；无宿主消费方 | #160 文档已声明 |
 | PPTX presenter | office-reference | **调查 → 实现** | 公开层与 0.5.0 包内都没有 presenter；必须由 Office 产品规格定义（#183） | #183 |
-
+| PPTX chart internals | provider-dependent | **接缝已定义并接入对象索引，几何仍由宿主提供** | #184 `ChartGeometrySnapshot` 是 chart-local 像素；对象索引通过 `PptxChartSnapshot.geometryViewport` 投影为 slide 归一化矩形。默认 ECharts adapter 仍由宿主提供 | #184 / #176 |
 | FileSystem | product-gap | **调查 → 决定（#179）** | 依赖公开（Apache-2.0），真正成本是文件模型 + 四个 viewer 集成 | #179 |
 | SchemaBuilder | product-gap | **调查 → 决定（#179）** | 缺 schema 持久化契约与宿主入口，不是许可证问题 | #179 |
 
@@ -231,7 +231,7 @@
 | 层 | 覆盖 | 缺 |
 |---|---|---|
 | core | 189 文件 / 73,419 行：engine、layout、editor ops、viewer（import/export/thumbnail/fonts）、blocks、引用 | 与 0.15.0 的增量（见 5.4） |
-| interaction | 文本 range/页/块/表单字段引用 + 修订/批注行为 | 嵌套表格父子层级、页眉/脚注字段（#176） |
+| interaction | 文本 range/页/块/表单字段引用 + 修订/批注行为 + 对象索引（#176） | PPTX 图表内部几何仍需宿主 renderer provider |
 | vue | `DocxViewer` 912 行、`DocxEditor` 1,116 行、`DocxToolbar`/`DocxViewerToolbar`、`DocxDocumentSurface`、批注/修订 gutter | — |
 | ui | `docx-toolbar` 32/32、`docx-sidebar` 24/24 | editor toolbar 没有独立 parity surface（与 viewer toolbar 共用结构） |
 
@@ -366,13 +366,13 @@
 | toolbar / 缩略图 rail | `public-vendored` **done** | `tools/extend-reference/src/vendor/extend/pptx-toolbar.tsx`、`pptx-slide-card.tsx` | 无 |
 | sorter 网格 | `public-vendored`（重组）**done** | 上游没有 sorter 网格；参考取 rail item + `file-thumbnail.tsx`，manifest 注明 | 上游无网格布局 |
 | presenter | `office-reference` **spec ready**（#183） | [pptx-presenter-reference.md](pptx-presenter-reference.md)；`pptx-viewer.tsx` 无 presenter；`@extend-ai/react-pptx@0.6.1` 的 `dist` 中 `presenter` 出现 0 次，`ViewerMode = 'slide' \| 'continuous'`；只有 `showNotes` 与 `.rpv-notes` | 实现 issue A/B/C（面板增强 / 演讲者布局 / 验收接线）未开 |
-| chart internals | `provider-dependent` | `pptx-core/src/reference-adapter.ts:54` `getObjectChart?`；`pptx-object-index.ts:218` 使用 `PptxChartSnapshot`；本轮新增可选 `geometry?: ChartGeometrySnapshot` | Surface 未接入；几何来源是 `@aiden0z/pptx-renderer` 的 ECharts 实例，需宿主适配（XLSX provider 已实现，可作为合同样例） |
+| chart internals | `provider-dependent` | `pptx-core/src/reference-adapter.ts:54` `getObjectChart?`；`pptx-object-index.ts:218` 使用 `PptxChartSnapshot`；本轮新增可选 `geometry?: ChartGeometrySnapshot`，对象索引通过 `geometryViewport` 消费 series/point/legend 几何 | Surface 渲染仍待接入；几何来源是 `@aiden0z/pptx-renderer` 的 ECharts 实例，需宿主适配（XLSX provider 已实现，可作为合同样例） |
 | 备注 | `public-vendored`（自读 OOXML）**done** | `pptx-core/src/notes.ts`；`PptxPresenterPanel` | 上游 notes 无公开布局 |
 
 ### 7.5 实现方案
 
 - **#183（presenter）**：已产出 [pptx-presenter-reference.md](pptx-presenter-reference.md)（区域图、尺寸表、交互清单、截图来源、实现计划）；`pptx-presenter` 的验收方式定为 **office-reference：规格 checklist + 自基线截图 + 组件测试**，`referenceStatus: "unreachable"` 退役，manifest/门禁接线见该文档 §11.4。
-- **#184（chart internals）**：合同落在 `@arcships/office-interaction`（`ChartGeometryProvider`/`ChartGeometrySnapshot`/hit-test）；XLSX 具体 provider 落在 `@arcships/vue-xlsx/chart`，覆盖 2-D bar/line/area/column+line combo，`tests/unit/xlsx-chart-geometry.test.mjs` 断言 fixture 几何、`tests/component/xlsx-chart-geometry-parity.test.mjs` 断言 provider 与 SVG 完全相同。PPTX 只加 `PptxChartSnapshot.geometry?` 接缝，ECharts 适配与 `PptxStage` 消费是 follow-up。规则/对照见 [chart-internals-reference.md](chart-internals-reference.md)。
+- **#184（chart internals）**：合同落在 `@arcships/office-interaction`（`ChartGeometryProvider`/`ChartGeometrySnapshot`/hit-test）；XLSX 具体 provider 落在 `@arcships/vue-xlsx/chart`，覆盖 2-D bar/line/area/column+line combo，`tests/unit/xlsx-chart-geometry.test.mjs` 断言 fixture 几何、`tests/component/xlsx-chart-geometry-parity.test.mjs` 断言 provider 与 SVG 完全相同。PPTX 侧 `PptxChartSnapshot.geometry?` 由 #176 对象索引消费（配合 `geometryViewport` 生成 slide 归一化轮廓）；ECharts 适配与 `PptxStage` 渲染仍是 follow-up。规则/对照见 [chart-internals-reference.md](chart-internals-reference.md)。
 - **#176（对象矩阵）**：把 PPTX 行从“provider 已有但未接入”改为“provider 合同 + Surface 接入”两步，附 fixture。
 - **风险**：`@aiden0z/pptx-renderer` 需要本地 patch（`patches/@aiden0z__pptx-renderer@1.2.4.patch`），升级时要同步维护 patch 与 chart 几何适配。
 
@@ -680,7 +680,7 @@
 - **#182**：L2 的前置条件不是“新建参考站”，而是 ① demo region 统一（`data-route-region="viewer"`）与固定高度；② reference 用 R2（原样 import 上游 wrapper + 安装 `@extend-ai/*`）。上游演示框 `[data-slot="component-preview"]` 不包含产品 header，我们的 `product-header` 必须排除。
 - **#183**：`unreachableReason` 中“presenter 在私有 `@extend-ai/react-pptx` 内”不成立（0.5.0 dist 中 `presenter` 出现 0 次，只有 `showNotes`/`.rpv-notes`）。presenter 应归 `office-reference`；`pptx-presenter` 的验收改为 office-reference 截图 + 组件测试。
 - **#184**：已产出 [chart-internals-reference.md](chart-internals-reference.md) + `office-interaction` geometry 合同 + XLSX 2-D bar/line/combo provider（fixture 几何与 SVG parity 各一条测试）；PPTX 只留 `PptxChartSnapshot.geometry?` 接缝，pie/scatter/3-D/手动 layout/Surface 消费列为 follow-up。
-- **#176**：PPTX chart internals 行改 `provider-dependent`；PDF 附件/OCG/签名/权限保持 `provider-dependent`（视觉识别器需 provider）；DOCX 页眉/脚注字段与嵌套表格为 `product-gap`（可在 #159 follow-up 实现）。
+- **#176**：PPTX chart internals 行改 `provider-dependent`（#184 geometry + `geometryViewport` 已由对象索引消费，Surface 渲染仍待接入）；PDF 附件/OCG/签名/权限保持 `provider-dependent`（视觉识别器需 provider）；DOCX 页眉/脚注字段与嵌套表格已实现（`tests/unit/docx-object-index.test.mjs`）。
 - **#178（已实现）**：CSV 不是 `not-used`；采用独立 `CsvViewer`（语义表格 + 行虚拟化，不引入 Glide/papaparse），新增 fixture/测试/demo 和 ADR；`/csv-viewer` 是产品演示而非上游像素 surface。
 - **#179**：FileSystem/SchemaBuilder 的“私有依赖”理由不成立（Apache-2.0）。若不做，写成 “无宿主消费方 + 文件模型/schema 契约缺失”；若做，按 §9.5/§10.5 拆 issue。
 - **#171**（已实现）：上游没有独立 page setup dialog，所以参考是 office-reference（Excel 页面设置），不是上游像素；规格与未做项见 [xlsx-page-setup-reference.md](xlsx-page-setup-reference.md)。

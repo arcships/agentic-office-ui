@@ -48,6 +48,12 @@ import "@arcships/vue-pdf/style.css"
 
 自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）与 #172 的 `showToolbar`（默认 `false`）；开启后复用同一 toolbar，390px 仍按 `flex-wrap` 换行且不横向溢出，侧栏在窄容器为 overlay，`Escape` 可先关搜索/actions 再关 overlay。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
 
+### 对象引用与宿主数据
+
+`createPdfObjectRegistry()` 把原生链接/表单/批注、视觉识别结果和阶段四行为组织为统一对象。PDF 附件、OCG/页面图层、数字签名和权限信息不由库解析：宿主把它们放进 `PdfReferenceContext.behaviorSource`，`resolvePdfBehaviorRecords()` 生成 `attachment` / `layer` / `signature` / `permission` 行为引用；也可以先用 `createPdfBehaviorRecords()` 预构建以控制本地化。行为只有 reference kind，不绘制画布轮廓。
+
+`PdfVisualObjectProvider` 同样由宿主注入：库不内置 OCR 或视觉表格识别器，视觉表格的行列层级由 provider 的 `parentObjectId` 给出。权限记录只供宿主/策略层判断，查看器不在渲染层强制执行打印/复制限制。
+
 ### 页面布局
 
 `PdfViewer` 和 `PdfSurface` 共用同一个 `pageLayout` 属性：

@@ -263,3 +263,118 @@ test("XLSX object registry registers and lists the built-in families", () => {
   assert.ok(visible.every((descriptor) => descriptor.draft.locator.type !== "format"
     || descriptor.draft.locator.value.kind !== "behavior"))
 })
+
+test("XLSX table rows and cells are selectable objects with table/row/cell hierarchy", () => {
+  const ctx = context()
+  const table = ctx.tables[0]
+  const rowDraft = xlsx.createXlsxTableRowReferenceDraft(ctx, table, 1)
+  assert.equal(rowDraft.kind, "table-row")
+  assert.equal(rowDraft.source, "native")
+  assert.equal(rowDraft.locator.value.kind, "table-row")
+  assert.equal(rowDraft.locator.value.rowIndex, 1)
+  assert.ok(rowDraft.fingerprint.contentHash.startsWith("fnv1a32:"))
+  assert.ok(rowDraft.fingerprint.ancestorKeys.includes("xlsx.table:SalesTable"))
+  assert.equal(rowDraft.reliability.semantic.level, "exact")
+  assert.equal(rowDraft.reliability.relocation.level, "likely")
+
+  const rowConfirmed = confirm(rowDraft, "ref-xlsx-row")
+  assert.equal(rowConfirmed.reference.kind, "table-row")
+  const rowResolved = xlsx.resolveXlsxReference(ctx, rowConfirmed.reference)
+  assert.equal(rowResolved.status, "exact")
+  assert.equal(rowResolved.descriptor.label, "Row 2")
+  assert.deepEqual(rowResolved.descriptor.path.map((entry) => entry.kind), [
+    "workbook", "worksheet", "table", "table-row",
+  ])
+  assert.ok(rowResolved.descriptor.content.text.includes("42"))
+  assert.equal(rowResolved.descriptor.childrenState, "available")
+
+  const cellDraft = xlsx.createXlsxTableCellReferenceDraft(ctx, table, 1, 1)
+  assert.equal(cellDraft.kind, "table-cell")
+  assert.equal(cellDraft.locator.value.kind, "table-cell")
+  assert.equal(cellDraft.locator.value.a1, "B2")
+  assert.equal(cellDraft.locator.value.rowIndex, 1)
+  assert.equal(cellDraft.locator.value.cellIndex, 1)
+  const cellConfirmed = confirm(cellDraft, "ref-xlsx-cell")
+  const cellResolved = xlsx.resolveXlsxReference(ctx, cellConfirmed.reference)
+  assert.equal(cellResolved.status, "exact")
+  assert.equal(cellResolved.descriptor.label, "Cell 2, 2")
+  assert.deepEqual(cellResolved.descriptor.path.map((entry) => entry.kind), [
+    "workbook", "worksheet", "table", "table-row", "table-cell",
+  ])
+  assert.deepEqual(cellResolved.descriptor.content, {
+    value: "42",
+    formula: "=SUM(B2:B5)",
+  })
+
+  const moved = xlsx.resolveXlsxReference(context("xlsx-rev-2"), cellConfirmed.reference)
+  assert.equal(moved.status, "relocated")
+  assert.equal(moved.reference.document.revision, "xlsx-rev-2")
+  assert.equal(moved.reference.locator.value.a1, "B2")
+
+  const registry = xlsx.createXlsxObjectRegistry()
+  const descriptors = registry.list(ctx, { kinds: ["table", "table-row", "table-cell"] })
+  const tableObject = descriptors.find((descriptor) => descriptor.draft.kind === "table")
+  const rowObject = descriptors.find((descriptor) =>
+    descriptor.draft.kind === "table-row" && descriptor.facets.rowIndex === 1)
+  const cellObject = descriptors.find((descriptor) =>
+    descriptor.draft.kind === "table-cell" && descriptor.facets.rowIndex === 1 && descriptor.facets.cellIndex === 1)
+  assert.ok(tableObject)
+  assert.ok(rowObject)
+  assert.ok(cellObject)
+  assert.equal(rowObject.parentObjectId, tableObject.objectId)
+  assert.equal(cellObject.parentObjectId, rowObject.objectId)
+  assert.deepEqual(
+    interaction.officeObjectAncestors(descriptors, cellObject.objectId).map((entry) => entry.draft.kind),
+    ["table", "table-row", "table-cell"],
+  )
+
+  assert.throws(
+    () => xlsx.createXlsxTableRowReferenceDraft(ctx, table, 99),
+    /outside the current table range/u,
+  )
+  assert.throws(
+    () => xlsx.createXlsxTableCellReferenceDraft(ctx, table, 0, 99),
+    /outside the current table range/u,
+  )
+})
+
+test("XLSX overlapping objects rank by series paint order and drawing z-index", () => {
+  const ctx = context()
+  const registry = xlsx.createXlsxObjectRegistry()
+  const seriesDescriptors = registry.list(ctx, { kinds: ["chart-series"] })
+  const emea = seriesDescriptors.find((descriptor) => descriptor.label === "Series: EMEA")
+  const apac = seriesDescriptors.find((descriptor) => descriptor.label === "Series: APAC")
+  assert.ok(emea)
+  assert.ok(apac)
+  assert.ok(xlsx.xlsxObjectCandidateZIndex(apac) > xlsx.xlsxObjectCandidateZIndex(emea))
+
+  const seriesCandidates = [emea, apac].map((descriptor) => ({
+    candidateId: descriptor.objectId,
+    descriptor,
+    hit: "direct",
+    depth: 3,
+  }))
+  assert.deepEqual(
+    xlsx.rankXlsxObjectCandidates(seriesCandidates).map((candidate) => candidate.descriptor.label),
+    ["Series: APAC", "Series: EMEA"],
+    "later chart series sit above earlier series in Excel paint order",
+  )
+
+  const sheet = dataSheet
+  const lowSpec = {
+    id: "shape-low", objectType: "shape", sheet, name: "Low", zIndex: 2,
+  }
+  const highSpec = {
+    id: "shape-high", objectType: "shape", sheet, name: "High", zIndex: 9,
+  }
+  const drawingContext = { ...ctx, drawings: [...ctx.drawings, lowSpec, highSpec] }
+  const low = xlsx.describeXlsxDrawing(drawingContext, lowSpec)
+  const high = xlsx.describeXlsxDrawing(drawingContext, highSpec)
+  assert.deepEqual(
+    xlsx.rankXlsxObjectCandidates([
+      { candidateId: low.objectId, descriptor: low, hit: "direct", depth: 3 },
+      { candidateId: high.objectId, descriptor: high, hit: "direct", depth: 3 },
+    ]).map((candidate) => candidate.descriptor.label),
+    ["High", "Low"],
+  )
+})

@@ -7,6 +7,7 @@
 // invisible workbook behaviors.
 
 import type {
+  OfficeObjectCandidate,
   OfficeObjectDescriptor,
   OfficeObjectKind,
   OfficeObjectProvider,
@@ -16,6 +17,7 @@ import {
   createOfficeObjectDescriptor,
   createOfficeObjectRegistry,
   officeObjectReliability,
+  rankOfficeObjectCandidates,
 } from "@arcships/office-interaction";
 import type {
   XlsxChart,
@@ -40,7 +42,10 @@ import {
   describeXlsxComment,
   describeXlsxDrawing,
   describeXlsxTable,
+  describeXlsxTableCell,
+  describeXlsxTableRow,
 } from "./reference-adapter";
+import { parseA1RangeReference } from "./images/image-parser";
 
 export const XLSX_STAGE2_KINDS: readonly OfficeObjectKind[] = Object.freeze([
   "table",
@@ -52,6 +57,8 @@ export const XLSX_STAGE2_KINDS: readonly OfficeObjectKind[] = Object.freeze([
 ]);
 
 export const XLSX_STAGE3_KINDS: readonly OfficeObjectKind[] = Object.freeze([
+  "table-row",
+  "table-cell",
   "chart-series",
   "chart-point",
   "chart-legend-entry",
@@ -116,15 +123,38 @@ function chartElementTargets(chart: XlsxChart): readonly XlsxChartElementTarget[
 export const XLSX_TABLE_OBJECT_PROVIDER: OfficeObjectProvider<XlsxReferenceContext> = {
   id: "xlsx.tables",
   format: "xlsx",
-  kinds: ["table"],
-  list(context) {
-    return (context.tables ?? []).flatMap((table) => {
+  kinds: ["table", "table-row", "table-cell"],
+  list(context, options) {
+    const descriptors: OfficeObjectDescriptor[] = [];
+    const maxObjects = options?.maxObjects ?? Number.POSITIVE_INFINITY;
+    for (const table of context.tables ?? []) {
+      if (descriptors.length >= maxObjects) break;
       try {
-        return [describeXlsxTable(context, table)];
+        descriptors.push(describeXlsxTable(context, table));
       } catch {
-        return [];
+        continue;
       }
-    });
+      const range = parseA1RangeReference(table.a1);
+      if (!range) continue;
+      const rowCount = range.end.row - range.start.row + 1;
+      const columnCount = range.end.col - range.start.col + 1;
+      for (let rowIndex = 0; rowIndex < rowCount && descriptors.length < maxObjects; rowIndex += 1) {
+        try {
+          descriptors.push(describeXlsxTableRow(context, table, rowIndex));
+        } catch {
+          continue;
+        }
+        for (let cellIndex = 0; cellIndex < columnCount && descriptors.length < maxObjects; cellIndex += 1) {
+          try {
+            descriptors.push(describeXlsxTableCell(context, table, rowIndex, cellIndex));
+          } catch {
+            // A cell outside the current table range is simply not an object;
+            // one bad index must not drop the rest of the table.
+          }
+        }
+      }
+    }
+    return descriptors;
   },
 };
 
@@ -161,7 +191,7 @@ export const XLSX_COMMENT_OBJECT_PROVIDER: OfficeObjectProvider<XlsxReferenceCon
 export const XLSX_CHART_OBJECT_PROVIDER: OfficeObjectProvider<XlsxReferenceContext> = {
   id: "xlsx.charts",
   format: "xlsx",
-  kinds: ["chart", ...XLSX_STAGE3_KINDS],
+  kinds: ["chart", "chart-series", "chart-point", "chart-legend-entry"],
   list(context) {
     const descriptors: OfficeObjectDescriptor[] = [];
     for (const chart of context.charts ?? []) {
@@ -265,6 +295,34 @@ export function xlsxCommentDescriptor(
   comment: XlsxReferenceComment,
 ): OfficeObjectDescriptor {
   return describeXlsxComment(context, comment);
+}
+
+/**
+ * Format-specific paint order used when candidates overlap.
+ *
+ * Excel paints later series above earlier series and drawing objects in their
+ * worksheet `zIndex` order. The generic candidate ranker only knows the
+ * optional `zIndex` field, so XLSX projects its own paint order into it here
+ * instead of relying on descriptor id or reliability as a tie-breaker.
+ */
+export function xlsxObjectCandidateZIndex(descriptor: OfficeObjectDescriptor): number | undefined {
+  const facet = descriptor.facets?.zIndex;
+  if (typeof facet === "number" && Number.isFinite(facet)) return facet;
+  for (const fragment of descriptor.visual?.fragments ?? []) {
+    if (fragment.zIndex !== undefined && Number.isFinite(fragment.zIndex)) return fragment.zIndex;
+  }
+  return undefined;
+}
+
+/** Fill missing XLSX z-order evidence and rank with the shared candidate sort. */
+export function rankXlsxObjectCandidates(
+  candidates: readonly OfficeObjectCandidate[],
+): readonly OfficeObjectCandidate[] {
+  return rankOfficeObjectCandidates(candidates.map((candidate) => {
+    if (candidate.zIndex !== undefined) return candidate;
+    const zIndex = xlsxObjectCandidateZIndex(candidate.descriptor);
+    return zIndex === undefined ? candidate : { ...candidate, zIndex };
+  }));
 }
 
 /** Shared reliability copy for host-defined XLSX object families. */
