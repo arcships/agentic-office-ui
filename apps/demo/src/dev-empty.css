@@ -1,0 +1,7 @@
+/*
+ * Dev-only placeholder for package `style.css` imports.
+ *
+ * When the demo serves workspace packages from source, their styles are
+ * injected by the Vue plugin (SFC styles) or imported by the package entry.
+ * The built packages still resolve their real `dist/style.css` files.
+ */
