@@ -274,9 +274,19 @@
         "default"
       ],
       "files": 8
+    },
+    "xlsx-ribbon": {
+      "subjectComponent": "tools/vue-reference/src/surfaces/XlsxRibbonSurface.vue (OfficeToolbar + OfficeButton/OfficeIconButton/OfficeToggle + HugeIcon)",
+      "states": [
+        "default",
+        "hover",
+        "focus",
+        "disabled"
+      ],
+      "files": 32
     }
   },
-  "treeSha256": "309cf6a38e6265013a70593b45be3e1e9866dd90c989a7cf29d69b705eec220d",
+  "treeSha256": "c95ccf8e1beaaa597b327d4aa1ce933ea37935387d0708a4b86339c0a72a5cf0",
   "files": [
     {
       "path": "bounding-box-citations/default/dark-1280x720.png",
@@ -9079,6 +9089,358 @@
       "sha256": "253e62bc1160e1b09fdbf5e7c43967dea1dbaad029cd8576b7ce4145b14c2c12"
     },
     {
+      "path": "xlsx-ribbon/default/dark-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 22033,
+      "sha256": "854d26489708813099780bdf69d9da71ee713d238a41e3c8d8173b82891ed2a7"
+    },
+    {
+      "path": "xlsx-ribbon/default/dark-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 22033,
+      "sha256": "854d26489708813099780bdf69d9da71ee713d238a41e3c8d8173b82891ed2a7"
+    },
+    {
+      "path": "xlsx-ribbon/default/dark-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 20328,
+      "sha256": "c9bfb2ad44a80af7268990c927dbf5b6e00eacc66578cd41e0a1527beb6a03ca"
+    },
+    {
+      "path": "xlsx-ribbon/default/dark-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "dark",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 18585,
+      "sha256": "41db6ee08bb470f40a82ec351039ffa9b001faf5fa7e19cc2579031d40a7b96a"
+    },
+    {
+      "path": "xlsx-ribbon/default/light-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 21949,
+      "sha256": "600dcd2cce4f1f50f85b5d26acb80ce090678ac283c670186bfcc4e6999dc461"
+    },
+    {
+      "path": "xlsx-ribbon/default/light-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 21949,
+      "sha256": "600dcd2cce4f1f50f85b5d26acb80ce090678ac283c670186bfcc4e6999dc461"
+    },
+    {
+      "path": "xlsx-ribbon/default/light-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 20075,
+      "sha256": "cad924466aeaaa82a27b2d4ded3fc5fa6dd46ec81950a2eee032997260d659b5"
+    },
+    {
+      "path": "xlsx-ribbon/default/light-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "default",
+      "theme": "light",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 18512,
+      "sha256": "c848be80adadffca7fc4fa81dcad966d3effffd218f2d4243b2468f47246d228"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/dark-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 20753,
+      "sha256": "5ada8355f150f39337493f63e610107c86ab71b30605f803ab5d797d646ebae2"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/dark-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 20753,
+      "sha256": "5ada8355f150f39337493f63e610107c86ab71b30605f803ab5d797d646ebae2"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/dark-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 19152,
+      "sha256": "3c48f85e963b27755fea57ca89612578fc5a28a3c4b72302cd2fb066d14ac883"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/dark-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "dark",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 17343,
+      "sha256": "6340df4f33eaecaf9d5adf7549987dd3f83e8f74264edbdf2edb67cc3d05a099"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/light-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 20675,
+      "sha256": "278f320afe0ae01d7ae5868a30fa9c998b7757358f3995b7fd84cd6d179fb813"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/light-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 20675,
+      "sha256": "278f320afe0ae01d7ae5868a30fa9c998b7757358f3995b7fd84cd6d179fb813"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/light-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 18831,
+      "sha256": "1915f15c8d9c05cd887efb9085bb050a86b384c8d600ee20dc0abe30ad134ddf"
+    },
+    {
+      "path": "xlsx-ribbon/disabled/light-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "disabled",
+      "theme": "light",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 17335,
+      "sha256": "c8a6126c359d5a671a2896a9fdf4f2f2e8cc8183c226b34364c95078a15a6755"
+    },
+    {
+      "path": "xlsx-ribbon/focus/dark-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 23569,
+      "sha256": "d4d41b20c12bc97786cd0a3ecd616f291202c4a6636b9cc5c26400a0ffa7a665"
+    },
+    {
+      "path": "xlsx-ribbon/focus/dark-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 23569,
+      "sha256": "d4d41b20c12bc97786cd0a3ecd616f291202c4a6636b9cc5c26400a0ffa7a665"
+    },
+    {
+      "path": "xlsx-ribbon/focus/dark-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 21714,
+      "sha256": "b1b98cd0f1d12706a9b9c53ab05fd32f0a447f28cad8e489e43c5547f79aeedc"
+    },
+    {
+      "path": "xlsx-ribbon/focus/dark-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "dark",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 20035,
+      "sha256": "0ab638aa1c5119a016c770b4586ffb20b67ad221566727a21008085ff4320c3a"
+    },
+    {
+      "path": "xlsx-ribbon/focus/light-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 23227,
+      "sha256": "95281e6465956b4219b2fac9b61bae7a2c161346bafb99df9d1f97c95fdab64c"
+    },
+    {
+      "path": "xlsx-ribbon/focus/light-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 23227,
+      "sha256": "95281e6465956b4219b2fac9b61bae7a2c161346bafb99df9d1f97c95fdab64c"
+    },
+    {
+      "path": "xlsx-ribbon/focus/light-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 21349,
+      "sha256": "73e00a700c9b09a9f118152bcb9090da59a721955f64328e3c664a10b5dc2156"
+    },
+    {
+      "path": "xlsx-ribbon/focus/light-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "focus",
+      "theme": "light",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 19763,
+      "sha256": "da98f44dfacad89947231d3c1093c64a2cef99aaf8d0111f321d54bbf6460d84"
+    },
+    {
+      "path": "xlsx-ribbon/hover/dark-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 22033,
+      "sha256": "854d26489708813099780bdf69d9da71ee713d238a41e3c8d8173b82891ed2a7"
+    },
+    {
+      "path": "xlsx-ribbon/hover/dark-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 22033,
+      "sha256": "854d26489708813099780bdf69d9da71ee713d238a41e3c8d8173b82891ed2a7"
+    },
+    {
+      "path": "xlsx-ribbon/hover/dark-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 20328,
+      "sha256": "c9bfb2ad44a80af7268990c927dbf5b6e00eacc66578cd41e0a1527beb6a03ca"
+    },
+    {
+      "path": "xlsx-ribbon/hover/dark-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "dark",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 18585,
+      "sha256": "41db6ee08bb470f40a82ec351039ffa9b001faf5fa7e19cc2579031d40a7b96a"
+    },
+    {
+      "path": "xlsx-ribbon/hover/light-1280x720.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "1280x720",
+      "width": 2000,
+      "height": 214,
+      "bytes": 21949,
+      "sha256": "600dcd2cce4f1f50f85b5d26acb80ce090678ac283c670186bfcc4e6999dc461"
+    },
+    {
+      "path": "xlsx-ribbon/hover/light-1440x900.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "1440x900",
+      "width": 2000,
+      "height": 214,
+      "bytes": 21949,
+      "sha256": "600dcd2cce4f1f50f85b5d26acb80ce090678ac283c670186bfcc4e6999dc461"
+    },
+    {
+      "path": "xlsx-ribbon/hover/light-390x844.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "390x844",
+      "width": 684,
+      "height": 466,
+      "bytes": 20075,
+      "sha256": "cad924466aeaaa82a27b2d4ded3fc5fa6dd46ec81950a2eee032997260d659b5"
+    },
+    {
+      "path": "xlsx-ribbon/hover/light-768x1024.png",
+      "surface": "xlsx-ribbon",
+      "state": "hover",
+      "theme": "light",
+      "viewport": "768x1024",
+      "width": 1440,
+      "height": 214,
+      "bytes": 18512,
+      "sha256": "c848be80adadffca7fc4fa81dcad966d3effffd218f2d4243b2468f47246d228"
+    },
+    {
       "path": "xlsx-sheet-tabs/default/dark-1280x720.png",
       "surface": "xlsx-sheet-tabs",
       "state": "default",
@@ -9879,6 +10241,18 @@
       "updated": 0,
       "removed": 0,
       "gitHead": "24452dbf4c269efa27e6b4b4d1cbf6c6889def78"
+    },
+    {
+      "date": "2026-11-21",
+      "reviewer": "dim-agent",
+      "issue": "#170",
+      "reason": "Add xlsx-ribbon format row on the 4-viewport baseline matrix (#170/#174)",
+      "treeSha256": "c95ccf8e1beaaa597b327d4aa1ce933ea37935387d0708a4b86339c0a72a5cf0",
+      "files": 896,
+      "added": 32,
+      "updated": 0,
+      "removed": 0,
+      "gitHead": "ba137a853cd08c6e8b16895d0c0f635f75278779"
     }
   ]
 }
