@@ -4,6 +4,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [Unreleased]
 
+### Chart internals geometry provider (#184)
+- `@arcships/office-interaction` adds a framework-agnostic chart-internal geometry contract: `ChartGeometryProvider<TChart>`, `ChartGeometrySnapshot`, `ChartGeometryConfidence` (`exact` / `approximate` / `provider`), rect/point/legend/axis/series types, `validateChartGeometrySnapshot()`, `assertChartGeometrySnapshot()` and `hitTestChartGeometry()`. Coordinates are chart-local CSS px; `exact` means renderer-painted at that frame, not Excel/PowerPoint pixel parity.
+- `@arcships/vue-xlsx/chart` adds `computeXlsxChartGeometry()` and `createXlsxChartGeometryProvider()` for 2-D column/bar, line/area and column+line/area combo charts. Plot area, legend, axis ticks/zero line, bar rects and line point anchors are `exact`; text boxes are `approximate`; pie/scatter/radar/3-D/surface and manual layout are reported through `limitations` instead of fabricated geometry.
+- `PptxChartSnapshot` gains an optional `geometry?: ChartGeometrySnapshot` seam for host renderers (ECharts) to attach internals; the concrete PPTX adapter and Surface consumption remain follow-ups.
+- Reference and exact/approximate/provider matrix: `docs/design/chart-internals-reference.md`. Fixture evidence: `tests/unit/xlsx-chart-geometry.test.mjs` and `tests/component/xlsx-chart-geometry-parity.test.mjs` (provider output equals the painted SVG marks/axis anchors on `xlsx-chart-families.xlsx`).
+
 ### XLSX page setup authoring (#171)
 - New `XlsxPageSetupDialog` (public `@arcships/vue-xlsx` export) opens from the ribbon's authoring group through the existing `XlsxAuthoringDialog` (`kind="pageSetup"`) on the shared `OfficeDialog`: orientation, paper size, `Adjust to %` / `Fit to N × M pages`, margins, centering, printed gridlines/headings, page order and print area. Fields open with the worksheet's current values, and the summary line shows the real page count, paper and effective scale from core pagination.
 - `XlsxViewerController.setPageSetup(input)` writes the patch in one undo step: `pageSetup`, `pageMargins`, `printOptions`, `sheetPr/pageSetUpPr` and the sheet-scoped `_xlnm.Print_Area` definition, so exports keep the layout. Core adds `setWorkbookPageSetup()` / `resolvePageSetupInput()` and the `XlsxPageSetupInput` / `XlsxResolvedPageSetupInput` types; `0` fit-to counts now round-trip as Excel's automatic height.
