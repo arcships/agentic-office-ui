@@ -100,6 +100,41 @@ test("route entries define the product region, landmarks and state", () => {
   }
 });
 
+test("the capture state matches the URLs the harness opens", () => {
+  for (const route of routes.routes) {
+    const state = route.state || {};
+    const urls = `${route.reference.url} ${route.subject.url}`;
+    if (state.zoom !== undefined) {
+      assert.ok(
+        urls.includes(`zoom=${state.zoom}`),
+        `${route.id}: both URLs must request zoom=${state.zoom}`,
+      );
+    }
+    if (state.statusBar === false) {
+      assert.ok(
+        route.subject.url.includes("statusbar=off"),
+        `${route.id}: a capture without the optional status bar must pass statusbar=off`,
+      );
+    }
+    if (state.sidebar === "closed") {
+      assert.ok(
+        (route.subject.prepare || []).some(
+          (action) => action.action === "click" && action.selector,
+        ),
+        `${route.id}: closing the sidebar needs an explicit prepare click`,
+      );
+    }
+    const docName = new URL(route.reference.url, "https://example.invalid")
+      .searchParams.get("doc")
+      ?.split("/")
+      .pop();
+    assert.ok(
+      docName && routes.fixtures[route.fixture].path.endsWith(docName),
+      `${route.id}: the doc served to the reference must be the pinned fixture`,
+    );
+  }
+});
+
 test("exclusions and differences use the documented taxonomy", () => {
   for (const route of routes.routes) {
     for (const exclusion of route.exclusions || []) {
