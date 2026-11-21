@@ -9,13 +9,11 @@
  * that keeps the trigger's class list, value span and icon wrapper. The
  * harness screenshots the closed trigger, so no popup/positioner is needed;
  * `data-disabled` / `aria-invalid` attributes are still honoured by the
- * class strings. The chevron uses the pinned upstream Hugeicons glyph
- * (`IconPlaceholder` resolves `hugeicons="ChevronDown"` to `ChevronDownIcon`),
- * matching the product toolbar; the icon class string is unchanged.
+ * class strings. The chevron uses the Lucide glyph supported by Extend's
+ * `IconPlaceholder` so it matches `@arcships/vue-ui`'s `OfficeIcon` family;
+ * the icon class string is unchanged.
  */
 import type * as React from "react";
-import { ChevronDownIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "../../lib/cn";
@@ -77,11 +75,18 @@ export function SelectTrigger({
     >
       {children}
       <span data-slot="select-icon">
-        <HugeiconsIcon
+        <svg
           aria-hidden="true"
           className={selectTriggerIconClassName}
-          icon={ChevronDownIcon}
-        />
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </span>
     </button>
   );

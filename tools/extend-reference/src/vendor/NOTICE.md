@@ -42,7 +42,7 @@ SOFTWARE.
 | `ui/spinner.tsx` | `apps/v4/registry/new-york-v4/ui/spinner.tsx` | `IconPlaceholder` resolved to an inline Lucide Loader2 SVG (matches `OfficeSpinner`) |
 | `ui/card.tsx` | `apps/v4/registry/new-york-v4/ui/card.tsx` | `useRender` replaced with `<div>`; only `Card` copied |
 | `ui/separator.tsx` | `apps/v4/registry/new-york-v4/ui/separator.tsx` | Base UI Separator replaced with a `<div>`; classes unchanged |
-| `ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | Static trigger/value only (`selectTriggerVariants` copied verbatim); chevron is `ChevronDownIcon` from `@hugeicons/core-free-icons`, matching `IconPlaceholder` and the product toolbar (#199); no popup |
+| `ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | Static trigger/value only (`selectTriggerVariants` copied verbatim); chevron is an inline Lucide SVG; no popup |
 | `ui/input.tsx` | `apps/v4/registry/new-york-v4/ui/input.tsx` | Base UI Input replaced by a native `<input>`; wrapper/input class strings unchanged |
 | `ui/dialog.tsx` | `apps/v4/registry/new-york-v4/ui/dialog.tsx` | Base UI dialog/portal/backdrop replaced by static divs with the same class strings so the open surface can be measured |
 | `ui/tooltip.tsx` | `apps/v4/registry/new-york-v4/ui/tooltip.tsx` | Base UI tooltip popup replaced by static markup with the same class strings and `data-parity-tooltip-content` |
