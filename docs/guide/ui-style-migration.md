@@ -79,12 +79,17 @@
 
 ## 5. 存量债务
 
-`tests/style/component-style-baseline.json` 冻结了迁移前测得的 977 条违规（564 条裸色、371 条裸尺寸/时长、
-42 条裸阴影色/定时函数），分布在 59 个文件。规则永远不会按目录关闭：
+样式 gate 有两本账（#175）：`tests/style/component-style-baseline.json` 只冻结**历史债务**，
+当前是迁移后剩下的 971 条违规（527 条裸色、402 条裸尺寸/时长、42 条裸阴影色/定时函数），
+分布在 61 个文件；`tests/style/parity-literal-allowlist.json` 只登记**为像素 parity 故意保留的上游字面值**，
+逐条精确到 file/rule/property/value/count，并带 upstreamPath/commit、issue、reason、reviewBy。
+两类白名单的边界和条目格式见 [ui-parity-ci.md §2.2](../testing/ui-parity-ci.md#22-两套样式白名单175)。
+规则永远不会按目录关闭：
 
-- 新文件、或某文件某规则超出现有计数 → `pnpm lint:style` 失败；
+- 新文件、或某文件某规则超出现有计数，且不在 parity allowlist → `pnpm lint:style` 失败；
 - 修好一条 → 基线计数自动“可收缩”，打印提示，不会失败；
-- 确需保留债务 → 走审批：
+- parity literal 匹配数少于条目 `count` → 报告 stale；条目过期或字段非法 → 直接失败；
+- 历史 baseline 只能收缩；`--approve` 只用于记录收缩/刷新，新增裸值只能走 parity allowlist：
 
   ```bash
   pnpm lint:style:baseline --approve --reviewer <handle> --issue "#nnn" \

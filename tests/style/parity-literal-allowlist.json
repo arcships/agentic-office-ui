@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "description": "Exact upstream pixel-parity literals that are deliberately exempt from the generic component-style baseline. This is not a second debt ledger: every entry names one file, rule, property, value and bounded count, the pinned upstream source, the owning issue, a reason and a review date. Globs, prefixes and wildcards are rejected by scripts/ci/style-parity-allowlist.mjs; a warning that is not listed here fails `pnpm lint:style` unless it is already in tests/style/component-style-baseline.json (legacy debt, shrink-only).",
+  "entries": [
+    {
+      "id": "pptx-viewer-toolbar-ring-shadow",
+      "file": "packages/vue-pptx/src/PptxViewerToolbar.vue",
+      "rule": "declaration-property-unit-disallowed-list",
+      "property": "box-shadow",
+      "value": "px",
+      "count": 16,
+      "upstreamPath": "apps/v4/components/extend/pptx-viewer.tsx, apps/v4/registry/new-york-v4/ui/select.tsx, apps/v4/app/globals.css",
+      "upstreamCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+      "issue": "#161",
+      "reason": "The pinned PPTX toolbar and SelectTrigger use Tailwind ring/shadow-xs/shadow-lg utilities; their 1/2/3/10/15px offsets and the two 1px inner-ring pseudo elements are upstream pixel geometry, and the token layer has no ring/shadow utility scale that reproduces them without changing computed box-shadow.",
+      "reviewBy": "2027-05-21",
+      "source": "upstream"
+    },
+    {
+      "id": "pptx-viewer-toolbar-ring-radius",
+      "file": "packages/vue-pptx/src/PptxViewerToolbar.vue",
+      "rule": "declaration-property-unit-disallowed-list",
+      "property": "border-radius",
+      "value": "px",
+      "count": 3,
+      "upstreamPath": "apps/v4/components/extend/pptx-viewer.tsx, apps/v4/registry/new-york-v4/ui/select.tsx",
+      "upstreamCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+      "issue": "#161",
+      "reason": "Two 1px ring-clip radii are derived from the upstream rounded-lg trigger, and the PPTX-only hidden-slide pill uses 999px; replacing the derived radii changes computed geometry and the pinned reference has no hidden-slide control to compare against. Both are part of the #161b freeze.",
+      "reviewBy": "2027-05-21",
+      "source": "upstream"
+    },
+    {
+      "id": "pptx-slide-card-transition",
+      "file": "packages/vue-pptx/src/PptxSlideCard.vue",
+      "rule": "declaration-property-unit-disallowed-list",
+      "property": "transition",
+      "value": "ms",
+      "count": 3,
+      "upstreamPath": "apps/v4/components/extend/pptx-viewer.tsx, apps/v4/components/extend/file-thumbnail.tsx",
+      "upstreamCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+      "issue": "#161",
+      "reason": "The upstream FileThumbnail/card hover and active transitions are Tailwind duration-150 utilities. The 0.8 token layer intentionally has no transition-duration token, so 150ms is the parity value and stays literal until a duration token lands.",
+      "reviewBy": "2027-05-21",
+      "source": "upstream"
+    }
+  ]
+}

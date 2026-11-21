@@ -8,7 +8,7 @@
 
 | Job | 触发 | 做什么 | 现在是否阻断 |
 |---|---|---|---|
-| `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、未审批的基线改动） |
+| `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值：历史 baseline + parity-literal allowlist）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、非法/过期 allowlist、未审批的基线改动） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844`（`coreSubset.viewports`，快速门槛）× light/dark，参考页 vs 对照页 + 提交基线比对 | 是（`--gate-mode all`） |
 | `ui-parity-nightly` | nightly / dispatch | 全矩阵（26 surface × 4 viewport × 2 theme）+ **4 个 viewport** 的提交基线比对（896 case） | 是（`--gate-mode all`） |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，`tests/a11y/allowlist.json` 为空，任何发现即失败 |
@@ -66,6 +66,81 @@
 
 当前唯一条目是 #169 的 button destructive：subject 使用 `--office-destructive-contrast`
 （red-600/white = 4.83:1），上游参考仍是 red-500（3.81:1）。
+
+## 2.2 两套样式白名单（#175）
+
+`pnpm lint:style` 只用于组件 CSS（`packages/*/src/**/*.{vue,css}`，token 文件除外），白名单分两类，
+**不要混用**：
+
+| 文件 | 用途 | 粒度 | 能否增长 |
+|---|---|---|---|
+| `tests/style/component-style-baseline.json` | 迁移前已经存在的**历史债务** | `file` + `rule` 计数 | 只能收缩；`--approve` 只能刷新/收缩，不能新增 |
+| `tests/style/parity-literal-allowlist.json` | 为像素 parity 故意保留的**上游字面值** | 精确 `file` + `rule` + `property` + `value` + 有界 `count` | 只能逐条新增，必须带 owner/复核日期 |
+
+门禁顺序是“先扣 parity literal，再比历史 baseline”：
+
+1. stylelint 产生 warning，脚本从 `warning.text` 解析出 `property` / `value`
+   （unit 规则的值是 `px`/`ms` 等，hex 规则是 `#fff`，value 规则是完整字面值）。
+2. 某条 warning 精确命中 allowlist 条目（文件、规则、属性、值全部相同，且该条目的 `count` 尚未用完）→
+   从“待比较集合”中扣除，并在 `output/style-guard/summary.json` 的
+   `parityAllowlist.matches[].warnings[]` 里记录 `file:line:column`。
+3. 剩余 warning 再与 `component-style-baseline.json` 比较；超出 baseline 计数的部分才是 `new` 并失败。
+4. allowlist 条目实际匹配数少于 `count` → `parityAllowlist.stale`，控制台和证据都会提示收缩，但不阻断
+   （说明债务已经减少）。条目字段非法或 `reviewBy` 已过期 → 直接失败（fail closed），
+   不会把 warning 静默豁免。
+
+条目格式（字段全部必填，除了 `source`）：
+
+```json
+{
+  "id": "pptx-viewer-toolbar-ring-shadow",
+  "file": "packages/vue-pptx/src/PptxViewerToolbar.vue",
+  "rule": "declaration-property-unit-disallowed-list",
+  "property": "box-shadow",
+  "value": "px",
+  "count": 16,
+  "upstreamPath": "apps/v4/components/extend/pptx-viewer.tsx",
+  "upstreamCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+  "issue": "#161",
+  "reason": "为什么这是上游像素几何，而不是没还的债",
+  "reviewBy": "2027-05-21",
+  "source": "upstream"
+}
+```
+
+规则：
+
+- `file` 必须是仓库内已存在的精确路径；`*`、`?`、`{}`、`[]`、前缀写法和 `..` 一律拒绝。
+- `property` 必须精确（unit/value 规则），`color-no-hex` 用 `null`；`value` 必须精确，不允许通配。
+- `count` 是正整数且不超过 1000：一个条目只能豁免有限条，不能写“整个文件/整个规则”。
+- `upstreamPath` + `upstreamCommit` 指向固定上游来源（当前固定 commit 为
+  [`docs/upstream/extend-ui.md`](../upstream/extend-ui.md) 中的 `70fe70c6…`）；`issue`、`reason`、`reviewBy` 必填。
+- 新增条目必须同时说明“为什么 token 化会改变像素”，不能只写“迁移遗留”。
+- 能 token 化且像素不变的，优先改回 token 并把条目的 `count` 减小或删除；`reviewBy` 到期前必须复核。
+
+当前 seed 只有 #161/#161b 的 22 条 PPTX 字面值：`PptxViewerToolbar.vue` 16 条 box-shadow、
+3 条 border-radius，`PptxSlideCard.vue` 3 条 transition。通用 baseline 已从 1,015 收缩到 **971**
+（527 裸色 / 402 尺寸时长 / 42 阴影色与定时函数，61 个文件），不含任何 parity 条目；
+后续目标是继续把 971 条历史债务迁回 token，而不是让 allowlist 变成第二本债务账。
+
+新增/移除条目的流程：
+
+```bash
+# 1. 看 warning 的精确 file/property/value
+pnpm lint:style
+
+# 2. 编辑 tests/style/parity-literal-allowlist.json（只加必要的精确条目）
+
+# 3. 确认 parity 字面值被扣除、legacy baseline 仍为 0 new
+pnpm lint:style
+
+# 4. 若 baseline 可收缩，按审批刷新（不会把 allowlist 条目写进 baseline，也不能新增计数）
+pnpm lint:style:baseline --approve --reviewer <handle> --issue "#nnn" \
+  --reason "迁移 X 组件的 N 条裸值"
+```
+
+单元测试 `tests/unit/style-parity-allowlist.test.mjs` 锁住：新裸值失败、allowlisted 上游字面值通过并出现在证据、
+stale 被报告、过期/非法条目 fail closed、legacy baseline 仍然工作，以及真实 allowlist 的 22 条 seed。
 
 ## 3. 视觉基线审批（不允许随手 `--update`）
 
@@ -194,7 +269,7 @@ pnpm ui:parity:routes -- --self-check          # reference 自己跟自己比（
 | `/pdf-viewer` L2 路由仍是 `report-only`（画布背景、页面栅格、暗色反转等 6 条阻断差异，另 1 条亚像素差异不阻断） | `output/ui-parity-routes/` | #182 follow-up |
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` destructive 有意偏离上游 red-500 | manifest `expectedDiffs` + `tests/visual/extend/button/destructive/` 基线 | #169；参考页保持上游 red-500，gate 报告 `WAIVED`（bounded pixel-ratio waiver） |
-| 1,015 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
+| 971 条存量组件 CSS 裸值 + 22 条 #161b PPTX parity literal | `tests/style/component-style-baseline.json` + `tests/style/parity-literal-allowlist.json` | #159–#164 收尾时逐步还债；parity 条目按 `reviewBy` 复核 |
 
 `tests/a11y/allowlist.json` 在 #169 后为空：button loading 通过 `aria-label` + `aria-disabled`
 保留可访问名与焦点，destructive 实心按钮使用 4.83:1 的 token 对，PDF 缩略图列表补上

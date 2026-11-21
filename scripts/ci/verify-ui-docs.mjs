@@ -54,6 +54,7 @@ const harnessDoc = read("docs/design/extend-parity-harness.md");
 const workflow = read(".github/workflows/ui-parity.yml");
 const stylelintConfig = read("stylelint.config.mjs");
 const parityManifest = readJson("tools/parity-fixtures/manifest.json");
+const parityLiteralAllowlist = readJson("tests/style/parity-literal-allowlist.json");
 
 // 1. Every primitive component is discoverable from docs/components.
 const primitiveFiles = readdirSync(path.join(root, "packages/vue-ui/src/components/ui"))
@@ -193,6 +194,48 @@ for (const rule of ["color-no-hex", "declaration-property-unit-disallowed-list",
 check(
   "style baseline carries an approval",
   /"approved": \{[\s\S]*?"reviewer":/.test(read("tests/style/component-style-baseline.json")),
+);
+
+// #175: the two ledgers are distinct and the parity allowlist is exact. A
+// glob or wildcard here would silently exempt new debt, so the docs contract
+// rejects it even before the style gate runs.
+check(
+  "parity-literal allowlist has schemaVersion 1",
+  parityLiteralAllowlist.schemaVersion === 1 && Array.isArray(parityLiteralAllowlist.entries),
+);
+for (const entry of parityLiteralAllowlist.entries || []) {
+  check(
+    `parity-literal ${entry.id || "<missing id>"} is exact and owned`,
+    Boolean(
+      entry.id &&
+        entry.file &&
+        !/[*?[\]{}]/u.test(entry.file) &&
+        entry.rule &&
+        entry.value &&
+        Number.isInteger(entry.count) &&
+        entry.count > 0 &&
+        entry.upstreamPath &&
+        entry.upstreamCommit &&
+        entry.issue &&
+        entry.reason &&
+        entry.reviewBy,
+    ),
+    entry.file,
+  );
+}
+for (const snippet of [
+  "component-style-baseline.json",
+  "parity-literal-allowlist.json",
+  "upstreamCommit",
+  "reviewBy",
+  "stale",
+]) {
+  check(`CI doc explains the two style ledgers (${snippet})`, ciDoc.includes(snippet));
+}
+check(
+  "lint-styles mentions both style ledgers",
+  read("scripts/ci/lint-styles.mjs").includes("parity-literal-allowlist.json") &&
+    read("scripts/ci/lint-styles.mjs").includes("component-style-baseline.json"),
 );
 
 // 9. a11y allowlist entries have an owner issue and a reason.
