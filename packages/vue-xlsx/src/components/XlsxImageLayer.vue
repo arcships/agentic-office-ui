@@ -12,6 +12,8 @@
         :key="item.image.id"
         class="xlsx-image-layer__item"
         data-testid="xlsx-image-item"
+        data-drawing-kind="image"
+        :data-drawing-id="item.image.id"
         tabindex="0"
         :class="{
           'xlsx-image-layer__item--selected': item.image.id === selectedImageId,

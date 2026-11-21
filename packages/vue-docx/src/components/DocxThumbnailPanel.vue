@@ -1,64 +1,102 @@
 <template>
-  <div class="docx-thumbnail-panel" data-testid="docx-thumbnail-panel" :class="{ 'docx-thumbnail-panel--collapsed': collapsed, 'docx-thumbnail-panel--dark': isDark }">
-    <!-- Toggle button -->
-    <button v-if="showToggle" class="docx-thumbnail-toggle" @click="collapsed = !collapsed" :title="collapsed ? m.docx.thumbnail.show : m.docx.thumbnail.hide">
-      {{ collapsed ? '▶' : '◀' }}
-    </button>
-
-    <!-- Thumbnails container -->
-    <div v-if="!collapsed" class="docx-thumbnail-container">
-      <div class="docx-thumbnail-header">
-        <span class="docx-thumbnail-title">{{ m.docx.thumbnail.pages }}</span>
-        <span class="docx-thumbnail-count">{{ pageCount }}</span>
+  <DocumentViewerSidebar
+    class="docx-thumbnail-panel"
+    :class="isDark ? 'docx-thumbnail-panel--dark' : undefined"
+    data-testid="docx-thumbnail-panel"
+    :open="!collapsed"
+    :mode="mode"
+    :breakpoint="breakpoint"
+    :width="160"
+    flush
+    :label="m.docx.thumbnail.pages"
+    :data-office-theme="isDark ? 'dark' : 'light'"
+    data-office-density="comfortable"
+    @update:open="onSidebarOpen"
+  >
+    <div
+      ref="listRef"
+      class="docx-thumbnail-list"
+      role="listbox"
+      :aria-label="m.docx.thumbnail.pages"
+      :aria-activedescendant="activeDescendantId"
+      :aria-busy="isLoading || undefined"
+      :data-page-count="pageCount"
+      tabindex="0"
+      @keydown="onListKeydown"
+      @scroll.passive="onThumbnailScroll"
+    >
+      <div
+        v-if="isLoading"
+        class="docx-thumbnail-skeleton"
+        role="status"
+        :aria-label="m.docx.viewer.loadingTitle"
+        data-testid="docx-thumbnail-skeleton"
+      >
+        <div class="docx-thumbnail-skeleton__card">
+          <span class="docx-thumbnail-skeleton__pulse" />
+        </div>
+        <div class="docx-thumbnail-skeleton__caption" />
       </div>
-
-      <div ref="listRef" class="docx-thumbnail-list" @scroll.passive="onThumbnailScroll">
-        <div
-          v-if="topSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${topSpacerHeight}px` }"
-          aria-hidden="true"
-        />
+      <div
+        v-else
+        class="docx-thumbnail-track"
+        :style="{ height: `${railContentHeight + THUMBNAIL_LIST_PADDING * 2}px` }"
+      >
         <div
           v-for="pageIndex of renderedPageRange"
           :key="pageIndex"
+          class="docx-thumbnail-row"
+          :class="{ 'docx-thumbnail-row--active': pageIndex + 1 === currentPage }"
+          :style="{ transform: `translateY(${THUMBNAIL_LIST_PADDING + pageMetric(pageIndex).top}px)` }"
+        >
+        <div
+          :id="optionId(pageIndex)"
           class="docx-thumbnail-item"
           :class="{
             'docx-thumbnail-item--active': pageIndex + 1 === currentPage,
             'docx-thumbnail-item--blank': isParityBlankPage(pageIndex),
           }"
+          role="option"
           data-testid="docx-thumbnail"
           :aria-current="pageIndex + 1 === currentPage ? 'page' : undefined"
+          :aria-label="`${m.common.page.label} ${pageLabel(pageIndex)}`"
+          :aria-posinset="pageIndex + 1"
+          :aria-selected="pageIndex + 1 === currentPage"
+          :aria-setsize="pageCount"
           :data-thumbnail-page-index="pageIndex"
           :data-thumbnail-page-label="pageLabel(pageIndex)"
           :data-thumbnail-parity-blank="isParityBlankPage(pageIndex) ? 'true' : 'false'"
           @click="onSelectPage(pageIndex)"
         >
-          <!-- Thumbnail canvas -->
-          <div class="docx-thumbnail-canvas-wrapper" :style="thumbnailCanvasWrapperStyle(pageIndex)">
-            <canvas
-              :ref="(el) => setCanvasRef(pageIndex, el as HTMLCanvasElement)"
-              :width="thumbnailCanvasPixelWidth()"
-              :height="thumbnailCanvasPixelHeight(pageIndex)"
-              :style="thumbnailCanvasStyle(pageIndex)"
-              class="docx-thumbnail-canvas"
-            />
-          </div>
-
-          <!-- Page number label: the number Word shows (per-section restart/format) -->
-          <div class="docx-thumbnail-label" data-testid="docx-thumbnail-label">
+          <FileThumbnail
+            class="docx-thumbnail-card"
+            :class="{ 'docx-thumbnail-card--active': pageIndex + 1 === currentPage }"
+            size="92px"
+            :file="thumbnailFile(pageIndex)"
+            :preview-aspect-ratio="cardAspectRatio(pageIndex)"
+            :is-loading="thumbnailLoading(pageIndex)"
+            :has-error="thumbnailError(pageIndex)"
+            preview-class-name="docx-thumbnail-preview"
+            :alt="`${m.common.page.label} ${pageLabel(pageIndex)}`"
+          >
+            <template #preview>
+              <canvas
+                :ref="(el) => setCanvasRef(pageIndex, el as HTMLCanvasElement)"
+                :width="thumbnailCanvasPixelWidth()"
+                :height="thumbnailCanvasPixelHeight(pageIndex)"
+                :style="thumbnailCanvasStyle(pageIndex)"
+                class="docx-thumbnail-canvas"
+              />
+            </template>
+          </FileThumbnail>
+          <span class="docx-thumbnail-label" data-testid="docx-thumbnail-label">
             {{ pageLabel(pageIndex) }}
-          </div>
+          </span>
         </div>
-        <div
-          v-if="bottomSpacerHeight > 0"
-          class="docx-thumbnail-spacer"
-          :style="{ height: `${bottomSpacerHeight}px` }"
-          aria-hidden="true"
-        />
+        </div>
       </div>
     </div>
-  </div>
+  </DocumentViewerSidebar>
 </template>
 
 <script setup lang="ts">
@@ -93,6 +131,7 @@ import {
   ensureDocxViewerPageSurfaceRegistry,
   subscribeDocxViewerPageSurfaces,
 } from "../composables/page-surface-registry"
+import { DocumentViewerSidebar, FileThumbnail } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -106,8 +145,23 @@ const props = withDefaults(
     defaultCollapsed?: boolean
     showToggle?: boolean
     isDark?: boolean
+    /**
+     * Layout strategy forwarded to `DocumentViewerSidebar`. `auto` resolves to
+     * the upstream 768px inline breakpoint.
+     */
+    mode?: "auto" | "inline" | "overlay"
+    /** Container width at which `auto` switches to the inline rail. */
+    breakpoint?: number
   }>(),
-  { currentPage: 1, totalPages: 1, defaultCollapsed: false, showToggle: true, isDark: false }
+  {
+    currentPage: 1,
+    totalPages: 1,
+    defaultCollapsed: false,
+    showToggle: true,
+    isDark: false,
+    mode: "auto",
+    breakpoint: 768,
+  }
 )
 
 const m = useDocxMessages()
@@ -121,6 +175,7 @@ const collapsed = ref(props.defaultCollapsed)
 const visibleStartPage = ref(0)
 const listRef = ref<HTMLElement | undefined>()
 const registryRevision = ref(0)
+const listboxId = `docx-thumbnails-${Math.random().toString(36).slice(2, 8)}`
 
 /**
  * When the panel is paired with an editor controller, the viewer owns
@@ -303,9 +358,26 @@ const pagePresentations = computed<PagePresentation[]>(() => {
 })
 
 // ── Thumbnail dimensions ───────────────────────────────────────────
-const THUMBNAIL_WIDTH = 140
-const THUMBNAIL_ITEM_EXTRA_HEIGHT = 36
+/**
+ * Upstream DOCX thumbnail geometry: a `FileThumbnail` card with `w-[92px]`
+ * inside an option box with `p-2` (8px), `gap-2` (8px) and one `text-xs` line
+ * (16px); every row reserves `pb-3` (12px) for the next card, and the list pads
+ * the virtual track with 16px on both edges.
+ */
+const THUMBNAIL_WIDTH = 92
+const THUMBNAIL_OPTION_PADDING = 8
+const THUMBNAIL_OPTION_GAP = 8
+const THUMBNAIL_LABEL_HEIGHT = 16
+const THUMBNAIL_ROW_GAP = 12
+const THUMBNAIL_LIST_PADDING = 16
+const THUMBNAIL_ITEM_EXTRA_HEIGHT =
+  THUMBNAIL_OPTION_PADDING * 2 +
+  THUMBNAIL_OPTION_GAP +
+  THUMBNAIL_LABEL_HEIGHT +
+  THUMBNAIL_ROW_GAP
 const DEFAULT_PAGE_SIZE = { width: 816, height: 1056 }
+const DOCX_THUMBNAIL_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 interface ThumbnailPageMetric {
   width: number
@@ -385,6 +457,8 @@ const railContentHeight = computed(() => {
   const metrics = pageMetrics.value
   if (metrics.length === 0) return 0
   const last = metrics[metrics.length - 1]
+  // One full row stride keeps the track height equal to upstream's
+  // `virtualizer.getTotalSize()`.
   return last.top + last.height + THUMBNAIL_ITEM_EXTRA_HEIGHT
 })
 
@@ -425,11 +499,15 @@ onUnmounted(() => {
 })
 
 function pageMetric(pageIndex: number): ThumbnailPageMetric {
+  const fallbackHeight = Math.max(
+    1,
+    Math.round(THUMBNAIL_WIDTH * (DEFAULT_PAGE_SIZE.height / DEFAULT_PAGE_SIZE.width)),
+  )
   return pageMetrics.value[pageIndex] ?? {
     width: THUMBNAIL_WIDTH,
-    height: 181,
+    height: fallbackHeight,
     scale: THUMBNAIL_WIDTH / DEFAULT_PAGE_SIZE.width,
-    top: pageIndex * (181 + THUMBNAIL_ITEM_EXTRA_HEIGHT),
+    top: pageIndex * (fallbackHeight + THUMBNAIL_ITEM_EXTRA_HEIGHT),
   }
 }
 
@@ -439,7 +517,14 @@ function thumbnailCanvasWrapperStyle(pageIndex: number): Record<string, string> 
 }
 
 function thumbnailCanvasStyle(pageIndex: number): Record<string, string> {
-  return thumbnailCanvasWrapperStyle(pageIndex)
+  // Upstream's canvas fills its preview box (`!size-full`), so the browser
+  // scales the backing store 1:1 at DPR 2 instead of relying on explicit px.
+  const metric = pageMetric(pageIndex)
+  return {
+    inlineSize: `${metric.width}px`,
+    blockSize: `${metric.height}px`,
+    background: "#fff",
+  }
 }
 
 function thumbnailCanvasPixelWidth(): number {
@@ -448,6 +533,44 @@ function thumbnailCanvasPixelWidth(): number {
 
 function thumbnailCanvasPixelHeight(pageIndex: number): number {
   return Math.max(1, Math.round(pageMetric(pageIndex).height * devicePixelRatio.value))
+}
+
+// ── Upstream option/card helpers ───────────────────────────────────
+const isLoading = computed(() => pageCount.value < 1)
+
+function optionId(pageIndex: number): string {
+  return `${listboxId}-page-${pageIndex + 1}`
+}
+
+const activeDescendantId = computed(() => {
+  if (pageCount.value < 1) return undefined
+  const pageIndex = Math.min(pageCount.value - 1, Math.max(0, (props.currentPage ?? 1) - 1))
+  return optionId(pageIndex)
+})
+
+function cardAspectRatio(pageIndex: number): number {
+  const pageSize = pageSizeFor(pageIndex)
+  return pageSize.width / pageSize.height
+}
+
+function thumbnailFile(pageIndex: number) {
+  return {
+    name: `${m.value.common.page.label} ${pageLabel(pageIndex)}`,
+    type: DOCX_THUMBNAIL_MIME,
+  }
+}
+
+function thumbnailLoading(pageIndex: number): boolean {
+  return thumbnailStates.value[pageIndex] !== "ready"
+}
+
+function thumbnailError(pageIndex: number): boolean {
+  return thumbnailStates.value[pageIndex] === "error"
+}
+
+function setThumbnailState(pageIndex: number, state: string): void {
+  if (thumbnailStates.value[pageIndex] === state) return
+  thumbnailStates.value = { ...thumbnailStates.value, [pageIndex]: state }
 }
 
 // ── Page range for rendering ───────────────────────────────────────
@@ -466,20 +589,19 @@ const renderedPageRange = computed(() => {
   }
   return range
 })
-const topSpacerHeight = computed(() => pageMetrics.value[renderWindow.value.start]?.top ?? 0)
-const bottomSpacerHeight = computed(() => {
-  const window = renderWindow.value
-  const metrics = pageMetrics.value
-  if (window.end >= metrics.length) return 0
-  return Math.max(0, railContentHeight.value - (metrics[window.end]?.top ?? railContentHeight.value))
-})
-
 // ── Canvas refs ────────────────────────────────────────────────────
 const canvasRefs = new Map<number, HTMLCanvasElement>()
+/** Reactive mirror of each canvas' `data-thumbnail-state` for the card overlay. */
+const thumbnailStates = ref<Record<number, string>>({})
 
 function setCanvasRef(pageIndex: number, el: HTMLCanvasElement | null): void {
   if (!el) {
     canvasRefs.delete(pageIndex)
+    if (pageIndex in thumbnailStates.value) {
+      const next = { ...thumbnailStates.value }
+      delete next[pageIndex]
+      thumbnailStates.value = next
+    }
     return
   }
   if (canvasRefs.get(pageIndex) === el) return
@@ -936,12 +1058,14 @@ function renderVisibleThumbnails(): void {
     if (!page) {
       canvas.dataset.thumbnailState = "unavailable"
       canvas.dataset.thumbnailContentBlocks = "0"
+      setThumbnailState(pageIndex, "unavailable")
       continue
     }
 
     const ctx = canvas.getContext("2d")
     if (!ctx) {
       canvas.dataset.thumbnailState = "error"
+      setThumbnailState(pageIndex, "error")
       continue
     }
     canvas.dataset.thumbnailState = "rendering"
@@ -975,10 +1099,12 @@ function renderVisibleThumbnails(): void {
 
       canvas.dataset.thumbnailState = "ready"
       canvas.dataset.thumbnailContentBlocks = String(page.blocks.length)
+      setThumbnailState(pageIndex, "ready")
     } catch {
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       canvas.dataset.thumbnailState = "error"
       canvas.dataset.thumbnailContentBlocks = "0"
+      setThumbnailState(pageIndex, "error")
     }
   }
 }
@@ -1003,127 +1129,182 @@ function onThumbnailScroll(event: Event): void {
   visibleStartPage.value = pageIndexAtScrollTop(target.scrollTop)
 }
 
+/** Upstream listbox keys: ArrowUp/Down step one page, Home/End jump. */
+function onListKeydown(event: KeyboardEvent): void {
+  const total = pageCount.value
+  if (total < 1) return
+  const current = Math.min(total, Math.max(1, props.currentPage ?? 1))
+  let next: number | null = null
+  if (event.key === "ArrowDown") next = Math.min(total, current + 1)
+  else if (event.key === "ArrowUp") next = Math.max(1, current - 1)
+  else if (event.key === "Home") next = 1
+  else if (event.key === "End") next = total
+  if (next === null) return
+  event.preventDefault()
+  if (next !== (props.currentPage ?? 1)) emit("selectPage", next - 1)
+}
+
 // ── Select page ────────────────────────────────────────────────────
 function onSelectPage(pageIndex: number): void {
   emit("selectPage", pageIndex)
 }
+
+function onSidebarOpen(open: boolean): void {
+  collapsed.value = !open
+}
 </script>
 
 <style scoped>
+/*
+ * Upstream Extend geometry (docx-viewer.tsx `DocxThumbnailSidebarList`):
+ * a 160px `w-40` rail, no header, 16px list padding, `12px` side inset per
+ * option row, a `w-[92px]` page card, `gap-2` before a `text-xs` page label and
+ * a `pb-3` row gap.
+ */
 .docx-thumbnail-panel {
-  display: flex;
-  flex-shrink: 0;
-  background: #f9fafb;
-  border-right: 1px solid #e5e7eb;
-  position: relative;
-  transition: width 150ms ease;
+  --office-ui-sidebar-width: 10rem;
+  box-sizing: border-box;
+  /* Upstream's rail inherits the toolbar foreground; the shared shell sets the
+     sidebar-specific token, so restore the inherited colour here. */
+  color: var(--office-foreground);
 }
 .docx-thumbnail-panel--dark {
-  background: #18181b;
-  border-right-color: #3f3f46;
+  color-scheme: dark;
 }
-.docx-thumbnail-panel--dark .docx-thumbnail-header { border-bottom-color: #3f3f46; }
-.docx-thumbnail-panel--dark .docx-thumbnail-title { color: #f4f4f5; }
-.docx-thumbnail-panel--dark .docx-thumbnail-count { background: #27272a; color: #a1a1aa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-item:hover { background: #27272a; }
-.docx-thumbnail-panel--dark .docx-thumbnail-item--active { background: #1e3a8a; outline-color: #60a5fa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-label { color: #a1a1aa; }
-.docx-thumbnail-panel--dark .docx-thumbnail-toggle { background: #3f3f46; color: #e4e4e7; }
-.docx-thumbnail-panel--dark .docx-thumbnail-toggle:hover { background: #52525b; }
-.docx-thumbnail-panel--collapsed {
-  width: 28px;
-}
-.docx-thumbnail-toggle {
-  position: absolute;
-  right: 4px;
-  top: 8px;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: #e5e7eb;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 10px;
-  color: #6b7280;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.docx-thumbnail-toggle:hover {
-  background: #d1d5db;
-}
-.docx-thumbnail-container {
-  width: 170px;
-  display: flex;
-  flex-direction: column;
-}
-.docx-thumbnail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
-}
-.docx-thumbnail-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-.docx-thumbnail-count {
-  font-size: 11px;
-  color: #6b7280;
-  background: #e5e7eb;
-  border-radius: 10px;
-  padding: 1px 8px;
+.docx-thumbnail-panel :deep(.office-document-sidebar__body) {
+  overflow: hidden;
+  padding: 0;
 }
 .docx-thumbnail-list {
-  flex: 1;
+  box-sizing: border-box;
+  block-size: 100%;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0;
+  outline: none;
 }
-.docx-thumbnail-spacer {
-  width: 1px;
-  pointer-events: none;
+/* Upstream offsets the virtual track by `DOCX_THUMBNAIL_LIST_PADDING` (16px)
+   on both edges; the loading skeleton is not padded. */
+.docx-thumbnail-track {
+  position: relative;
+  box-sizing: border-box;
+}
+.docx-thumbnail-list:focus-visible {
+  outline: none;
+}
+/* Upstream row: `absolute top-0 right-3 left-3 pb-3` positioned by
+   `translateY(rowStart)`. The transform also keeps the nested canvas clip in
+   its own paint layer, exactly like the pinned reference. */
+.docx-thumbnail-row {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 12px;
+  padding-block-end: 12px;
+  contain: layout;
 }
 .docx-thumbnail-item {
-  margin-bottom: 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  padding: 4px;
-  transition: background 100ms ease;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  padding: 8px;
+  border-radius: var(--office-radius-md);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: 16px;
+  cursor: default;
+  outline: none;
+  user-select: none;
+  transition: box-shadow 150ms ease;
 }
 .docx-thumbnail-item:hover {
-  background: #f3f4f6;
+  background: var(--office-sidebar-accent);
 }
 .docx-thumbnail-item--active {
-  background: #eff6ff;
-  outline: 2px solid #3b82f6;
-  outline-offset: -2px;
+  background: var(--office-sidebar-accent);
+  color: var(--office-foreground);
 }
-.docx-thumbnail-canvas-wrapper {
-  overflow: hidden;
-  border-radius: 2px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+.docx-thumbnail-item:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--office-ring),
+    0 0 0 3px var(--office-background);
+}
+.docx-thumbnail-card {
+  flex: none;
+  inline-size: 92px;
+  border: 0;
+  border-radius: var(--office-radius-md);
+  background: var(--office-background);
+  box-shadow: var(--office-shadow-xs);
+}
+.docx-thumbnail-card--active {
+  box-shadow: var(--office-shadow-sm);
+}
+/* `preview-class-name` lands inside the FileThumbnail root, so restyling it
+   needs a deep selector: white page sheet at the card radius. */
+.docx-thumbnail-panel :deep(.docx-thumbnail-preview) {
+  border-radius: var(--office-radius-md);
   background: #fff;
 }
 /* A blank page a section's parity inserted stays an empty sheet; the dashed
    edge keeps it from reading as a page that failed to render. */
-.docx-thumbnail-item--blank .docx-thumbnail-canvas-wrapper {
-  outline: 1px dashed #cbd5e1;
+.docx-thumbnail-panel .docx-thumbnail-item--blank :deep(.docx-thumbnail-preview) {
+  outline: 1px dashed var(--office-border);
   outline-offset: -1px;
-}
-.docx-thumbnail-panel--dark .docx-thumbnail-item--blank .docx-thumbnail-canvas-wrapper {
-  outline-color: #52525b;
 }
 .docx-thumbnail-canvas {
   display: block;
 }
 .docx-thumbnail-label {
+  display: block;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--office-text-xs);
+  line-height: 16px;
   text-align: center;
-  font-size: 11px;
-  line-height: 14px;
-  color: #6b7280;
-  margin-top: 2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docx-thumbnail-skeleton {
+  box-sizing: border-box;
+  padding: 16px;
+  color: var(--office-muted-foreground);
+}
+.docx-thumbnail-skeleton__card {
+  block-size: 112px;
+  inline-size: 80px;
+  margin-inline: auto;
+  overflow: hidden;
+  border-radius: var(--office-radius-md);
+  background: var(--office-background);
+  box-shadow: var(--office-shadow-xs);
+}
+.docx-thumbnail-skeleton__pulse {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  background: var(--office-muted);
+}
+.docx-thumbnail-skeleton__caption {
+  block-size: 12px;
+  inline-size: 40px;
+  margin-block-start: 12px;
+  margin-inline: auto;
+  border-radius: 9999px;
+  background: var(--office-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docx-thumbnail-item {
+    transition: none;
+  }
+}
+
+@media print {
+  .docx-thumbnail-panel {
+    display: none !important;
+  }
 }
 </style>

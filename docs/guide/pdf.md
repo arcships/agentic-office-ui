@@ -35,12 +35,16 @@ import "@arcships/vue-pdf/style.css"
 | `showToolbar` | `boolean` | `true` | 工具栏 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
+| `showPrint` | `boolean` | `true` | 打印按钮（#162 新增） |
+| `showStatusBar` | `boolean` | `false` | 可见 `OfficeStatusBar`（#162 新增） |
 | `minHeight` | `string \| number` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `isDark` | `boolean` | `false` | 深色外壳与页面背景；页面位图默认反色，可用 `--pdf-dark-page-filter: none` 关闭 |
 | `showOutline` | `boolean` | `true` | `PdfSurface` 在文档带书签时显示大纲面板；无书签时不显示 |
 | `showThumbnails` | `boolean` | `true` | `PdfSurface` 显示共享的页面缩略图栏（`PdfViewer` 同样默认显示） |
 
-`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和大纲面板会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
+`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图、大纲面板和可见状态栏会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
+
+自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
 
 ### 页面布局
 

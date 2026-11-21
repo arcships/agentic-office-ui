@@ -1,0 +1,163 @@
+/**
+ * @arcships/vue-ui — Office theme layer
+ *
+ * Adapted from extend-hq/ui @ 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT).
+ * Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn.
+ * Licensed under the MIT License; see docs/upstream/licenses/extend-ui-MIT.txt.
+ *
+ * Public entry point: `@arcships/vue-ui/theme.css`.
+ *
+ *   <div data-office-theme="dark"> ... </div>
+ *   <div data-office-theme="light"> ... </div>
+ *   <div data-office-theme="system"> ... </div>   (follows prefers-color-scheme)
+ *
+ * Everything is scoped under `[data-office-theme]`; importing this file does
+ * not change the host page. `theme.css` is self-contained after the package
+ * build: the source `@import` is inlined into `dist/theme.css`, so plain
+ * `<link rel="stylesheet">` consumers only need one request.
+ *
+ * Dark values are intentionally written twice: once for the explicit
+ * `data-office-theme="dark"` scope and once for `data-office-theme="system"`
+ * inside the colour-scheme media query. The unit suite compares the two blocks
+ * so they cannot drift. Values mirror the pinned Extend reference
+ * (apps/v4/app/globals.css, commit 70fe70c6f1e1eee53954c6923f3d9f583557a57e).
+ */
+
+@import "./tokens.css";
+
+[data-office-theme="light"],
+[data-office-theme="system"] {
+  color-scheme: light;
+}
+
+[data-office-theme="dark"] {
+  color-scheme: dark;
+
+  --office-background: oklch(14.5% 0 0);
+  --office-foreground: oklch(97% 0 0);
+  --office-card: color-mix(in srgb, var(--office-background) 98%, white);
+  --office-card-foreground: oklch(97% 0 0);
+  --office-popover: color-mix(in srgb, var(--office-background) 98%, white);
+  --office-popover-foreground: oklch(97% 0 0);
+
+  --office-primary: oklch(97% 0 0);
+  --office-primary-foreground: oklch(26.9% 0 0);
+  --office-secondary: color-mix(in oklab, white 4%, transparent);
+  --office-secondary-foreground: oklch(97% 0 0);
+  --office-muted: color-mix(in oklab, white 4%, transparent);
+  --office-muted-foreground: color-mix(in srgb, oklch(55.6% 0 0) 90%, white);
+  --office-accent: color-mix(in oklab, white 4%, transparent);
+  --office-accent-foreground: oklch(97% 0 0);
+  --office-destructive: color-mix(in srgb, oklch(63.7% 0.237 25.331) 90%, white);
+  --office-destructive-foreground: oklch(70.4% 0.191 22.216);
+
+  --office-border: color-mix(in oklab, white 6%, transparent);
+  --office-input: color-mix(in oklab, white 8%, transparent);
+  --office-ring: oklch(55.6% 0 0);
+  --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.25), 0 2px 4px -2px oklab(0 0 0 / 0.25);
+
+  --office-chart-1: oklch(80.9% 0.105 251.813);
+  --office-chart-2: oklch(62.3% 0.214 259.815);
+  --office-chart-3: oklch(54.6% 0.245 262.881);
+  --office-chart-4: oklch(48.8% 0.243 264.376);
+  --office-chart-5: oklch(42.4% 0.199 265.638);
+
+  --office-sidebar: color-mix(in srgb, oklch(14.5% 0 0) 97%, white);
+  --office-sidebar-foreground: color-mix(
+    in srgb,
+    oklch(97% 0 0) 64%,
+    var(--office-sidebar)
+  );
+  --office-sidebar-primary: oklch(97% 0 0);
+  --office-sidebar-primary-foreground: oklch(26.9% 0 0);
+  --office-sidebar-accent: color-mix(in oklab, white 4%, transparent);
+  --office-sidebar-accent-foreground: oklch(97% 0 0);
+  --office-sidebar-border: color-mix(in oklab, white 5%, transparent);
+  --office-sidebar-ring: oklch(70.8% 0 0);
+
+  --office-surface: oklch(20% 0 0);
+  --office-surface-foreground: oklch(70.8% 0 0);
+  --office-code: var(--office-surface);
+  --office-code-foreground: var(--office-surface-foreground);
+  --office-code-highlight: oklch(27% 0 0);
+  --office-code-number: oklch(72% 0 0);
+  --office-selection: oklch(92.2% 0 0);
+  --office-selection-foreground: oklch(20.5% 0 0);
+
+  --office-success: oklch(69.6% 0.17 162.48);
+  --office-success-foreground: oklch(76.5% 0.177 163.223);
+  --office-warning: oklch(76.9% 0.188 70.08);
+  --office-warning-foreground: oklch(82.8% 0.189 84.429);
+  --office-info: oklch(62.3% 0.214 259.815);
+  --office-info-foreground: oklch(70.7% 0.165 254.624);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-office-theme="system"] {
+    color-scheme: dark;
+
+    --office-background: oklch(14.5% 0 0);
+    --office-foreground: oklch(97% 0 0);
+    --office-card: color-mix(in srgb, var(--office-background) 98%, white);
+    --office-card-foreground: oklch(97% 0 0);
+    --office-popover: color-mix(in srgb, var(--office-background) 98%, white);
+    --office-popover-foreground: oklch(97% 0 0);
+
+    --office-primary: oklch(97% 0 0);
+    --office-primary-foreground: oklch(26.9% 0 0);
+    --office-secondary: color-mix(in oklab, white 4%, transparent);
+    --office-secondary-foreground: oklch(97% 0 0);
+    --office-muted: color-mix(in oklab, white 4%, transparent);
+    --office-muted-foreground: color-mix(in srgb, oklch(55.6% 0 0) 90%, white);
+    --office-accent: color-mix(in oklab, white 4%, transparent);
+    --office-accent-foreground: oklch(97% 0 0);
+    --office-destructive: color-mix(in srgb, oklch(63.7% 0.237 25.331) 90%, white);
+    --office-destructive-foreground: oklch(70.4% 0.191 22.216);
+
+    --office-border: color-mix(in oklab, white 6%, transparent);
+    --office-input: color-mix(in oklab, white 8%, transparent);
+    --office-ring: oklch(55.6% 0 0);
+    --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.25), 0 2px 4px -2px oklab(0 0 0 / 0.25);
+
+    --office-chart-1: oklch(80.9% 0.105 251.813);
+    --office-chart-2: oklch(62.3% 0.214 259.815);
+    --office-chart-3: oklch(54.6% 0.245 262.881);
+    --office-chart-4: oklch(48.8% 0.243 264.376);
+    --office-chart-5: oklch(42.4% 0.199 265.638);
+
+    --office-sidebar: color-mix(in srgb, oklch(14.5% 0 0) 97%, white);
+    --office-sidebar-foreground: color-mix(
+      in srgb,
+      oklch(97% 0 0) 64%,
+      var(--office-sidebar)
+    );
+    --office-sidebar-primary: oklch(97% 0 0);
+    --office-sidebar-primary-foreground: oklch(26.9% 0 0);
+    --office-sidebar-accent: color-mix(in oklab, white 4%, transparent);
+    --office-sidebar-accent-foreground: oklch(97% 0 0);
+    --office-sidebar-border: color-mix(in oklab, white 5%, transparent);
+    --office-sidebar-ring: oklch(70.8% 0 0);
+
+    --office-surface: oklch(20% 0 0);
+    --office-surface-foreground: oklch(70.8% 0 0);
+    --office-code: var(--office-surface);
+    --office-code-foreground: var(--office-surface-foreground);
+    --office-code-highlight: oklch(27% 0 0);
+    --office-code-number: oklch(72% 0 0);
+    --office-selection: oklch(92.2% 0 0);
+    --office-selection-foreground: oklch(20.5% 0 0);
+
+    --office-success: oklch(69.6% 0.17 162.48);
+    --office-success-foreground: oklch(76.5% 0.177 163.223);
+    --office-warning: oklch(76.9% 0.188 70.08);
+    --office-warning-foreground: oklch(82.8% 0.189 84.429);
+    --office-info: oklch(62.3% 0.214 259.815);
+    --office-info-foreground: oklch(70.7% 0.165 254.624);
+  }
+}
+
+/* Scoped selection colours; harmless for hosts that opt out of the provider. */
+[data-office-theme] ::selection {
+  background-color: var(--office-selection);
+  color: var(--office-selection-foreground);
+}

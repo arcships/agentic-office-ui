@@ -2,17 +2,45 @@
   <button
     ref="rootRef"
     class="pptx-thumbnail"
-    :class="{ 'pptx-thumbnail--active': active }"
+    :class="{
+      'pptx-thumbnail--active': active,
+      'pptx-thumbnail--loading': status === 'loading',
+      'pptx-thumbnail--error': status === 'error',
+    }"
     type="button"
     :aria-label="thumbnailLabel"
     :aria-current="active ? 'page' : undefined"
+    :aria-busy="status === 'loading' ? 'true' : undefined"
     :data-pptx-thumbnail-index="slide.index"
+    :data-thumbnail-state="status"
     @click="emit('select', slide.index)"
   >
-    <span ref="canvasRef" class="pptx-thumbnail__canvas" />
-    <span class="pptx-thumbnail__label">
+    <span class="pptx-thumbnail__frame">
+      <span ref="canvasRef" class="pptx-thumbnail__canvas" />
+      <OfficeSkeleton
+        v-if="status === 'loading'"
+        class="pptx-thumbnail__skeleton"
+        data-testid="pptx-thumbnail-skeleton"
+      />
+      <span
+        v-else-if="status === 'error'"
+        class="pptx-thumbnail__error"
+        data-testid="pptx-thumbnail-error"
+        role="img"
+        :aria-label="m.pptx.thumbnail.failed"
+      >
+        <OfficeIcon name="triangle-alert" />
+        <span class="pptx-thumbnail__error-label">{{ m.pptx.thumbnail.failed }}</span>
+      </span>
+    </span>
+    <span v-if="showLabel" class="pptx-thumbnail__label">
       <span>{{ slide.number }}</span>
-      <span v-if="slide.hidden" class="pptx-thumbnail__hidden">{{ m.pptx.thumbnail.hidden }}</span>
+      <OfficeBadge
+        v-if="slide.hidden"
+        variant="secondary"
+        class="pptx-thumbnail__hidden"
+        data-testid="pptx-thumbnail-hidden"
+      >{{ m.pptx.thumbnail.hidden }}</OfficeBadge>
     </span>
   </button>
 </template>
@@ -24,6 +52,7 @@ import type {
   PptxPreviewSession,
 } from "@arcships/pptx-core/browser"
 import type { PptxSlideInfo } from "@arcships/pptx-core"
+import { OfficeBadge, OfficeIcon, OfficeSkeleton } from "@arcships/vue-ui"
 import {
   PPTX_THUMBNAIL_OBSERVER,
   type PptxThumbnailObserver,
@@ -36,9 +65,12 @@ const props = withDefaults(defineProps<{
   slide: PptxSlideInfo
   width?: number
   active?: boolean
+  /** Render the slide-number label under the canvas (the sorter card owns it). */
+  showLabel?: boolean
 }>(), {
   width: 148,
   active: false,
+  showLabel: true,
 })
 
 const emit = defineEmits<{ select: [index: number] }>()
@@ -49,6 +81,12 @@ const thumbnailLabel = computed(() => formatOfficeMessage(
 ))
 const rootRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
+/**
+ * Thumbnail lifecycle for the shared skeleton/error chrome:
+ * `idle` never rendered (the session returned no handle), `loading` awaits the
+ * renderer, `ready` shows the painted slide and `error` shows the fallback.
+ */
+const status = ref<"idle" | "loading" | "ready" | "error">("idle")
 /** Shared gate provided by `PptxViewer`; standalone thumbnails observe themselves. */
 const sharedObserver = inject(PPTX_THUMBNAIL_OBSERVER, null) as PptxThumbnailObserver | null
 let observer: IntersectionObserver | null = null
@@ -60,9 +98,8 @@ function clear(): void {
   renderId += 1
   handle?.dispose()
   handle = null
-  const canvas = canvasRef.value
-  canvas?.replaceChildren?.()
-  if (canvas?.dataset) delete canvas.dataset.error
+  status.value = "idle"
+  canvasRef.value?.replaceChildren?.()
 }
 
 async function render(): Promise<void> {
@@ -72,10 +109,12 @@ async function render(): Promise<void> {
   const nextHandle = props.session.renderThumbnail(props.slide.index, target, props.width)
   if (!nextHandle) return
   handle = nextHandle
+  status.value = "loading"
   try {
     await nextHandle.ready
+    if (id === renderId) status.value = "ready"
   } catch {
-    if (id === renderId) target.dataset.error = "true"
+    if (id === renderId) status.value = "error"
   }
 }
 

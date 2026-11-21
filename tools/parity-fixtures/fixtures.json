@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 1,
+  "reference": {
+    "repo": "extend-hq/ui",
+    "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+    "commitDate": "2026-11-17",
+    "license": "MIT",
+    "pages": {
+      "components": "https://www.extend.ai/ui/docs/components",
+      "blocks": "https://www.extend.ai/ui/blocks"
+    }
+  },
+  "fonts": {
+    "sans": "Geist Variable",
+    "mono": "Geist Mono Variable",
+    "source": "@fontsource-variable/geist, @fontsource-variable/geist-mono (stand-in for next/font Geist in apps/v4/lib/fonts.ts)"
+  },
+  "copy": {
+    "fileUpload": {
+      "title": "Click to upload or drop files",
+      "description": "PDF, DOC/DOCX, XLSX, CSV, PNG, or JPG",
+      "browseLabel": "Browse files",
+      "draggingLabel": "Drop to add",
+      "rejection": "This file type is not supported here."
+    },
+    "pdfToolbar": {
+      "pageLabel": "Page",
+      "ofLabel": "of",
+      "zoomValue": "100%",
+      "searchLabel": "Search text",
+      "actionsLabel": "Open PDF actions",
+      "sidebarLabel": "Pages sidebar"
+    },
+    "buttons": {
+      "label": "Upload document",
+      "outline": "Outline",
+      "secondary": "Secondary",
+      "ghost": "Ghost",
+      "destructive": "Delete",
+      "link": "Read the docs",
+      "iconAlt": "Page actions"
+    },
+    "input": {
+      "label": "Document title",
+      "value": "Quarterly report",
+      "placeholder": "Enter a title",
+      "invalid": "Invalid value",
+      "disabled": "Read only value"
+    },
+    "select": {
+      "label": "Word document",
+      "placeholder": "Choose a format",
+      "options": [
+        "Word document",
+        "PDF",
+        "Presentation"
+      ]
+    },
+    "dialog": {
+      "trigger": "Open dialog",
+      "title": "Rename document",
+      "description": "Choose a new name for the shared document.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "close": "Close"
+    },
+    "tooltip": {
+      "trigger": "Copy",
+      "content": "Copy to clipboard"
+    }
+  },
+  "documents": [
+    {
+      "id": "pdf",
+      "name": "quarterly-report.pdf",
+      "type": "application/pdf",
+      "sizeBytes": 2416640,
+      "pages": 12,
+      "extendSurface": "pdf-viewer"
+    },
+    {
+      "id": "docx",
+      "name": "legal-contract.docx",
+      "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "sizeBytes": 184320,
+      "pages": 8,
+      "extendSurface": "docx-viewer"
+    },
+    {
+      "id": "xlsx",
+      "name": "financial-model.xlsx",
+      "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "sizeBytes": 512000,
+      "sheets": 4,
+      "extendSurface": "xlsx-viewer"
+    },
+    {
+      "id": "pptx",
+      "name": "roadmap-review.pptx",
+      "type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "sizeBytes": 734003,
+      "slides": 9,
+      "extendSurface": "pptx-viewer"
+    },
+    {
+      "id": "png",
+      "name": "contract-page.png",
+      "type": "image/png",
+      "sizeBytes": 48128,
+      "asset": "/samples/contract-page.png"
+    }
+  ],
+  "fileUpload": {
+    "accept": ".pdf,.doc,.docx,.xlsx,.csv,.png,.jpg,.jpeg,application/pdf",
+    "multiple": true,
+    "maxSizeBytes": 26214400,
+    "acceptedFileTypes": [
+      {
+        "label": "Image",
+        "icon": "image"
+      },
+      {
+        "label": "PDF",
+        "icon": "pdf"
+      },
+      {
+        "label": "Sheet",
+        "icon": "sheet"
+      }
+    ],
+    "selectedFile": {
+      "name": "quarterly-report.pdf",
+      "mimeType": "application/pdf",
+      "content": "parity fixture"
+    },
+    "rejectedFile": {
+      "name": "notes.txt",
+      "mimeType": "text/plain",
+      "content": "parity fixture"
+    }
+  },
+  "pdfToolbar": {
+    "activePage": 3,
+    "numPages": 12,
+    "zoomPercent": 100,
+    "sidebarOpen": false,
+    "showRotateControls": true,
+    "showDownload": true,
+    "showUpload": true
+  },
+  "documentSidebar": {
+    "widthPx": 160,
+    "inline": true,
+    "open": true
+  },
+  "blocks": {
+    "citations": [
+      {
+        "id": "c1",
+        "page": 2,
+        "label": "Clause 4.2",
+        "text": "The supplier shall deliver within 30 days."
+      },
+      {
+        "id": "c2",
+        "page": 5,
+        "label": "Clause 9.1",
+        "text": "Liability is capped at the contract value."
+      }
+    ],
+    "layoutBlocks": [
+      {
+        "id": "block-1",
+        "type": "heading",
+        "text": "MASTER SERVICES AGREEMENT",
+        "confidence": 0.98,
+        "page": 1
+      },
+      {
+        "id": "block-2",
+        "type": "paragraph",
+        "text": "Provider will deliver document intelligence and workflow automation for the customer's finance operations.",
+        "confidence": 0.89,
+        "page": 1
+      },
+      {
+        "id": "block-3",
+        "type": "table",
+        "text": "Service level targets and response windows for each severity level.",
+        "confidence": 0.77,
+        "page": 2
+      },
+      {
+        "id": "block-4",
+        "type": "figure",
+        "text": "Figure 1 - Payment flow",
+        "confidence": 0.91,
+        "page": 2
+      }
+    ],
+    "signature": {
+      "label": "Authorized signature",
+      "page": 1,
+      "bbox": {
+        "x": 300,
+        "y": 504,
+        "width": 250,
+        "height": 58
+      },
+      "imageDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAA6CAYAAACZBESJAAACUklEQVR42u3dy47CMAxAUVqxZ8P/f+Fs+AJmMRoJjWCgbR5OfO4aShP71m764HQCAAAAAAAAAAAA8CFLjx+9XK73d5+53b4W4QHKsEaUfMvnAASs6L8C/1exHyVX2eN0XGJB9GKSv0o2SRan2xILon+URFsSZcvBAfVjo9sierXkIHv96r11bgk/Fk0X444mhAW6OjHZE5fH710u17vYJK/opaqxc/Z4MREfFf1UOuh/K48KEqsrEp/EotcItmQqE49aFVd8krXutZPqWRJpF/tK3vP30EH0lkF2c0dc6cieRPReSUX8WLK12gc50FD0SNe8s1f7aBW19P7sXQPIKPzUomduJSOP9ci+HT14Zz2dqCJ65AnMEugR7iY8sirvvoyOoo9yq+rsso82vp4P02Q58C+Sa64AW+k2Z89Ys06USo5nczXrTT5rZnkeH8qYNXFB9mJVZPSJmSGwniCTC9Ur+gwVZOQAE1w3VFX02RJs9PFo2fGKM8l/BBl1PKp57HhEOfguRwczSxUZcUxW2eOL3eopznfbXiTX9kkjOan3zH2pmO3ZjhcCDig7ycdvw/ds+0hunnsPGCTPOL+ftvil9meRWONUdZI72OzlLLFUGsSiRnzXT37Q21n67gPJgUaCZd8PjM1qCuJWdX9FBaimAMgOaN0BogOA9h1Q0QEQffDKbhYwIq7P7pA84186RcZ9BkSvkvi9E6uVgCO+gMMBJpjo2mAVDFBBgIJYjCM7iA6yg+jOkckOopMdIDrZgUa4TNPpXN0lMhA9kfCkRwu+ATiMGdq08K5VAAAAAElFTkSuQmCC"
+    },
+    "splits": [
+      {
+        "id": "s1",
+        "pages": "1-4",
+        "title": "Scope"
+      },
+      {
+        "id": "s2",
+        "pages": "5-8",
+        "title": "Obligations"
+      },
+      {
+        "id": "s3",
+        "pages": "9-12",
+        "title": "Signatures"
+      }
+    ],
+    "fileSystem": [
+      {
+        "id": "f1",
+        "name": "contracts",
+        "type": "folder",
+        "children": 3
+      },
+      {
+        "id": "f2",
+        "name": "legal-contract.docx",
+        "type": "docx",
+        "sizeBytes": 184320
+      },
+      {
+        "id": "f3",
+        "name": "quarterly-report.pdf",
+        "type": "pdf",
+        "sizeBytes": 2416640
+      }
+    ],
+    "pageImage": "/samples/contract-page.png",
+    "pageWidth": 1000,
+    "pageHeight": 1330,
+    "boundingBoxCitations": {
+      "fields": [
+        {
+          "key": "vendor_name",
+          "schema": {
+            "type": "string",
+            "title": "Vendor name"
+          },
+          "actual": "Northwind Industrial Supplies",
+          "expected": "Northwind Industrial Supplies",
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 8,
+              "top": 9,
+              "width": 42,
+              "height": 4.5
+            }
+          },
+          "metadataPath": "vendor_name"
+        },
+        {
+          "key": "invoice_total",
+          "schema": {
+            "type": "number",
+            "title": "Invoice total"
+          },
+          "actual": 2882.58,
+          "expected": 2882.58,
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 62,
+              "top": 64,
+              "width": 30,
+              "height": 4
+            }
+          },
+          "metadataPath": "invoice_total"
+        },
+        {
+          "key": "payment_terms",
+          "schema": {
+            "type": "string",
+            "title": "Payment terms"
+          },
+          "actual": "Net 30",
+          "expected": "Net 30",
+          "location": {
+            "page": 1,
+            "area": {
+              "left": 8,
+              "top": 88,
+              "width": 50,
+              "height": 4
+            }
+          },
+          "metadataPath": "payment_terms"
+        }
+      ],
+      "modifiedFieldKey": "payment_terms",
+      "modifiedExpected": "Net 45"
+    },
+    "layoutPageBlocks": [
+      {
+        "id": "block-1",
+        "type": "heading",
+        "text": "MASTER SERVICES AGREEMENT",
+        "confidence": 0.98,
+        "page": 1,
+        "bbox": [
+          90,
+          65,
+          640,
+          55
+        ]
+      },
+      {
+        "id": "block-2",
+        "type": "paragraph",
+        "text": "Provider will deliver document intelligence and workflow automation for the customer's finance operations.",
+        "confidence": 0.89,
+        "page": 1,
+        "bbox": [
+          90,
+          148,
+          820,
+          130
+        ]
+      },
+      {
+        "id": "block-3",
+        "type": "table",
+        "text": "Service level targets and response windows for each severity level.",
+        "confidence": 0.77,
+        "page": 2,
+        "bbox": [
+          90,
+          870,
+          820,
+          190
+        ]
+      },
+      {
+        "id": "block-4",
+        "type": "figure",
+        "text": "Figure 1 - Payment flow",
+        "confidence": 0.91,
+        "page": 2,
+        "bbox": [
+          90,
+          1195,
+          650,
+          60
+        ]
+      }
+    ],
+    "documentSplits": {
+      "thumbnailImage": "/samples/contract-page.png",
+      "splits": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2",
+            "page-3"
+          ]
+        },
+        {
+          "id": "split-2",
+          "title": "Model architecture",
+          "pages": [
+            "page-4",
+            "page-5",
+            "page-6",
+            "page-7"
+          ]
+        },
+        {
+          "id": "split-3",
+          "title": "Training and results",
+          "pages": [
+            "page-8",
+            "page-9",
+            "page-10"
+          ]
+        }
+      ],
+      "singleSplit": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2",
+            "page-3"
+          ]
+        }
+      ],
+      "emptyPagesSplit": [
+        {
+          "id": "split-1",
+          "title": "Abstract and intro",
+          "pages": [
+            "page-1",
+            "page-2"
+          ]
+        },
+        {
+          "id": "split-2",
+          "title": "Model architecture",
+          "pages": []
+        }
+      ]
+    }
+  },
+  "docxToolbar": {
+    "activePage": 1,
+    "pageCount": 8,
+    "zoomPercent": 100,
+    "sidebarOpen": true,
+    "showComments": true,
+    "showTrackedChanges": true,
+    "showUpload": true,
+    "showDownload": true,
+    "isDark": false
+  },
+  "xlsxToolbar": {
+    "zoomPercent": 100,
+    "fileName": "financial-model.xlsx",
+    "showUpload": true,
+    "showDownload": true,
+    "showExport": true
+  },
+  "xlsxSheetTabs": {
+    "activeIndex": 1,
+    "sheets": [
+      "Dashboard",
+      "Revenue Chart",
+      "P&L"
+    ]
+  },
+  "xlsxStatusBar": {
+    "segments": [
+      "A1:C10",
+      "Count: 3",
+      "Sum: 42",
+      "Selected"
+    ],
+    "note": "kept short so the strip stays inside a 390px viewport; overflowing segments are clipped by the reference strip and are not part of the compared surface"
+  },
+  "pptxToolbar": {
+    "activeSlideIndex": 2,
+    "slideCount": 12,
+    "zoomPercent": 100,
+    "sidebarOpen": false,
+    "showDownload": true,
+    "showUpload": true
+  },
+  "pptxSorter": {
+    "aspectRatio": 1.7777777777777777,
+    "width": 960,
+    "height": 540,
+    "thumbnailWidth": 132,
+    "cardCount": 6,
+    "columns": 3
+
+  }
+}

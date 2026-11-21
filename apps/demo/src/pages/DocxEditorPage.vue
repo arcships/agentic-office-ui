@@ -19,6 +19,7 @@
         :editor="editor"
         :editable="!isReadOnly"
         :show-toolbar="true"
+        :is-dark="isDark"
         style="height: 76vh;"
       />
       <div v-else class="empty"><p>编辑器正在初始化……</p></div>
@@ -58,6 +59,7 @@
 import { computed, ref } from "vue"
 import { DocxEditorViewer, useDocxEditor } from "@arcships/vue-docx"
 import { createBlankDocumentModel, type DocModel } from "@arcships/docx-core"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 // ── Starter model ────────────────────────────────────────────────────
 const starterModel: DocModel = {
@@ -253,6 +255,7 @@ const selectionSnapshot = computed(() => JSON.stringify({
 
 // ── UI toggles ───────────────────────────────────────────────────────
 const isReadOnly = ref(false)
+const isDark = readDemoTheme() === "dark"
 
 const exportBytesState = ref<"idle" | "running" | "ready" | "error">("idle")
 const exportBytesSnapshot = ref("")

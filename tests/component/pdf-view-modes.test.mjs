@@ -91,6 +91,13 @@ function classNames(node) {
   return String(node?.props?.class || "").split(/\s+/).filter(Boolean);
 }
 
+async function chooseToolbarAction(root, testId) {
+  findByTestId(root, "pdf-actions").props.onClick();
+  await waitFor(() => findByTestId(root, testId) !== undefined, `${testId} actions item`);
+  findByTestId(root, testId).props.onClick();
+  await vue.nextTick();
+}
+
 function nodesWithClass(root, className) {
   return walk(root).filter((node) => classNames(node).includes(className));
 }
@@ -258,9 +265,8 @@ test("PdfViewer spread renders the active page and its facing page", async (t) =
   assert.equal(findByTestId(mounted.root, "pdf-page").props["data-page-number"], 1);
 
   // Page navigation keeps the pair in sync: page 3 faces page 4.
-  findByTestId(mounted.root, "pdf-next-page").props.onClick();
-  await vue.nextTick();
-  findByTestId(mounted.root, "pdf-next-page").props.onClick();
+  await chooseToolbarAction(mounted.root, "pdf-next-page");
+  await chooseToolbarAction(mounted.root, "pdf-next-page");
   await waitFor(
     () => findByTestId(mounted.root, "pdf-page")?.props["data-page-number"] === 3,
     "active page 3",
@@ -327,8 +333,7 @@ test("PdfViewer continuous mode lays out every page and keeps the active page ac
   );
 
   // Switching to single-page mode keeps page 3 selected.
-  const layoutSelect = findByTestId(mounted.root, "pdf-page-layout");
-  layoutSelect.props.onChange({ target: { value: "single" } });
+  await chooseToolbarAction(mounted.root, "pdf-page-layout-single");
   await waitFor(
     () => nodesWithClass(mounted.root, "pdf-frame-wrap")[0].props["data-page-layout"] === "single",
     "single-page layout",

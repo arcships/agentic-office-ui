@@ -15,6 +15,10 @@ import {
 // update. The custom component renderer intentionally has no browser DOM.
 if (globalThis.Document === undefined) globalThis.Document = class Document {};
 if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
+// Reka UI primitives check refs against these constructors even when the
+// custom renderer has no real DOM; the stubs keep mounting DOM-free.
+if (globalThis.Element === undefined) globalThis.Element = class Element {};
+if (globalThis.DocumentFragment === undefined) globalThis.DocumentFragment = class DocumentFragment {};
 
 const { PptxViewer } = await importFromDemo("@arcships/vue-pptx");
 
@@ -101,13 +105,29 @@ async function mountViewer(props = {}) {
   return { ...mounted, calls: fake.calls };
 }
 
+/**
+ * Layout/present/notes/fullscreen/find live in the upstream-style actions menu
+ * so the resting toolbar row keeps the pinned Extend controls and order.
+ */
+async function openActions(root) {
+  findByTestId(root, "pptx-actions").props.onClick();
+  await vue.nextTick();
+}
+
+async function selectViewMode(root, mode) {
+  await openActions(root);
+  findByTestId(root, `pptx-view-mode-${mode}`).props.onClick();
+  await vue.nextTick();
+}
+
 test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
   const mounted = await mountViewer({ slideCount: 5 });
   const sorter = findByTestId(mounted.root, "pptx-sorter");
   assert.equal(sorter, undefined, "single view is the default browse layout");
 
+  await openActions(mounted.root);
   const sorterButton = findByTestId(mounted.root, "pptx-view-mode-sorter");
-  assert.equal(sorterButton.props["aria-pressed"], false);
+  assert.notEqual(sorterButton.props["aria-checked"], true, "single view is checked, not the sorter");
   sorterButton.props.onClick();
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
@@ -127,8 +147,9 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
     0,
     "the current slide stays selected when the sorter opens",
   );
+  await openActions(mounted.root);
   assert.equal(
-    findByTestId(mounted.root, "pptx-view-mode-sorter").props["aria-pressed"],
+    findByTestId(mounted.root, "pptx-view-mode-sorter").props["aria-checked"],
     true,
   );
   assert.deepEqual(mounted.warnings, []);
@@ -137,7 +158,7 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
 
 test("PPTX sorter selection stays in sync with the slide and the single view", async () => {
   const mounted = await mountViewer({ slideCount: 5 });
-  findByTestId(mounted.root, "pptx-view-mode-sorter").props.onClick();
+  await selectViewMode(mounted.root, "sorter");
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
   // Selecting a sorter cell moves the deck to that slide without closing the grid.
@@ -154,7 +175,7 @@ test("PPTX sorter selection stays in sync with the slide and the single view", a
   assert.ok(findByTestId(mounted.root, "pptx-sorter"), "the grid stays open after selecting a slide");
 
   // Switching back to the single view keeps the same slide selected.
-  findByTestId(mounted.root, "pptx-view-mode-single").props.onClick();
+  await selectViewMode(mounted.root, "single");
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") === undefined, "sorter closed");
   assert.equal(
     findByTestId(mounted.root, "pptx-viewer").props["data-slide-index"],
@@ -167,7 +188,7 @@ test("PPTX sorter selection stays in sync with the slide and the single view", a
 
 test("PPTX sorter only mounts the slides around the visible rows", async () => {
   const mounted = await mountViewer({ slideCount: 40 });
-  findByTestId(mounted.root, "pptx-view-mode-sorter").props.onClick();
+  await selectViewMode(mounted.root, "sorter");
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
   const sorter = findByTestId(mounted.root, "pptx-sorter");
@@ -198,7 +219,7 @@ test("PPTX sorter only mounts the slides around the visible rows", async () => {
 
 test("PPTX sorter keeps browse keys scrolling instead of changing slides", async () => {
   const mounted = await mountViewer({ slideCount: 30 });
-  findByTestId(mounted.root, "pptx-view-mode-sorter").props.onClick();
+  await selectViewMode(mounted.root, "sorter");
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
   const viewer = findByTestId(mounted.root, "pptx-viewer");

@@ -62,6 +62,14 @@
           <option v-for="zoom in zoomOptions" :key="zoom" :value="zoom">{{ zoom }}%</option>
         </select>
       </label>
+      <label class="select-label">
+        viewMode
+        <select v-model="viewMode" data-testid="docx-prop-view-mode">
+          <option value="continuous">continuous</option>
+          <option value="single">single</option>
+          <option value="spread">spread</option>
+        </select>
+      </label>
     </fieldset>
 
     <div class="viewer-container product-surface">
@@ -76,10 +84,12 @@
         :show-download="showDownload"
         :default-thumbnails-open="defaultThumbnailsOpen"
         :default-zoom="defaultZoom"
+        :view-mode="viewMode"
         v-model:is-dark="isDark"
         v-model:show-tracked-changes="showTrackedChanges"
         v-model:show-comments="showComments"
         style="height: 78vh;"
+        @update:view-mode="viewMode = $event"
         @load-start="onViewerLoadStart"
         @load-success="onViewerLoadSuccess"
         @load-error="onViewerLoadError"
@@ -168,6 +178,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef } from "vue"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 import {
   bundledDocxWasmUrl,
   createDocxRuntime,
@@ -223,8 +234,9 @@ const showToolbar = ref(true)
 const showUpload = ref(true)
 const showDownload = ref(true)
 const defaultThumbnailsOpen = ref(false)
-const isDark = ref(false)
+const isDark = ref(readDemoTheme() === "dark")
 const defaultZoom = ref(100)
+const viewMode = ref<import("@arcships/vue-docx").DocxViewMode>("continuous")
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const diagnostics = ref<VisibleDiagnostic[]>([])
 const sourceGraph = shallowRef<DocumentSourceGraph | null>(null)

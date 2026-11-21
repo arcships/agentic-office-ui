@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "description": "Known accessibility findings for the core components, keyed by surface and either an axe rule id (`rule`) or a keyboard check name (`check`). Every entry needs an owner issue and a reason, and the run fails on anything not listed here. Remove an entry as soon as the owning issue fixes it; stale entries are reported.",
+  "entries": [
+    {
+      "surface": "button",
+      "rule": "button-name",
+      "issue": "#157",
+      "reason": "The loading state hides the label with `visibility: hidden` (matching shadcn's spinner overlay), so the accessible name disappears while busy. #157 owns the primitive; the fix is an aria-label when loading or an opacity-based hide that keeps the text in the accessibility tree."
+    },
+    {
+      "surface": "button",
+      "rule": "color-contrast",
+      "issue": "#157",
+      "reason": "The destructive variant uses Extend's `--office-destructive` pair (white on #fb2c36 = 3.8:1). The ratio comes from the pinned upstream token, so fixing it is a design-system decision owned by #157, not a local override."
+    },
+    {
+      "surface": "pdf-sidebar",
+      "check": "focus-indicator",
+      "issue": "#162",
+      "reason": "The PDF sidebar's thumbnail list is reachable with Tab but paints no focus ring; the component belongs to the PDF chrome (#162) and the shared sidebar (#158)."
+    }
+  ]
+}

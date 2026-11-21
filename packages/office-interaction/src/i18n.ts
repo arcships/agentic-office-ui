@@ -54,6 +54,14 @@ export interface OfficeZoomMessages {
   out: string
   level: string
   reset: string
+  /** Zoom-select preset: scale the page to the available width. */
+  fitWidth: string
+  /** Zoom-select preset: scale the page to fit the viewport height. */
+  fitPage: string
+  /** Zoom-select preset: 100% without fit scaling. */
+  actualSize: string
+  /** Percent label template with a `{value}` placeholder. */
+  percent: string
 }
 
 export interface OfficePageMessages {
@@ -67,6 +75,29 @@ export interface OfficePageMessages {
   of: string
   /** Template with `{current}` and `{total}` placeholders. */
   indicator: string
+}
+
+/** Shared labels for the Office viewer/editor chrome (issue #158). */
+export interface OfficeChromeMessages {
+  /** Accessible name of `OfficeToolbar`; hosts can override with `label`. */
+  toolbar: string
+  /** Accessible name of `DocumentViewerSidebar`. */
+  sidebar: string
+  /** Accessible name of the sidebar toggle rendered by hosts. */
+  sidebarToggle: string
+  /** Accessible name of `OfficeStatusBar`. */
+  statusBar: string
+  /** Label prefix shown before a document file name. */
+  fileName: string
+  error: string
+  warning: string
+  retry: string
+  emptyTitle: string
+  emptyDescription: string
+  errorTitle: string
+  errorDescription: string
+  loadingTitle: string
+  loadingDescription: string
 }
 
 export interface OfficeCommonMessages {
@@ -140,7 +171,67 @@ export interface OfficeCommonMessages {
     imageText: string
     /** Template with a `{text}` placeholder. */
     textLabel: string
+    heading: string
+    listItem: string
+    textBlock: string
+    link: string
+    formField: string
+    /** Template with a `{name}` placeholder. */
+    formFieldName: string
+    annotation: string
+    /** Template with a `{text}` placeholder. */
+    annotationText: string
+    /** Template with a `{id}` placeholder. */
+    annotationById: string
+    /** Template with a `{target}` placeholder. */
+    actionTarget: string
+    /** Template with a `{name}` placeholder. */
+    tableByName: string
+    /** Template with a `{name}` placeholder. */
+    chartSeries: string
+    /** Template with a `{number}` placeholder. */
+    chartPoint: string
+    /** Template with a `{number}` placeholder. */
+    legendEntry: string
+    /** Template with a `{name}` placeholder. */
+    styleName: string
+    /** Template with a `{name}` placeholder. */
+    bookmarkName: string
+    /** Template with a `{name}` placeholder. */
+    fieldName: string
+    /** Template with a `{number}` placeholder. */
+    section: string
+    /** Template with a `{author}` placeholder. */
+    trackedChange: string
+    /** Template with a `{state}` placeholder. */
+    commentState: string
+    /** Template with a `{name}` placeholder. */
+    crossReference: string
+    /** Template with a `{formula}` placeholder. */
+    formulaLabel: string
+    /** Template with a `{number}` placeholder. */
+    conditionalFormat: string
+    /** Template with a `{number}` placeholder. */
+    dataValidation: string
+    /** Template with a `{name}` placeholder. */
+    namedRange: string
+    protection: string
+    /** Template with a `{number}` placeholder. */
+    animation: string
+    transition: string
+    action: string
+    master: string
+    layout: string
+    note: string
+    /** Template with a `{name}` placeholder. */
+    attachment: string
+    /** Template with a `{name}` placeholder. */
+    layer: string
+    /** Template with a `{name}` placeholder. */
+    signature: string
+    permission: string
   }
+  chrome: OfficeChromeMessages
 }
 
 export interface OfficeDocxMessages {
@@ -199,6 +290,8 @@ export interface OfficeDocxMessages {
     /** Fit-to-viewport toggles. */
     fitWidth: string
     fitPage: string
+    /** Trigger for the compact toolbar overflow menu. */
+    moreActions: string
     lightThemeAction: string
     darkThemeAction: string
     lightDocument: string
@@ -721,6 +814,8 @@ export interface OfficeXlsxMessages {
     export: string
     printPreview: string
     pageBreaks: string
+    /** Trigger for the workbook actions (overflow) menu. */
+    moreActions: string
   }
   statusBar: {
     /** Accessible label of the selected cell/range address. */
@@ -1166,10 +1261,25 @@ export interface OfficePptxMessages {
     previousSlide: string
     nextSlide: string
     hiddenSlide: string
-    /** Browse layout control: single slide list or slide-sorter grid. */
+    /** Accessible name of the viewer toolbar. */
+    toolbar: string
+    /** Slide-counter label that precedes the number (upstream: "Slide"). */
+    slideLabel: string
+    /** Accessible name of the editable slide-number field. */
+    slideNumberInput: string
+    /** Accessible name of the slide number button; `{number}` placeholder. */
+    editSlideNumber: string
+    /** Trigger of the upstream-style actions menu in the toolbar. */
+    moreActions: string
+    /** Browse layout control: single slide list, slide-sorter grid or present. */
     viewMode: string
     viewModeSingle: string
     viewModeSorter: string
+    viewModePresent: string
+    /** Leaves presentation mode and returns to the single browse layout. */
+    viewModeBrowse: string
+    /** Toolbar toggle for the speaker-notes / presenter rail. */
+    notesToggle: string
     /** Accessible name of the slide-sorter grid. */
     sorter: string
     searchPlaceholder: string
@@ -1179,6 +1289,9 @@ export interface OfficePptxMessages {
     loading: string
     waiting: string
     cancelled: string
+    /** Password-protected or legacy binary (OLE/CFB) presentations. */
+    encryptedTitle: string
+    encryptedDescription: string
     /** Rejected drop: the file type is not a PowerPoint presentation. */
     unsupportedDrop: string
     reload: string
@@ -1276,6 +1389,10 @@ export interface OfficePptxMessages {
     /** Template with a `{number}` placeholder. */
     hiddenLabel: string
     hidden: string
+    /** Accessible name of the thumbnail loading skeleton. */
+    loading: string
+    /** Shown when the thumbnail renderer rejects. */
+    failed: string
   }
   stage: {
     region: string
@@ -1294,10 +1411,15 @@ export interface OfficePdfMessages {
     pageLayoutSpread: string
     pageInput: string
     rotateClockwise: string
+    rotateCounterclockwise: string
     searchLabel: string
     searchPlaceholder: string
     search: string
     download: string
+    /** Print the whole document through the browser print dialog. */
+    print: string
+    /** Trigger for the toolbar overflow actions menu. */
+    moreActions: string
     thumbnails: string
     /** Template with a `{page}` placeholder. */
     thumbnailAlt: string
@@ -1317,6 +1439,17 @@ export interface OfficePdfMessages {
     /** Rejected drop: the file type is not a PDF document. */
     unsupportedDrop: string
     selectionLayer: string
+    /** A password is required to unlock an encrypted document. */
+    passwordRequired: string
+    /** Accessible name of the floating text-selection toolbar. */
+    selectionActions: string
+    copySelection: string
+    copiedSelection: string
+    /** Accessible name of the link hover card. */
+    linkActions: string
+    openLink: string
+    /** Title of the annotation details dialog. */
+    annotationDetails: string
   }
   surface: {
     noPdf: string
@@ -1364,6 +1497,15 @@ export interface OfficeMessages {
   pptx: OfficePptxMessages
   pdf: OfficePdfMessages
   vueUi: {
+    primitives: {
+      /** Accessible name for the dialog/sheet dismiss control and the primitive close label. */
+      close: string
+      loading: string
+      menu: string
+      notifications: string
+      dialog: string
+      more: string
+    }
     regionSelector: {
       label: string
       instructions: string
@@ -1379,19 +1521,104 @@ export interface OfficeMessages {
       /** Template with `{label}`, `{kind}` and `{reliability}` placeholders. */
       itemDescription: string
     }
+    regionAnnotator: {
+      defaultAriaLabel: string
+      toolbarLabel: string
+      arrow: string
+      rectangle: string
+      text: string
+      highlight: string
+      color: string
+      remove: string
+      clear: string
+      empty: string
+      imageAlt: string
+      textPlaceholder: string
+      textSave: string
+      textCancel: string
+      hint: string
+      /** Template with a `{count}` placeholder. */
+      count: string
+    }
     boundingBox: {
       noFields: string
       imageAlt: string
+      formTab: string
+      jsonTab: string
+      actual: string
+      expected: string
+      revert: string
+      setNull: string
+      modified: string
+      loading: string
+      error: string
+      reviewView: string
     }
     fileUpload: {
       prompt: string
+      title: string
+      description: string
+      browse: string
+      drop: string
+      ready: string
+      rejected: string
+      unknownType: string
     }
     layoutBlocks: {
       noBlocks: string
       imageAlt: string
+      loading: string
+      error: string
+      markdown: string
+      blockLabels: {
+        heading: string
+        paragraph: string
+        list: string
+        table: string
+        figure: string
+        header: string
+        footer: string
+        pageNumber: string
+      }
     }
     signaturePad: {
       clear: string
+      cancel: string
+      confirm: string
+      drawn: string
+      typed: string
+      typePlaceholder: string
+      previewAlt: string
+      signed: string
+      unsigned: string
+      sign: string
+      edit: string
+      export: string
+      exporting: string
+      dialogTitle: string
+      dialogDescription: string
+      fieldsTitle: string
+      fieldsDescription: string
+      /** Template with `{width}`, `{height}` and `{page}` placeholders. */
+      sizeOnPage: string
+      loading: string
+      error: string
+    }
+    documentSplits: {
+      addSplit: string
+      dropPages: string
+      noPages: string
+      noSplits: string
+      loading: string
+      error: string
+      remove: string
+      reorder: string
+      /** Template with a `{pages}` placeholder. */
+      pageRange: string
+      /** Template with a `{number}` placeholder. */
+      splitFallback: string
+      /** Template with a `{number}` placeholder. */
+      pageTitle: string
     }
     fileThumbnail: {
       unknownType: string
@@ -1438,6 +1665,10 @@ export const officeMessagesEn: OfficeMessages = {
       out: "Zoom out",
       level: "Zoom level",
       reset: "Fit to window",
+      fitWidth: "Fit width",
+      fitPage: "Fit page",
+      actualSize: "Actual size",
+      percent: "{value}%",
     },
     page: {
       label: "Page",
@@ -1488,6 +1719,58 @@ export const officeMessagesEn: OfficeMessages = {
       imageId: "Image {id}",
       imageText: "Image: {text}",
       textLabel: "Text: {text}",
+      heading: "Heading",
+      listItem: "List item",
+      textBlock: "Text block",
+      link: "Link",
+      formField: "Form field",
+      formFieldName: "Form field: {name}",
+      annotation: "Annotation",
+      annotationText: "Annotation: {text}",
+      annotationById: "Annotation {id}",
+      actionTarget: "Action: {target}",
+      tableByName: "Table {name}",
+      chartSeries: "Series: {name}",
+      chartPoint: "Point {number}",
+      legendEntry: "Legend entry {number}",
+      styleName: "Style: {name}",
+      bookmarkName: "Bookmark: {name}",
+      fieldName: "Field: {name}",
+      section: "Section {number}",
+      trackedChange: "Revision by {author}",
+      commentState: "Comment state: {state}",
+      crossReference: "Cross-reference: {name}",
+      formulaLabel: "Formula: {formula}",
+      conditionalFormat: "Conditional format {number}",
+      dataValidation: "Data validation {number}",
+      namedRange: "Named range: {name}",
+      protection: "Sheet protection",
+      animation: "Animation {number}",
+      transition: "Slide transition",
+      action: "Action",
+      master: "Slide master",
+      layout: "Slide layout",
+      note: "Speaker notes",
+      attachment: "Attachment: {name}",
+      layer: "Optional content: {name}",
+      signature: "Signature: {name}",
+      permission: "Permissions",
+    },
+    chrome: {
+      toolbar: "Document toolbar",
+      sidebar: "Document pages",
+      sidebarToggle: "Toggle document pages",
+      statusBar: "Document status",
+      fileName: "File",
+      error: "Error",
+      warning: "Warning",
+      retry: "Try again",
+      emptyTitle: "No document open",
+      emptyDescription: "Open a file to get started.",
+      errorTitle: "Unable to open this document",
+      errorDescription: "Check the file and try again.",
+      loadingTitle: "Opening document",
+      loadingDescription: "Preparing the document…",
     },
   },
   docx: {
@@ -1535,6 +1818,7 @@ export const officeMessagesEn: OfficeMessages = {
       viewModeSpread: "Two-page spread",
       fitWidth: "Fit width",
       fitPage: "Fit page",
+      moreActions: "More toolbar actions",
       lightThemeAction: "Use light document theme",
       darkThemeAction: "Use dark document theme",
       lightDocument: "Light document",
@@ -2014,6 +2298,7 @@ export const officeMessagesEn: OfficeMessages = {
       export: "Export XLSX",
       printPreview: "Print preview",
       pageBreaks: "Page break preview",
+      moreActions: "Open workbook actions",
     },
     statusBar: {
       range: "Selected range",
@@ -2432,9 +2717,17 @@ export const officeMessagesEn: OfficeMessages = {
       previousSlide: "Previous slide",
       nextSlide: "Next slide",
       hiddenSlide: "Hidden slide",
+      toolbar: "Presentation toolbar",
+      slideLabel: "Slide",
+      slideNumberInput: "Slide number",
+      editSlideNumber: "Current slide {number}. Edit slide number",
+      moreActions: "Open PowerPoint actions",
       viewMode: "Browse layout",
       viewModeSingle: "Single slide view",
       viewModeSorter: "Slide sorter",
+      viewModePresent: "Present",
+      viewModeBrowse: "Exit presentation",
+      notesToggle: "Speaker notes",
       sorter: "Slide sorter",
       searchPlaceholder: "Search slides",
       search: "Search",
@@ -2443,6 +2736,8 @@ export const officeMessagesEn: OfficeMessages = {
       loading: "Loading PPTX…",
       waiting: "Waiting for the slide stage…",
       cancelled: "PPTX loading was cancelled.",
+      encryptedTitle: "Presentation is protected",
+      encryptedDescription: "This presentation is password-protected or saved in the legacy binary format. Remove the password or save it as .pptx and try again.",
       unsupportedDrop: "Only .pptx, .pptm, .ppsx, .ppsm, .potx and .potm files are supported",
       reload: "Reload",
       retry: "Retry",
@@ -2523,6 +2818,8 @@ export const officeMessagesEn: OfficeMessages = {
       label: "Slide {number}",
       hiddenLabel: "Slide {number}, hidden",
       hidden: "Hidden",
+      loading: "Loading thumbnail",
+      failed: "Thumbnail unavailable",
     },
     stage: {
       region: "Choose slide area",
@@ -2539,10 +2836,13 @@ export const officeMessagesEn: OfficeMessages = {
       pageLayoutSpread: "Two-page spread",
       pageInput: "Page number",
       rotateClockwise: "Rotate clockwise",
+      rotateCounterclockwise: "Rotate counterclockwise",
       searchLabel: "Search PDF text",
       searchPlaceholder: "Search text",
       search: "Search",
       download: "Download PDF",
+      print: "Print PDF",
+      moreActions: "More PDF actions",
       thumbnails: "Page thumbnails",
       thumbnailAlt: "Page {page} thumbnail",
       pageLabel: "Page {page}",
@@ -2556,6 +2856,13 @@ export const officeMessagesEn: OfficeMessages = {
       invalidPdf: "The PDF file could not be parsed or rendered.",
       unsupportedDrop: "Only PDF files are supported",
       selectionLayer: "PDF page text selection layer",
+      passwordRequired: "Enter the document password to unlock this PDF.",
+      selectionActions: "Selection actions",
+      copySelection: "Copy selection",
+      copiedSelection: "Copied",
+      linkActions: "Link preview",
+      openLink: "Open link",
+      annotationDetails: "Annotation details",
     },
     surface: {
       noPdf: "No PDF loaded",
@@ -2589,6 +2896,14 @@ export const officeMessagesEn: OfficeMessages = {
     },
   },
   vueUi: {
+    primitives: {
+      close: "Close",
+      loading: "Loading",
+      menu: "Menu",
+      notifications: "Notifications",
+      dialog: "Dialog",
+      more: "More",
+    },
     regionSelector: {
       label: "Selected region",
       instructions: "Drag to select a region. Use the arrow keys to move it, Shift+arrow keys to resize, Enter to confirm, and Escape to cancel.",
@@ -2602,19 +2917,99 @@ export const officeMessagesEn: OfficeMessages = {
       noCandidates: "No candidate objects",
       itemDescription: "{label}, type {kind}, reliability {reliability}",
     },
+    regionAnnotator: {
+      defaultAriaLabel: "Region annotation editor",
+      toolbarLabel: "Annotation tools",
+      arrow: "Arrow",
+      rectangle: "Rectangle",
+      text: "Text",
+      highlight: "Highlight",
+      color: "Annotation color",
+      remove: "Remove selected annotation",
+      clear: "Clear annotations",
+      empty: "Capture a region to annotate it.",
+      imageAlt: "Captured region preview",
+      textPlaceholder: "Annotation text",
+      textSave: "Add text",
+      textCancel: "Cancel text",
+      hint: "Drag on the image to draw. Select an annotation and press Delete to remove it.",
+      count: "{count} annotations",
+    },
     boundingBox: {
       noFields: "No fields to display",
       imageAlt: "Citation source preview",
+      formTab: "Form",
+      jsonTab: "JSON",
+      actual: "Actual",
+      expected: "Expected",
+      revert: "Revert changes",
+      setNull: "Set to NULL",
+      modified: "Modified",
+      loading: "Loading review fields…",
+      error: "Review fields could not be loaded.",
+      reviewView: "Review view",
     },
     fileUpload: {
       prompt: "Drag & drop files here, or click to select",
+      title: "Click to upload or drop files",
+      description: "PDF, DOC/DOCX, XLSX, CSV, PNG, or JPG",
+      browse: "Browse files",
+      drop: "Drop to add",
+      ready: "Ready",
+      rejected: "This file type is not supported here.",
+      unknownType: "Unknown type",
     },
     layoutBlocks: {
-      noBlocks: "No layout blocks detected",
+      noBlocks: "No layout blocks found.",
       imageAlt: "Layout preview",
+      loading: "Loading layout blocks…",
+      error: "Layout blocks could not be loaded.",
+      markdown: "Markdown",
+      blockLabels: {
+        heading: "Heading",
+        paragraph: "Paragraph",
+        list: "List",
+        table: "Table",
+        figure: "Figure",
+        header: "Header",
+        footer: "Footer",
+        pageNumber: "Page number",
+      },
     },
     signaturePad: {
       clear: "Clear",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      drawn: "Draw",
+      typed: "Type",
+      typePlaceholder: "Type your full name",
+      previewAlt: "Signature preview",
+      signed: "Signed",
+      unsigned: "Unsigned",
+      sign: "Sign",
+      edit: "Edit",
+      export: "Export signed PDF",
+      exporting: "Exporting...",
+      dialogTitle: "Add signature",
+      dialogDescription: "Draw a signature to place it into the selected PDF field.",
+      fieldsTitle: "Signature fields",
+      fieldsDescription: "Review fields, collect signatures, and export a signed PDF.",
+      sizeOnPage: "{width} x {height} on page {page}",
+      loading: "Loading signature fields…",
+      error: "Signature fields could not be loaded.",
+    },
+    documentSplits: {
+      addSplit: "Add split",
+      dropPages: "Drop pages here",
+      noPages: "No pages",
+      noSplits: "No document splits yet.",
+      loading: "Loading document splits…",
+      error: "Document splits could not be loaded.",
+      remove: "Remove {title}",
+      reorder: "Reorder {title}",
+      pageRange: "Pages {pages}",
+      splitFallback: "Split {number}",
+      pageTitle: "Page {number}",
     },
     fileThumbnail: {
       unknownType: "Unknown type",
@@ -2651,6 +3046,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       out: "缩小",
       level: "缩放比例",
       reset: "恢复适合窗口",
+      fitWidth: "适合宽度",
+      fitPage: "适合页面",
+      actualSize: "实际大小",
+      percent: "{value}%",
     },
     page: {
       label: "页",
@@ -2701,6 +3100,58 @@ export const officeMessagesZhCN: OfficeMessages = {
       imageId: "图片 {id}",
       imageText: "图片：{text}",
       textLabel: "文本：{text}",
+      heading: "标题",
+      listItem: "列表项",
+      textBlock: "文本块",
+      link: "链接",
+      formField: "表单控件",
+      formFieldName: "表单控件：{name}",
+      annotation: "批注标记",
+      annotationText: "批注标记：{text}",
+      annotationById: "批注标记 {id}",
+      actionTarget: "动作：{target}",
+      tableByName: "表格 {name}",
+      chartSeries: "系列：{name}",
+      chartPoint: "数据点 {number}",
+      legendEntry: "图例项 {number}",
+      styleName: "样式：{name}",
+      bookmarkName: "书签：{name}",
+      fieldName: "域：{name}",
+      section: "第 {number} 节",
+      trackedChange: "{author} 的修订",
+      commentState: "批注状态：{state}",
+      crossReference: "交叉引用：{name}",
+      formulaLabel: "公式：{formula}",
+      conditionalFormat: "条件格式 {number}",
+      dataValidation: "数据验证 {number}",
+      namedRange: "命名区域：{name}",
+      protection: "工作表保护",
+      animation: "动画 {number}",
+      transition: "幻灯片切换",
+      action: "动作",
+      master: "幻灯片母版",
+      layout: "幻灯片版式",
+      note: "演讲者备注",
+      attachment: "附件：{name}",
+      layer: "可选内容组：{name}",
+      signature: "签名：{name}",
+      permission: "权限",
+    },
+    chrome: {
+      toolbar: "文档工具栏",
+      sidebar: "文档页面",
+      sidebarToggle: "切换文档页面",
+      statusBar: "文档状态",
+      fileName: "文件",
+      error: "错误",
+      warning: "警告",
+      retry: "重试",
+      emptyTitle: "未打开文档",
+      emptyDescription: "打开一个文件开始。",
+      errorTitle: "无法打开此文档",
+      errorDescription: "请检查文件后重试。",
+      loadingTitle: "正在打开文档",
+      loadingDescription: "正在准备文档…",
     },
   },
   docx: {
@@ -2747,6 +3198,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       viewModeSpread: "双页",
       fitWidth: "适应宽度",
       fitPage: "适应页面",
+      moreActions: "更多工具栏操作",
       lightThemeAction: "使用浅色文档主题",
       darkThemeAction: "使用深色文档主题",
       lightDocument: "浅色文档",
@@ -3226,6 +3678,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       export: "导出 XLSX",
       printPreview: "打印预览",
       pageBreaks: "分页预览",
+      moreActions: "打开工作簿操作",
     },
     statusBar: {
       range: "选定区域",
@@ -3644,9 +4097,17 @@ export const officeMessagesZhCN: OfficeMessages = {
       previousSlide: "上一页",
       nextSlide: "下一页",
       hiddenSlide: "隐藏页",
+      toolbar: "幻灯片工具栏",
+      slideLabel: "幻灯片",
+      slideNumberInput: "幻灯片编号",
+      editSlideNumber: "当前第 {number} 张幻灯片，可编辑编号",
+      moreActions: "打开 PowerPoint 操作菜单",
       viewMode: "浏览布局",
       viewModeSingle: "单页视图",
       viewModeSorter: "幻灯片浏览",
+      viewModePresent: "演示",
+      viewModeBrowse: "退出演示",
+      notesToggle: "演讲者备注",
       sorter: "幻灯片浏览",
       searchPlaceholder: "搜索幻灯片",
       search: "搜索",
@@ -3655,6 +4116,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       loading: "正在加载 PPTX…",
       waiting: "正在等待幻灯片舞台…",
       cancelled: "PPTX 加载已取消。",
+      encryptedTitle: "演示文稿受保护",
+      encryptedDescription: "该演示文稿已加密，或保存为旧版二进制格式。请取消密码保护或另存为 .pptx 后重试。",
       unsupportedDrop: "仅支持 .pptx、.pptm、.ppsx、.ppsm、.potx 和 .potm 文件",
       reload: "重新加载",
       retry: "重试",
@@ -3735,6 +4198,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       label: "第 {number} 页",
       hiddenLabel: "第 {number} 页，隐藏页",
       hidden: "隐藏",
+      loading: "正在加载缩略图",
+      failed: "缩略图不可用",
     },
     stage: {
       region: "选择幻灯片区域",
@@ -3751,10 +4216,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageLayoutSpread: "双页",
       pageInput: "页码",
       rotateClockwise: "顺时针旋转",
+      rotateCounterclockwise: "逆时针旋转",
       searchLabel: "搜索 PDF 文本",
       searchPlaceholder: "搜索文本",
       search: "搜索",
       download: "下载 PDF",
+      print: "打印 PDF",
+      moreActions: "更多 PDF 操作",
       thumbnails: "页面缩略图",
       thumbnailAlt: "第 {page} 页缩略图",
       pageLabel: "第 {page} 页",
@@ -3768,6 +4236,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       invalidPdf: "PDF 文件无法解析或渲染。",
       unsupportedDrop: "仅支持 PDF 文件",
       selectionLayer: "PDF 页面文本选择层",
+      passwordRequired: "输入文档密码以解锁此 PDF。",
+      selectionActions: "选中内容操作",
+      copySelection: "复制选中内容",
+      copiedSelection: "已复制",
+      linkActions: "链接预览",
+      openLink: "打开链接",
+      annotationDetails: "批注详情",
     },
     surface: {
       noPdf: "未加载 PDF",
@@ -3801,6 +4276,14 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
   },
   vueUi: {
+    primitives: {
+      close: "关闭",
+      loading: "加载中",
+      menu: "菜单",
+      notifications: "通知",
+      dialog: "对话框",
+      more: "更多",
+    },
     regionSelector: {
       label: "选定区域",
       instructions: "拖动以框选区域。方向键移动区域，按住 Shift 配合方向键调整大小，Enter 确认，Escape 取消。",
@@ -3814,19 +4297,99 @@ export const officeMessagesZhCN: OfficeMessages = {
       noCandidates: "没有候选对象",
       itemDescription: "{label}，类型 {kind}，识别可靠度 {reliability}",
     },
+    regionAnnotator: {
+      defaultAriaLabel: "区域标注编辑器",
+      toolbarLabel: "标注工具",
+      arrow: "箭头",
+      rectangle: "矩形",
+      text: "文字",
+      highlight: "高亮",
+      color: "标注颜色",
+      remove: "删除选中的标注",
+      clear: "清除所有标注",
+      empty: "先框选并截图，然后在此添加标注。",
+      imageAlt: "区域截图预览",
+      textPlaceholder: "标注文字",
+      textSave: "添加文字",
+      textCancel: "取消文字",
+      hint: "在图片上拖动即可绘制。选中标注后按 Delete 删除。",
+      count: "{count} 条标注",
+    },
     boundingBox: {
       noFields: "没有可显示的字段",
       imageAlt: "引用来源预览",
+      formTab: "表单",
+      jsonTab: "JSON",
+      actual: "实际值",
+      expected: "预期值",
+      revert: "撤销修改",
+      setNull: "设为 NULL",
+      modified: "已修改",
+      loading: "正在加载审核字段…",
+      error: "审核字段加载失败。",
+      reviewView: "审核视图",
     },
     fileUpload: {
       prompt: "将文件拖放到此处，或点击选择",
+      title: "点击上传或拖放文件",
+      description: "PDF、DOC/DOCX、XLSX、CSV、PNG 或 JPG",
+      browse: "浏览文件",
+      drop: "拖放以添加",
+      ready: "就绪",
+      rejected: "不支持此文件类型。",
+      unknownType: "未知类型",
     },
     layoutBlocks: {
-      noBlocks: "未检测到布局块",
+      noBlocks: "未找到布局块。",
       imageAlt: "布局预览",
+      loading: "正在加载布局块…",
+      error: "布局块加载失败。",
+      markdown: "Markdown",
+      blockLabels: {
+        heading: "标题",
+        paragraph: "段落",
+        list: "列表",
+        table: "表格",
+        figure: "图形",
+        header: "页眉",
+        footer: "页脚",
+        pageNumber: "页码",
+      },
     },
     signaturePad: {
       clear: "清除",
+      cancel: "取消",
+      confirm: "确认",
+      drawn: "手写",
+      typed: "输入",
+      typePlaceholder: "输入完整姓名",
+      previewAlt: "签名预览",
+      signed: "已签名",
+      unsigned: "未签名",
+      sign: "签名",
+      edit: "编辑",
+      export: "导出已签名 PDF",
+      exporting: "正在导出...",
+      dialogTitle: "添加签名",
+      dialogDescription: "绘制签名并放入选中的 PDF 字段。",
+      fieldsTitle: "签名字段",
+      fieldsDescription: "检查字段、收集签名并导出已签名 PDF。",
+      sizeOnPage: "第 {page} 页，{width} x {height}",
+      loading: "正在加载签名字段…",
+      error: "签名字段加载失败。",
+    },
+    documentSplits: {
+      addSplit: "添加拆分",
+      dropPages: "将页面拖放到此处",
+      noPages: "无页面",
+      noSplits: "尚未创建文档拆分。",
+      loading: "正在加载文档拆分…",
+      error: "文档拆分加载失败。",
+      remove: "移除 {title}",
+      reorder: "重新排序 {title}",
+      pageRange: "第 {pages} 页",
+      splitFallback: "拆分 {number}",
+      pageTitle: "第 {number} 页",
     },
     fileThumbnail: {
       unknownType: "未知类型",

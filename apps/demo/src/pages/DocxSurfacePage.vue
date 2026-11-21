@@ -92,6 +92,7 @@
         :model="model"
         :show-tracked-changes="showTrackedChanges"
         :show-comments="showComments"
+        :theme="isDark ? 'dark' : 'light'"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
         document-id="demo-docx-document"
@@ -107,6 +108,7 @@
         @reference-confirm="onReferenceConfirm"
         @reference-resolve="resolveEvent = $event"
         @reference-error="referenceError = $event.message"
+        @region-draft-change="onRegionDraftChange"
       />
       <div v-else class="empty" data-testid="docx-surface-empty">
         <p>选择示例文档以查看最小嵌入组件的渲染效果。</p>
@@ -126,6 +128,46 @@
       <div class="reference-panel__json">
         <div><span>referenceConfirm</span><pre>{{ referenceJson }}</pre></div>
         <div><span>referenceResolve</span><pre>{{ resolveJson }}</pre></div>
+      </div>
+    </section>
+
+    <section class="capture-panel" data-testid="docx-region-capture-panel">
+      <div class="capture-panel__header">
+        <div>
+          <strong>区域截图与标注</strong>
+          <p>选择“区域”后在页面上拖出区域，再点击截图。位图显示在此处，标注文档以 JSON 往返。</p>
+        </div>
+        <label class="ctrl">
+          截图倍率
+          <select v-model.number="captureScale" data-testid="docx-region-capture-scale">
+            <option :value="1">1x</option>
+            <option :value="2">2x</option>
+          </select>
+        </label>
+        <button
+          :disabled="!pendingRegion || capturing"
+          data-testid="docx-region-capture"
+          @click="captureSelectedRegion"
+        >{{ capturing ? "截图中…" : "截图并使用标注编辑器" }}</button>
+        <button v-if="capture" data-testid="docx-region-capture-clear" @click="clearCapture">清除截图</button>
+      </div>
+      <p v-if="captureError" class="error" data-testid="docx-region-capture-error">{{ captureError }}</p>
+      <p v-else-if="!pendingRegion" class="capture-panel__hint" data-testid="docx-region-capture-hint">
+        尚未选择区域。切换到“区域”选择模式，在页面上拖动以创建区域。
+      </p>
+      <div v-else-if="capture" class="capture-panel__body" data-testid="docx-region-capture-output">
+        <OfficeRegionAnnotator
+          v-model="annotationDocument"
+          :image="capture.url"
+          :width="capture.width"
+          :height="capture.height"
+        />
+        <div class="capture-panel__side">
+          <strong>标注 JSON</strong>
+          <pre data-testid="docx-region-annotation-json">{{ annotationJson }}</pre>
+          <strong>source</strong>
+          <pre data-testid="docx-region-capture-source">{{ captureSourceJson }}</pre>
+        </div>
       </div>
     </section>
 
@@ -154,10 +196,22 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceConfirmEvent,
   type OfficeReferenceResolveEvent,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
 } from "@arcships/vue-docx"
-import { OfficeFindBar } from "@arcships/vue-ui"
+import {
+  OfficeFindBar,
+  OfficeRegionAnnotator,
+  captureRegion,
+  createOfficeRegionAnnotationDocument,
+  releaseRegionCapture,
+  stringifyOfficeRegionAnnotationDocument,
+  type OfficeRegionAnnotationDocument,
+  type OfficeRegionCapture,
+  type OfficeRegionCaptureRegion,
+} from "@arcships/vue-ui"
 import { createLatestRequestGate } from "../lib/latest-request"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 // ── Samples ──────────────────────────────────────────────────────────
 const samples = [
@@ -188,6 +242,7 @@ const loadGate = createLatestRequestGate()
 
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
+const isDark = readDemoTheme() === "dark"
 const zoom = ref(1)
 const fitWidth = ref(false)
 const searchQuery = ref("")
@@ -209,6 +264,16 @@ const resolveEvent = shallowRef<OfficeReferenceResolveEvent | null>(null)
 const referenceError = ref("")
 const referenceJson = computed(() => confirmEvent.value ? JSON.stringify(confirmEvent.value, null, 2) : "选择文字、页面或区域后，这里会显示可直接交给 Agent 的引用。")
 const resolveJson = computed(() => resolveEvent.value ? JSON.stringify(resolveEvent.value, null, 2) : "尚未重新解析。")
+
+// ── Region capture + annotation ──────────────────────────────────────
+const pendingRegion = shallowRef<OfficeRegionCaptureRegion | null>(null)
+const captureScale = ref(2)
+const capturing = ref(false)
+const captureError = ref("")
+const capture = shallowRef<OfficeRegionCapture | null>(null)
+const annotationDocument = shallowRef<OfficeRegionAnnotationDocument>(createOfficeRegionAnnotationDocument())
+const annotationJson = computed(() => stringifyOfficeRegionAnnotationDocument(annotationDocument.value))
+const captureSourceJson = computed(() => capture.value ? JSON.stringify(capture.value.source, null, 2) : "")
 
 const surfaceRef = ref<InstanceType<typeof DocxDocumentSurface>>()
 const surfaceKey = computed(() => `${displayName.value}-${loadCounter.value}`)
@@ -248,6 +313,7 @@ async function loadSelectedSample(): Promise<void> {
   const fileName = selectedSample.value
   const loader = runtime.value.createLoader()
   request.signal.addEventListener("abort", () => loader.cancel(), { once: true })
+  clearCapture()
   error.value = null
   ready.value = false
   totalPages.value = 0
@@ -311,6 +377,49 @@ function onReferenceConfirm(event: OfficeReferenceConfirmEvent): void {
   latestReference.value = event.reference
   resolveEvent.value = null
   referenceError.value = ""
+  const locator = event.reference.locator
+  if (locator.type === "manual-region" && locator.value.space === "page") {
+    pendingRegion.value = locator.value
+  }
+}
+
+function onRegionDraftChange(event: OfficeRegionDraftChange): void {
+  if (event.phase === "change") pendingRegion.value = event.region
+}
+
+function clearCapture(): void {
+  releaseRegionCapture(capture.value)
+  capture.value = null
+  pendingRegion.value = null
+  annotationDocument.value = createOfficeRegionAnnotationDocument()
+  captureError.value = ""
+}
+
+async function captureSelectedRegion(): Promise<void> {
+  const region = pendingRegion.value
+  const surface = surfaceRef.value
+  if (!region || !("space" in region) || region.space !== "page") {
+    captureError.value = "请先在“区域”模式下拖出一个页面区域。"
+    return
+  }
+  if (!surface) return
+  capturing.value = true
+  captureError.value = ""
+  try {
+    const next = await captureRegion({
+      surface,
+      region: region.rect,
+      target: { pageIndex: region.pageIndex },
+      scale: captureScale.value,
+    })
+    releaseRegionCapture(capture.value)
+    capture.value = next
+    annotationDocument.value = createOfficeRegionAnnotationDocument({ source: next.source })
+  } catch (cause) {
+    captureError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    capturing.value = false
+  }
 }
 
 async function resolveLatestReference(): Promise<void> {
@@ -347,6 +456,7 @@ async function simulateDocumentUpdate(): Promise<void> {
 // ── Teardown ─────────────────────────────────────────────────────────
 onBeforeUnmount(() => {
   loadGate.abort()
+  releaseRegionCapture(capture.value)
   runtime.value.dispose()
 })
 
@@ -401,4 +511,17 @@ h2 { margin-bottom: 4px; }
 .reference-panel__json { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-top: 12px; }
 .reference-panel__json span { color: var(--muted-foreground); font-size: 12px; }
 .reference-panel pre { background: #111827; color: #dbeafe; min-height: 150px; max-height: 360px; overflow: auto; padding: 10px; font: 11px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+
+.capture-panel { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+.capture-panel__header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.capture-panel__header > div { flex: 1 1 360px; }
+.capture-panel__header p { color: var(--muted-foreground); font-size: 12px; margin: 4px 0 0; }
+.capture-panel__header button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--background); }
+.capture-panel__header button:disabled { opacity: .45; cursor: default; }
+.capture-panel__hint { color: var(--muted-foreground); font-size: 12px; margin: 10px 0 0; }
+.capture-panel__body { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 12px; margin-top: 12px; align-items: start; }
+.capture-panel__side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.capture-panel__side strong { font-size: 12px; }
+.capture-panel__side pre { background: #111827; color: #dbeafe; min-height: 120px; max-height: 260px; overflow: auto; padding: 10px; font: 11px/1.5 ui-monospace, monospace; white-space: pre-wrap; margin: 0; }
+@media (max-width: 900px) { .capture-panel__body { grid-template-columns: 1fr; } }
 </style>

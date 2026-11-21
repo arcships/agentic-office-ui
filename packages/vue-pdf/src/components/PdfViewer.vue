@@ -50,12 +50,27 @@ import {
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
-import { isEditableViewerTarget, useViewerKeys, useFileDrop, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
+import {
+  DocumentViewerSidebar,
+  DocumentViewerSidebarSkeleton,
+  OfficeButton,
+  OfficeEmptyState,
+  OfficeErrorState,
+  OfficeIcon,
+  OfficeLoadingState,
+  OfficePopover,
+  OfficeStatusBar,
+  isEditableViewerTarget,
+  useViewerKeys,
+  useFileDrop,
+  FILE_DROP_OUTLINE,
+} from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
 import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
 import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
+import PdfViewerToolbar from "./PdfViewerToolbar.vue"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -74,6 +89,8 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   showToolbar: true,
   showDownload: true,
   showRotateControls: true,
+  showPrint: true,
+  showStatusBar: false,
   minHeight: undefined,
   isDark: false,
   locale: "en",
@@ -100,13 +117,12 @@ const rotation = ref<PdfRotation>(0)
 /** Pixel ratio the current page bitmap was rendered at; re-renders on display change. */
 const renderDpr = ref(currentRenderDpr())
 const activePage = ref(1)
-const pageInput = ref("1")
 const showThumbnails = ref(true)
 const searchDraft = ref("")
 const viewerRef = ref<HTMLElement | null>(null)
 const frameRef = ref<HTMLElement | null>(null)
 const pageImageRef = ref<HTMLElement | null>(null)
-const searchInputRef = ref<HTMLInputElement | null>(null)
+const toolbarRef = ref<InstanceType<typeof PdfViewerToolbar> | null>(null)
 const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
@@ -136,6 +152,14 @@ const thumbnailUrls = thumbnailPipeline.urls
 const printPageUrls = ref<Record<number, string>>({})
 const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
+/** Viewport point of the last committed text selection; anchors the selection toolbar. */
+const selectionAnchor = ref<{ x: number; y: number } | null>(null)
+const selectionCopied = ref(false)
+/**
+ * Reka overlays need a real DOM. Node component tests mount the viewer with a
+ * host renderer, so the floating toolbar only mounts in a browser.
+ */
+const overlaysAvailable = typeof window !== "undefined" && typeof document !== "undefined"
 const pageTextLayer = ref<PdfPageTextLayer | null>(null)
 let textLayerRequest = 0
 const selectionRects = ref<readonly PdfRenderRect[]>([])
@@ -219,6 +243,27 @@ const viewerState = computed(() => {
   return renderDocument.value && pageImageUrl.value ? "ready" : "idle"
 })
 const controlsDisabled = computed(() => !renderDocument.value || !!loadError.value)
+/** Encrypted documents get their own unlock state instead of a generic error. */
+const encryptedError = computed(() => loadError.value?.code === "ENCRYPTED")
+const errorTitle = computed(() =>
+  encryptedError.value ? m.value.pdf.errors.encrypted : m.value.common.chrome.errorTitle
+)
+const errorDetail = computed(() =>
+  encryptedError.value
+    ? m.value.pdf.viewer.passwordRequired
+    : loadError.value
+      ? `${loadError.value.code}: ${loadErrorMessage.value}`
+      : ""
+)
+const statusBarStatus = computed(() => {
+  if (viewerState.value === "loading") return m.value.pdf.viewer.opening
+  if (viewerState.value === "error") return loadErrorMessage.value
+  return ""
+})
+/** Thumbnails are still rasterizing; show the shared sidebar skeleton above them. */
+const thumbnailsLoading = computed(() =>
+  !!renderDocument.value && Object.keys(thumbnailUrls.value).length === 0
+)
 const pdfPageLabels = ref<readonly string[]>([])
 const currentSearchHit = computed(() => searchHits.value[searchHitIndex.value])
 const pageImageStyle = computed(() => {
@@ -434,11 +479,6 @@ function setPageLayout(mode: PdfPageLayout): void {
   void nextTick(() => scrollFrameToActivePage())
 }
 
-function onPageLayoutChange(event: Event): void {
-  const value = (event.target as HTMLSelectElement | null)?.value
-  if (value === "continuous" || value === "single" || value === "spread") setPageLayout(value)
-}
-
 function scrollFrameToActivePage(): void {
   const frame = frameRef.value
   if (!frame || !isStackedLayout.value) return
@@ -566,8 +606,40 @@ function clearSelection(): void {
   selectionClickCandidate = false
   selectionGesture = null
   selectionRects.value = []
+  selectionAnchor.value = null
+  selectionCopied.value = false
   if (selectionState.value.kind === "none") return
   emitSelection({ kind: "none" })
+}
+
+const selectionAnchorStyle = computed<Record<string, string> | undefined>(() =>
+  selectionAnchor.value
+    ? {
+        left: `${selectionAnchor.value.x}px`,
+        top: `${selectionAnchor.value.y}px`,
+      }
+    : undefined
+)
+
+/** Close the floating selection toolbar when the reader dismisses it. */
+function onSelectionPopoverOpen(open: boolean): void {
+  if (!open) clearSelection()
+}
+
+async function copySelection(): Promise<void> {
+  if (selectionState.value.kind !== "text") return
+  const text = selectionState.value.text
+  const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined
+  if (!clipboard?.writeText) {
+    selectionCopied.value = false
+    return
+  }
+  try {
+    await clipboard.writeText(text)
+    selectionCopied.value = true
+  } catch {
+    selectionCopied.value = false
+  }
 }
 
 function selectionPageIndex(): number {
@@ -675,6 +747,8 @@ async function commitViewerSelection(gesture: ViewerSelectionGesture): Promise<v
       return
     }
     emitSelection({ kind: "text", range, text, rects: [...selectionRects.value] })
+    selectionCopied.value = false
+    selectionAnchor.value = { x: gesture.latest.x, y: gesture.latest.y }
   } catch {
     if (request === selectionRequest) emitSelection({ kind: "unavailable", pageIndex: gesture.pageIndex, reason: "empty" })
   }
@@ -1022,12 +1096,13 @@ function resetSearch(): void {
 }
 
 function clearSearchAndRestoreFocus(): void {
+  toolbarRef.value?.closeSearch()
   searchDraft.value = ""
   searchGeneration++
   searchAbort?.abort()
   searchAbort = undefined
   resetSearch()
-  viewerRef.value?.focus()
+  viewerRef.value?.focus({ preventScroll: true })
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
@@ -1077,7 +1152,7 @@ function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
       return true
     case "search":
       if (!props.showToolbar) return false
-      searchInputRef.value?.focus()
+      toolbarRef.value?.openSearch()
       return true
     case "escape":
       if (searchDraft.value || searchHits.value.length) {
@@ -1113,6 +1188,7 @@ function stepZoom(direction: 1 | -1): boolean {
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
   cancelRenderWork()
+  toolbarRef.value?.closeSearch()
   clearSelection()
   textLayerRequest += 1
   pageTextLayer.value = null
@@ -1135,7 +1211,6 @@ async function releaseCurrentDocument(options: { closeDocument?: boolean } = {})
   runtimeForDocument = undefined
   numPages.value = 0
   activePage.value = 1
-  pageInput.value = "1"
   verifiedBlob.value = null
   loadedFileName.value = ""
   resetSearch()
@@ -1250,14 +1325,6 @@ function applyZoom(next: number | undefined): void {
   zoom.value = next
 }
 
-function zoomIn(): void {
-  applyZoom(zoomOptions.find((value) => value > zoom.value))
-}
-
-function zoomOut(): void {
-  applyZoom([...zoomOptions].reverse().find((value) => value < zoom.value))
-}
-
 const touchGestures = createTouchGestureTracker({
   getZoom: () => zoom.value,
   onZoom: (next) => { zoom.value = next },
@@ -1269,9 +1336,9 @@ function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMo
 function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
 function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
-function rotateClockwise(): void {
+function rotateBy(direction: 1 | -1): void {
   const anchor = measureAnchor()
-  const next = ((rotation.value + 90) % 360) as PdfRotation
+  const next = (((rotation.value + direction * 90) % 360) + 360) % 360 as PdfRotation
   pendingAnchor = anchor ? { ...anchor, zoom: zoom.value, rotation: next } : undefined
   rotation.value = next
 }
@@ -1281,16 +1348,11 @@ function setActivePage(page: number, options: { reveal?: boolean } = {}): void {
   const changed = next !== activePage.value
   if (changed) pendingAnchor = undefined
   activePage.value = next
-  pageInput.value = String(next)
   emit("active-page-change", next)
   // Continuous and spread layouts scroll; a toolbar, thumbnail, keyboard or
   // search jump has to bring the new page's row into view. Scroll tracking
   // passes `reveal: false` so the reader's own scroll is never fought.
   if (changed && options.reveal !== false) scrollFrameToActivePage()
-}
-
-function commitPageInput(): void {
-  setActivePage(Number(pageInput.value))
 }
 
 async function handleDownload(): Promise<void> {
@@ -1545,7 +1607,6 @@ async function load(): Promise<void> {
     renderDocument.value = openedDocument
     numPages.value = openedDocument.pageCount
     activePage.value = 1
-    pageInput.value = "1"
     verifiedBlob.value = verified.blob
     loadedFileName.value = verified.fileName
     await renderCurrentPage(requestId, task.signal, true)
@@ -1600,7 +1661,6 @@ watch(
   () => void load(),
   { immediate: true },
 )
-watch(activePage, (page) => { pageInput.value = String(page) })
 watch([activePage, zoom, rotation, renderDpr], () => {
   clearSelection()
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
@@ -1672,6 +1732,7 @@ defineExpose({
     ref="viewerRef"
     :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', printMode && 'pdf-viewer--print', props.className)"
     :style="viewerMinHeightStyle"
+    :data-office-theme="props.isDark ? 'dark' : 'light'"
     :data-file-drop-active="isDragOver ? 'true' : undefined"
     data-testid="pdf-viewer"
     tabindex="0"
@@ -1682,76 +1743,63 @@ defineExpose({
     @dragleave="onDragLeave"
     @drop="onDrop"
   >
-    <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
-      <button
-        data-testid="pdf-sidebar-toggle"
-        type="button"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.toggleThumbnails"
-        :aria-pressed="showThumbnails"
-        @click="showThumbnails = !showThumbnails"
-      >☰</button>
-      <span class="file-name">{{ getDownloadFileName() }}</span>
-      <button data-testid="pdf-first-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.first" @click="setActivePage(1)">«</button>
-      <button data-testid="pdf-previous-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.previous" @click="setActivePage(activePage - 1)">‹</button>
-      <input
-        v-model="pageInput"
-        data-testid="pdf-page-input"
-        class="page-input"
-        type="number"
-        min="1"
-        :max="numPages || 1"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.pageInput"
-        @change="commitPageInput"
-        @keydown.enter.prevent="commitPageInput"
-      />
-      <span class="page-indicator">/ <span data-testid="pdf-page-count">{{ numPages || '—' }}</span></span>
-      <button data-testid="pdf-next-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.next" @click="setActivePage(activePage + 1)">›</button>
-      <button data-testid="pdf-last-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.last" @click="setActivePage(numPages)">»</button>
-      <button data-testid="pdf-zoom-out" type="button" :disabled="controlsDisabled || zoom <= zoomOptions[0]" :aria-label="m.common.zoom.out" @click="zoomOut">−</button>
-      <select v-model.number="zoom" data-testid="pdf-zoom-select" :disabled="controlsDisabled" :aria-label="m.common.zoom.level">
-        <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
-      </select>
-      <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" :aria-label="m.common.zoom.in" @click="zoomIn">+</button>
-      <select
-        data-testid="pdf-page-layout"
-        class="page-layout-select"
-        :value="pageLayoutMode"
-        :disabled="controlsDisabled"
-        :aria-label="m.pdf.viewer.pageLayout"
-        @change="onPageLayoutChange"
-      >
-        <option value="continuous">{{ m.pdf.viewer.pageLayoutContinuous }}</option>
-        <option value="single">{{ m.pdf.viewer.pageLayoutSingle }}</option>
-        <option value="spread">{{ m.pdf.viewer.pageLayoutSpread }}</option>
-      </select>
-      <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" :aria-label="m.pdf.viewer.rotateClockwise" @click="rotateClockwise">⟳</button>
-      <form class="pdf-search" role="search" @submit.prevent="submitSearch">
-        <input
-          ref="searchInputRef"
-          v-model="searchDraft"
-          data-testid="pdf-search-input"
-          :disabled="controlsDisabled"
-          :aria-label="m.pdf.viewer.searchLabel"
-          :placeholder="m.pdf.viewer.searchPlaceholder"
-          @keydown.esc.prevent="clearSearchAndRestoreFocus"
-        />
-        <button data-testid="pdf-search-submit" type="submit" :disabled="controlsDisabled || !searchDraft.trim()">{{ m.pdf.viewer.search }}</button>
-        <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.previous" @click="moveSearch(-1)">↑</button>
-        <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.next" @click="moveSearch(1)">↓</button>
-      </form>
-      <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status" aria-atomic="true">{{ searchResult }}</span>
-      <button v-if="props.showDownload" data-testid="pdf-download" type="button" :disabled="!verifiedBlob || !!loadError" :aria-label="m.pdf.viewer.download" @click="handleDownload">⬇</button>
-    </div>
+    <PdfViewerToolbar
+      v-if="props.showToolbar"
+      ref="toolbarRef"
+      :active-page="activePage"
+      :total-pages="numPages"
+      :disabled="controlsDisabled"
+      :sidebar-open="showThumbnails"
+      :zoom="zoom"
+      :page-layout="pageLayoutMode"
+      :file-name="getDownloadFileName()"
+      :show-download="props.showDownload"
+      :show-print="props.showPrint"
+      :show-rotate-controls="props.showRotateControls"
+      :can-download="!!verifiedBlob && !loadError"
+      :search-query="searchDraft"
+      :search-result="searchResult"
+      :search-has-hits="searchHits.length > 0"
+      @toggle-sidebar="showThumbnails = !showThumbnails"
+      @select-page="setActivePage"
+      @update:zoom="applyZoom"
+      @rotate="rotateBy"
+      @update:page-layout="setPageLayout"
+      @update:search-query="searchDraft = $event"
+      @submit-search="submitSearch"
+      @search-previous="moveSearch(-1)"
+      @search-next="moveSearch(1)"
+      @search-close="clearSearchAndRestoreFocus"
+      @download="handleDownload"
+      @print="printAllPages"
+    />
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
     <div v-if="dropError" data-testid="pdf-drop-error" class="pdf-drop-error" role="alert">{{ dropError }}</div>
-    <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
-    <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
-    <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
-      {{ loadError.code }}: {{ loadErrorMessage }}
-    </div>
+    <OfficeEmptyState
+      v-if="!effectiveSource"
+      class="pdf-state pdf-state--empty"
+      data-testid="pdf-empty"
+      :title="m.pdf.viewer.noPdf"
+      icon="file-text"
+    />
+    <OfficeLoadingState
+      v-else-if="isLoading && !renderDocument"
+      class="pdf-state pdf-state--loading"
+      data-testid="pdf-loading"
+      :title="m.pdf.viewer.opening"
+    />
+    <OfficeErrorState
+      v-else-if="loadError"
+      class="pdf-state pdf-state--error"
+      data-testid="load-error"
+      :data-error-code="loadError.code"
+      :data-encrypted="encryptedError ? 'true' : undefined"
+      :title="errorTitle"
+      :description="errorDetail"
+      :icon="encryptedError ? 'lock' : 'triangle-alert'"
+      :show-retry="false"
+    />
     <div
       v-else-if="renderDocument"
       data-testid="pdf-document"
@@ -1761,17 +1809,28 @@ defineExpose({
       :data-zoom="zoom"
       :data-rotation="rotation"
     >
-      <PdfThumbnailStrip
-        v-if="showThumbnails"
-        :pageCount="numPages"
-        :labels="pdfPageLabels"
-        :urls="thumbnailUrls"
-        :activePage="activePage"
+      <DocumentViewerSidebar
+        :open="showThumbnails"
+        :close-on-escape="false"
+        flush
         :label="m.pdf.viewer.thumbnails"
-        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
-        :pageLabel="m.pdf.viewer.pageLabel"
-        @select="setActivePage"
-      />
+        class="pdf-sidebar"
+        data-testid="pdf-thumbnails-sidebar"
+        @update:open="showThumbnails = $event"
+      >
+        <DocumentViewerSidebarSkeleton v-if="thumbnailsLoading" variant="thumbnail" />
+        <PdfThumbnailStrip
+          :pageCount="numPages"
+          :labels="pdfPageLabels"
+          :urls="thumbnailUrls"
+          :activePage="activePage"
+          :label="m.pdf.viewer.thumbnails"
+          :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+          :pageLabel="m.pdf.viewer.pageLabel"
+          :page-sizes="renderDocument?.pages ?? []"
+          @select="setActivePage"
+        />
+      </DocumentViewerSidebar>
       <main
         ref="frameRef"
         class="pdf-frame-wrap"
@@ -1888,6 +1947,54 @@ defineExpose({
       </figure>
     </div>
     <div v-if="downloadError" class="download-error">{{ downloadError }}</div>
+    <OfficeStatusBar
+      v-if="props.showStatusBar"
+      class="pdf-status-bar"
+      data-testid="pdf-status-bar"
+      :page="activePage"
+      :total-pages="numPages"
+      :status="statusBarStatus"
+      :file-name="getDownloadFileName()"
+      :busy="viewerState === 'loading'"
+    />
+    <OfficePopover
+      v-if="overlaysAvailable && selectionState.kind === 'text' && selectionAnchor"
+      :open="true"
+      side="top"
+      align="center"
+      :side-offset="8"
+      content-class="pdf-selection-popover"
+      data-testid="pdf-selection-popover"
+      @update:open="onSelectionPopoverOpen"
+    >
+      <template #trigger>
+        <span class="pdf-selection-anchor" :style="selectionAnchorStyle" aria-hidden="true" />
+      </template>
+      <div
+        class="pdf-selection-popover__body"
+        data-testid="pdf-selection-popover"
+        role="toolbar"
+        :aria-label="m.pdf.viewer.selectionActions"
+      >
+        <p class="pdf-selection-popover__text">{{ selectionState.text }}</p>
+        <div class="pdf-selection-popover__actions">
+          <span
+            v-if="selectionCopied"
+            class="pdf-selection-popover__status"
+            role="status"
+          >{{ m.pdf.viewer.copiedSelection }}</span>
+          <OfficeButton
+            variant="outline"
+            size="sm"
+            data-testid="pdf-selection-copy"
+            @click="copySelection"
+          >
+            <OfficeIcon name="copy" />
+            {{ m.pdf.viewer.copySelection }}
+          </OfficeButton>
+        </div>
+      </div>
+    </OfficePopover>
   </div>
 </template>
 
@@ -1922,23 +2029,17 @@ defineExpose({
 }
 /* Keyboard focus lands on the viewer root; keep a visible ring around it. */
 .pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
-.pdf-toolbar { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--pdf-border); flex-wrap: wrap; }
-.pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--pdf-control-border); border-radius: 6px; background: var(--pdf-control-bg); color: inherit; padding: 0 8px; }
-.pdf-toolbar button { cursor: pointer; }
-.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-.pdf-toolbar button:disabled, .pdf-toolbar input:disabled, .pdf-toolbar select:disabled { opacity: .45; cursor: not-allowed; }
-.file-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; margin-right: auto; }
-.page-input { width: 58px; text-align: center; }
-.page-indicator { font-size: 12px; white-space: nowrap; }
-.pdf-search { display: flex; align-items: center; gap: 4px; }
-.pdf-search input { width: 150px; }
-.search-result { font-size: 12px; color: var(--pdf-link); white-space: nowrap; }
+/* The toolbar keeps the public `.pdf-toolbar` hook for print/touch rules. Its
+   default row is implemented by `PdfViewerToolbar` against the pinned Extend
+   reference; this scoped rule only keeps the print hook working. */
+.pdf-toolbar { min-height: 48px; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.pdf-status-bar { flex: 0 0 auto; }
 .pdf-drop-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-bottom: 1px solid var(--pdf-border); background: rgba(220, 38, 38, 0.08); }
-.pdf-empty, .pdf-error { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--pdf-muted); }
-.pdf-error, .download-error { color: #b91c1c; }
-.download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--pdf-border); }
-.pdf-body { display: flex; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
+.pdf-state { flex: 1 1 auto; min-height: 0; }
+.download-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-top: 1px solid var(--pdf-border); }
+.pdf-body { display: flex; position: relative; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
+.pdf-sidebar { --pdf-border: var(--office-border); }
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 /* Single-page mode paints one stage exactly like before; the stack wrapper only
    exists so continuous and spread modes share the same template. */
@@ -1981,17 +2082,49 @@ defineExpose({
 .page-error { min-height: 0; min-width: min(300px, 100%); border-radius: 8px; background: var(--pdf-control-bg); padding: 24px; box-shadow: 0 2px 8px rgb(0 0 0 / 12%); }
 .pdf-search-context { position: sticky; top: 0; z-index: 3; width: fit-content; max-width: min(720px, 90%); margin: 0 auto 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--pdf-control-border); border-radius: 8px; background: var(--pdf-control-bg); color: var(--pdf-fg); font-size: 12px; padding: 6px 10px; }
 .pdf-search-context mark { background: #fde047; color: #111827; padding: 1px 2px; }
+/* Floating text-selection toolbar. The zero-size fixed anchor is the Reka
+   popover trigger, so the surface opens next to the pointer that ended the
+   selection without owning any page geometry. */
+.pdf-selection-anchor {
+  position: fixed;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
+.pdf-selection-popover { max-inline-size: min(22rem, calc(100vw - 2rem)); }
+.pdf-selection-popover__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2);
+  min-inline-size: 0;
+}
+.pdf-selection-popover__text {
+  max-block-size: 4.5rem;
+  margin: 0;
+  overflow: hidden;
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+}
+.pdf-selection-popover__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--office-ui-space-2);
+}
+.pdf-selection-popover__status {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+}
 .pdf-print-pages { display: none; }
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
   .pdf-frame-wrap { padding: 12px; }
-  .pdf-search { order: 3; width: 100%; }
-  .pdf-search input { flex: 1; width: auto; }
 }
 
 @media print {
   .pdf-viewer { height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; color: #000 !important; }
-  .pdf-toolbar, .pdf-thumbnails, .pdf-status, .pdf-search-context, .download-error, .page-loading { display: none !important; }
+  .pdf-toolbar, .pdf-thumbnails, .pdf-sidebar, .pdf-status, .pdf-status-bar, .pdf-search-context, .download-error, .page-loading { display: none !important; }
   .pdf-viewer--print .pdf-body { display: none !important; }
   .pdf-body { display: block !important; min-height: 0 !important; background: #fff !important; }
   .pdf-frame-wrap { overflow: visible !important; min-height: 0 !important; padding: 0 !important; }
@@ -2021,12 +2154,12 @@ defineExpose({
 }
 
 @media (pointer: coarse) {
-  .pdf-toolbar button,
-  .pdf-toolbar select,
-  .pdf-toolbar input {
+  .pdf-toolbar :deep(button),
+  .pdf-toolbar :deep(select),
+  .pdf-toolbar :deep(input) {
     min-height: 44px;
   }
-  .pdf-toolbar button {
+  .pdf-toolbar :deep(button) {
     min-width: 44px;
   }
 }

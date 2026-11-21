@@ -32,7 +32,7 @@
       <section>
         <h3>DocxViewer</h3>
         <div ref="viewerHost" class="parity-surface" data-testid="parity-viewer">
-          <DocxViewer :model="model" :show-toolbar="false" />
+          <DocxViewer :model="model" :show-toolbar="false" :is-dark="isDark" />
         </div>
       </section>
       <section>
@@ -43,6 +43,7 @@
             :editable="false"
             :show-toolbar="false"
             :show-thumbnails="false"
+            :is-dark="isDark"
           />
         </div>
       </section>
@@ -68,6 +69,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 
 import { useRoute } from "vue-router"
 import { createDocxRuntime, type DocModel } from "@arcships/docx-core"
 import { DocxEditor, DocxViewer } from "@arcships/vue-docx"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 import {
   EMPTY_INTERACTION,
   EMPTY_STRUCTURE,
@@ -101,6 +103,7 @@ const runtime = createDocxRuntime()
 const loader = runtime.createLoader()
 const selectedSample = ref<SampleFile>(samples[0].file)
 const pageState = ref<PageState>("idle")
+const isDark = readDemoTheme() === "dark"
 const loadedFile = ref("")
 const loadError = ref("")
 const model = shallowRef<DocModel>()

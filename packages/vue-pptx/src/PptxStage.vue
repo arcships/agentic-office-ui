@@ -5,11 +5,15 @@
     data-testid="pptx-stage"
     @click="onClick"
     @pointermove="onReferencePointerMove"
+    @pointerleave="onReferencePointerLeave"
     @mouseup="onTextSelectionMouseUp"
     @keydown="onStageKeydown"
     @contextmenu.prevent="onContextMenu"
   >
     <div ref="elementRef" class="pptx-stage__content" />
+    <div v-if="objectOutline" class="pptx-stage__object-outline" :style="objectOutline.style">
+      <span class="pptx-stage__object-outline-label">{{ objectOutline.label }}</span>
+    </div>
     <div
       v-if="selectionMode === 'region'"
       class="pptx-stage__region-layer"
@@ -40,6 +44,7 @@ import {
   createPptxObjectReferenceDraft,
   createPptxRegionReferenceDraft,
   createPptxSlideReferenceDraft,
+  createPptxSubObjectReferenceDraft,
   createPptxTextReferenceDraft,
   describePptxReference,
   resolvePptxReference,
@@ -62,6 +67,10 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult, localizeOfficeDescriptorLabel } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
 
@@ -184,6 +193,7 @@ function referenceContext(): PptxReferenceContext {
       return slide ? slidePathFor(slide, index) : `rendered-slide:${index}`
     }),
     getObjectParagraphs: paragraphsForObject,
+    getObjectTable: tableSnapshotForObject,
   }
   cachedReferenceContext = { revision, context }
   return context
@@ -278,6 +288,72 @@ function resolveHit(event: MouseEvent): StageHit | null {
   return resolveHitAt(event.target)
 }
 
+const objectOutline = ref<{ style: Record<string, string>; label: string } | null>(null)
+let candidateElements = new Map<string, Element>()
+
+function clearObjectOutline(): void {
+  objectOutline.value = null
+  candidateElements = new Map()
+}
+
+function updateObjectOutline(candidates: readonly OfficeReferenceCandidatePreview[]): void {
+  const active = candidates[0]
+  const element = active ? candidateElements.get(active.candidateId) : undefined
+  const measured = element && typeof element.getBoundingClientRect === "function"
+    ? element.getBoundingClientRect()
+    : undefined
+  const root = hostRef.value?.getBoundingClientRect?.()
+  if (!active || !measured || !root || measured.width <= 0 || measured.height <= 0) {
+    objectOutline.value = null
+    return
+  }
+  objectOutline.value = {
+    style: {
+      left: `${measured.left - root.left}px`,
+      top: `${measured.top - root.top}px`,
+      width: `${measured.width}px`,
+      height: `${measured.height}px`,
+    },
+    label: active.preview?.label ?? "",
+  }
+}
+
+function tableElementForObject(element: HTMLElement | null | undefined): HTMLTableElement | null {
+  if (!element || element.dataset.pptxNodeType !== "table") return null
+  return element.tagName === "TABLE"
+    ? element as HTMLTableElement
+    : element.querySelector<HTMLTableElement>("table")
+}
+
+function tableSnapshotFromElement(element: HTMLElement): { rows: string[][] } | undefined {
+  const table = tableElementForObject(element)
+  if (!table) return undefined
+  const rows = [...table.querySelectorAll("tr")].map((row) =>
+    [...row.querySelectorAll("td, th")].map((cell) => cell.textContent ?? ""))
+  return rows.length ? { rows } : undefined
+}
+
+function tableSnapshotForObject(slideIndex: number, objectKey: string): { rows: string[][] } | undefined {
+  const slide = slideElements().find((element) => Number(element.dataset.slideIndex) === slideIndex)
+  const object = [...(slide?.querySelectorAll<HTMLElement>("[data-pptx-object-key]") ?? [])]
+    .find((element) => element.dataset.pptxObjectKey === objectKey)
+  return object ? tableSnapshotFromElement(object) : undefined
+}
+
+function tableCellForTarget(
+  target: Element | null,
+  objectElement: HTMLElement | null,
+): { rowIndex: number; cellIndex: number } | undefined {
+  const table = tableElementForObject(objectElement)
+  const cell = target?.closest?.("td, th")
+  if (!table || !cell || !table.contains(cell)) return undefined
+  const row = cell.parentElement
+  if (!row) return undefined
+  const rowIndex = [...table.querySelectorAll("tr")].indexOf(row as HTMLTableRowElement)
+  const cellIndex = [...(row.querySelectorAll("td, th"))].indexOf(cell as HTMLTableCellElement)
+  return rowIndex >= 0 && cellIndex >= 0 ? { rowIndex, cellIndex } : undefined
+}
+
 function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undefined {
   const context = referenceContext()
   if (!context.document.slides[hit.slideIndex]) return undefined
@@ -309,6 +385,50 @@ function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undef
   }
 }
 
+function tableCellCandidateForTarget(
+  slideIndex: number,
+  target: Element | null | undefined,
+  objectElement: HTMLElement | null | undefined,
+): OfficeReferenceCandidatePreview | undefined {
+  const objectKey = objectElement?.dataset.pptxObjectKey
+  const tableCell = tableCellForTarget(target ?? null, objectElement ?? null)
+  if (!objectKey || !objectElement || !tableCell) return undefined
+  try {
+    const context = referenceContext()
+    const draft = createPptxSubObjectReferenceDraft(context, slideIndex, objectKey, {
+      kind: "table-cell",
+      ...tableCell,
+    })
+    const label = `Cell ${tableCell.rowIndex + 1}, ${tableCell.cellIndex + 1}`
+    const cellCandidateId = `pptx:table-cell:${objectKey}:${tableCell.rowIndex}:${tableCell.cellIndex}`
+    candidateElements.set(cellCandidateId, target?.closest?.("td, th") ?? objectElement)
+    return {
+      candidateId: cellCandidateId,
+      draft,
+      preview: {
+        label,
+        path: [
+          { kind: "document", label: descriptor("presentation") },
+          { kind: "slide", label: descriptor("slide", { number: slideIndex + 1 }) },
+          {
+            kind: "table",
+            label: objectElement.getAttribute("aria-label")
+              || formatOfficeMessage(m.value.common.descriptors.table, {
+                number: objectElement.dataset.pptxNodeId || objectElement.dataset.pptxObjectKey || "",
+              }),
+          },
+          { kind: "table-cell", label },
+        ],
+      },
+      hit: "direct",
+      depth: 3,
+    }
+  } catch {
+    // A table whose DOM grid cannot be read keeps the table object candidate.
+    return undefined
+  }
+}
+
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try {
     const target = elementRef.value?.ownerDocument?.elementFromPoint?.(point.clientX, point.clientY)
@@ -316,11 +436,20 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     const slide = target.closest<HTMLElement>("[data-slide-index]")
     const slideIndex = Number(slide?.dataset.slideIndex)
     if (!Number.isSafeInteger(slideIndex) || slideIndex < 0) return []
-    const objectKey = target.closest<HTMLElement>("[data-pptx-object-key]")?.dataset.pptxObjectKey
+    const objectElement = target.closest<HTMLElement>("[data-pptx-object-key]")
+    const objectKey = objectElement?.dataset.pptxObjectKey
     const candidate = candidateForHit({ slideIndex, ...(objectKey ? { objectKey } : {}) })
     if (!candidate) return []
+    candidateElements = new Map()
+    candidateElements.set(candidate.candidateId, objectKey && objectElement ? objectElement : target)
+    const slideCandidate = objectKey ? candidateForHit({ slideIndex }) : undefined
+    const tableCellCandidate = tableCellCandidateForTarget(slideIndex, target, objectElement)
+    if (tableCellCandidate) {
+      return slideCandidate
+        ? [tableCellCandidate, candidate, slideCandidate]
+        : [tableCellCandidate, candidate]
+    }
     if (!objectKey) return [candidate]
-    const slideCandidate = candidateForHit({ slideIndex })
     return slideCandidate ? [candidate, slideCandidate] : [candidate]
   } catch (reason) {
     emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "PPTX" }))
@@ -329,9 +458,17 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
 }
 
 function onReferencePointerMove(event: PointerEvent): void {
-  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  if (selectionMode.value !== "object") return
   const candidates = hitTest(event)
+  updateObjectOutline(candidates)
+  if (!props.emitReferenceCandidates) return
   emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
+}
+
+function onReferencePointerLeave(): void {
+  clearObjectOutline()
+  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  emit("referenceCandidateChange", { candidates: [] })
 }
 
 function elementForNode(node: Node): HTMLElement | null {
@@ -487,7 +624,10 @@ function onClick(event: MouseEvent): void {
     })
   }
   if (selectionMode.value === "object") {
-    const candidate = candidateForHit(hit)
+    const target = event.target as Element | null
+    const objectElement = target?.closest?.<HTMLElement>("[data-pptx-object-key]") ?? null
+    const candidate = tableCellCandidateForTarget(hit.slideIndex, target, objectElement)
+      ?? candidateForHit(hit)
     if (candidate) confirmDraft(candidate.draft, event.detail === 0 ? "keyboard" : "pointer", candidate.preview, event.shiftKey)
   }
 }
@@ -699,6 +839,24 @@ defineExpose({
     return props.scrollContainer
   },
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /** Region-capture hook for `captureRegion()` in `@arcships/vue-ui`. */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; slideIndex?: number }
+    const requested = request.target?.slideIndex
+      ?? (locator.space === "slide" ? locator.slideIndex : undefined)
+    const slides = slideElements()
+    const slide = slides.find((element) => Number(element.dataset.slideIndex) === requested) ?? slides[0]
+    if (!slide) return null
+    const slideIndex = Number(slide.dataset.slideIndex)
+    return {
+      element: slide,
+      format: "pptx",
+      space: "slide",
+      slideIndex: Number.isSafeInteger(slideIndex) ? slideIndex : requested ?? 0,
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
     if (signal?.aborted) throw new DOMException("PPTX reference description aborted.", "AbortError")

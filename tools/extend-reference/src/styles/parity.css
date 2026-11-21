@@ -1,0 +1,50 @@
+/*
+ * Harness stylesheet for the pinned Extend reference.
+ *
+ * `extend-globals.css` is the vendored upstream globals.css (import graph
+ * narrowed; see the provenance header inside). The rules below only wire the
+ * Geist fonts, which upstream loads through next/font in apps/v4/lib/fonts.ts:
+ * next/font injects the same `--font-sans` / `--font-mono` variables, so the
+ * computed font stack is equivalent to the pinned reference.
+ */
+@import "./extend-globals.css";
+
+:root {
+  --font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* Matches `antialiased` on the reference layout body. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* DOCX sidebar parity: the subject's active page/label use the shared DOCX
+ * thumbnail tokens. Keep the same values in both themes so the reference and
+ * subject compare the page imagery instead of two different palettes. */
+:root {
+  --docx-thumbnail-active: #eff6ff;
+  --docx-thumbnail-ring: #3b82f6;
+  --docx-thumbnail-label: #6b7280;
+  --docx-skeleton-bg: oklab(0 0 0 / 0.04);
+  --docx-header-border: oklab(0 0 0 / 0.06);
+  --docx-title: #727272;
+  --docx-sidebar-bg: oklch(0.985 0 0);
+}
+
+.dark {
+  --docx-thumbnail-active: oklab(1 0 0 / 0.04);
+  --docx-thumbnail-ring: oklch(0.556 0 0);
+  --docx-thumbnail-label: oklch(0.708 0 0);
+  --docx-skeleton-bg: oklab(1 0 0 / 0.04);
+  --docx-header-border: oklab(1 0 0 / 0.05);
+  --docx-title: oklch(0.97 0 0);
+  --docx-sidebar-bg: color(srgb 0.0681953 0.0682112 0.0682127);
+}

@@ -19,8 +19,9 @@
 
     <p v-if="fileName" class="pptx-demo__file">当前文件：{{ fileName }}</p>
     <PptxViewer
+      v-model:mode="mode"
       :source="source"
-      :mode="mode"
+      :is-dark="isDark"
       :autoplay="false"
       height="calc(100vh - 190px)"
       @action="status = `动作：${$event.kind}`"
@@ -40,8 +41,10 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { PptxViewer } from "@arcships/vue-pptx"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 const source = ref<File | null>(null)
+const isDark = readDemoTheme() === "dark"
 const mode = ref<"browse" | "present">("browse")
 const fileName = ref("")
 const status = ref("请选择一个 PowerPoint 文件。")

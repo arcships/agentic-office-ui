@@ -48,6 +48,8 @@
 |  | `./style.css` | 不适用 | `./dist/style.css` |
 | `@arcships/vue-ui` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./style.css` | 不适用 | `./dist/style.css` |
+|  | `./tokens.css` | 不适用 | `./dist/tokens.css` |
+|  | `./theme.css` | 不适用 | `./dist/theme.css` |
 | `@arcships/pptx-core` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./browser` | `./dist/browser.d.ts` | `./dist/browser.js` |
 |  | `./package.json` | 不适用 | `./package.json` |
@@ -216,7 +218,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 范围与图表数据源高亮（issue #132）：`XlsxRangeHighlightLayer` 是根入口新增的浮层出口，`XlsxViewer`/`XlsxSheetSurface` 已自动挂载；`controller.highlightRanges()`/`clearHighlightedRanges()`/`highlightedRanges` 读写范围，选中图表/系列/数据点/图例时按 category/value/bubbleSize 角色自动高亮源区域。根入口同时导出 `CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE`、`XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR`、`collectChartRangeHighlights`、`parseChartSourceRange`、`parseChartSourceA1Range`、`chartRangeCellAt`、`normalizeHighlightRange`、`createRangeHighlightLayout`、`rangeHighlightStyle` 及对应类型，供自建网格复用同一套解析、颜色和冻结窗格几何。
 - 公式引用高亮（issue #126）：编辑 `=SUM(A1:A3)+B2` 时，`XlsxFormulaBar` 与 `XlsxGrid` 的内联编辑器都会把每个引用按 Excel 调色板着色；光标所在的引用在公式栏加下划线，网格用同色边框描出当前工作表上的目标区域（活动引用更粗）。支持 A1、`$A$1`、区域、整行/整列、`Sheet2!A1` 与名称引用；字符串、函数名、外部工作簿和无法解析的名称不着色。回车/取消/失焦后清除，且不写工作簿。根入口导出 `collectFormulaReferences`、`parseFormulaReferences`、`formulaReferenceSegments`、`FORMULA_REFERENCE_COLORS`、`resolveNamedRangeTarget`、`useFormulaReferenceEditing`、`createNamedRangeResolver`、`isReferenceOnActiveSheet` 及对应类型；自定义公式输入框用这些 API 驱动同一个网格高亮会话。网格根节点暴露 `data-formula-reference-ranges`、`data-formula-reference-active` 与 `data-formula-reference-count` 供宿主和测试读取。
 
-网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。`XlsxAuthoringDialog` 是新增的独立对话框出口，`XlsxViewer` 会自动渲染它。
+网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。`XlsxAuthoringDialog` 是独立对话框出口，`XlsxViewer` 会自动渲染它；0.8 起它渲染在共享 `OfficeDialog`（Reka）上，表单状态、校验、Esc/backdrop/关闭后焦点归还保持不变。`XlsxHeaderMenu` 与 `XlsxAutoFilterMenu`（issue #160）是新增的独立菜单出口，分别承载行/列表头菜单与 AutoFilter 值面板，均渲染在共享 `OfficeDropdownMenu`（Reka）上并保留原有 `data-testid`；`XlsxGrid` 会自动挂载它们，只嵌入网格的宿主也可以直接使用。
 
 ### 3.5 `@arcships/vue-pdf`
 
@@ -225,6 +227,8 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 根入口还提供 `createPdfTextReferenceDraft`、`createPdfPageReferenceDraft`、`createPdfRegionReferenceDraft`、`resolvePdfReference`、`describePdfReference` 和 `normalizePdfReferenceRect`。解析器通过调用方传入的 Runtime 与当前 `PdfRenderDocument` 验证字符范围或重新搜索，不上传正文，也不管理确认后的产品状态。
 
 PDF Runtime 只接收已经取得并验证的 `ArrayBuffer`，不会再次请求原始 PDF 地址。URL 来源必须显式提供 `urlPolicy`；加载会跟随重定向并在读取正文前用同一协议与来源规则重新校验最终地址，跨来源或协议降级重定向返回 `SOURCE_NOT_ALLOWED`。`PdfVerifiedDocument.resolvedUrl`、`PdfLoadError` 与诊断中的 URL 都去除查询串、片段和内嵌凭据。默认使用包内 PDFium Worker，关闭外部字体回退；Worker 或 WASM 初始化失败会返回错误，不会把验证字节状态当成渲染成功。宿主自带严格内容安全策略时，需要允许 `worker-src blob:`，并允许读取 `@arcships/vue-pdf/assets/pdfium.wasm` 对应的同源资源。
+
+Chrome（issue #162）：`PdfViewer` 的默认行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar toggle、Page/页码/of N、rotate、zoom、search、`⋯`），额外命令（上一页/下一页/首页/末页、布局、文件名、下载、打印）收进 `⋯` actions 菜单；其余 chrome 使用 `DocumentViewerSidebar`、`OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`、`OfficeStatusBar`、`OfficePopover`/`OfficeTooltip`/`OfficeDialog`。没有新增或移除 PDF 根入口导出；只增加向后兼容的可选 props：`PdfViewer.showPrint`（默认 `true`）、`PdfViewer.showStatusBar`（默认 `false`）、`PdfSurface.showStatusBar`（默认 `false`）、`PdfSurface.showAnnotationDialog`（默认 `false`）。既有事件、`data-testid`、`expose` 方法和 `PdfViewerProps` 必填合同不变（`pdf-next-page` 等命令仍在 actions 菜单中保留原 test id）；详细映射与 Extend 像素对照见 `docs/components/pdf-chrome.md`。
 
 PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 MiB`，宿主可公开调整，不叠加第二层隐藏硬上限。本地 Blob 在读取前检查声明大小；URL 有可信 `Content-Length` 时先检查响应头，否则在取得正文后、创建 PDF 引擎前检查实际字节。超过当前值返回 `PDF_TOO_LARGE`，包含 `actual` 和 `allowed`，并且不显示旧页面或创建新页面。页数、单页像素、总内存和并发页不是公开拒绝条件。
 
@@ -242,7 +246,22 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension` 和 `FILE_DROP_OUTLINE`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`OfficeRegionAnnotator`、`captureRegion`、`releaseRegionCapture`、`computeRegionCaptureGeometry`、`computeRegionRasterCrop`、`createOfficeRegionAnnotationDocument`、`parseOfficeRegionAnnotationDocument`、`stringifyOfficeRegionAnnotationDocument`、`officeRegionAnnotationBounds`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`OfficeThemeProvider`、`OfficeIcon`、`HugeIcon`、`HugeIconData`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension`、`FILE_DROP_OUTLINE`、`OfficeButton`、`OfficeIconButton`、`OfficeInput`、`OfficeTextarea`、`OfficeSelect`、`OfficeDropdownMenu`、`OfficeContextMenu`、`OfficeDialog`、`OfficeSheet`、`OfficePopover`、`OfficeTooltip`、`OfficeTabs`、`OfficeToggle`、`OfficeBadge`、`OfficeCard`、`OfficeSeparator`、`OfficeSkeleton`、`OfficeSpinner`、`OfficeScrollArea`、`OfficeToastProvider`、`OfficeToolbar`、`OfficeToolbarGroup`、`OfficeToolbarSeparator`、`OfficePageControl`、`OfficeZoomControl`、`OfficeSearchPopover`、`OfficeStatusBar`、`OfficeEmptyState`、`OfficeErrorState`、`OfficeLoadingState`、`DocumentViewerSidebar`、`DocumentViewerSidebarSkeleton`、`useElementWidth`、`useOfficeToast` 及对应的 `Office*Props`/`OfficeMenuEntry`/`OfficeSelectEntry`/`OfficeZoomFitMode`/`OfficeSearchStatus` 等类型、`resolveOfficeTheme`、`officeSystemPrefersDark`、`provideOfficeTheme`、`useOfficeTheme`、`OFFICE_ICONS`、`OFFICE_ICON_NAMES`、`normalizeOfficeIconName`、`resolveOfficeIcon`、`provideOfficeIcons`、`useOfficeIcons` 和主题/图标相关常量，以及根入口导出的属性和事件类型。`HugeIcon` 是 `@hugeicons/core-free-icons` 数据的 Vue 渲染器（16–18px，跟随 token 与 `currentColor`），供需要与 Extend 图标逐像素对齐的组件复用。`DocumentViewerSidebar` 新增可选 `flush`（默认 `false`，为 `true` 时 body 去掉 padding 并交给子内容滚动）；`DocumentViewerSidebarSkeleton` 新增可选 `variant`（`list` 默认；`thumbnail` 对齐上游 PDF 侧栏骨架）；均为向后兼容新增。新代码使用 `@arcships/vue-ui/style.css` 和 `@arcships/vue-ui/theme.css`；只使用浅色 token 契约时可以改用 `@arcships/vue-ui/tokens.css`。
+
+文档 blocks（0.8 起，#164）同样只新增可选 props。`BoundingBoxCitations` 在原有 `file`/`fields` 页卡模式外支持 `reviewFields`、`pageImage`、`pageWidth`/`pageHeight`、`activeFieldKey`、`expectedValues`、`showExpected`、`readOnly`、`view`（`split`/`panel`）、`loading`、`error`、`emptyMessage`；`LayoutBlocks` 在原有 `file`/`output` 外支持 `blocks`、`pageImage`、`pageWidth`/`pageHeight`、`activeBlockId`、`view`、`heading`、`emptyMessage`、`renderMarkdown`、`loading`、`error`、`ariaLabel`；`SignaturePad` 新增 `mode`（`draw`/`typed`）、`modelValue`、`defaultValue`、`placeholder`、`showControls`、`showClear`、`showCancel`、`showConfirm`、`confirmDisabled`、`disabled`、`guide`、`loading`、`error`、`ariaLabel`；`FileThumbnail` 新增 `fill`、`previewFill`（供缩略图条/拆分列表使用）。新增 `ESignatureFields`（`fields`、`canExport`、`exporting`、`showPreview`、`title`、`description`、`loading`、`error`）与 `DocumentSplits`（`splits`、`thumbnailImages`、`withFrameDivider`、`hideAddSplit`、`disableRemove`、`loading`、`error`、`emptyMessage`）。新增导出类型包括 `BoundingBoxReviewField`、`BoundingBoxReviewFieldSchema`、`BoundingBoxReviewLocation`、`BoundingBoxHighlightArea`、`OfficeJsonValue`、`LayoutBlockType`、`ESignatureField`、`ESignatureFieldBox`、`ESignatureFieldsProps`、`DocumentSplit`、`DocumentSplitPageId`、`DocumentSplitsProps`。完整 API、键盘/状态与像素证据见 [components/document-blocks.md](../components/document-blocks.md)。
+
+
+FileUpload / FileThumbnail（0.8 起，#163）在保留原有 props/事件的前提下对齐 Extend 默认值并新增可选视觉参数。`FileUpload` 新增 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`（默认 `true`）、`showBorderBeam`（默认 `false`）、`borderBeamTheme`，同时默认 `accept` 为 Extend 文档/图片白名单、`multiple=true`；旧宿主可传 `accept=""`、`:multiple="false"`、`:show-file-list="false"` 恢复旧行为。`files-accepted` 与 `files-rejected` 的载荷不变，拒绝项的 `code`/`file`/`message` 保持稳定。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`previewClassName`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta`、`alt`；`size` 在原 `sm`/`md`/`lg` 之外接受数字（像素）或 CSS 长度，旧的 `file.url` 图片回退仍可用。视觉只引用 `--office-*`/`--office-ui-*` token；`showTypeGlyph` / `showMeta` 默认 `false`，因为 Extend 的 `FileThumbnail` 默认 fallback 本身没有 glyph/meta 层。完整合同见 [components/file-components.md](../components/file-components.md)。
+
+
+主题与 token 层（0.8 起）是所有 Office 组件唯一的视觉来源。`theme.css` 把 `@arcships/vue-ui/tokens.css` 内联进发布产物，并在 `[data-office-theme="light"]`、`[data-office-theme="dark"]`、`[data-office-theme="system"]` 下提供浅色、深色和 `prefers-color-scheme` 切换；所有声明都限定在 `data-office-theme` 子树内，不修改 `:root`、`html`、`body`，也不依赖全局 `.dark` 类。`OfficeThemeProvider` 写入 `data-office-theme`、`data-office-theme-resolved`、`data-office-density` 和可选的 `lang`，提供 `theme`（默认 `system`）、`locale`、`density`（`comfortable`/`compact`）、`messages`、`as` 五个可选 props，并通过 `useOfficeTheme()` 暴露只读上下文；`system` 在客户端监听 `matchMedia`，无 `window` 的 SSR 环境回退为浅色且不崩溃。字体 token `--office-font-sans` / `--office-font-mono` 默认 Geist / Geist Mono，但包内不打包字体（无 `@font-face`、无 `url()`），宿主自行加载并可通过 `[data-office-theme]` 覆盖。
+
+`OfficeIcon` 以 `@lucide/vue` 为运行时依赖（构建时 external），props 为 `name`、`icon`、`size`、`strokeWidth`、`label`；默认尺寸来自 `--office-icon-size`（16px），默认线宽为 `2`，省略 `label` 时输出 `aria-hidden="true"`。内置注册表只命名导入常用图标，未使用的 Lucide 图标不进入消费者 bundle；`provideOfficeIcons()` 可以在子树内扩展或覆盖，`resolveOfficeIcon()` 支持 `chevron-down`、`ChevronDown` 等写法。token 数值与 Extend 参考 commit `70fe70c6f1e1eee53954c6923f3d9f583557a57e` 对齐：`--office-radius: 0.625rem`、8% alpha 边框、4% alpha muted/secondary/accent、中性 primary、2px 焦点环、`shadow-xs`/`shadow-sm`。
+
+Primitive 层（0.8 起）以 `reka-ui@^2.11` 为运行时依赖，构建时 external，不引入 Tailwind/preflight。共享约定：`class`、`variant`（`default`/`secondary`/`ghost`/`outline`/`destructive`/`link`）、`size`（`xs`/`sm`/`default`/`lg`，按钮另有 `icon`/`icon-sm`/`icon-lg`）、`disabled`、`loading`、`data-slot` 和 `asChild`。视觉只引用 `--office-*` token；`.office-ui` 上只补充共享 token 未覆盖的间距、overlay、z-index 和动画时长。Dialog/Sheet 的焦点陷阱、Esc、backdrop、关闭后焦点归还，Select/Menu/Tooltip/Popover 的 portal 与碰撞定位，Tabs 的 roving tabindex，Toast 的 status live region 均由 reka-ui 提供。`Spinner` 和 `Tooltip` 的公开 props 保持兼容，后者内部改为委托 `OfficeTooltip`。完整合同见 `docs/components/ui-primitives.md`；包体积预算为新增 gzip ≤35 KB（不含图标），由 `tests/unit/vue-ui-primitives-contract.test.mjs` 检查。
+
+共享 chrome 层（issue #158）在 primitive 之上提供 `OfficeToolbar`/`OfficeToolbarGroup`/`OfficeToolbarSeparator`、`OfficePageControl`、`OfficeZoomControl`、`OfficeSearchPopover`、`OfficeStatusBar`、`OfficeEmptyState`/`OfficeErrorState`/`OfficeLoadingState`、`DocumentViewerSidebar`/`DocumentViewerSidebarSkeleton` 和 `useElementWidth`。所有组件保持受控/非受控双模式，视觉只读 `--office-*` token；toolbar 最小高度 48px、`px-3 py-2`、4/8px gap、底边和 `bg-background`，sidebar 固定 160px 并在容器宽度低于 768px 时自动 overlay。新增 i18n 键位于 `common.chrome.*` 与 `common.zoom.fitWidth`/`fitPage`/`actualSize`/`percent`，`OfficeChromeMessages` 已导出。完整 API、键盘/ARIA 和响应式截图证据见 `docs/components/office-chrome.md`。四个 viewer 的迁移留给 #159–#162，现有公开 props 不变。
+
 
 `OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
@@ -253,6 +272,12 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 各查看器在根元素绑定该组合函数，并在命中时抛出 `fileDrop(file)` 事件；拖入时根元素带 `data-file-drop-active="true"`。不支持的类型不会进入加载管线：DOCX 通过 `controller.setStatus()` 提示，XLSX/PDF/PPTX 在查看器上方渲染 `role="alert"` 条（文案来自 `xlsx.viewer.unsupportedDrop`、`pdf.viewer.unsupportedDrop`、`pptx.viewer.unsupportedDrop`）。`@arcships/vue-xlsx` 还导出 `XLSX_FILE_EXTENSIONS`、`XLSX_FILE_MIME_TYPES`、`XLSX_FILE_ACCEPT` 和 `isSupportedXlsxFileName`，`@arcships/vue-pdf`/`@arcships/vue-pptx` 提供同名的 `PDF_*`/`PPTX_*` 常量与判断函数。
 
 两个 Office 选择原语依赖 `@arcships/office-interaction` 的公开类型。它们只消费规范化几何和受控临时状态：不解析 Office 文件，不从 DOM 猜测格式对象，也不保存引用集合。轮廓层负责候选可视化和键盘事件；区域框负责 `0..1` 坐标中的拖选与键盘调整。确认后的工具栏、引用列表和 Agent 工作流由宿主实现。
+
+区域截图与标注是可选能力，headless 宿主不引入任何 DOM 依赖即可继续只使用引用事件。`captureRegion({ surface, region, scale })` 接受元素、宿主自建的 capture provider 或内置 Surface 组件实例（四个 Surface 都实现可选的 `getCaptureSurface()`）；`region` 可以是规范化矩形，也可以是 `ManualRegionLocator`，后者由有能力解析的 Surface 返回 `region` 覆盖值。默认 `scale` 为 `devicePixelRatio`，输出像素尺寸先经过 `maxPixels`、`maxDimension`、`maxBytes` 与 `MAX_REGION_CAPTURE_SCALE` 检查；返回对象持有 `blob`、`url`、`source` 元数据和 `release()`，宿主必须在替换或卸载时调用 `release()`/`releaseRegionCapture()` 以撤销 object URL。Canvas/图片 Surface 应提供 intrinsic `raster`，通过 `drawImage` 精确裁剪；纯 DOM Surface 使用 SVG `foreignObject` 尽力栅格化。
+
+`OfficeRegionAnnotator` 是同一能力的可选 Vue 组件：它在截图上提供箭头、矩形、文字和高亮工具，坐标始终相对截图自身归一化到 `[0,1]`，样式中的 `strokeWidth`/`fontSize` 相对短边归一化，因此 1x 与 2x 位图渲染一致。`OfficeRegionAnnotationDocument` 可经 `stringifyOfficeRegionAnnotationDocument()`/`parseOfficeRegionAnnotationDocument()` 往返 JSON；文档不属于 `OfficeObjectReference`，也不会上传或写入引用。组件只在 `image` 是 `Blob` 时创建 object URL，并在 prop 变化和卸载时撤销。
+
+完整字段、限制与示例见[区域截图与标注](region-capture-and-annotation.md)。
 
 ### 3.7 `@arcships/pptx-core`
 
@@ -272,7 +297,7 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.8 `@arcships/vue-pptx`
 
-稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu`、`PptxStageLinkActivate`、`PptxObjectHyperlink` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。`showNotes`（默认 `false`）挂载演讲者面板：浏览模式显示当前页备注，演示模式显示演讲者视图（当前页备注 + 下一页缩略图 + 计时），面板根节点为 `data-testid="pptx-presenter"` 并带 `data-presenter-mode`，备注可用 `notes` 插槽替换。浏览布局由 `viewMode`（`single` / `sorter`，未受控时由工具栏控制）选择，另有 `defaultViewMode` 和 `update:viewMode`（issue #110）：`sorter` 是懒加载的缩略图网格，只挂载可视行附近的格子，点击格子切页但保持网格打开，两种布局共享同一个活动页。超链接（issue #114）在两种模式下都可点击：`a:hlinkClick` 经共享 URL 策略只允许 `http:`/`https:`/`mailto:` 和文档内跳页，外部链接在新标签页打开、内部链接走同一个 `goTo()`，`javascript:` 等目标被拒绝；`action` 事件仍按原样抛出，`linkHandling="host"` 关闭内置打开/复制行为。`PptxStage` 额外发出 `link-activate`（键盘激活链接形状），右键带链接的形状由查看器渲染内置菜单（`showContextMenu` 可关闭，`context-menu` 事件始终先抛出），悬停链接只作为 tooltip/`static` 能力报告，不自动执行。链接元数据写入 `PptxObjectIdentity.hyperlinks`（`PptxObjectHyperlink`）和 `PptxSlideAction.tooltip`，并在渲染元素上以 `data-pptx-hyperlink*`、`role="link"`、`tabindex` 和 `title` 暴露。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
+稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`PptxLinkMenu`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu`、`PptxStageLinkActivate`、`PptxObjectHyperlink` 和其他公开类型。`PptxLinkMenu` 是链接右键菜单的低层组件（共享 `OfficeDropdownMenu`），供自建舞台复用；`PptxViewer` 内部已使用它。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。`showNotes`（默认 `false`）挂载演讲者面板：浏览模式显示当前页备注，演示模式显示演讲者视图（当前页备注 + 下一页缩略图 + 计时），面板根节点为 `data-testid="pptx-presenter"` 并带 `data-presenter-mode`，备注可用 `notes` 插槽替换。浏览布局由 `viewMode`（`single` / `sorter`，未受控时由工具栏控制）选择，另有 `defaultViewMode` 和 `update:viewMode`（issue #110）；`mode`/`showNotes` 同样支持受控与非受控（`update:mode`、`update:showNotes`），工具栏的 `showPresentToggle`、`showNotesToggle`、`showFullscreenControl` 默认开启（#161）。空/加载/错误状态由共享 `Office*` state 渲染，OLE/CFB 密码保护或旧版二进制文件返回 `UNSUPPORTED_CONTENT` 并显示受保护状态（`data-encrypted="true"`，`data-state` 仍为 `error`）。`sorter` 是懒加载的缩略图网格，只挂载可视行附近的格子，点击格子切页但保持网格打开，两种布局共享同一个活动页。超链接（issue #114）在两种模式下都可点击：`a:hlinkClick` 经共享 URL 策略只允许 `http:`/`https:`/`mailto:` 和文档内跳页，外部链接在新标签页打开、内部链接走同一个 `goTo()`，`javascript:` 等目标被拒绝；`action` 事件仍按原样抛出，`linkHandling="host"` 关闭内置打开/复制行为。`PptxStage` 额外发出 `link-activate`（键盘激活链接形状），右键带链接的形状由查看器渲染共享 `OfficeDropdownMenu` 内置菜单（内容节点 `data-testid="pptx-context-menu"`，`showContextMenu` 可关闭，`context-menu` 事件始终先抛出），悬停链接只作为 tooltip/`static` 能力报告，不自动执行。链接元数据写入 `PptxObjectIdentity.hyperlinks`（`PptxObjectHyperlink`）和 `PptxSlideAction.tooltip`，并在渲染元素上以 `data-pptx-hyperlink*`、`role="link"`、`tabindex` 和 `title` 暴露。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
 
 ### 3.9 `@arcships/office-interaction`
 
@@ -280,15 +305,19 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 引用只保存文档修订、语义、格式定位器、内容指纹和规范化区域，不保存 DOM、Vue 实例、Blob URL 或截图位图。`OfficeInteractionValidationError` 的 `code` 固定为 `INVALID_OFFICE_INTERACTION`，详细原因从结构化 `issues` 读取。该包不解析 Office 文件、不渲染界面、不保存引用集合、不调用 Agent，也不修改文件；格式包负责生成定位器，宿主决定如何组织和使用确认后的引用。
 
-根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；`XlsxViewer`/`XlsxSheetSurface` 的 `locale` 同时作为数字和日期格式的默认区域（可用 `documentLocale` 单独覆盖），键入 `1.234,5` 在 `de-DE` 下解析为 1234.5 并显示为 `1.234,50`，`[$-407]` 等格式内置区域始终优先，显式 `@` 文本格式保持原样；用户可见文案、aria-label 和数字/日期显示不再与查看器语言脱节。
+根入口还提供对象注册层：`OfficeObjectProvider<TContext>`、`createOfficeObjectRegistry<TContext>()`、`createOfficeObjectDescriptor()`、`createOfficeObjectFingerprint()`、`isOfficeObjectVisible()`、`officeObjectAncestors()` / `officeObjectChildren()`、`rankOfficeObjectCandidates()` 和 `officeObjectCandidatePreview()`。provider 只返回当前修订的 descriptor（含 draft、fingerprint、四维可靠度，可选 `visual` / `facets`），不提交引用；阶段四行为没有 `visual`，因此不会进入画布轮廓。注册层是四个格式包内置对象族的公共扩展点。
+
+根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。目录中的 `vueUi.primitives` 提供 primitive 层通用控制标签（关闭、加载、菜单、通知、对话框、更多），`@arcships/vue-ui` 的 Dialog/Sheet/Spinner/Toast 等组件默认取英文并跟随宿主 locale 与 `messages` 覆盖。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；`XlsxViewer`/`XlsxSheetSurface` 的 `locale` 同时作为数字和日期格式的默认区域（可用 `documentLocale` 单独覆盖），键入 `1.234,5` 在 `de-DE` 下解析为 1234.5 并显示为 `1.234,50`，`[$-407]` 等格式内置区域始终优先，显式 `@` 文本格式保持原样；用户可见文案、aria-label 和数字/日期显示不再与查看器语言脱节。
 
 ### 3.10 统一 Surface 引用选择
 
 `DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受 `documentId?: string`、`selectionMode?: "content" | "object" | "region"` 和 `emitReferenceCandidates?: boolean`。`selectionMode` 是受控输入，只解释下一次选择手势；Surface 不保存确认后的引用。
 
-四个 Surface 共同 expose `getDocumentRevision()`、`hitTest()`、`describeReference()`、`resolveReference()`、`scrollToReference()` 和 `captureReferencePreview()`。当前预览位图采集由宿主渲染管线负责，内置实现会发出 `CAPTURE_UNSUPPORTED` 并拒绝 Promise，不会返回伪造截图。
+四个 Surface 共同 expose `getDocumentRevision()`、`hitTest()`、`describeReference()`、`resolveReference()`、`scrollToReference()` 和 `captureReferencePreview()`；同时提供可选的 `getCaptureSurface()` 供 `@arcships/vue-ui` 的 `captureRegion()` 使用。`captureReferencePreview()` 的位图采集仍由宿主渲染管线负责，内置实现会发出 `CAPTURE_UNSUPPORTED` 并拒绝 Promise，不会返回伪造截图；需要内建区域位图时使用新的 `captureRegion()` 合同。
 
 统一事件为 `documentRevisionChange`、`referenceCandidateChange`、`referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。既有 `selectionChange`、`objectClick`、`contextMenu` 等格式事件在 `0.x` 中继续保留。每个格式包从根入口重导出共享 Surface 类型，消费端无需深层导入。
+
+阶段二–四的首批对象在 `0.8` 批次接入：DOCX/XLSX/PPTX/PDF 的对象索引与行为 adapter 见各格式包根入口（例如 `createDocxObjectRegistry`、`createXlsxObjectRegistry`、`createPptxObjectRegistry`、`createPdfObjectRegistry`）。`selectionMode="object"` 时的悬停轮廓只依赖候选 `preview.label` 和 DOM/页面几何，宿主无需读取私有对象；PDF 的 `PdfVisualObjectProvider` 由宿主注入，库不内置 OCR。表格单元格、图表元素等内部对象需要宿主提供 `getObjectTable` / `getObjectChart` 证据时才能创建引用，缺失证据返回结构化 `unsupported`，不会猜测。
 
 ### 3.11 统一 Surface 缩放
 
@@ -366,16 +395,28 @@ XLSX 表格样式与透视/切片合同：`BUILTIN_TABLE_STYLES`、`resolveBuilt
 | `FileUpload` | `files-accepted` | 通过检查的 `File[]` |
 | `FileUpload` | `files-rejected` | `FileUploadRejection[]`；每项包含 `code`、被拒绝的 `file` 和可显示的 `message` |
 | `SignaturePad` | `update:signature` | 数据地址；空签名为 `null` |
-| `BoundingBoxCitations` | `field-click` | `BoundingBoxField` |
-| `LayoutBlocks` | `block-click` | `LayoutBlock` |
+| `SignaturePad` | `update:modelValue`、`clear`、`cancel`、`confirm` | draw 模式为数据地址、typed 模式为文本；`confirm` 只在有签名时触发 |
+| `ESignatureFields` | `sign`、`edit`、`clear`、`export` | `ESignatureField` |
+| `BoundingBoxCitations` | `field-click` | `BoundingBoxField`（legacy 页卡模式） |
+| `BoundingBoxCitations` | `field-focus`、`update:activeFieldKey`、`update:expected` | `BoundingBoxReviewField`、字段 key、字段 key + `OfficeJsonValue` |
+| `LayoutBlocks` | `block-click`、`block-focus`、`update:activeBlockId` | `LayoutBlock` 或 block id |
+| `DocumentSplits` | `select-page` | 1-based 页码 |
+| `DocumentSplits` | `update:splits`、`splits-change`、`add-split`、`remove-split` | `DocumentSplit[]` 或新增/移除的 `DocumentSplit` |
 | `OfficeObjectOutlineLayer` | `activate`、`confirm`、`dismiss`、`navigate-hierarchy` | 候选轮廓；`confirm` 另含 `additiveRequested` 与 `penetrateRequested` |
 | `OfficeRegionSelector` | `update:modelValue`、`selection-start`、`selection-change`、`selection-commit`、`selection-cancel` | 规范化点或矩形；取消可返回原区域或 `null` |
+| `OfficeRegionAnnotator` | `update:modelValue`、`update:mode`、`update:color`、`annotation-add`、`annotation-remove`、`annotation-select`、`annotation-change`、`annotation-error`、`image-load` | 标注文档、单条标注、模式/颜色或错误；坐标归一化到截图 |
+| `OfficeSelect` | `update:modelValue`、`update:open` | 字符串选项值或打开状态 |
+| `OfficeDropdownMenu` / `OfficeContextMenu` | `select`、`update:open` | `select` 参数为被选中的 `OfficeMenuEntry` 和原始事件；`update:open` 为布尔值 |
+| `OfficeDialog` / `OfficeSheet` / `OfficePopover` | `update:open` | 布尔值 |
+| `OfficeInput` / `OfficeTextarea` / `OfficeToggle` / `OfficeTabs` | `update:modelValue` | 字符串、布尔值或 tab value |
+| `OfficeToastProvider` / `useOfficeToast` | 通过组合函数触发 | `success`/`error`/`warning`/`info`/`loading`/`add`/`update`/`close`/`promise` |
 
-`FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。选择控件只表达候选、确认或取消，宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行管理状态。
+
+`FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。`OfficeThemeProvider` 只写主题属性并暴露上下文，`OfficeIcon` 只渲染图标，两者不发出业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。选择控件只表达候选、确认或取消，宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行管理状态。
 
 ### 4.5 `vue-pptx`
 
-`PptxViewer` 提供 `load-start`、`load-success`、`load-error`、`slide-change`、`playback-ready`、`playback-state-change`、`step-change`、`playback-warning`、`capability`、`media-request`、`action` 和 `playback-error`。程序判断使用公开错误码和能力报告，不解析界面文案。
+`PptxViewer` 提供 `load-start`、`load-success`、`load-error`、`slide-change`、`playback-ready`、`playback-state-change`、`step-change`、`playback-warning`、`capability`、`media-request`、`action`、`playback-error`、`context-menu`、`update:viewMode`、`update:mode` 和 `update:showNotes`。程序判断使用公开错误码和能力报告，不解析界面文案。
 
 `PptxStage` 提供：
 

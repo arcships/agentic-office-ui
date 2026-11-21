@@ -64,8 +64,21 @@ const suites = {
 
       "tests/unit/office-runtime.test.mjs",
       "tests/unit/viewer-keys.test.mjs",
+      "tests/unit/vue-ui-design-tokens.test.mjs",
+      "tests/unit/extend-parity-harness.test.mjs",
+      "tests/unit/ui-parity-gate.test.mjs",
+      "tests/unit/vue-ui-primitives-contract.test.mjs",
+      "tests/unit/product-visual-matrix.test.mjs",
+      "tests/unit/vue-ui-chrome-contract.test.mjs",
+
+
       "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
+      "tests/unit/office-interaction-objects.test.mjs",
+      "tests/unit/docx-object-index.test.mjs",
+      "tests/unit/xlsx-object-index.test.mjs",
+      "tests/unit/pdf-object-index.test.mjs",
+      "tests/unit/pptx-object-index.test.mjs",
       "tests/unit/i18n.test.mjs",
       "tests/unit/image-budget.test.mjs",
       "tests/unit/docx-core.test.mjs",
@@ -73,6 +86,7 @@ const suites = {
       "tests/unit/docx-search.test.mjs",
       "tests/unit/docx-replace.test.mjs",
       "tests/unit/docx-fixture-fidelity.test.mjs",
+      "tests/unit/fixture-corpus.test.mjs",
       "tests/unit/docx-form-field-required.test.mjs",
       "tests/unit/docx-model-preservation.test.mjs",
       "tests/unit/docx-export-prepare-model.test.mjs",
@@ -191,7 +205,10 @@ command("core-behavior-5", process.execPath, [
       "tests/unit/pptx-hyperlinks.test.mjs",
       "tests/unit/pptx-speaker-notes.test.mjs",
       "tests/unit/pptx-transitions.test.mjs",
+      "tests/unit/region-capture.test.mjs",
+      "tests/unit/region-annotations.test.mjs",
       "tests/unit/core-purity.test.mjs",
+      "tests/unit/attribution-contract.test.mjs",
 
     ]),
     command("core-boundary", process.execPath, [
@@ -255,11 +272,15 @@ command("core-behavior-5", process.execPath, [
 
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/file-components.test.mjs",
+      "tests/component/document-blocks.test.mjs",
       "tests/component/file-drop-import.test.mjs",
       "tests/component/pdf-page-lifecycle.test.mjs",
       "tests/component/i18n-source.test.mjs",
       "tests/component/i18n-runtime.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
+      "tests/component/pdf-object-selection.test.mjs",
+      "tests/component/region-annotator.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
@@ -285,6 +306,9 @@ command("core-behavior-5", process.execPath, [
       "tests/component/docx-command-wiring.test.mjs",
       "tests/component/docx-edit-model-preservation.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
+      "tests/component/vue-ui-theme-icon.test.mjs",
+      "tests/component/vue-ui-primitives.test.mjs",
+      "tests/component/vue-ui-chrome.test.mjs",
 
     ]),
 command("vue-component-behavior-2", process.execPath, [
@@ -334,8 +358,10 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/pdf-surface-lazy-render.test.mjs",
       "tests/component/pdf-view-modes.test.mjs",
       "tests/component/pdf-navigation-aids.test.mjs",
+      "tests/component/pdf-chrome.test.mjs",
       "tests/component/pptx-slide-sorter.test.mjs",
       "tests/component/pptx-presenter-view.test.mjs",
+      "tests/component/pptx-context-menu.test.mjs",
       "tests/component/docx-notes.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/docx-edit-clone-sharing.test.mjs",
@@ -354,6 +380,9 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/xlsx-sheet-order.test.mjs",
       "tests/component/xlsx-sheet-tabs.test.mjs",
       "tests/component/xlsx-status-bar.test.mjs",
+      "tests/component/xlsx-office-chrome.test.mjs",
+      "tests/component/xlsx-menus.test.mjs",
+      "tests/component/xlsx-authoring-dialog.test.mjs",
       "tests/component/xlsx-viewer-tab-surface.test.mjs",
       "tests/component/xlsx-sheet-visibility.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",
@@ -661,6 +690,22 @@ command("vue-component-behavior-5", process.execPath, [
         DOCS_EVIDENCE_DIR: path.join(suiteDir, "documentation-contract"),
       },
     }),
+    // #165: component map / token table / migration guide / release checklist
+    // and the gate docs must keep matching the code they describe.
+    command("ui-documentation-contract", process.execPath, [
+      "scripts/ci/verify-ui-docs.mjs",
+    ], {
+      env: {
+        UI_DOCS_EVIDENCE_DIR: path.join(suiteDir, "ui-documentation-contract"),
+      },
+    }),
+    command("open-source-attribution", process.execPath, [
+      "scripts/ci/verify-attribution.mjs",
+    ], {
+      env: {
+        ATTRIBUTION_EVIDENCE_DIR: path.join(suiteDir, "open-source-attribution"),
+      },
+    }),
   ],
   test: [
     ...(prebuilt ? [] : [command("build", pnpm, ["build"])]),
@@ -670,6 +715,15 @@ command("vue-component-behavior-5", process.execPath, [
   check: [
     command("typecheck", pnpm, ["typecheck"]),
     command("build", pnpm, ["-r", "build"]),
+    // #165 component style guards: new bare hex/radius/font-size/shadow/
+    // transition values in packages/*/src fail against the frozen baseline.
+    command("style-token-guard", process.execPath, [
+      "scripts/ci/lint-styles.mjs",
+    ], {
+      env: {
+        STYLE_GUARD_EVIDENCE_DIR: path.join(suiteDir, "style-token-guard"),
+      },
+    }),
     childSuite("unit", "test:unit"),
     childSuite("component", "test:component"),
     childSuite("blackbox", "test:blackbox"),

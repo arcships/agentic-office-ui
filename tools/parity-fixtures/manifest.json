@@ -1,0 +1,1365 @@
+{
+  "schemaVersion": 1,
+  "harness": "extend-ui-pixel-parity",
+  "referenceCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+  "referenceUrl": "https://github.com/extend-hq/ui",
+  "deviceScaleFactor": 2,
+  "viewports": [
+    {
+      "id": "1440x900",
+      "label": "desktop",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "1280x720",
+      "label": "laptop",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": "768x1024",
+      "label": "tablet",
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "390x844",
+      "label": "mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "thresholds": {
+    "geometryTolerancePx": 0,
+    "maxChannelDelta": 2,
+    "maxDiffPixelRatio": 0.001,
+    "maxContiguousDiffPx": 4,
+    "heatmapAmplification": 16,
+    "topDiffRegions": 5
+  },
+  "surfaces": [
+    {
+      "id": "button",
+      "title": "Button",
+      "referenceComponent": "apps/v4/components/ui/button.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeButton.vue",
+      "subjectStatus": "available",
+      "cellWidth": 240,
+      "notes": "Primitive layer #157. Reference and subject use the same copy, Geist font, variants, sizes and interaction states.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "active",
+          "label": "active",
+          "matrixState": "active",
+          "interaction": {
+            "type": "press",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "outline",
+          "label": "outline",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "secondary",
+          "label": "secondary",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "ghost",
+          "label": "ghost",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "destructive",
+          "label": "destructive",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "link",
+          "label": "link",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-sm",
+          "label": "size sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-lg",
+          "label": "size lg",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "icon-sm",
+          "label": "icon sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "input",
+      "title": "Input",
+      "referenceComponent": "apps/v4/components/ui/input.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeInput.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=input-control]",
+      "referenceTargetSelector": "[data-slot=input-control]",
+      "cellWidth": 300,
+      "notes": "Primitive layer #157. The wrapper (border, radius, focus ring) is the measured target; the inner input keeps the reference height/padding contract.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "input"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "invalid",
+          "label": "invalid",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "size-sm",
+          "label": "size sm",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "select",
+      "title": "Select",
+      "referenceComponent": "apps/v4/components/ui/select.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeSelect.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=select-trigger]",
+      "referenceTargetSelector": "[data-slot=select-trigger]",
+      "cellWidth": 320,
+      "notes": "Primitive layer #157. Closed trigger, disabled and placeholder states; popup positioning stays covered by the component suite.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-slot=select-trigger]"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled",
+          "matrixState": "disabled",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "placeholder",
+          "label": "placeholder",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "dialog",
+      "title": "Dialog",
+      "referenceComponent": "apps/v4/components/ui/dialog.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeDialog.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=dialog-content]",
+      "referenceTargetSelector": "[data-slot=dialog-popup]",
+      "cellWidth": 560,
+      "notes": "Primitive layer #157. Open dialog with the same header, empty panel, footer and close button as the reference.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "tooltip",
+      "title": "Tooltip",
+      "referenceComponent": "apps/v4/components/ui/tooltip.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeTooltip.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=tooltip-content]",
+      "referenceTargetSelector": "[data-parity-tooltip-content]",
+      "cellWidth": 220,
+      "notes": "Primitive layer #157. The visible bubble is the measured target; the trigger uses the same copy and hover interaction.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-parity-tooltip-trigger]"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "file-upload",
+      "title": "FileUpload",
+      "referenceComponent": "apps/v4/components/extend/file-upload.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/FileUpload.vue",
+      "subjectStatus": "available",
+      "cellWidth": 520,
+      "notes": "Both sides render FileUpload with shipped defaults (no visual props): Extend's icon cluster, default copy, accept list, multiple input and in-component file list are reproduced by the Vue FileUpload. The file list is on by default; hosts can opt out with show-file-list=false.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default (empty)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "dragging",
+          "label": "dragging",
+          "matrixState": "active",
+          "interaction": {
+            "type": "dragenter",
+            "selector": "[role='button']"
+          }
+        },
+        {
+          "id": "rejected",
+          "label": "rejected",
+          "matrixState": "error",
+          "interaction": {
+            "type": "set-input-files",
+            "selector": "input[type='file']",
+            "file": "fileUpload.rejectedFile"
+          }
+        },
+        {
+          "id": "file-selected",
+          "label": "file selected",
+          "matrixState": "default",
+          "interaction": {
+            "type": "set-input-files",
+            "selector": "input[type='file']",
+            "file": "fileUpload.selectedFile"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "file-thumbnail",
+      "title": "FileThumbnail",
+      "referenceComponent": "apps/v4/components/extend/file-thumbnail.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/FileThumbnail.vue",
+      "subjectStatus": "available",
+      "cellWidth": 220,
+      "notes": "Extend's square preview card, blur-in reveal, loading overlay, error fallback and muted empty tile are reproduced by the Vue FileThumbnail. The Extend default tile has no glyph/meta layer; showTypeGlyph/showMeta stay opt-in Vue extensions.",
+      "states": [
+        {
+          "id": "default",
+          "label": "empty fallback",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "image",
+          "label": "image preview",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "pdf-toolbar",
+      "title": "PDF toolbar",
+      "referenceComponent": "apps/v4/components/extend/pdf-viewer.tsx (PDFViewerToolbar)",
+      "subjectComponent": "packages/vue-pdf/src/components/PdfViewerToolbar.vue ([data-testid=pdf-toolbar])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='pdf-toolbar']",
+      "cellWidth": 960,
+      "notes": "Both sides render the pinned Extend PDFViewerToolbar row with the same fixture values (page 3 of 12, 100%, sidebar closed). The Vue subject is the production PdfViewerToolbar; additional PDF commands (layout, first/last, download, print, file name) live in the closed ⋯ actions menu and do not affect the default row.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (sidebar toggle)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (sidebar toggle)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "active",
+          "label": "active (sidebar toggle)",
+          "matrixState": "active",
+          "interaction": {
+            "type": "press",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "empty document (controls disabled)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "pdf-sidebar",
+      "title": "PDF thumbnails sidebar",
+      "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx + pdf-viewer.tsx (PDFViewerThumbnails)",
+      "subjectComponent": "packages/vue-pdf/src/components/PdfViewer.vue (DocumentViewerSidebar + PdfThumbnailStrip)",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-pdf-sidebar-frame]",
+      "subjectTargetSelector": "[data-pdf-sidebar-frame]",
+      "cellWidth": 220,
+      "notes": "Both sides render a 160px rail over four 600×800 PDF pages, one shared thumbnail PNG, numeric page labels, active page 1 and the same 768px inline breakpoint. The reference is the pinned Extend DocumentViewerThumbnailSidebar with the real PDFViewerThumbnails markup; the subject is the production DocumentViewerSidebar + PdfThumbnailStrip pair used by PdfViewer.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "docx-toolbar",
+      "title": "DOCX toolbar",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/docx-toolbar.tsx (pinned Extend DocxToolbar)",
+      "subjectComponent": "packages/vue-docx/src/components/DocxViewerToolbar.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='docx-viewer-toolbar']",
+      "referenceTargetSelector": "[data-parity-docx-toolbar]",
+      "cellWidth": 1400,
+      "notes": "Both sides render the pinned Extend `DocxToolbar` from apps/v4/components/extend/docx-viewer.tsx: thumbnails toggle, Page + page number + of N, zoom out / level / in, separator and the closed DOCX actions trigger in a 48px `min-h-12 px-3 py-2` row. Every product-only command (find, comments, edits, revision display, view mode, fit, theme, upload, download) lives in the actions menu or behind an opt-in host prop, so the default row is the upstream row.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (thumbnails toggle)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (thumbnails toggle)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "disabled (empty document)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "docx-sidebar",
+      "title": "DOCX thumbnail sidebar",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/docx-sidebar.tsx + assets/docx-thumbnail.png",
+      "subjectComponent": "packages/vue-docx/src/components/DocxThumbnailPanel.vue (real canvas thumbnails, DocumentViewerSidebar shell)",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='docx-thumbnail-panel']",
+      "referenceTargetSelector": "[data-document-thumbnail-sidebar]",
+      "cellWidth": 220,
+      "notes": "Both sides render the pinned Extend `DocumentViewerThumbnailSidebar` (160px `w-40` rail) with the real `DocxThumbnailSidebarContent` markup: no header, 16px list padding, a 92px page card with the same page image, a `text-xs` page label, the active `bg-sidebar-accent` state and the upstream `p-4` loading skeleton. The page image is captured from the same DOCX thumbnail renderer at 2x.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "pptx-toolbar",
+      "title": "PPTX toolbar",
+      "referenceComponent": "apps/v4/components/extend/pptx-viewer.tsx (PptxToolbar)",
+      "subjectComponent": "packages/vue-pptx/src/PptxViewerToolbar.vue ([data-pptx-toolbar])",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-pptx-toolbar]",
+      "subjectTargetSelector": "[data-pptx-toolbar]",
+      "core": true,
+      "gateStatus": "blocking",
+      "cellWidth": 960,
+      "notes": "Both sides render the pinned Extend PptxToolbar resting row with the same fixture values (slide 3 of 12, 100%, thumbnail rail closed, download/upload available). The Vue subject is the production PptxViewerToolbar; the PPTX-only commands (browse layout, present, speaker notes, fullscreen, find) live in the closed ... actions menu and do not affect the default row.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "hover",
+          "label": "hover (thumbnail toggle)",
+          "matrixState": "hover",
+          "interaction": { "type": "hover", "selector": "button" }
+        },
+        {
+          "id": "focus",
+          "label": "focus (thumbnail toggle)",
+          "matrixState": "focus",
+          "interaction": { "type": "focus", "selector": "button" }
+        },
+        {
+          "id": "active",
+          "label": "active (thumbnail toggle)",
+          "matrixState": "active",
+          "interaction": { "type": "press", "selector": "button" }
+        },
+        {
+          "id": "disabled",
+          "label": "empty presentation (controls disabled)",
+          "matrixState": "empty",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "pptx-sorter",
+      "title": "PPTX slide sorter cards",
+      "referenceComponent": "apps/v4/components/extend/pptx-viewer.tsx (PptxSidebarThumbnail item) + file-thumbnail.tsx",
+      "subjectComponent": "packages/vue-pptx/src/PptxSlideCard.vue + PptxThumbnail.vue ([data-pptx-sorter-grid])",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-pptx-sorter-grid]",
+      "subjectTargetSelector": "[data-pptx-sorter-grid]",
+      "core": true,
+      "gateStatus": "blocking",
+      "cellWidth": 672,
+      "notes": "The pinned Extend PPTX viewer has no sorter grid; the only slide-card markup upstream is the thumbnail-rail item (PptxSidebarThumbnail inside the role=option wrapper). Both sides render six of those cards in the production sorter grid metrics (3 columns, 12px gap) with the same 960x540 fixture slide, one active card, hover on card 2. The grid composition is a harness fixture; the card anatomy (p-2, gap-2, rounded-md, text-xs, shadow-xs -> shadow-sm, sidebar-accent hover/active, white rounded-sm preview) is upstream. Loading/error card states are covered by the PPTX chrome story (OfficeSkeleton/error copy are intentional #161 additions) and are not part of this matrix.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default (card 1 active)",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "hover",
+          "label": "hover (card 2)",
+          "matrixState": "hover",
+          "interaction": { "type": "hover", "selector": "[data-slide-index='1']" }
+        },
+        {
+          "id": "selected",
+          "label": "selected (card 3 active)",
+          "matrixState": "active",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "pptx-presenter",
+      "title": "PPTX presenter panel",
+      "referenceComponent": null,
+      "subjectComponent": "packages/vue-pptx/src/PptxPresenterPanel.vue ([data-testid=pptx-presenter])",
+      "subjectStatus": "available",
+      "referenceStatus": "unreachable",
+      "pendingIssue": "#161",
+      "core": false,
+      "gateStatus": "pending",
+      "gatePendingIssue": "#161",
+      "cellWidth": 300,
+      "notes": "No reference surface exists at the pinned commit.",
+      "unreachableReason": "The pinned Extend UI commit 70fe70c6 has no PPTX presenter/speaker-notes layout: apps/v4/components/extend/pptx-viewer.tsx renders only the toolbar, thumbnail rail and loading/empty/error chrome; presenter view and speaker notes live inside the private @extend-ai/react-pptx engine, which this repository does not vendor. Building a reference out of Extend primitives would only re-assert our own composition, so the panel is aligned to Extend primitives (Card/Separator/ScrollArea) and validated by the PPTX chrome story (scripts/ci/capture-pptx-chrome.py) plus component tests instead of a pixel reference.",
+      "states": [
+        {
+          "id": "browse",
+          "label": "browse notes rail",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        },
+        {
+          "id": "present",
+          "label": "presenter rail (next slide, timer)",
+          "matrixState": "default",
+          "interaction": { "type": "none" }
+        }
+      ]
+    },
+    {
+      "id": "document-sidebar",
+      "title": "DocumentViewerSidebar",
+      "referenceComponent": "apps/v4/components/extend/document-viewer-sidebar.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue + DocumentViewerSidebarSkeleton.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-document-sidebar-frame]",
+      "subjectTargetSelector": "[data-document-sidebar-frame]",
+      "cellWidth": 220,
+      "notes": "Both sides render the pinned Extend `DocumentViewerThumbnailSidebar` as a 160px `w-40` rail inside the same 240px frame: two fixture page cards (80x112 `FileThumbnail` + `text-xs` page number), 8px list padding, 12px list gap, and the upstream `p-4` one-card loading skeleton. States cover inline open/closed/skeleton plus the overlay open/closed pair (absolute 160px rail over a 196px `muted` document surface, `-translate-x-full` when closed, `shadow-lg` edge). The fixture strip is viewer state rather than a sidebar primitive, so #163 documents the integration seam and each viewer keeps its own thumbnails.",
+      "states": [
+        {
+          "id": "open",
+          "label": "open (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "closed",
+          "label": "closed (inline)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "skeleton",
+          "label": "skeleton",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "overlay-open",
+          "label": "open (overlay)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "overlay-closed",
+          "label": "closed (overlay)",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-empty-state",
+      "title": "OfficeEmptyState",
+      "referenceComponent": "apps/v4/components/extend/pdf-editor-shared.tsx (PdfEditorEmptyState)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeEmptyState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-empty-state]",
+      "subjectTargetSelector": "[data-slot=empty-state]",
+      "cellWidth": 320,
+      "notes": "`PdfEditorEmptyState` is the only reusable empty state in the pinned Extend tree: centered column, `gap-2 px-4 py-10`, optional 40px `rounded-full bg-muted` glyph, `text-sm font-medium` title, `max-w-56 text-xs` description and an `mt-2` action row. The glyph is omitted on both sides (icon artwork is an OfficeIcon/Hugeicons concern covered by the icon unit tests), so the cells compare layout, typography and the default catalog copy. `action` adds the upstream outline/sm button in the `mt-2` slot.",
+      "states": [
+        {
+          "id": "default",
+          "label": "title + description",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "action",
+          "label": "with action",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-error-state",
+      "title": "OfficeErrorState",
+      "referenceComponent": "apps/v4/components/extend/xlsx-viewer.tsx (loadError card inside `grid place-items-center bg-muted/30 p-4`)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeErrorState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-error-card]",
+      "subjectTargetSelector": "[data-slot=error-state]",
+      "cellWidth": 360,
+      "notes": "Both sides render the pinned viewer error card inside the upstream centered host: `max-w-md rounded-lg border bg-background p-4 text-sm`, `font-medium` title, `mt-1 text-muted-foreground` message and an `mt-4` outline/sm action. The card is the target, so padding, the 1px border, the 10px radius and the 14/20 type are compared geometrically too. The upstream card has no glyph; OfficeErrorState's `icon` prop is opt-in. `message` drops the action row (`showRetry=false`).",
+      "states": [
+        {
+          "id": "default",
+          "label": "card with retry",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "message",
+          "label": "card without action",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "wrapped",
+          "label": "wrapped message",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-loading-state",
+      "title": "OfficeLoadingState",
+      "referenceComponent": "apps/v4/components/extend/docx-viewer.tsx + xlsx-viewer.tsx (ViewerLoadingSurface)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeLoadingState.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-viewer-loading-surface]",
+      "subjectTargetSelector": "[data-slot=loading-state]",
+      "cellWidth": 320,
+      "notes": "`ViewerLoadingSurface` is `grid h-full min-h-52 place-items-center bg-transparent` with the 16px spinner. A 320x208 frame makes `h-full` and the subject's 13rem min-height resolve to the same box, and the state root is the target, so the 208px min-height, the centered placement and the spinner size are compared. The subject reaches the upstream surface by passing empty title/description; `hidden` covers the upstream `showSpinner={false}` branch. Titled loading states are covered by the component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "spinner",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hidden",
+          "label": "spinner hidden",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "office-status-bar",
+      "title": "OfficeStatusBar",
+      "referenceComponent": "apps/v4/components/extend/file-system.tsx footer + xlsx-viewer.tsx sheet tabs + pdf-editor-panels.tsx hint rows (composed footer contract)",
+      "subjectComponent": "packages/vue-ui/src/components/chrome/OfficeStatusBar.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-status-bar-frame]",
+      "subjectTargetSelector": "[data-slot=status-bar]",
+      "cellWidth": 360,
+      "notes": "Extend has no standalone status bar: viewers append footer strips with `border-t`, `bg-muted/40`, `px-3 py-2`, `text-xs text-muted-foreground` (file-system.tsx `aria-live` footer, xlsx-viewer.tsx sheet-tab strip, pdf-editor-panels.tsx hint rows). The reference composes those documented footer classes with the page/status/file content OfficeStatusBar renders, so the diff pins the shared footer metrics (33px row, 12/16 type, muted palette, left/right split, 4px/8px gaps) instead of a single upstream class list.",
+      "states": [
+        {
+          "id": "default",
+          "label": "page + status + file",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "bounding-box-citations",
+      "title": "Bounding box citations (HumanReviewPanel)",
+      "referenceComponent": "apps/v4/components/extend/bounding-box-citations.tsx (HumanReviewPanel, scalar Form cards)",
+      "subjectComponent": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-review-panel]",
+      "subjectTargetSelector": "[data-slot=bounding-box-panel]",
+      "cellWidth": 420,
+      "notes": "Form tab with scalar string/number review fields. The upstream JSON tab (pierre/diffs) and array/object grid editors are not vendored; loading/error/empty cells use the harness extension contract. Page highlight and split layout are covered by component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "form fields",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover field",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-review-field-key='invoice_total']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus field",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-review-field-key='payment_terms']"
+          }
+        },
+        {
+          "id": "selected",
+          "label": "active field",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "modified",
+          "label": "modified expected",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "empty",
+          "label": "no fields",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "layout-blocks",
+      "title": "Layout blocks (OCR panel)",
+      "referenceComponent": "apps/v4/components/extend/layout-blocks-panel.tsx (LayoutBlocksPanel)",
+      "subjectComponent": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-layout-panel]",
+      "subjectTargetSelector": "[data-slot=layout-blocks-panel]",
+      "cellWidth": 420,
+      "notes": "Block list with type badge, confidence and page chip. The reference omits @tanstack/react-virtual (four fixture rows fit the 420px panel); loading/error states follow the shared harness extension contract. Markdown rendering is covered by component tests.",
+      "states": [
+        {
+          "id": "default",
+          "label": "blocks",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover block",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-layout-block-id='block-2']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus block",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-layout-block-id='block-3']"
+          }
+        },
+        {
+          "id": "active",
+          "label": "active block",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "empty",
+          "label": "no blocks",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "e-signature",
+      "title": "E-signature fields",
+      "referenceComponent": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx (SignatureFieldsPanel)",
+      "subjectComponent": "packages/vue-ui/src/components/ESignatureFields.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-signature-fields]",
+      "subjectTargetSelector": "[data-slot=e-signature-fields]",
+      "cellWidth": 420,
+      "notes": "Unsigned/signed/exporting field panel with the shared signature fixture. The padded signature image is identical on both sides. The drawn canvas dialog is non-deterministic and is covered by SignaturePad interaction tests instead; showPreview is a harness extension.",
+      "states": [
+        {
+          "id": "unsigned",
+          "label": "unsigned field",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "signed",
+          "label": "signed field",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "exporting",
+          "label": "exporting",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "preview",
+          "label": "signature preview",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "document-splits",
+      "title": "Document splits",
+      "referenceComponent": "apps/v4/components/extend/document-splits.tsx (SplitGroupCard + list)",
+      "subjectComponent": "packages/vue-ui/src/components/DocumentSplits.vue",
+      "subjectStatus": "available",
+      "referenceTargetSelector": "[data-document-splits]",
+      "subjectTargetSelector": "[data-slot=document-splits]",
+      "cellWidth": 460,
+      "notes": "Split result list with page thumbnails, counts and remove actions. The reference is a static adaptation (no @dnd-kit); drag, add/remove and keyboard reordering are covered by component tests. Empty-pages, empty, loading and error cells follow the shared harness extension contract.",
+      "states": [
+        {
+          "id": "default",
+          "label": "three splits",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover thumbnail",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[data-page-id='page-1']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus thumbnail",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[data-page-id='page-1']"
+          }
+        },
+        {
+          "id": "single",
+          "label": "single split",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "empty-pages",
+          "label": "empty split group",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "empty",
+          "label": "no splits",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "loading",
+          "label": "loading",
+          "matrixState": "loading",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "error",
+          "label": "error",
+          "matrixState": "error",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": false,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "xlsx-toolbar",
+      "title": "XLSX viewer toolbar",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-toolbar.tsx (apps/v4/components/extend/xlsx-viewer.tsx WorkbookToolbar)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxToolbar.vue ([data-testid=xlsx-toolbar])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-toolbar']",
+      "referenceTargetSelector": "[data-parity-xlsx-toolbar]",
+      "cellWidth": 1000,
+      "notes": "Both sides render the pinned Extend WorkbookToolbar row: min-h-12 px-3 py-2 gap-2, zoom out / 84px zoom select / zoom in, separator, search trigger, separator, workbook actions trigger. The Vue subject is the production XlsxToolbar; everything upstream keeps in the closed ... menu (download, export, upload, print preview, page breaks, file name) lives in the same menu and does not affect the resting row.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (zoom out)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (zoom out)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "button"
+          }
+        },
+        {
+          "id": "disabled",
+          "label": "empty workbook (controls disabled)",
+          "matrixState": "empty",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "xlsx-sheet-tabs",
+      "title": "XLSX sheet tabs",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-sheet-tabs.tsx (apps/v4/components/extend/xlsx-viewer.tsx WorkbookSheetTabsInner)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxSheetTabs.vue ([data-testid=xlsx-sheet-tabs])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-sheet-tabs']",
+      "referenceTargetSelector": "[data-parity-xlsx-sheet-tabs]",
+      "cellWidth": 1000,
+      "notes": "Upstream sheet-tab strip: border-t bg-muted/40 px-3 py-2, a horizontally scrollable 40px (50px when overflowing) viewport with the sm TabsList (bg-muted, p-0.5, rounded-lg) and max-w-48 triggers. The Vue subject keeps drag reorder, rename, hidden/unhide and the tab context menu; the add/remove/nav buttons upstream does not render are opt-in host props.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        },
+        {
+          "id": "hover",
+          "label": "hover (inactive tab)",
+          "matrixState": "hover",
+          "interaction": {
+            "type": "hover",
+            "selector": "[role='tab'][aria-selected='false']"
+          }
+        },
+        {
+          "id": "focus",
+          "label": "focus (inactive tab)",
+          "matrixState": "focus",
+          "interaction": {
+            "type": "focus",
+            "selector": "[role='tab'][aria-selected='false']"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    },
+    {
+      "id": "xlsx-status-bar",
+      "title": "XLSX status strip",
+      "referenceComponent": "tools/extend-reference/src/vendor/extend/xlsx-status-bar.tsx (apps/v4/components/extend/file-system.tsx status strip)",
+      "subjectComponent": "packages/vue-xlsx/src/components/XlsxStatusBar.vue ([data-testid=xlsx-status-bar])",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-testid='xlsx-status-bar']",
+      "referenceTargetSelector": "[data-parity-xlsx-status-bar]",
+      "cellWidth": 1000,
+      "notes": "The pinned Extend XLSX viewer/editor has no status bar, so the reference is Extend status-strip markup (file-system.tsx: 28px aria-live footer, border-t, bg-muted/40, px-3, text-xs, muted). Segments come from the shared fixture, so only geometry/typography/colour are compared; the XLSX address/stat semantics stay in the Vue component.",
+      "states": [
+        {
+          "id": "default",
+          "label": "default",
+          "matrixState": "default",
+          "interaction": {
+            "type": "none"
+          }
+        }
+      ],
+      "core": true,
+      "gateStatus": "blocking"
+    }
+  ],
+  "coreSubset": {
+    "description": "Surfaces the pull-request parity job captures. Everything else only runs in the nightly full matrix.",
+    "surfaces": [
+      "button",
+      "input",
+      "select",
+      "dialog",
+      "tooltip",
+      "file-upload",
+      "file-thumbnail",
+      "pdf-toolbar",
+      "pdf-sidebar",
+      "docx-toolbar",
+      "docx-sidebar",
+      "pptx-toolbar",
+      "pptx-sorter",
+      "xlsx-toolbar",
+      "xlsx-sheet-tabs",
+      "xlsx-status-bar"
+    ]
+  },
+  "baselines": {
+    "directory": "tests/visual/extend",
+    "manifest": "tests/visual/extend/manifest.json",
+    "naming": "<surface>/<state>/<theme>-<viewport>.png",
+    "viewports": [
+      "1440x900",
+      "390x844"
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "capturePaddingPx": 12,
+    "description": "Committed subject baselines for gate-blocking surfaces. `pnpm ui:baseline` manages them; the approval flow lives in tests/visual/extend/README.md."
+  },
+  "gate": {
+    "modes": {
+      "all": "Every parity failure blocks (default; `pnpm ui:parity`).",
+      "ready": "Only surfaces with gateStatus=blocking block; pending surfaces stay report-only (CI).",
+      "off": "Never exit non-zero; artifact mode (`--report-only`)."
+    },
+    "prMode": "all",
+    "finalMode": "all"
+  }
+}

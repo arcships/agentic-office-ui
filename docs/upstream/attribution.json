@@ -1,0 +1,952 @@
+{
+  "schemaVersion": 1,
+  "description": "Machine-readable open-source attribution manifest. docs/upstream/extend-ui.md is the human-readable index; scripts/ci/verify-attribution.mjs keeps both in sync and enforces the file headers.",
+  "extend": {
+    "repository": "https://github.com/extend-hq/ui",
+    "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+    "commitDate": "2026-11-17",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn"
+  },
+  "header": {
+    "required": "Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn.",
+    "markers": [
+      {
+        "name": "upstream and pinned commit",
+        "pattern": "extend-hq/ui\\s+@?\\s*70fe70c6f1e1eee53954c6923f3d9f583557a57e"
+      },
+      {
+        "name": "license identifier",
+        "pattern": "\\(MIT\\)|MIT License|SPDX-License-Identifier:\\s*MIT"
+      },
+      {
+        "name": "Extend copyright",
+        "pattern": "Copyright \\(c\\) 2026 CrowdView Inc, dba Extend"
+      },
+      {
+        "name": "shadcn portions",
+        "pattern": "portions Copyright \\(c\\) 2023 shadcn"
+      }
+    ],
+    "commentPrefixes": ["//", "/*", "*", "<!--", "--", "/*!"]
+  },
+  "upstreams": [
+    {
+      "id": "extend-ui",
+      "name": "Extend UI (extend-hq/ui)",
+      "aliases": ["Extend UI", "extend-hq/ui"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn",
+      "licenseFile": "docs/upstream/licenses/extend-ui-MIT.txt",
+      "licenseMarkers": [
+        "MIT License",
+        "Copyright (c) 2026 CrowdView Inc, dba Extend",
+        "Portions Copyright (c) 2023 shadcn"
+      ],
+      "sourceUrl": "https://github.com/extend-hq/ui",
+      "pinnedUrl": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+      "licenseUrl": "https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/LICENSE.md",
+      "usage": "Reference design, token, layout and behavior baseline for the 0.8 Office UI work. Adapted files carry the Extend header and are listed in docs/upstream/extend-ui.md."
+    },
+    {
+      "id": "extend-react-docx",
+      "name": "@extend-ai/react-docx (DOCX engine port)",
+      "aliases": ["@extend-ai/react-docx"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 CrowdView Inc, dba Extend",
+      "licenseFile": "docs/upstream/licenses/extend-react-docx-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2026 CrowdView Inc, dba Extend"],
+      "sourceUrl": "https://github.com/extend-hq/react-docx",
+      "pinnedUrl": "https://github.com/extend-hq/react-docx/tree/6f70b92",
+      "licenseUrl": "https://github.com/extend-hq/react-docx/blob/main/LICENSE",
+      "usage": "Source of the DOCX engine and editor port in packages/docx-core and packages/vue-docx (ported from upstream commit 6f70b92). File-level provenance stays in each ported module header."
+    },
+    {
+      "id": "extend-react-xlsx",
+      "name": "@extend-ai/react-xlsx (XLSX chart and sheet port)",
+      "aliases": ["@extend-ai/react-xlsx"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 CrowdView Inc, dba Extend",
+      "licenseFile": "docs/upstream/licenses/extend-react-xlsx-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2026 CrowdView Inc, dba Extend"],
+      "sourceUrl": "https://github.com/extend-hq/react-xlsx",
+      "pinnedUrl": "https://github.com/extend-hq/react-xlsx",
+      "licenseUrl": "https://github.com/extend-hq/react-xlsx/blob/main/LICENSE",
+      "usage": "Source of the XLSX chart renderer and related sheet behavior adapted in packages/vue-xlsx. File-level provenance stays in each adapted module header."
+    },
+    {
+      "id": "shadcn",
+      "name": "shadcn (React primitives upstream)",
+      "aliases": ["shadcn", "shadcn/ui"],
+      "license": "MIT",
+      "copyright": "Portions Copyright (c) 2023 shadcn (covered by the Extend UI notice)",
+      "licenseFile": "docs/upstream/licenses/extend-ui-MIT.txt",
+      "licenseMarkers": ["MIT License", "Portions Copyright (c) 2023 shadcn"],
+      "sourceUrl": "https://github.com/shadcn-ui/ui",
+      "pinnedUrl": "https://github.com/shadcn-ui/ui",
+      "licenseUrl": "https://github.com/shadcn-ui/ui/blob/main/LICENSE.md",
+      "usage": "Upstream primitive design that Extend UI vendors; attribution is carried by the Extend UI MIT notice that names the 2023 shadcn portions."
+    },
+    {
+      "id": "shadcn-vue",
+      "name": "shadcn-vue (reference implementation, not a runtime dependency)",
+      "aliases": ["shadcn-vue", "unovue/shadcn-vue"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2023 unovue",
+      "licenseFile": "docs/upstream/licenses/shadcn-vue-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2023 unovue"],
+      "sourceUrl": "https://github.com/unovue/shadcn-vue",
+      "pinnedUrl": "https://github.com/unovue/shadcn-vue/tree/d1bf1b3a2d1a824b19f32d7253a28a43797b8253",
+      "licenseUrl": "https://github.com/unovue/shadcn-vue/blob/dev/LICENSE",
+      "usage": "Vue-side reference for primitive structure and API shape (2026-11-03 dev commit d1bf1b3). Not a runtime dependency; no file is copied yet."
+    },
+    {
+      "id": "reka-ui",
+      "name": "reka-ui (runtime primitive dependency)",
+      "aliases": ["reka-ui", "unovue/reka-ui"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2023 radix-vue",
+      "licenseFile": "docs/upstream/licenses/reka-ui-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2023 radix-vue"],
+      "sourceUrl": "https://github.com/unovue/reka-ui",
+      "pinnedUrl": "https://github.com/unovue/reka-ui/tree/v2.11.0",
+      "licenseUrl": "https://github.com/unovue/reka-ui/blob/main/LICENSE",
+      "usage": "Runtime dependency for the Vue primitive layer planned in #157 (reka-ui 2.11.x). Installed through pnpm; the MIT notice ships with the dependency."
+    },
+    {
+      "id": "lucide",
+      "name": "Lucide (@lucide/vue)",
+      "aliases": ["Lucide", "lucide", "@lucide/vue"],
+      "license": "ISC",
+      "copyright": "Copyright (c) 2026 Lucide Icons and Contributors",
+      "licenseFile": "docs/upstream/licenses/lucide-ISC.txt",
+      "licenseMarkers": ["ISC License", "Copyright (c) 2026 Lucide Icons and Contributors"],
+      "sourceUrl": "https://github.com/lucide-icons/lucide",
+      "pinnedUrl": "https://github.com/lucide-icons/lucide",
+      "licenseUrl": "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
+      "usage": "Icon set for the planned OfficeIcon adapter (#156, @lucide/vue 1.76.x). Icons are consumed as a dependency, not vendored."
+    },
+    {
+      "id": "geist",
+      "name": "Geist and Geist Mono fonts",
+      "aliases": ["Geist", "Geist Mono", "geist-font"],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright (c) 2023 Vercel, in collaboration with basement.studio",
+      "licenseFile": "docs/upstream/licenses/geist-OFL-1.1.txt",
+      "licenseMarkers": [
+        "SIL OPEN FONT LICENSE Version 1.1",
+        "Copyright (c) 2023 Vercel, in collaboration with basement.studio"
+      ],
+      "sourceUrl": "https://github.com/vercel/geist-font",
+      "pinnedUrl": "https://github.com/vercel/geist-font",
+      "licenseUrl": "https://github.com/vercel/geist-font/blob/main/LICENSE.txt",
+      "usage": "Default sans and mono font tokens for the Office theme (#156); consumed through @fontsource-variable/geist (OFL-1.1) or a host-provided Geist installation."
+    },
+    {
+      "id": "hugeicons",
+      "name": "Hugeicons (@hugeicons/core-free-icons)",
+      "aliases": ["Hugeicons", "@hugeicons/core-free-icons", "hugeicons"],
+      "license": "MIT",
+      "copyright": "Copyright (c) 2025 Hugeicons",
+      "licenseFile": "docs/upstream/licenses/hugeicons-MIT.txt",
+      "licenseMarkers": ["MIT License", "Copyright (c) 2025 Hugeicons"],
+      "sourceUrl": "https://github.com/hugeicons/hugeicons",
+      "pinnedUrl": "https://github.com/hugeicons/hugeicons",
+      "licenseUrl": "https://github.com/hugeicons/hugeicons/blob/main/LICENSE",
+      "usage": "Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored."
+    }
+  ],
+  "index": [
+    {
+      "upstreamFile": "apps/v4/app/globals.css",
+      "purpose": "Semantic design tokens: radius, color scales, ring, shadows, spacing.",
+      "target": "packages/vue-ui/src/styles/tokens.css",
+      "status": "adapted",
+      "issues": ["#155", "#156"],
+      "notes": "Numbers are re-expressed as Vue tokens; no CSS is copied, but the file header records the pinned commit, so #167's reverse check treats it as adapted (header present)."
+    },
+    {
+      "upstreamFile": "apps/v4/app/legacy-themes.css",
+      "purpose": "Theme variants, dark scope, and font variable wiring.",
+      "target": "packages/vue-ui/src/styles/theme.css",
+      "status": "adapted",
+      "issues": ["#156"],
+      "notes": "Scoped under [data-office-theme]; our own selector strategy. The file header records the pinned commit, so #167's reverse check treats it as adapted."
+    },
+    {
+      "upstreamFile": "apps/v4/app/shadcn-tailwind.css",
+      "purpose": "Tailwind layer that maps CSS variables to utilities.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#166"],
+      "notes": "The repository does not use Tailwind or preflight."
+    },
+    {
+      "upstreamFile": "apps/v4/lib/fonts.ts",
+      "purpose": "Font family definitions for Geist, Geist Mono, and document fonts.",
+      "target": "packages/vue-ui/src/styles/fonts.css",
+      "status": "reference-only",
+      "issues": ["#155", "#156"],
+      "notes": "Family stack and variable-font intent only; next/font is not used."
+    },
+    {
+      "upstreamFile": "apps/v4/lib/font-definitions.ts",
+      "purpose": "Font metadata used by the documentation site.",
+      "target": "packages/vue-ui/src/styles/fonts.css",
+      "status": "reference-only",
+      "issues": ["#156"],
+      "notes": "Only the Geist and Geist Mono entries are relevant."
+    },
+    {
+      "upstreamFile": "apps/v4/lib/utils.ts",
+      "purpose": "Tailwind class merge helper (cn).",
+      "target": "tools/extend-reference/src/lib/cn.ts",
+      "status": "adapted",
+      "issues": ["#155"],
+      "notes": "Only the #155 harness needs cn(); the Vue packages use scoped CSS and no Tailwind helper."
+    },
+    {
+      "upstreamFile": "apps/v4/lib/pdf-thumbnail-utils.ts",
+      "purpose": "PDF page thumbnail generation with the PDFium WASM engine.",
+      "target": "packages/vue-pdf/src/components/PdfThumbnailStrip.vue",
+      "status": "reference-only",
+      "issues": ["#162"],
+      "notes": "Our PDF engine already renders thumbnails; layout and cache behavior are the reference."
+    },
+    {
+      "upstreamFile": "apps/v4/lib/pdf-viewer-blocks.ts",
+      "purpose": "Documentation-site metadata for PDF viewer demo blocks.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#162"],
+      "notes": "Docs-site registry metadata has no product counterpart."
+    },
+
+    {
+      "upstreamFile": "apps/v4/components/ui/button.tsx",
+      "purpose": "Button primitive with variants and sizes.",
+      "target": "packages/vue-ui/src/components/ui/OfficeButton.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Markup, variants, and sizes re-expressed with reka-ui slot behavior and scoped CSS. IconButton reuses the icon sizes."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/button.tsx",
+      "purpose": "Icon-only button sizes, ghost/active state and touch target.",
+      "target": "packages/vue-ui/src/components/ui/OfficeIconButton.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Reuses the Button primitive; adds a required accessible label and aria-pressed active state."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/input.tsx",
+      "purpose": "Input primitive styling and focus ring.",
+      "target": "packages/vue-ui/src/components/ui/OfficeInput.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Height, radius, border alpha, and focus-visible ring are derived from the upstream class list."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/input.tsx",
+      "purpose": "Textarea variant of the input styling (no dedicated upstream file).",
+      "target": "packages/vue-ui/src/components/ui/OfficeTextarea.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Upstream has no textarea.tsx; the input tokens are extended to a multi-line control."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/select.tsx",
+      "purpose": "Select primitive with portal, collision handling, and scroll buttons.",
+      "target": "packages/vue-ui/src/components/ui/OfficeSelect.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "reka-ui provides the behavior; the visual layer follows upstream."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/dropdown-menu.tsx",
+      "purpose": "Dropdown menu shell, items, separators, and shortcuts.",
+      "target": "packages/vue-ui/src/components/ui/OfficeDropdownMenu.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/context-menu.tsx",
+      "purpose": "Right-click context menu with the same item styling.",
+      "target": "packages/vue-ui/src/components/ui/OfficeContextMenu.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/dialog.tsx",
+      "purpose": "Modal dialog, header, footer, close button, and backdrop.",
+      "target": "packages/vue-ui/src/components/ui/OfficeDialog.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/sheet.tsx",
+      "purpose": "Edge sheet built on the dialog primitive.",
+      "target": "packages/vue-ui/src/components/ui/OfficeSheet.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/popover.tsx",
+      "purpose": "Anchored popover surface and arrow.",
+      "target": "packages/vue-ui/src/components/ui/OfficePopover.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/tooltip.tsx",
+      "purpose": "Tooltip surface, delay, and side offset.",
+      "target": "packages/vue-ui/src/components/ui/OfficeTooltip.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "The standalone packages/vue-ui/src/components/Tooltip.vue stays public and delegates to OfficeTooltip."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/tabs.tsx",
+      "purpose": "Tab list, trigger, and panel styling.",
+      "target": "packages/vue-ui/src/components/ui/OfficeTabs.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/toggle.tsx",
+      "purpose": "Toggle variants and pressed state.",
+      "target": "packages/vue-ui/src/components/ui/OfficeToggle.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/badge.tsx",
+      "purpose": "Badge variants and sizes.",
+      "target": "packages/vue-ui/src/components/ui/OfficeBadge.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/card.tsx",
+      "purpose": "Card shell, header, content, and footer.",
+      "target": "packages/vue-ui/src/components/ui/OfficeCard.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/separator.tsx",
+      "purpose": "Orientation-aware separator.",
+      "target": "packages/vue-ui/src/components/ui/OfficeSeparator.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/skeleton.tsx",
+      "purpose": "Loading placeholder.",
+      "target": "packages/vue-ui/src/components/ui/OfficeSkeleton.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/spinner.tsx",
+      "purpose": "Loading spinner.",
+      "target": "packages/vue-ui/src/components/ui/OfficeSpinner.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "The standalone packages/vue-ui/src/components/Spinner.vue stays public and delegates to OfficeSpinner."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/scroll-area.tsx",
+      "purpose": "Custom scrollbar area.",
+      "target": "packages/vue-ui/src/components/ui/OfficeScrollArea.vue",
+      "status": "adapted",
+      "issues": ["#157"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/sonner.tsx",
+      "purpose": "Toast surface configuration.",
+      "target": "packages/vue-ui/src/components/ui/OfficeToastProvider.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Visual tokens only; the behavior comes from reka-ui Toast, not vue-sonner."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/alert.tsx",
+      "purpose": "Inline alert container and variants.",
+      "target": "packages/vue-ui/src/components/OfficeErrorState.vue",
+      "status": "reference-only",
+      "issues": ["#158"],
+      "notes": "Error and warning states stay host-configurable; only the information hierarchy is borrowed."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/color-picker.tsx",
+      "purpose": "Color picker with presets and alpha support.",
+      "target": "packages/vue-xlsx/src/components/XlsxAuthoringDialog.vue",
+      "status": "reference-only",
+      "issues": ["#160"],
+      "notes": "Planned for cell fill and font color. Re-check the status before copying any code."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/accordion.tsx",
+      "purpose": "Accordion primitive.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#157"],
+      "notes": "No Office surface needs an accordion."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/aspect-ratio.tsx",
+      "purpose": "Aspect-ratio wrapper.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#157"],
+      "notes": "Plain CSS aspect-ratio is used where needed."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/breadcrumb.tsx",
+      "purpose": "Breadcrumb navigation.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#164"],
+      "notes": "The deferred FileSystem block plan does not include breadcrumbs yet."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/collapsible.tsx",
+      "purpose": "Collapsible primitive used by the upstream sidebar.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "DocumentViewerSidebar uses inline and overlay modes instead of a collapsible tree."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/command.tsx",
+      "purpose": "Command palette and filtered list.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "Search popovers use a plain input plus a list so the host keeps filtering control."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/group.tsx",
+      "purpose": "Segmented button group.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "OfficeToolbarGroup covers the toolbar grouping need."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/kbd.tsx",
+      "purpose": "Keyboard shortcut chip.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "Shortcuts are exposed through aria-keyshortcuts and tooltips."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/resizable.tsx",
+      "purpose": "Panel resize handles.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "Sidebar width measurement uses ResizeObserver on our side."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/sidebar.tsx",
+      "purpose": "Application shell sidebar.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "Application-shell concern, not a document viewer primitive."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/switch.tsx",
+      "purpose": "Switch primitive used by the XLSX viewer settings.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#160"],
+      "notes": "Settings use Toggle with an explicit label instead."
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/toast.tsx",
+      "purpose": "Legacy toast primitive.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#157"],
+      "notes": "Superseded by sonner.tsx upstream and vue-sonner locally."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/ui/*.tsx",
+      "purpose": "Token-driven visual rules shared by every primitive.",
+      "target": "packages/vue-ui/src/styles/ui.css",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Tailwind utilities are re-expressed as office-* classes using --office-* tokens; no Tailwind or preflight."
+    }
+,
+    {
+      "upstreamFile": "apps/v4/components/ui/*.tsx",
+      "purpose": "Convention guard for the planned primitive directory.",
+      "target": "packages/vue-ui/src/components/ui/",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Any Vue or CSS file placed in this directory is adapted from the matching Extend UI primitive and must carry the header."
+    },
+
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-viewer.tsx",
+      "purpose": "PDF viewer chrome: toolbar, page controls, zoom, search, sidebar, download, print.",
+      "target": "packages/vue-pdf/src/components/PdfViewer.vue",
+      "status": "reference-only",
+      "issues": ["#158", "#162"],
+      "notes": "Structure, sizes, and state coverage are the baseline; the Vue implementation stays independent."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor.tsx",
+      "purpose": "PDF editor workspace composition.",
+      "target": "packages/vue-pdf/src/components/PdfEditor.vue",
+      "status": "reference-only",
+      "issues": ["#162"],
+      "notes": "Planned shell for the PDF editing surface."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor-workspace.tsx",
+      "purpose": "Editable workspace and page layout.",
+      "target": "packages/vue-pdf/src/components/PdfEditor.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor-panels.tsx",
+      "purpose": "Signature, form, and annotation side panels.",
+      "target": "packages/vue-pdf/src/components/PdfEditorPanels.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor-dialogs.tsx",
+      "purpose": "Print, capture, security, and property dialogs.",
+      "target": "packages/vue-pdf/src/components/PdfEditorDialogs.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor-properties.tsx",
+      "purpose": "Form field and document property inspector.",
+      "target": "packages/vue-pdf/src/components/PdfEditorProperties.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-editor-shared.tsx",
+      "purpose": "Shared editor context, feature flags, and color presets.",
+      "target": "packages/vue-pdf/src/components/PdfEditor.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/document-viewer-sidebar.tsx",
+      "purpose": "Inline and overlay document sidebar with skeleton and animation.",
+      "target": "packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue",
+      "status": "reference-only",
+      "issues": ["#158", "#163"],
+      "notes": "Canonical sidebar lives in #158 under components/chrome; #163 documents the thumbnail-strip integration seam and does not duplicate the component."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/file-upload.tsx",
+      "purpose": "Dropzone, accept chips, file list, ready and error states.",
+      "target": "packages/vue-ui/src/components/FileUpload.vue",
+      "status": "adapted",
+      "issues": ["#163"],
+      "notes": "Vue scoped-CSS rewrite of the icon cluster, dropzone, browse chip and file list using --office-* tokens; Hugeicons supply the same glyph data as the reference."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/file-upload.tsx",
+      "purpose": "Default accept list and icon-cluster definitions for FileUpload.",
+      "target": "packages/vue-ui/src/components/file-upload-defaults.ts",
+      "status": "adapted",
+      "issues": ["#163"],
+      "notes": "Extracted into a module so defineProps() defaults can reference the Extend values from module scope; no rendered markup."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/file-thumbnail.tsx",
+      "purpose": "Square and configurable preview card with blur-in and error fallback.",
+      "target": "packages/vue-ui/src/components/FileThumbnail.vue",
+      "status": "adapted",
+      "issues": ["#163"],
+      "notes": "Vue scoped-CSS rewrite of the square/custom-ratio preview card, blur-in reveal, loading overlay and error fallback."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/docx-viewer.tsx",
+      "purpose": "DOCX viewer chrome and page navigation.",
+      "target": "packages/vue-docx/src/components/DocxViewer.vue",
+      "status": "reference-only",
+      "issues": ["#159"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/docx-editor.tsx",
+      "purpose": "DOCX editor chrome and formatting controls.",
+      "target": "packages/vue-docx/src/components/DocxEditor.vue",
+      "status": "reference-only",
+      "issues": ["#159"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/docx-annotation-card.tsx",
+      "purpose": "Comment and tracked-change gutter cards.",
+      "target": "packages/vue-docx/src/components/DocxAnnotationCard.vue",
+      "status": "reference-only",
+      "issues": ["#159"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/xlsx-viewer.tsx",
+      "purpose": "XLSX viewer ribbon, sheet tabs, status bar, and menus.",
+      "target": "packages/vue-xlsx/src/components/XlsxViewer.vue",
+      "status": "reference-only",
+      "issues": ["#160"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/xlsx-editor.tsx",
+      "purpose": "XLSX editor ribbon and authoring entry points.",
+      "target": "packages/vue-xlsx/src/components/XlsxViewer.vue",
+      "status": "reference-only",
+      "issues": ["#160"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/xlsx-controls.tsx",
+      "purpose": "Ribbon control buttons, inputs, and selects.",
+      "target": "packages/vue-xlsx/src/components/XlsxRibbon.vue",
+      "status": "reference-only",
+      "issues": ["#160"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/workbook-select.tsx",
+      "purpose": "Workbook and sheet selector.",
+      "target": "packages/vue-xlsx/src/components/XlsxSheetTabs.vue",
+      "status": "reference-only",
+      "issues": ["#160"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pptx-viewer.tsx",
+      "purpose": "PPTX viewer toolbar, slide-number/zoom cluster and thumbnail card chrome (host side of presenter and sorter).",
+      "target": "packages/vue-pptx/src/PptxViewer.vue",
+      "status": "reference-only",
+      "issues": ["#161"],
+      "notes": "The default row keeps only the upstream controls; layout/present/notes/fullscreen/find move into the upstream-style actions menu. Presenter view has no upstream layout (private @extend-ai/react-pptx engine), so pptx-presenter is registered as an unreachable parity surface."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/bounding-box-citations.tsx",
+      "purpose": "Citation overlay, boxes, and sidebar list.",
+      "target": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "HumanReviewPanel Form cards, scalar fields and highlight; the JSON tab (pierre/diffs) and array/object grid editors stay reference-only."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/layout-blocks.tsx",
+      "purpose": "Layout blocks viewer with OCR blocks and PDF overlay.",
+      "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Panel behaviour, block overlay geometry and block type styling; the PDF viewer composition lives in the host shell."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/layout-blocks-panel.tsx",
+      "purpose": "Layout block list, confidence display, and markdown view.",
+      "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Card list, confidence badges, page chips, empty/loading/error states and the safe markdown subset."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/document-splits.tsx",
+      "purpose": "Split range selection and result list.",
+      "target": "packages/vue-ui/src/components/DocumentSplits.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Split cards, page thumbnails, add/remove, drag/drop and keyboard reordering."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/file-system.tsx",
+      "purpose": "Finder-style file browser.",
+      "target": "packages/vue-ui/src/components/FileSystem.vue",
+      "status": "reference-only",
+      "issues": ["#164"],
+      "notes": "Deferred in #164 after assessment: the upstream file is 5,381 LOC and depends on the full Finder-style file model, preview cards, breadcrumb navigation and document preview cards that no 0.8 surface consumes. Evidence is recorded in docs/components/document-blocks.md."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/document-preview-card.tsx",
+      "purpose": "Hover preview card for document references.",
+      "target": "packages/vue-ui/src/components/DocumentPreviewCard.vue",
+      "status": "reference-only",
+      "issues": ["#164"],
+      "notes": "Deferred with FileSystem; listed so a later implementation starts from the pinned source."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/pdf-block-resizable-shell.tsx",
+      "purpose": "Resizable PDF block shell used by documentation blocks.",
+      "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "status": "reference-only",
+      "issues": ["#164"],
+      "notes": "Only relevant if the PDF overlay block becomes resizable."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/document-scroll-content.tsx",
+      "purpose": "Thin re-export of the Radix scroll-area content.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#158"],
+      "notes": "No behavior to port."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/csv-viewer.tsx",
+      "purpose": "CSV table viewer.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#160"],
+      "notes": "CSV is out of scope for the 0.8 Office surfaces."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/schema-builder.tsx",
+      "purpose": "Extraction schema builder.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#164"],
+      "notes": "Deferred in #164 after assessment: 2,703 LOC schema editor (nested field/type editing, validation, extraction preview) with no host consumer in 0.8; recorded in docs/components/document-blocks.md."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/ui-toast.tsx",
+      "purpose": "Toast manager provider.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#157"],
+      "notes": "The host owns notifications; the library does not ship a toast manager."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/xlsx-pivot-controls.tsx",
+      "purpose": "Pivot table authoring controls.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#160"],
+      "notes": "Pivot tables are outside the 0.8 XLSX scope."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/xlsx-pivot-header.tsx",
+      "purpose": "Pivot table header menu.",
+      "target": "",
+      "status": "not-used",
+      "issues": ["#160"],
+      "notes": "Pivot tables are outside the 0.8 XLSX scope."
+    },
+
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/bounding-box-citations-block.tsx",
+      "purpose": "Citations block demo composition.",
+      "target": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: review panel + page highlight; the PDF viewer is a host slot."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/layout-blocks-block.tsx",
+      "purpose": "Layout blocks demo composition.",
+      "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: page overlay + OCR block panel."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/document-splits-block.tsx",
+      "purpose": "Document splits demo composition.",
+      "target": "packages/vue-ui/src/components/DocumentSplits.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Vue composition: DocumentSplits panel with host-selected page callbacks."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx",
+      "purpose": "E-signature flow and typed and drawn signature preview.",
+      "target": "packages/vue-ui/src/components/SignaturePad.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Draw/typed SignaturePad canvas with clear, confirm and mobile pointer input."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/e-signature.tsx",
+      "purpose": "E-signature field panel with signed/unsigned state and export action.",
+      "target": "packages/vue-ui/src/components/ESignatureFields.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "Right-hand signature field panel; the drawn canvas dialog is SignaturePad.vue."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/file-system-block.tsx",
+      "purpose": "File system block composition.",
+      "target": "packages/vue-ui/src/components/FileSystem.vue",
+      "status": "reference-only",
+      "issues": ["#164"]
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/docx-editor.tsx",
+      "purpose": "DOCX editor block composition.",
+      "target": "packages/vue-docx/src/components/DocxEditor.vue",
+      "status": "reference-only",
+      "issues": ["#159"]
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/docx-layout-blocks.tsx",
+      "purpose": "DOCX layout blocks block composition.",
+      "target": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "status": "adapted",
+      "issues": ["#164"],
+      "notes": "The #viewer slot accepts a DOCX surface; the block panel is shared."
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/excel-editor.tsx",
+      "purpose": "Excel editor block composition.",
+      "target": "packages/vue-xlsx/src/components/XlsxViewer.vue",
+      "status": "reference-only",
+      "issues": ["#160"]
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/pdf-dropzone.tsx",
+      "purpose": "PDF dropzone block.",
+      "target": "packages/vue-ui/src/components/FileUpload.vue",
+      "status": "reference-only",
+      "issues": ["#163"]
+    },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/blocks/pdf-editor-block.tsx",
+      "purpose": "PDF editor block composition.",
+      "target": "packages/vue-pdf/src/components/PdfViewer.vue",
+      "status": "reference-only",
+      "issues": ["#162"]
+    },
+    {
+      "upstreamFile": "apps/v4/components/ui/*.tsx",
+      "purpose": "Convention guard for the shared Office chrome directory.",
+      "target": "packages/vue-ui/src/components/chrome/",
+      "status": "reference-only",
+      "issues": ["#158"],
+      "notes": "The toolbar/sidebar/status/state components are independent implementations measured against Extend PDF/DOCX chrome and the --office-* tokens; no upstream code is copied, so they carry no source header. Pixel evidence lives in the document-sidebar and office-* surfaces."
+    },
+    {
+      "upstreamFile": "apps/v4 vendored reference snapshot (components)",
+      "purpose": "Upstream component copies rendered by the #155 parity harness.",
+      "target": "tools/extend-reference/src/vendor/",
+      "status": "adapted",
+      "issues": ["#155", "#157"],
+      "notes": "Markup and class strings match upstream for the Button/Input/Select/Dialog/Tooltip surfaces; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups rendered as static measurable markup). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
+    },
+    {
+      "upstreamFile": "apps/v4 vendored reference snapshot (styles)",
+      "purpose": "Upstream CSS copies used by the reference harness.",
+      "target": "tools/extend-reference/src/styles/",
+      "status": "adapted",
+      "issues": ["#155"],
+      "notes": "extend-globals.css narrows only the @import graph; the rest is verified byte-for-byte against the pinned upstream body hash by scripts/ci/extract-extend-tokens.mjs. extend-shadcn-tailwind.css is byte-identical below its provenance header. parity.css is harness-authored and excluded.",
+      "exclude": ["parity.css"]
+    }
+  ],
+  "urlChecks": [
+    { "url": "https://github.com/extend-hq/ui" },
+    {
+      "url": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/LICENSE.md"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e/apps/v4/components/ui"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e/apps/v4/components/extend"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e/apps/v4/registry/new-york-v4/blocks"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/apps/v4/app/globals.css"
+    },
+    {
+      "url": "https://github.com/extend-hq/ui/blob/70fe70c6f1e1eee53954c6923f3d9f583557a57e/apps/v4/lib/fonts.ts"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components"
+    },
+    {
+      "url": "https://www.extend.ai/ui/blocks",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/blocks"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/docx-viewer",
+      "archivedUrl": "https://web.archive.org/web/20260810165152/https://www.extend.ai/ui/docs/components/docx-viewer"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/docx-editor",
+      "archivedUrl": "https://web.archive.org/web/20260810163713/https://www.extend.ai/ui/docs/components/docx-editor"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/xlsx-viewer",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components/xlsx-viewer"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/xlsx-editor",
+      "archivedUrl": "https://web.archive.org/web/20260810164538/https://www.extend.ai/ui/docs/components/xlsx-editor"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/pptx-viewer",
+      "archivedUrl": "https://web.archive.org/web/20260810171008/https://www.extend.ai/ui/docs/components/pptx-viewer"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/pdf-viewer",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components/pdf-viewer"
+    },
+    { "url": "https://www.extend.ai/ui/docs/components/pdf-editor" },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/file-upload",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components/file-upload"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/file-thumbnail",
+      "archivedUrl": "https://web.archive.org/web/20260810165725/https://www.extend.ai/ui/docs/components/file-thumbnail"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/document-viewer-sidebar",
+      "archivedUrl": "https://web.archive.org/web/20260810172217/https://www.extend.ai/ui/docs/components/document-viewer-sidebar"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/bounding-box-citations",
+      "archivedUrl": "https://web.archive.org/web/20260810165857/https://www.extend.ai/ui/docs/components/bounding-box-citations"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/layout-blocks",
+      "archivedUrl": "https://web.archive.org/web/20260810161505/https://www.extend.ai/ui/docs/components/layout-blocks"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/e-signature",
+      "archivedUrl": "https://web.archive.org/web/20260810162931/https://www.extend.ai/ui/docs/components/e-signature"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/document-splits",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components/document-splits"
+    },
+    {
+      "url": "https://www.extend.ai/ui/docs/components/file-system",
+      "archivedUrl": "https://web.archive.org/web/20261109174704/https://www.extend.ai/ui/docs/components/file-system"
+    },
+    { "url": "https://github.com/unovue/shadcn-vue" },
+    { "url": "https://github.com/unovue/shadcn-vue/blob/dev/LICENSE" },
+    { "url": "https://github.com/unovue/reka-ui" },
+    { "url": "https://github.com/unovue/reka-ui/blob/main/LICENSE" },
+    { "url": "https://github.com/lucide-icons/lucide" },
+    { "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE" },
+    { "url": "https://github.com/vercel/geist-font" },
+    { "url": "https://github.com/vercel/geist-font/blob/main/LICENSE.txt" },
+    { "url": "https://github.com/extend-hq/react-docx" },
+    { "url": "https://github.com/extend-hq/react-docx/blob/main/LICENSE" },
+    { "url": "https://github.com/extend-hq/react-xlsx" },
+    { "url": "https://github.com/extend-hq/react-xlsx/blob/main/LICENSE" },
+    { "url": "https://github.com/shadcn-ui/ui" },
+    { "url": "https://github.com/shadcn-ui/ui/blob/main/LICENSE.md" }
+  ]
+}

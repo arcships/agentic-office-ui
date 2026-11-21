@@ -388,29 +388,53 @@ test("the viewer toolbar switches from balloons to inline and back", async () =>
   const mounted = await mount(DocxViewer, {
     model: revisionModel(),
     showToolbar: true,
+    // The upstream default row has no review-display control; hosts opt in and
+    // the choices render inside the DOCX actions menu.
+    toolbarReviewControls: true,
   });
   try {
     await settle();
-    const select = () =>
-      walk(mounted.root).find(
-        (node) => node.props?.["data-testid"] === "docx-revision-display"
-      );
     const html = () => paragraphHosts(mounted.root)[0]?.props.innerHTML ?? "";
+    const element = (testId) =>
+      walk(mounted.root).find((node) => node.props?.["data-testid"] === testId);
+    const openMenu = async () => {
+      await element("docx-toolbar-actions").props.onClick();
+      await settle();
+      assert.ok(element("docx-actions-menu"), "the actions menu must open");
+    };
+    const activeDisplay = async () => {
+      await openMenu();
+      const checked = [
+        "balloons",
+        "inline",
+        "none",
+      ].filter((value) => element(`docx-revision-display-${value}`)?.props["aria-checked"]);
+      await element("docx-toolbar-actions").props.onClick();
+      await settle();
+      return checked;
+    };
+    const chooseDisplay = async (value) => {
+      await openMenu();
+      await element(`docx-revision-display-${value}`).props.onClick();
+      await settle();
+    };
 
-    assert.equal(select()?.props.value, "balloons");
+    assert.deepEqual(await activeDisplay(), ["balloons"]);
     assert.doesNotMatch(html(), /gone/u);
 
-    select().props.onChange({ target: { value: "inline" } });
-    await settle();
-    assert.equal(select()?.props.value, "inline");
+    await chooseDisplay("inline");
+    assert.deepEqual(await activeDisplay(), ["inline"]);
     assert.match(html(), /gone/u);
     assert.match(html(), /data-docx-tracked-change="deletion"/u);
 
-    select().props.onChange({ target: { value: "none" } });
-    await settle();
-    assert.equal(select()?.props.value, "none");
+    await chooseDisplay("none");
+    assert.deepEqual(await activeDisplay(), ["none"]);
     assert.doesNotMatch(html(), /gone/u);
     assert.doesNotMatch(html(), /data-docx-tracked-change=/u);
+
+    await chooseDisplay("balloons");
+    assert.deepEqual(await activeDisplay(), ["balloons"]);
+    assert.doesNotMatch(html(), /gone/u);
     assert.deepEqual(mounted.warnings, []);
   } finally {
     mounted.app.unmount();

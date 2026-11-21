@@ -1,318 +1,37 @@
-<template>
-  <header class="docx-viewer-toolbar" data-testid="docx-viewer-toolbar">
-    <div class="docx-viewer-toolbar__leading">
-      <button
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        data-testid="docx-sidebar-toggle"
-        :aria-pressed="sidebarOpen"
-        :aria-label="m.docx.toolbar.sidebarToggle"
-        :title="m.docx.toolbar.pageThumbnails"
-        :disabled="disabled"
-        @click="emit('toggleSidebar')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <path d="M8 4v16M5.5 8h.01M5.5 12h.01M5.5 16h.01" />
-        </svg>
-      </button>
-
-      <span class="docx-viewer-toolbar__file" :title="fileName">{{ fileName }}</span>
-
-      <div class="docx-viewer-toolbar__page" :aria-label="m.common.page.navigation">
-        <span>{{ m.common.page.label }}</span>
-        <input
-          ref="pageInputRef"
-          v-model="pageDraft"
-          data-testid="docx-page-current"
-          :aria-label="m.common.page.current"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          :disabled="disabled || totalPages < 1"
-          @focus="onPageFocus"
-          @blur="onPageBlur"
-          @keydown.enter.prevent="commitPage"
-          @keydown.esc.prevent="resetPageDraft"
-        />
-        <span>{{ m.common.page.of }} {{ totalPages || "–" }}</span>
-      </div>
-    </div>
-
-    <div class="docx-viewer-toolbar__actions">
-      <div
-        class="docx-viewer-toolbar__view-modes"
-        role="group"
-        :aria-label="m.docx.toolbar.viewMode"
-      >
-        <button
-          type="button"
-          class="docx-viewer-toolbar__segment"
-          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'continuous' }"
-          data-testid="docx-view-mode-continuous"
-          :aria-label="m.docx.toolbar.viewModeContinuous"
-          :title="m.docx.toolbar.viewModeContinuous"
-          :aria-pressed="viewMode === 'continuous'"
-          :disabled="disabled"
-          @click="emit('update:viewMode', 'continuous')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="5" y="2.5" width="14" height="8" rx="1" /><rect x="5" y="13.5" width="14" height="8" rx="1" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="docx-viewer-toolbar__segment"
-          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'single' }"
-          data-testid="docx-view-mode-single"
-          :aria-label="m.docx.toolbar.viewModeSingle"
-          :title="m.docx.toolbar.viewModeSingle"
-          :aria-pressed="viewMode === 'single'"
-          :disabled="disabled"
-          @click="emit('update:viewMode', 'single')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="3" width="16" height="18" rx="1" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="docx-viewer-toolbar__segment"
-          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'spread' }"
-          data-testid="docx-view-mode-spread"
-          :aria-label="m.docx.toolbar.viewModeSpread"
-          :title="m.docx.toolbar.viewModeSpread"
-          :aria-pressed="viewMode === 'spread'"
-          :disabled="disabled"
-          @click="emit('update:viewMode', 'spread')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="2" y="4" width="9" height="16" rx="1" /><rect x="13" y="4" width="9" height="16" rx="1" />
-          </svg>
-        </button>
-      </div>
-      <div class="docx-viewer-toolbar__view-modes" role="group" :aria-label="m.common.zoom.level">
-        <button
-          type="button"
-          class="docx-viewer-toolbar__segment"
-          :class="{ 'docx-viewer-toolbar__segment--active': fitMode === 'width' }"
-          data-testid="docx-fit-width"
-          :aria-label="m.docx.toolbar.fitWidth"
-          :title="m.docx.toolbar.fitWidth"
-          :aria-pressed="fitMode === 'width'"
-          :disabled="disabled"
-          @click="emit('update:fitMode', fitMode === 'width' ? 'none' : 'width')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 7h18M3 17h18M7 7v10M17 7v10" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="docx-viewer-toolbar__segment"
-          :class="{ 'docx-viewer-toolbar__segment--active': fitMode === 'page' }"
-          data-testid="docx-fit-page"
-          :aria-label="m.docx.toolbar.fitPage"
-          :title="m.docx.toolbar.fitPage"
-          :aria-pressed="fitMode === 'page'"
-          :disabled="disabled"
-          @click="emit('update:fitMode', fitMode === 'page' ? 'none' : 'page')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="5" y="3" width="14" height="18" rx="1" /><path d="M9 7h6M9 17h6" />
-          </svg>
-        </button>
-      </div>
-      <div class="docx-viewer-toolbar__search" role="search">
-        <input
-          ref="searchInputRef"
-          data-testid="docx-search-input"
-          type="search"
-          :value="searchQuery"
-          :placeholder="m.docx.toolbar.searchPlaceholder"
-          :aria-label="m.docx.toolbar.searchPlaceholder"
-          :disabled="disabled"
-          @input="onSearchInput"
-          @compositionstart="searchComposing = true"
-          @compositionend="onSearchCompositionEnd"
-          @keydown.enter.prevent="onSearchEnter"
-          @keydown.esc.prevent="emit('searchClose')"
-        />
-        <button
-          type="button"
-          class="docx-viewer-toolbar__search-option"
-          :class="{ 'docx-viewer-toolbar__search-option--active': searchCaseSensitive }"
-          data-testid="docx-search-case-sensitive"
-          :aria-label="m.common.search.caseSensitive"
-          :title="m.common.search.caseSensitive"
-          :aria-pressed="searchCaseSensitive"
-          :disabled="disabled"
-          @click="emit('update:searchCaseSensitive', !searchCaseSensitive)"
-        >&#65;&#97;</button>
-        <button
-          type="button"
-          class="docx-viewer-toolbar__search-option"
-          :class="{ 'docx-viewer-toolbar__search-option--active': searchWholeWord }"
-          data-testid="docx-search-whole-word"
-          :aria-label="m.common.search.wholeWord"
-          :title="m.common.search.wholeWord"
-          :aria-pressed="searchWholeWord"
-          :disabled="disabled"
-          @click="emit('update:searchWholeWord', !searchWholeWord)"
-        >&#97;&#98;|</button>
-        <button
-          type="button"
-          class="docx-viewer-toolbar__search-option"
-          :class="{ 'docx-viewer-toolbar__search-option--active': searchRegex }"
-          data-testid="docx-search-regex"
-          :aria-label="m.common.search.regex"
-          :title="m.common.search.regex"
-          :aria-pressed="searchRegex"
-          :disabled="disabled"
-          @click="emit('update:searchRegex', !searchRegex)"
-        >.*</button>
-        <span
-          data-testid="docx-search-status"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
-        <button type="button" :aria-label="m.common.search.previous" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
-        <button type="button" :aria-label="m.common.search.next" data-testid="docx-search-next" :disabled="disabled || !searchResultCount" @click="emit('searchNext')">›</button>
-      </div>
-      <button
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        :aria-label="m.common.zoom.out"
-        :title="m.common.zoom.out"
-        :disabled="disabled || zoom <= zoomOptions[0]"
-        @click="emit('update:zoom', nextZoom(-1))"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" /><path d="M8 12h8" />
-        </svg>
-      </button>
-      <select
-        class="docx-viewer-toolbar__zoom"
-        data-testid="docx-zoom-select"
-        :aria-label="m.common.zoom.level"
-        :disabled="disabled"
-        :value="zoom"
-        @change="onZoomChange"
-      >
-        <option v-for="option in zoomSelectOptions" :key="option" :value="option">
-          {{ option }}%
-        </option>
-      </select>
-      <button
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        :aria-label="m.common.zoom.in"
-        :title="m.common.zoom.in"
-        :disabled="disabled || zoom >= zoomOptions[zoomOptions.length - 1]"
-        @click="emit('update:zoom', nextZoom(1))"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" />
-        </svg>
-      </button>
-
-      <span class="docx-viewer-toolbar__separator" aria-hidden="true" />
-
-      <button
-        type="button"
-        class="docx-viewer-toolbar__toggle-button"
-        data-testid="docx-show-tracked-changes"
-        :aria-pressed="showTrackedChanges"
-        :disabled="disabled || trackedChangeCount === 0"
-        :title="trackedChangesTitle"
-        @click="emit('toggleTrackedChanges')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M5 3h10l4 4v14H5zM15 3v5h4M8 12h8M8 16h5" />
-        </svg>
-        <span>{{ m.docx.toolbar.trackedChanges }}</span>
-        <span v-if="trackedChangeCount > 0" class="docx-viewer-toolbar__count">{{ trackedChangeCount }}</span>
-      </button>
-      <label class="docx-viewer-toolbar__toggle-button" :title="m.docx.toolbar.revisionDisplay">
-        <select
-          data-testid="docx-revision-display"
-          class="docx-viewer-toolbar__revision-select"
-          :value="revisionDisplay"
-          :aria-label="m.docx.toolbar.revisionDisplay"
-          @change="onRevisionDisplayChange"
-        >
-          <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
-          <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
-          <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
-        </select>
-      </label>
-      <button
-        type="button"
-        class="docx-viewer-toolbar__toggle-button"
-        data-testid="docx-show-comments"
-        :aria-pressed="showComments"
-        :disabled="disabled || commentCount === 0"
-        :title="commentsTitle"
-        @click="emit('toggleComments')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" />
-        </svg>
-        <span>{{ m.docx.toolbar.comments }}</span>
-        <span v-if="commentCount > 0" class="docx-viewer-toolbar__count">{{ commentCount }}</span>
-      </button>
-
-      <span class="docx-viewer-toolbar__separator" aria-hidden="true" />
-
-      <button
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        data-testid="docx-theme-toggle"
-        :aria-label="isDark ? m.docx.toolbar.lightThemeAction : m.docx.toolbar.darkThemeAction"
-        :title="isDark ? m.docx.toolbar.lightDocument : m.docx.toolbar.darkDocument"
-        :disabled="disabled"
-        @click="emit('toggleTheme')"
-      >
-        <svg v-if="isDark" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
-        </svg>
-      </button>
-      <button
-        v-if="showUpload"
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        data-testid="docx-upload"
-        :aria-label="m.docx.toolbar.upload"
-        :title="m.docx.toolbar.upload"
-        @click="emit('upload')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5M5 14v5h14v-5" />
-        </svg>
-      </button>
-      <button
-        v-if="showDownload"
-        type="button"
-        class="docx-viewer-toolbar__icon-button"
-        data-testid="docx-download"
-        :aria-label="m.docx.toolbar.download"
-        :title="m.docx.toolbar.download"
-        :disabled="disabled || !canDownload"
-        @click="emit('download')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 19h14" />
-        </svg>
-      </button>
-    </div>
-  </header>
-</template>
-
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+/**
+ * DOCX viewer toolbar (issue #159).
+ *
+ * Layout source: `tools/extend-reference/src/vendor/extend/docx-toolbar.tsx`
+ * (Extend UI `DocxToolbar`, pinned 70fe70c6). The default row is the upstream
+ * row: thumbnails toggle, Page + page number + of N on the left; zoom out,
+ * zoom level, zoom in, separator and the actions trigger on the right.
+ *
+ * Every other DOCX command the product ships (find, comments, tracked changes,
+ * revision display, view mode, fit, theme, upload, download) lives in the
+ * actions menu or behind an opt-in host prop, exactly like upstream's
+ * `DocxFileActionsMenu` / `toolbarActions` slots. Commands, events and test ids
+ * are unchanged.
+ */
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue"
+import {
+  ArrowHorizontalIcon,
+  ArrowVerticalIcon,
+  CircleMinusIcon,
+  CirclePlusIcon,
+  Comment01Icon,
+  FileDiffIcon,
+  Moon02Icon,
+  MoreHorizontalIcon,
+  SidebarLeftIcon,
+  Sun03Icon,
+} from "@hugeicons/core-free-icons"
+import {
+  HugeIcon,
+  OfficeIcon,
+  OfficeIconButton,
+  OfficeSearchPopover,
+} from "@arcships/vue-ui"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useDocxMessages } from "../i18n"
 
@@ -343,8 +62,34 @@ const props = withDefaults(
     searchRegex?: boolean
     showUpload?: boolean
     showDownload?: boolean
+    /**
+     * Opt-in: show the document file name next to the thumbnails toggle.
+     * Off by default so the default row matches the upstream toolbar.
+     */
+    showFileName?: boolean
+    /**
+     * Opt-in: keep the find field inline in the row. Off by default; the
+     * actions menu and Ctrl/Cmd+F open the same find popover either way.
+     */
+    showSearch?: boolean
+    /** Opt-in: expose the view-mode and fit controls in the actions menu. */
+    showViewControls?: boolean
+    /** Opt-in: expose the review-display control in the actions menu. */
+    showReviewControls?: boolean
   }>(),
-  { showUpload: true, showDownload: true, searchCaseSensitive: false, searchWholeWord: false, searchRegex: false, viewMode: "continuous", fitMode: "none" },
+  {
+    showUpload: true,
+    showDownload: true,
+    searchCaseSensitive: false,
+    searchWholeWord: false,
+    searchRegex: false,
+    viewMode: "continuous",
+    fitMode: "none",
+    showFileName: false,
+    showSearch: false,
+    showViewControls: false,
+    showReviewControls: false,
+  },
 )
 
 const emit = defineEmits<{
@@ -369,299 +114,1031 @@ const emit = defineEmits<{
 }>()
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
-const zoomSelectOptions = computed(() => {
-  if (!Number.isFinite(props.zoom) || zoomOptions.includes(props.zoom)) return zoomOptions
-  return [...zoomOptions, props.zoom].sort((a, b) => a - b)
-})
+const viewModes = ["continuous", "single", "spread"] as const
+const revisionDisplays = ["inline", "balloons", "none"] as const
+
 const m = useDocxMessages()
-const trackedChangesTitle = computed(() => {
-  if (props.trackedChangeCount <= 0) return m.value.docx.toolbar.trackedChangesNone
-  const template = props.showTrackedChanges
-    ? m.value.docx.toolbar.trackedChangesHide
-    : m.value.docx.toolbar.trackedChangesShow
-  return formatOfficeMessage(template, { count: props.trackedChangeCount })
-})
-const commentsTitle = computed(() => {
-  if (props.commentCount <= 0) return m.value.docx.toolbar.commentsNone
-  const template = props.showComments
-    ? m.value.docx.toolbar.commentsHide
-    : m.value.docx.toolbar.commentsShow
-  return formatOfficeMessage(template, { count: props.commentCount })
-})
-const pageDraft = ref(String(props.currentPage || 1))
-const pageInputRef = ref<HTMLInputElement>()
-const pageInputFocused = ref(false)
-const searchInputRef = ref<HTMLInputElement>()
-const searchComposing = ref(false)
 
-function pageInputIsActive(): boolean {
-  if (pageInputFocused.value) return true
-  return typeof document !== "undefined" && pageInputRef.value === document.activeElement
-}
-
-watch(
-  () => props.currentPage,
-  (page) => {
-    // Keep a focused draft intact while the user is typing a page number.
-    if (pageInputIsActive()) return
-    pageDraft.value = String(page || 1)
-  },
+const displayPage = computed(() => {
+  const total = Math.max(0, Math.trunc(props.totalPages) || 0)
+  if (total < 1) return 1
+  return Math.min(Math.max(Math.trunc(props.currentPage) || 1, 1), total)
+})
+const displayTotal = computed(() =>
+  props.totalPages > 0 ? String(props.totalPages) : "-",
+)
+const zoomPercent = computed(() => Math.round(props.zoom))
+/** Upstream appends the current gesture zoom when it is not a preset. */
+const zoomSelectOptions = computed(() => {
+  const current = Math.round(props.zoom * 100) / 100
+  if (zoomOptions.includes(current)) return zoomOptions
+  return [...zoomOptions, current].sort((left, right) => left - right)
+})
+const canZoomOut = computed(
+  () => !props.disabled && props.zoom > zoomOptions[0]!,
+)
+const canZoomIn = computed(
+  () => !props.disabled && props.zoom < zoomOptions[zoomOptions.length - 1]!,
+)
+const viewModeLabels = computed<Record<string, string>>(() => ({
+  continuous: m.value.docx.toolbar.viewModeContinuous,
+  single: m.value.docx.toolbar.viewModeSingle,
+  spread: m.value.docx.toolbar.viewModeSpread,
+}))
+const revisionDisplayLabels = computed<Record<string, string>>(() => ({
+  inline: m.value.docx.toolbar.revisionDisplayInline,
+  balloons: m.value.docx.toolbar.revisionDisplayBalloons,
+  none: m.value.docx.toolbar.revisionDisplayNone,
+}))
+const trackedChangesLabel = computed(() =>
+  formatOfficeMessage(
+    props.showTrackedChanges
+      ? m.value.docx.toolbar.trackedChangesHide
+      : m.value.docx.toolbar.trackedChangesShow,
+    { count: props.trackedChangeCount },
+  ),
+)
+const commentsLabel = computed(() =>
+  formatOfficeMessage(
+    props.showComments
+      ? m.value.docx.toolbar.commentsHide
+      : m.value.docx.toolbar.commentsShow,
+    { count: props.commentCount },
+  ),
+)
+const themeToggleLabel = computed(() =>
+  props.isDark ? m.value.docx.toolbar.lightThemeAction : m.value.docx.toolbar.darkThemeAction,
 )
 
-function onPageFocus(): void {
-  pageInputFocused.value = true
+// ── Page number: draft while focused, commit on Enter/blur ─────────
+const pageDraft = ref(String(displayPage.value))
+const pageFocused = ref(false)
+watch(displayPage, (page) => {
+  if (!pageFocused.value) pageDraft.value = String(page)
+})
+
+function commitPageDraft(): void {
+  const parsed = Number.parseInt(String(pageDraft.value).trim(), 10)
+  if (!Number.isInteger(parsed) || props.totalPages < 1) {
+    pageDraft.value = String(displayPage.value)
+    return
+  }
+  const next = Math.min(Math.max(parsed, 1), props.totalPages)
+  pageDraft.value = String(next)
+  if (next !== displayPage.value) emit("selectPage", next)
 }
 
-function onRevisionDisplayChange(event: Event): void {
-  const value = (event.target as HTMLSelectElement).value
-  if (value === "inline" || value === "balloons" || value === "none") {
-    emit("update:revisionDisplay", value)
-  }
+function onPageFocus(event?: FocusEvent): void {
+  pageFocused.value = true
+  ;(event?.target as HTMLInputElement | null)?.select?.()
 }
 
 function onPageBlur(): void {
-  pageInputFocused.value = false
-  commitPage()
+  pageFocused.value = false
+  commitPageDraft()
 }
 
-function resetPageDraft(): void {
-  pageDraft.value = String(props.currentPage || 1)
+function onPageKeydown(event: KeyboardEvent): void {
+  if (event.key === "Enter") {
+    event.preventDefault()
+    commitPageDraft()
+  } else if (event.key === "Escape") {
+    event.preventDefault()
+    pageFocused.value = false
+    pageDraft.value = String(displayPage.value)
+  }
 }
 
-function commitPage(): void {
-  const parsed = Number(pageDraft.value)
-  if (!Number.isInteger(parsed) || props.totalPages < 1) {
-    resetPageDraft()
+// ── Zoom ───────────────────────────────────────────────────────────
+function stepZoom(direction: -1 | 1): void {
+  if (props.disabled) return
+  const next = direction < 0
+    ? [...zoomOptions].reverse().find((option) => option < props.zoom)
+    : zoomOptions.find((option) => option > props.zoom)
+  if (next !== undefined) emit("update:zoom", next)
+}
+
+function onZoomSelect(event: Event): void {
+  const next = Number((event.target as HTMLSelectElement | null)?.value)
+  if (Number.isFinite(next)) emit("update:zoom", next)
+}
+
+// ── Find ───────────────────────────────────────────────────────────
+const searchOpen = ref(false)
+const searchPopoverRef = ref<InstanceType<typeof OfficeSearchPopover>>()
+const searchStatusText = computed(() =>
+  props.searchResultCount
+    ? `${props.searchResultIndex + 1}/${props.searchResultCount}`
+    : props.searchQuery
+      ? "0/0"
+      : "",
+)
+
+function openSearch(): void {
+  if (props.disabled) return
+  actionsOpen.value = false
+  if (!props.showSearch) searchOpen.value = true
+  void nextTick(() => searchPopoverRef.value?.focus())
+}
+
+function closeSearch(): void {
+  if (!searchOpen.value) return
+  searchOpen.value = false
+  emit("searchClose")
+}
+
+// ── Actions menu ───────────────────────────────────────────────────
+const actionsOpen = ref(false)
+const actionsRoot = ref<HTMLElement | null>(null)
+
+function toggleActions(): void {
+  // Upstream keeps the trigger enabled while the document controls are
+  // disabled, so an empty viewer can still reach Upload.
+  if (actionsOpen.value) {
+    actionsOpen.value = false
     return
   }
-  const page = Math.min(Math.max(parsed, 1), props.totalPages)
-  pageDraft.value = String(page)
-  emit("selectPage", page)
+  searchOpen.value = false
+  actionsOpen.value = true
 }
 
-function searchValue(event: Event): string {
-  return (event.target as HTMLInputElement).value
+function closeActions(): void {
+  actionsOpen.value = false
 }
 
-function onSearchInput(event: Event): void {
-  if (!searchComposing.value) emit("update:searchQuery", searchValue(event))
+function runAction(action: "download" | "upload" | "theme" | "comments" | "trackedChanges"): void {
+  if (action === "download") emit("download")
+  else if (action === "upload") emit("upload")
+  else if (action === "theme") emit("toggleTheme")
+  else if (action === "comments") emit("toggleComments")
+  else emit("toggleTrackedChanges")
+  closeActions()
 }
 
-function onSearchCompositionEnd(event: CompositionEvent): void {
-  searchComposing.value = false
-  emit("update:searchQuery", searchValue(event))
+function selectViewMode(mode: import("../composables/docx-view-mode").DocxViewMode): void {
+  if (props.disabled) return
+  emit("update:viewMode", mode)
+  closeActions()
 }
 
-function nextZoom(direction: -1 | 1): number {
-  const currentIndex = zoomOptions.indexOf(props.zoom)
-  if (currentIndex >= 0) {
-    return zoomOptions[Math.min(Math.max(currentIndex + direction, 0), zoomOptions.length - 1)]
+function selectFitMode(
+  mode: import("../composables/docx-view-mode").DocxFitMode | "none",
+): void {
+  if (props.disabled) return
+  emit("update:fitMode", mode)
+  closeActions()
+}
+
+function selectRevisionDisplay(
+  display: import("@arcships/docx-core").DocxRevisionDisplay,
+): void {
+  if (props.disabled) return
+  emit("update:revisionDisplay", display)
+  closeActions()
+}
+
+function findInDocument(): void {
+  openSearch()
+}
+
+function onDocumentPointerDown(event: PointerEvent): void {
+  const target = event.target as Node | null
+  if (actionsOpen.value && actionsRoot.value && target && !actionsRoot.value.contains(target)) {
+    closeActions()
   }
-  if (direction < 0) {
-    return [...zoomOptions].reverse().find((option) => option < props.zoom) ?? zoomOptions[0]
+}
+
+watch(actionsOpen, (open) => {
+  if (typeof document === "undefined") return
+  const method = open ? "addEventListener" : "removeEventListener"
+  if (typeof document[method] !== "function") return
+  document[method]("pointerdown", onDocumentPointerDown as EventListener)
+})
+
+onBeforeUnmount(() => {
+  if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+    document.removeEventListener("pointerdown", onDocumentPointerDown as EventListener)
   }
-  return zoomOptions.find((option) => option > props.zoom) ?? zoomOptions[zoomOptions.length - 1]
-}
+})
 
-function onZoomChange(event: Event): void {
-  const value = Number((event.target as HTMLSelectElement).value)
-  if (Number.isFinite(value) && value > 0) emit("update:zoom", value)
-}
-
-function onSearchEnter(event: KeyboardEvent): void {
-  if (event.shiftKey) emit("searchPrevious")
-  else emit("searchNext")
+async function focusSearch(): Promise<void> {
+  openSearch()
+  await nextTick()
+  searchPopoverRef.value?.focus()
 }
 
 defineExpose({
-  focusSearch: () => searchInputRef.value?.focus(),
+  focusSearch,
+  closeSearch,
+  closeActions,
 })
 </script>
 
+<template>
+  <div
+    class="docx-viewer-toolbar"
+    role="toolbar"
+    :aria-label="m.common.chrome.toolbar"
+    data-testid="docx-viewer-toolbar"
+    :data-office-theme="isDark ? 'dark' : 'light'"
+    data-office-density="comfortable"
+    @keydown.esc.stop="closeActions(); closeSearch()"
+  >
+    <div class="docx-viewer-toolbar__leading">
+      <span class="docx-viewer-toolbar__tooltip-trigger">
+        <OfficeIconButton
+          variant="ghost"
+          size="icon-sm"
+          class="docx-viewer-toolbar__icon-button"
+          data-testid="docx-sidebar-toggle"
+          :aria-pressed="sidebarOpen"
+          :label="m.docx.toolbar.sidebarToggle"
+          :disabled="disabled"
+          @click="emit('toggleSidebar')"
+        >
+          <HugeIcon :icon="SidebarLeftIcon" class="docx-viewer-toolbar__icon" />
+        </OfficeIconButton>
+      </span>
+
+      <span v-if="showFileName" class="docx-viewer-toolbar__file" :title="fileName">{{ fileName }}</span>
+
+      <div class="docx-viewer-toolbar__page">
+        <span>{{ m.common.page.label }}</span>
+        <span
+          class="docx-viewer-toolbar__page-control"
+          :data-disabled="disabled || totalPages < 1 ? 'true' : undefined"
+        >
+          <span class="docx-viewer-toolbar__page-display" aria-hidden="true">{{ displayPage }}</span>
+          <input
+            class="docx-viewer-toolbar__page-input"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            autocomplete="off"
+            v-model="pageDraft"
+            :disabled="disabled || totalPages < 1"
+            @input="pageFocused = true"
+            :aria-label="m.common.page.label"
+            data-testid="docx-page-current"
+            @focus="onPageFocus"
+            @change="commitPageDraft"
+            @blur="onPageBlur"
+            @keydown="onPageKeydown"
+          />
+        </span>
+        <span class="docx-viewer-toolbar__page-total" data-testid="docx-page-total">{{ m.common.page.of }} {{ displayTotal }}</span>
+      </div>
+    </div>
+
+    <div class="docx-viewer-toolbar__trailing">
+      <div class="docx-viewer-toolbar__group">
+        <span class="docx-viewer-toolbar__tooltip-trigger">
+          <OfficeIconButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-viewer-toolbar__icon-button"
+            data-testid="docx-zoom-out"
+            :label="m.common.zoom.out"
+            :disabled="!canZoomOut"
+            @click="stepZoom(-1)"
+          >
+            <HugeIcon :icon="CircleMinusIcon" class="docx-viewer-toolbar__icon" />
+          </OfficeIconButton>
+        </span>
+        <span class="docx-viewer-toolbar__zoom" :data-disabled="disabled ? 'true' : undefined">
+          <button
+            type="button"
+            class="docx-viewer-toolbar__zoom-trigger"
+            tabindex="-1"
+            aria-hidden="true"
+          >
+            <span class="docx-viewer-toolbar__zoom-value">{{ zoomPercent }}%</span>
+            <OfficeIcon name="chevron-down" class="docx-viewer-toolbar__zoom-icon" />
+          </button>
+          <select
+            class="docx-viewer-toolbar__zoom-native"
+            :value="zoom"
+            :disabled="disabled"
+            :aria-label="m.common.zoom.level"
+            data-testid="docx-zoom-select"
+            @change="onZoomSelect"
+          >
+            <option v-for="value in zoomSelectOptions" :key="value" :value="value">
+              {{ value }}%
+            </option>
+          </select>
+        </span>
+        <span class="docx-viewer-toolbar__tooltip-trigger">
+          <OfficeIconButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-viewer-toolbar__icon-button"
+            data-testid="docx-zoom-in"
+            :label="m.common.zoom.in"
+            :disabled="!canZoomIn"
+            @click="stepZoom(1)"
+          >
+            <HugeIcon :icon="CirclePlusIcon" class="docx-viewer-toolbar__icon" />
+          </OfficeIconButton>
+        </span>
+      </div>
+
+      <span v-if="showSearch" class="docx-viewer-toolbar__search">
+        <OfficeSearchPopover
+          ref="searchPopoverRef"
+          inline
+          :model-value="searchQuery"
+          :result-count="searchResultCount"
+          :active-index="searchResultIndex"
+          :status-text="searchStatusText"
+          :case-sensitive="searchCaseSensitive"
+          :whole-word="searchWholeWord"
+          :regex="searchRegex"
+          :show-options="true"
+          :disabled="disabled"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          input-type="search"
+          test-id-prefix="docx-search"
+          @update:model-value="emit('update:searchQuery', $event)"
+          @update:case-sensitive="emit('update:searchCaseSensitive', $event)"
+          @update:whole-word="emit('update:searchWholeWord', $event)"
+          @update:regex="emit('update:searchRegex', $event)"
+          @previous="emit('searchPrevious')"
+          @next="emit('searchNext')"
+          @close="closeSearch"
+        />
+      </span>
+
+      <div class="docx-viewer-toolbar__separator" role="separator" aria-orientation="vertical" />
+
+      <span ref="actionsRoot" class="docx-viewer-toolbar__actions-wrap">
+        <span class="docx-viewer-toolbar__tooltip-trigger">
+          <OfficeIconButton
+            variant="ghost"
+            size="icon-sm"
+            class="docx-viewer-toolbar__icon-button"
+            data-testid="docx-toolbar-actions"
+            :label="m.docx.toolbar.moreActions"
+            :active="actionsOpen"
+            aria-haspopup="menu"
+            :aria-expanded="actionsOpen"
+            @click="toggleActions"
+          >
+            <HugeIcon :icon="MoreHorizontalIcon" class="docx-viewer-toolbar__icon" />
+          </OfficeIconButton>
+        </span>
+
+        <div
+          v-if="actionsOpen"
+          class="docx-viewer-toolbar__popover docx-viewer-toolbar__menu"
+          role="menu"
+          :aria-label="m.docx.toolbar.moreActions"
+          data-testid="docx-actions-menu"
+          @keydown.esc.stop.prevent="closeActions"
+        >
+          <button
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitem"
+            data-testid="docx-find"
+            :disabled="disabled"
+            @click="findInDocument"
+          >
+            <OfficeIcon name="search" />
+            <span>{{ m.docx.toolbar.searchPlaceholder }}</span>
+          </button>
+          <div class="docx-viewer-toolbar__menu-separator" role="separator" />
+          <button
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitemcheckbox"
+            data-testid="docx-show-comments"
+            :aria-checked="showComments"
+            :disabled="disabled"
+            @click="runAction('comments')"
+          >
+            <HugeIcon :icon="Comment01Icon" class="docx-viewer-toolbar__menu-icon" />
+            <span>{{ commentsLabel }}</span>
+            <span v-if="showComments" class="docx-viewer-toolbar__menu-check" aria-hidden="true">✓</span>
+          </button>
+          <button
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitemcheckbox"
+            data-testid="docx-show-tracked-changes"
+            :aria-checked="showTrackedChanges"
+            :disabled="disabled"
+            @click="runAction('trackedChanges')"
+          >
+            <HugeIcon :icon="FileDiffIcon" class="docx-viewer-toolbar__menu-icon" />
+            <span>{{ trackedChangesLabel }}</span>
+            <span v-if="showTrackedChanges" class="docx-viewer-toolbar__menu-check" aria-hidden="true">✓</span>
+          </button>
+
+          <template v-if="showReviewControls">
+            <div class="docx-viewer-toolbar__menu-separator" role="separator" />
+            <div
+              class="docx-viewer-toolbar__menu-group"
+              role="group"
+              :aria-label="m.docx.toolbar.revisionDisplay"
+              data-testid="docx-revision-display"
+            >
+              <button
+                v-for="display in revisionDisplays"
+                :key="display"
+                type="button"
+                class="docx-viewer-toolbar__menu-item"
+                role="menuitemradio"
+                :aria-checked="display === revisionDisplay"
+                :data-display-active="display === revisionDisplay ? 'true' : undefined"
+                :data-testid="`docx-revision-display-${display}`"
+                :disabled="disabled"
+                @click="selectRevisionDisplay(display)"
+              >
+                <span>{{ revisionDisplayLabels[display] }}</span>
+              </button>
+            </div>
+          </template>
+
+          <template v-if="showViewControls">
+            <div class="docx-viewer-toolbar__menu-separator" role="separator" />
+            <div
+              class="docx-viewer-toolbar__menu-group"
+              role="group"
+              :aria-label="m.docx.toolbar.viewMode"
+              data-testid="docx-view-mode"
+            >
+              <button
+                v-for="mode in viewModes"
+                :key="mode"
+                type="button"
+                class="docx-viewer-toolbar__menu-item"
+                role="menuitemradio"
+                :aria-checked="mode === viewMode"
+                :data-view-mode-active="mode === viewMode ? 'true' : undefined"
+                :data-testid="`docx-view-mode-${mode}`"
+                :disabled="disabled"
+                @click="selectViewMode(mode)"
+              >
+                <span>{{ viewModeLabels[mode] }}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="docx-viewer-toolbar__menu-item"
+              role="menuitemradio"
+              data-testid="docx-fit-width"
+              :aria-checked="fitMode === 'width'"
+              :disabled="disabled"
+              @click="selectFitMode(fitMode === 'width' ? 'none' : 'width')"
+            >
+              <HugeIcon :icon="ArrowHorizontalIcon" class="docx-viewer-toolbar__menu-icon" />
+              <span>{{ m.docx.toolbar.fitWidth }}</span>
+            </button>
+            <button
+              type="button"
+              class="docx-viewer-toolbar__menu-item"
+              role="menuitemradio"
+              data-testid="docx-fit-page"
+              :aria-checked="fitMode === 'page'"
+              :disabled="disabled"
+              @click="selectFitMode(fitMode === 'page' ? 'none' : 'page')"
+            >
+              <HugeIcon :icon="ArrowVerticalIcon" class="docx-viewer-toolbar__menu-icon" />
+              <span>{{ m.docx.toolbar.fitPage }}</span>
+            </button>
+          </template>
+
+          <div class="docx-viewer-toolbar__menu-separator" role="separator" />
+          <button
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitemcheckbox"
+            data-testid="docx-theme-toggle"
+            :aria-checked="isDark"
+            :disabled="disabled"
+            @click="runAction('theme')"
+          >
+            <HugeIcon
+              :icon="isDark ? Sun03Icon : Moon02Icon"
+              class="docx-viewer-toolbar__menu-icon"
+            />
+            <span>{{ themeToggleLabel }}</span>
+            <span v-if="isDark" class="docx-viewer-toolbar__menu-check" aria-hidden="true">✓</span>
+          </button>
+          <button
+            v-if="showUpload"
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitem"
+            data-testid="docx-upload"
+            @click="runAction('upload')"
+          >
+            <OfficeIcon name="upload" />
+            <span>{{ m.docx.toolbar.upload }}</span>
+          </button>
+          <button
+            v-if="showDownload"
+            type="button"
+            class="docx-viewer-toolbar__menu-item"
+            role="menuitem"
+            data-testid="docx-download"
+            :disabled="disabled || !canDownload"
+            @click="runAction('download')"
+          >
+            <OfficeIcon name="download" />
+            <span>{{ m.docx.toolbar.download }}</span>
+          </button>
+        </div>
+      </span>
+    </div>
+
+    <div
+      v-if="searchOpen && !showSearch"
+      class="docx-viewer-toolbar__popover docx-viewer-toolbar__find"
+      role="search"
+      :aria-label="m.docx.toolbar.searchPlaceholder"
+      data-testid="docx-find-popover"
+    >
+      <OfficeSearchPopover
+        ref="searchPopoverRef"
+        inline
+        :model-value="searchQuery"
+        :result-count="searchResultCount"
+        :active-index="searchResultIndex"
+        :status-text="searchStatusText"
+        :case-sensitive="searchCaseSensitive"
+        :whole-word="searchWholeWord"
+        :regex="searchRegex"
+        :show-options="true"
+        :disabled="disabled"
+        :placeholder="m.docx.toolbar.searchPlaceholder"
+        input-type="search"
+        test-id-prefix="docx-search"
+        @update:model-value="emit('update:searchQuery', $event)"
+        @update:case-sensitive="emit('update:searchCaseSensitive', $event)"
+        @update:whole-word="emit('update:searchWholeWord', $event)"
+        @update:regex="emit('update:searchRegex', $event)"
+        @previous="emit('searchPrevious')"
+        @next="emit('searchNext')"
+        @close="closeSearch"
+      />
+    </div>
+  </div>
+</template>
+
 <style scoped>
+/*
+ * The row is the upstream Extend `min-h-12 px-3 py-2 gap-2` toolbar with
+ * `justify-between`. Parity measures this component against the pinned
+ * reference, so it owns its padding/gap instead of using OfficeToolbar's.
+ */
+.docx-viewer-toolbar,
+.docx-viewer-toolbar * {
+  box-sizing: border-box;
+}
+
 .docx-viewer-toolbar {
-  align-items: center;
-  background: var(--docx-toolbar-bg, #fff);
-  border-bottom: 1px solid var(--docx-border, #e4e4e7);
-  color: var(--docx-foreground, #18181b);
+  position: relative;
   display: flex;
-  flex: 0 0 auto;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 7px 12px;
+  gap: 8px;
+  min-block-size: 48px;
+  padding: 8px 12px;
+  border-block-end: 1px solid var(--office-border);
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font-family: inherit;
+  font-size: var(--office-text-base);
+  line-height: var(--office-leading-base);
 }
+
 .docx-viewer-toolbar__leading,
-.docx-viewer-toolbar__actions,
-.docx-viewer-toolbar__page {
-  align-items: center;
+.docx-viewer-toolbar__trailing {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-inline-size: 0;
 }
-.docx-viewer-toolbar__leading { gap: 10px; min-width: 0; }
-.docx-viewer-toolbar__actions { gap: 4px; }
-.docx-viewer-toolbar__search { align-items: center; display: flex; gap: 2px; margin-right: 4px; }
-.docx-viewer-toolbar__search input { background: #fff; border: 1px solid #d4d4d8; border-radius: 7px; color: #18181b; font: inherit; font-size: 12px; height: 32px; padding: 0 8px; width: 132px; }
-.docx-viewer-toolbar__search span { color: #71717a; font-size: 11px; min-width: 30px; text-align: center; }
-.docx-viewer-toolbar__search .docx-viewer-toolbar__search-option {
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 700;
-  height: 26px;
-  line-height: 1;
-  width: 26px;
+
+.docx-viewer-toolbar__leading {
+  gap: 8px;
 }
-.docx-viewer-toolbar__search .docx-viewer-toolbar__search-option--active {
-  background: #e0e7ff;
-  border-color: #818cf8;
-  color: #312e81;
+
+.docx-viewer-toolbar__trailing {
+  margin-inline-start: auto;
+  justify-content: flex-end;
+  gap: 4px;
 }
-.docx-viewer-toolbar__search button { background: transparent; border: 1px solid transparent; border-radius: 5px; color: inherit; cursor: pointer; font-size: 20px; height: 28px; line-height: 20px; padding: 0; width: 24px; }
-.docx-viewer-toolbar__search button:hover:not(:disabled) { background: #f4f4f5; }
-.docx-viewer-toolbar__search button:disabled { opacity: .3; }
+
+.docx-viewer-toolbar__tooltip-trigger {
+  display: inline-flex;
+}
+
+.docx-viewer-toolbar__icon {
+  display: block;
+  inline-size: 16px;
+  block-size: 16px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
 .docx-viewer-toolbar__file {
-  font-size: 13px;
+  color: var(--office-foreground);
+  font-size: var(--office-text-sm);
   font-weight: 600;
-  max-width: 220px;
+  max-inline-size: 13.75rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.docx-viewer-toolbar .office-icon-button[data-active="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--office-ring) 40%, transparent);
+}
+
 .docx-viewer-toolbar__page {
-  color: #52525b;
-  font-size: 13px;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  color: var(--office-primary);
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
   white-space: nowrap;
 }
-.docx-viewer-toolbar__page input {
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  color: #18181b;
+
+.docx-viewer-toolbar__page-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: 28px;
+  flex: none;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--office-radius-lg);
+  background: transparent;
+  color: inherit;
   font: inherit;
-  height: 30px;
-  padding: 0 5px;
+  cursor: text;
+}
+
+.docx-viewer-toolbar__page-display {
+  display: block;
+  line-height: 20px;
+  pointer-events: none;
+}
+
+.docx-viewer-toolbar__page-input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font: inherit;
   text-align: center;
-  width: 42px;
+  cursor: text;
 }
-.docx-viewer-toolbar__icon-button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  color: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  height: 32px;
-  justify-content: center;
-  padding: 0;
-  width: 32px;
+
+.docx-viewer-toolbar__page-control:hover:not([data-disabled="true"]) {
+  background: var(--office-accent);
+  color: var(--office-accent-foreground);
 }
-.docx-viewer-toolbar__toggle-button {
-  align-items: center;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 7px;
+
+.docx-viewer-toolbar__page-control:focus-within {
+  box-shadow:
+    0 0 0 1px var(--office-background),
+    0 0 0 3px var(--office-ring);
+}
+
+.docx-viewer-toolbar__page-control[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
+
+.docx-viewer-toolbar__page-input:disabled {
+  cursor: not-allowed;
+}
+
+.docx-viewer-toolbar__page-total {
   color: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
+}
+
+.docx-viewer-toolbar__group {
+  display: flex;
+  flex: none;
+  align-items: center;
   gap: 4px;
-  height: 32px;
-  padding: 0 7px;
 }
-.docx-viewer-toolbar__toggle-button:hover:not(:disabled),
-.docx-viewer-toolbar__toggle-button[aria-pressed="true"] { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
-.docx-viewer-toolbar__toggle-button:disabled { cursor: default; opacity: .35; }
-.docx-viewer-toolbar__toggle-button svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 15px; }
-/* Segmented view-mode and fit-mode controls. */
-.docx-viewer-toolbar__view-modes {
-  align-items: center;
-  border: 1px solid #e4e4e7;
-  border-radius: 8px;
+
+.docx-viewer-toolbar__separator {
+  flex: none;
+  inline-size: 1px;
+  block-size: 16px;
+  margin: 0 4px;
+  background: var(--office-border);
+}
+
+.docx-viewer-toolbar__zoom {
+  position: relative;
   display: inline-flex;
-  gap: 1px;
-  overflow: hidden;
-  padding: 1px;
+  flex: none;
+  inline-size: 104px;
+  min-inline-size: 104px;
+  block-size: 28px;
 }
-.docx-viewer-toolbar__segment {
+
+.docx-viewer-toolbar__zoom-trigger {
+  position: relative;
+  display: flex;
   align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  height: 28px;
-  justify-content: center;
-  padding: 0;
-  width: 30px;
-}
-.docx-viewer-toolbar__segment:hover:not(:disabled) { background: #f4f4f5; }
-.docx-viewer-toolbar__segment--active { background: #eff6ff; color: #1d4ed8; }
-.docx-viewer-toolbar__segment:disabled { cursor: default; opacity: .35; }
-.docx-viewer-toolbar__segment svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; width: 15px; }
-.docx-viewer-toolbar__revision-select {
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: 6px;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0 9px;
+  border: 1px solid var(--office-input);
+  border-radius: var(--office-radius-lg);
+  background: var(--office-background);
+  background: light-dark(
+    var(--office-background),
+    color-mix(in oklab, var(--office-input) 32%, transparent)
+  );
+  background-clip: padding-box;
+  color: var(--office-foreground);
   font: inherit;
-  font-size: 12px;
-  max-width: 96px;
+  font-size: var(--office-text-sm);
+  line-height: var(--office-leading-sm);
+  text-align: start;
+  box-shadow:
+    0 0 0 0 transparent,
+    0 0 0 0 transparent,
+    0 0 0 0 transparent,
+    0 0 0 0 transparent,
+    color-mix(in oklab, black 5%, transparent) 0 1px 2px 0;
+  cursor: pointer;
+}
+
+.docx-viewer-toolbar__zoom-trigger::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--office-radius-lg) - 1px);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, black 4%, transparent);
+  pointer-events: none;
+}
+
+.docx-viewer-toolbar__zoom-value {
+  flex: 1 1 0%;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docx-viewer-toolbar__zoom-icon {
+  flex: none;
+  margin-inline-end: -4px;
+  opacity: 0.8;
+}
+
+.docx-viewer-toolbar__zoom-native {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.docx-viewer-toolbar__zoom-native:disabled {
+  display: none;
+}
+
+[data-office-theme="dark"] .docx-viewer-toolbar__zoom-trigger {
+  background-clip: border-box;
+}
+
+[data-office-theme="dark"] .docx-viewer-toolbar__zoom-trigger::before {
+  box-shadow: 0 -1px 0 0 color-mix(in oklab, white 6%, transparent);
+}
+
+.docx-viewer-toolbar__zoom-native option {
+  color: var(--office-foreground);
+  background: var(--office-popover);
+}
+
+.docx-viewer-toolbar__zoom[data-disabled="true"] .docx-viewer-toolbar__zoom-trigger {
+  opacity: 0.64;
+  box-shadow: none;
+}
+
+.docx-viewer-toolbar__zoom[data-disabled="true"] .docx-viewer-toolbar__zoom-trigger::before {
+  box-shadow: none;
+}
+
+.docx-viewer-toolbar__zoom:focus-within .docx-viewer-toolbar__zoom-trigger {
+  border-color: var(--office-ring);
+  box-shadow:
+    0 0 0 1px var(--office-background),
+    0 0 0 3px var(--office-ring);
+}
+
+.docx-viewer-toolbar__search {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.docx-viewer-toolbar__actions-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.docx-viewer-toolbar__popover {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-end: 0;
+  z-index: 50;
+  border: 1px solid var(--office-border);
+  border-radius: var(--office-radius-lg);
+  background: var(--office-popover);
+  color: var(--office-popover-foreground);
+  box-shadow: var(--office-shadow-md);
+}
+
+.docx-viewer-toolbar__find {
+  inset-inline-end: 12px;
+  inline-size: 288px;
+  max-inline-size: calc(100vw - 24px);
+  padding: 8px;
+}
+
+.docx-viewer-toolbar__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  inline-size: 240px;
+  max-inline-size: calc(100vw - 24px);
+  padding: 4px;
+}
+
+.docx-viewer-toolbar__menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.docx-viewer-toolbar__menu-separator {
+  block-size: 1px;
+  margin: 4px -4px;
+  background: var(--office-border);
+}
+
+.docx-viewer-toolbar__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--office-radius-sm);
+  background: transparent;
+  color: var(--office-foreground);
+  font: inherit;
+  font-size: var(--office-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.docx-viewer-toolbar__menu-item:hover:not(:disabled),
+.docx-viewer-toolbar__menu-item:focus-visible {
+  background: var(--office-accent);
+  color: var(--office-accent-foreground);
   outline: none;
 }
-.docx-viewer-toolbar__count { align-items: center; background: currentColor; border-radius: 999px; color: #fff; display: inline-flex; font-size: 10px; height: 17px; justify-content: center; min-width: 17px; padding: 0 4px; }
-.docx-viewer-toolbar__icon-button:hover:not(:disabled) { background: #f4f4f5; }
-.docx-viewer-toolbar__icon-button:focus-visible,
-.docx-viewer-toolbar__page input:focus-visible,
-.docx-viewer-toolbar__zoom:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+
+.docx-viewer-toolbar__menu-item[data-view-mode-active="true"],
+.docx-viewer-toolbar__menu-item[data-display-active="true"] {
+  background: color-mix(in oklab, var(--office-primary) 10%, transparent);
+  color: var(--office-primary);
+  font-weight: 600;
 }
-.docx-viewer-toolbar__icon-button:disabled { cursor: default; opacity: .35; }
-.docx-viewer-toolbar__icon-button svg {
-  fill: none;
-  height: 17px;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-  width: 17px;
+
+.docx-viewer-toolbar__menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
 }
-.docx-viewer-toolbar__zoom {
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 7px;
-  color: #18181b;
-  font: inherit;
-  font-size: 12px;
-  height: 32px;
-  min-width: 76px;
-  padding: 0 8px;
+
+.docx-viewer-toolbar__menu-item svg.office-icon,
+.docx-viewer-toolbar__menu-icon {
+  flex: none;
+  inline-size: 16px;
+  block-size: 16px;
+  opacity: 0.8;
 }
-.docx-viewer-toolbar__separator { background: #e4e4e7; height: 18px; margin: 0 3px; width: 1px; }
+
+.docx-viewer-toolbar__menu-check {
+  margin-inline-start: auto;
+  color: var(--office-primary);
+}
+
+/* The upstream row wraps below the 640px Tailwind breakpoint; the container
+ * queries below keep the DOCX-specific compact variants. */
+@media (max-width: 639px) {
+  .docx-viewer-toolbar__page-control,
+  .docx-viewer-toolbar__zoom,
+  .docx-viewer-toolbar__zoom-trigger {
+    block-size: 32px;
+  }
+
+  .docx-viewer-toolbar__page-control,
+  .docx-viewer-toolbar__zoom-trigger {
+    font-size: var(--office-text-base);
+    line-height: var(--office-leading-base);
+  }
+
+  .docx-viewer-toolbar__page-display {
+    line-height: var(--office-leading-base);
+  }
+
+  .docx-viewer-toolbar__zoom-icon {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+}
 
 @container docx-shell (max-width: 720px) {
-  .docx-viewer-toolbar { align-items: stretch; flex-direction: column; gap: 6px; }
-  .docx-viewer-toolbar__actions { justify-content: flex-end; }
-  .docx-viewer-toolbar__file { flex: 1; max-width: none; }
+  .docx-viewer-toolbar__trailing {
+    flex: 1 1 100%;
+  }
+
+  .docx-viewer-toolbar__leading {
+    flex: 1 1 100%;
+  }
+
+  .docx-viewer-toolbar__file {
+    flex: 1 1 auto;
+    max-inline-size: none;
+  }
 }
 
 @container docx-shell (max-width: 460px) {
-  .docx-viewer-toolbar__file { display: none; }
-  .docx-viewer-toolbar__leading { justify-content: space-between; }
-  .docx-viewer-toolbar__actions { overflow-x: auto; }
+  .docx-viewer-toolbar {
+    padding-inline: 8px;
+    gap: 4px;
+  }
+
+  .docx-viewer-toolbar__file {
+    display: none;
+  }
+
+  .docx-viewer-toolbar__leading {
+    justify-content: space-between;
+  }
 }
 
 @media (pointer: coarse) {
-  .docx-viewer-toolbar__icon-button,
+  .docx-viewer-toolbar button {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  .docx-viewer-toolbar select,
+  .docx-viewer-toolbar input {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  /* The row's custom controls are wrappers around the native form elements,
+     so they grow with them on touch surfaces. */
   .docx-viewer-toolbar__zoom,
-  .docx-viewer-toolbar__page input,
-  .docx-viewer-toolbar__search input,
-  .docx-viewer-toolbar__search button {
-    min-height: 44px;
-    min-width: 44px;
+  .docx-viewer-toolbar__zoom-trigger,
+  .docx-viewer-toolbar__page-control {
+    min-block-size: 44px;
+  }
+
+  .docx-viewer-toolbar__zoom-native {
+    inset-block-start: 50%;
+    inset-block-end: auto;
+    block-size: 44px;
+    translate: 0 -50%;
   }
 }
 </style>

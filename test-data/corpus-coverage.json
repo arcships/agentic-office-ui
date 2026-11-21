@@ -1,0 +1,547 @@
+{
+  "version": 1,
+  "description": "Fixture -> feature -> issue -> test coverage matrix for the real fixture corpus.",
+  "generatedBy": "scripts/generate_test_materials.py",
+  "fixtures": [
+    {
+      "file": "charts-images.xlsx",
+      "features": [
+        "xlsx:chart",
+        "xlsx:image",
+        "xlsx:merged-cells",
+        "xlsx:freeze-panes",
+        "xlsx:data-validation",
+        "xlsx:conditional-format"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/component/xlsx-fixture-structure.test.mjs"
+      ]
+    },
+    {
+      "file": "chinese-mixed.docx",
+      "features": [
+        "docx:cjk-text",
+        "docx:mixed-script"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "cjk-report.pdf",
+      "features": [
+        "pdf:cjk-text",
+        "pdf:text-layer"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "contract-page.png",
+      "features": [
+        "image:png"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "corrupted.docx",
+      "features": [
+        "negative:corrupt-package"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "corrupted.pdf",
+      "features": [
+        "negative:corrupt-package"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "corrupted.xlsx",
+      "features": [
+        "negative:corrupt-package"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "deck-structure.pptx",
+      "features": [
+        "pptx:slide-master",
+        "pptx:slide-layout",
+        "pptx:placeholder",
+        "pptx:smartart",
+        "pptx:video-placeholder",
+        "pptx:cjk-text"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "demo.docx",
+      "features": [
+        "docx:long-document"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "docx-embedded-objects.docx",
+      "features": [
+        "docx:textbox",
+        "docx:shape",
+        "docx:smartart",
+        "docx:chart",
+        "docx:ole-object",
+        "docx:math-omml"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "docx-fields-controls.docx",
+      "features": [
+        "docx:field-page-roman",
+        "docx:field-numpages-alpha",
+        "docx:field-styleref-roman",
+        "docx:content-control",
+        "docx:tracked-move",
+        "docx:footnote-in-table"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "encrypted.pdf",
+      "features": [
+        "pdf:encrypted"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "field-citations.json",
+      "features": [
+        "ocr:field-citations"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "financial-model.xlsx",
+      "features": [
+        "xlsx:formulas",
+        "xlsx:number-format",
+        "xlsx:multiple-sheets"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "invoice-table.docx",
+      "features": [
+        "docx:table",
+        "docx:merged-cells"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "invoice.png",
+      "features": [
+        "image:png"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "large-contract.pdf",
+      "features": [
+        "pdf:large"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "large-grid.xlsx",
+      "features": [
+        "xlsx:large-grid"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "legal-contract.docx",
+      "features": [
+        "docx:long-document"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "ocr-layout.json",
+      "features": [
+        "ocr:layout"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "page-sizes.docx",
+      "features": [
+        "docx:section-page-size",
+        "docx:section-orientation"
+      ],
+      "issues": [
+        58
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/unit/docx-fixture-fidelity.test.mjs"
+      ]
+    },
+    {
+      "file": "pdf-1000-pages.pdf",
+      "features": [
+        "pdf:large",
+        "pdf:text-layer"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "pdf-acroform-annotations.pdf",
+      "features": [
+        "pdf:acroform",
+        "pdf:annotation",
+        "pdf:attachment",
+        "pdf:ocg",
+        "pdf:signature-field",
+        "pdf:docmdp"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "report-with-image.docx",
+      "features": [
+        "docx:image"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "review-comments.docx",
+      "features": [
+        "docx:comments",
+        "docx:tracked-changes",
+        "docx:footnotes",
+        "docx:endnotes"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "review-threads.docx",
+      "features": [
+        "docx:threaded-comments",
+        "docx:resolved-comment",
+        "docx:comment-in-table",
+        "docx:comment-in-header",
+        "docx:tracked-changes"
+      ],
+      "issues": [
+        53
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/unit/docx-fixture-fidelity.test.mjs"
+      ]
+    },
+    {
+      "file": "rotated-pages.pdf",
+      "features": [
+        "pdf:rotation"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "sales-table-validated.xlsx",
+      "features": [
+        "xlsx:freeze-panes",
+        "xlsx:data-validation",
+        "xlsx:table",
+        "xlsx:column-width"
+      ],
+      "issues": [
+        62
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/component/xlsx-fixture-structure.test.mjs"
+      ]
+    },
+    {
+      "file": "sales-table.xlsx",
+      "features": [
+        "xlsx:table",
+        "xlsx:formulas",
+        "xlsx:number-format"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "sample.pdf",
+      "features": [
+        "pdf:text-layer"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "scanned-invoice.pdf",
+      "features": [
+        "pdf:scanned",
+        "pdf:image-only"
+      ],
+      "issues": [],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py"
+      ]
+    },
+    {
+      "file": "sections-columns.docx",
+      "features": [
+        "docx:section-orientation",
+        "docx:section-columns",
+        "docx:textbox",
+        "docx:watermark"
+      ],
+      "issues": [
+        53
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/unit/docx-fixture-fidelity.test.mjs"
+      ]
+    },
+    {
+      "file": "table-structures.docx",
+      "features": [
+        "docx:table",
+        "docx:vertical-merge",
+        "docx:grid-span",
+        "docx:nested-table",
+        "docx:table-header-repeat"
+      ],
+      "issues": [
+        53
+      ],
+      "tests": [
+        "scripts/ci/verify-fixtures.mjs",
+        "scripts/verify_test_materials.py",
+        "tests/unit/docx-fixture-fidelity.test.mjs"
+      ]
+    },
+    {
+      "file": "xlsx-chart-families.xlsx",
+      "features": [
+        "xlsx:chart-family-bar",
+        "xlsx:chart-family-line",
+        "xlsx:chart-family-pie",
+        "xlsx:chart-family-scatter",
+        "xlsx:chart-family-radar",
+        "xlsx:chart-family-area",
+        "xlsx:chart-combo-one-axis",
+        "xlsx:chart-combo-two-axis",
+        "xlsx:chart-3d-fallback"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "xlsx-large-scale.xlsx",
+      "features": [
+        "xlsx:large-rows",
+        "xlsx:wide-columns"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "xlsx-macros.xlsm",
+      "features": [
+        "xlsx:macro-enabled",
+        "xlsx:vba-project-stub"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "xlsx-negative-databar-icons.xlsx",
+      "features": [
+        "xlsx:data-bar-negative",
+        "xlsx:icon-set-4",
+        "xlsx:icon-set-5",
+        "xlsx:cfvo-num",
+        "xlsx:cfvo-percent",
+        "xlsx:cfvo-percentile",
+        "xlsx:cfvo-formula"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    },
+    {
+      "file": "xlsx-protected-1904.xlsx",
+      "features": [
+        "xlsx:date-1904",
+        "xlsx:workbook-protection",
+        "xlsx:sheet-protection"
+      ],
+      "issues": [
+        72
+      ],
+      "tests": [
+        "tests/unit/fixture-corpus.test.mjs",
+        "scripts/verify_test_materials.py",
+        "scripts/ci/verify-fixtures.mjs"
+      ]
+    }
+  ]
+}

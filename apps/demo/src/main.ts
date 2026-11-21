@@ -1,11 +1,17 @@
 import { createApp } from "vue"
 import { createRouter, createWebHashHistory } from "vue-router"
 import App from "./App.vue"
+import { applyDemoTheme } from "./lib/demo-visual-settings"
 import "@arcships/vue-docx/style.css"
 import "@arcships/vue-xlsx/style.css"
 import "@arcships/vue-pptx/style.css"
 import "@arcships/vue-pdf/style.css"
 import "@arcships/vue-ui/style.css"
+import "@arcships/vue-ui/theme.css"
+
+// Apply `?theme=dark` before the app mounts so the first paint matches the
+// captured state and no light flash can leak into a screenshot.
+applyDemoTheme()
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -22,6 +28,9 @@ const router = createRouter({
     { path: "/pdf-surface", component: () => import("./pages/PdfSurfacePage.vue") },
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
     { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
+    { path: "/file-components", component: () => import("./pages/FileComponentsPage.vue") },
+    { path: "/primitives", component: () => import("./pages/PrimitivesPage.vue") },
+    { path: "/chrome", component: () => import("./pages/ChromePage.vue") },
     { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },
     { path: "/docx-parity", component: () => import("./pages/DocxParityPage.vue") },
     { path: "/runtime-limits", component: () => import("./pages/RuntimeLimitsPage.vue") },

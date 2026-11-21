@@ -38,6 +38,7 @@
         :src="src ?? undefined"
         :file-name="displayName || 'verification.xlsx'"
         :read-only="readOnly"
+        :is-dark="isDark"
         :use-worker="useWorker"
         :url-policy="urlPolicy"
         :defer-loading-above-bytes="deferLoadingAboveBytes"
@@ -103,6 +104,7 @@ import {
   type XlsxUrlPolicy,
 } from "@arcships/vue-xlsx"
 import type { XlsxViewerController } from "@arcships/xlsx-core"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 const XlsxViewerWrapper = defineComponent({
   props: {
@@ -110,6 +112,7 @@ const XlsxViewerWrapper = defineComponent({
     src: { type: String as PropType<string | undefined> },
     fileName: { type: String as PropType<string | undefined> },
     readOnly: { type: Boolean, default: false },
+    isDark: { type: Boolean, default: false },
     useWorker: { type: Boolean, default: true },
     deferLoadingAboveBytes: { type: Number, default: 0 },
     urlPolicy: { type: Object as PropType<XlsxUrlPolicy>, required: true },
@@ -130,6 +133,7 @@ const XlsxViewerWrapper = defineComponent({
     return () => h(XlsxViewer, {
       controller,
       readOnly: props.readOnly,
+      isDark: props.isDark,
       showDefaultToolbar: true,
       showUpload: true,
       style: { height: "100%" },
@@ -157,6 +161,7 @@ const inputError = ref<XlsxLoadError | null>(null)
 const controller = shallowRef<XlsxViewerController | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const readOnly = ref(false)
+const isDark = readDemoTheme() === "dark"
 const useWorker = ref(true)
 const sourceKind = ref("未选择")
 const loadCounter = ref(0)

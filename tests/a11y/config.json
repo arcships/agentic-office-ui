@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "description": "axe-core + keyboard smoke targets for the core Extend-aligned components (#165). The page under test is the built parity comparison app (tools/vue-reference/dist), which renders the real `@arcships/vue-ui` / `@arcships/vue-pdf` components in light and dark themes.",
+  "themes": ["light", "dark"],
+  "viewports": ["1440x900"],
+  "axe": {
+    "tags": ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+    "disabledRules": [],
+    "description": "Rules matching these WCAG tags run against the surface root. `tests/a11y/allowlist.json` records the pre-existing violations; anything not listed fails the run."
+  },
+  "checks": {
+    "focusable": "Tab from the document reaches an interactive control inside the surface.",
+    "focus-indicator": "The focused control paints an outline or a ring (box-shadow), so keyboard focus stays visible.",
+    "accessible-name": "The focused control exposes an accessible name (aria-labelledby, aria-label, label, text, alt, title).",
+    "select-opens-on-arrow": "ArrowDown on a combobox trigger opens a listbox; Escape closes it."
+  },
+  "surfaces": [
+    {
+      "id": "button",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "input",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "select",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name", "select-opens-on-arrow"]
+    },
+    {
+      "id": "dialog",
+      "keyboardState": "open",
+      "checks": ["focusable", "focus-indicator", "accessible-name"],
+      "notes": "The dialog is controlled by the harness with open=true, so Escape cannot be observed here; the close button is reachable with Tab and labelled."
+    },
+    {
+      "id": "tooltip",
+      "keyboardState": "open",
+      "checks": ["focusable"]
+    },
+    {
+      "id": "file-upload",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "file-thumbnail",
+      "keyboardState": "image",
+      "checks": [],
+      "notes": "The thumbnail card is not interactive; axe-core covers its image alt text."
+    },
+    {
+      "id": "pdf-toolbar",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "pdf-sidebar",
+      "keyboardState": "open",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "docx-toolbar",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"]
+    },
+    {
+      "id": "document-sidebar",
+      "keyboardState": "open",
+      "checks": [],
+      "notes": "The shared sidebar is a labelled landmark (`<aside aria-label>`) with host-owned children; the fixture strip has no controls, and the overlay Escape-close / inline-vs-overlay ResizeObserver behaviour is pinned by the `DocumentViewerSidebar` component tests and scripts/ci/capture-office-chrome.py. axe-core still checks the landmark, the inert closed cells and duplicate ids."
+    },
+    {
+      "id": "office-empty-state",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "`role=group` with labelledby/describedby and no controls; axe-core covers the grouping, the icon decoration and colour contrast."
+    },
+    {
+      "id": "office-error-state",
+      "keyboardState": "default",
+      "checks": ["focusable", "focus-indicator", "accessible-name"],
+      "notes": "The default cell renders the Retry action, which must stay Tab reachable, visibly focused and named."
+    },
+    {
+      "id": "office-loading-state",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "`role=status aria-live=polite aria-busy=true` with no controls; axe-core covers the live region contract."
+    },
+    {
+      "id": "office-status-bar",
+      "keyboardState": "default",
+      "checks": [],
+      "notes": "A labelled `<footer>` with no controls; axe-core covers the landmark and the nested `role=status`/`role=alert` regions."
+    }
+  ]
+}

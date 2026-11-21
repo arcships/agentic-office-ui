@@ -1,0 +1,160 @@
+/**
+ * @arcships/vue-ui — Office design tokens
+ *
+ * Adapted from extend-hq/ui @ 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT).
+ * Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn.
+ * Licensed under the MIT License; see docs/upstream/licenses/extend-ui-MIT.txt.
+ *
+ * Single visual source for every Office component. Values are aligned with the
+ * Extend UI / shadcn reference at commit
+ * 70fe70c6f1e1eee53954c6923f3d9f583557a57e (apps/v4/app/globals.css):
+ *
+ *   --radius: 0.625rem             -> --office-radius
+ *   --border (8% black alpha)      -> --office-border
+ *   --muted / --secondary / --accent (4% alpha)
+ *   --primary (neutral-800)        -> --office-primary
+ *   focus ring (2px)               -> --office-ring-width
+ *   --shadow-xs / --shadow-sm      -> --office-shadow-xs / --office-shadow-sm
+ *   --shadow-md                    -> --office-shadow-md
+ *
+ * Scope: every declaration lives under `[data-office-theme]`. Importing this
+ * file does not touch `:root`, `html` or `body`, so a host application keeps
+ * its own global tokens. `theme.css` layers the light / dark / system values
+ * on top and is the public entry point (`@arcships/vue-ui/theme.css`).
+ *
+ * This file carries the light values so a host that only needs one scheme can
+ * import it standalone. Dark consumers must import `theme.css`.
+ */
+
+[data-office-theme] {
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  /* Geist is the reference face. It is intentionally NOT bundled with this
+   * package (no @font-face / no font binaries): the host loads Geist once and
+   * either inherits this token or overrides it. See docs/design/office-theme.md. */
+  --office-font-sans: Geist, "Geist Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans SC", sans-serif;
+  --office-font-mono: "Geist Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --office-text-xs: 0.75rem;
+  --office-leading-xs: 1rem;
+  --office-text-sm: 0.875rem;
+  --office-leading-sm: 1.25rem;
+  --office-text-base: 1rem;
+  --office-leading-base: 1.5rem;
+  --office-text-lg: 1.125rem;
+  --office-leading-lg: 1.75rem;
+  --office-text-xl: 1.25rem;
+  --office-leading-xl: 1.75rem;
+
+  /* ── Radius (Extend `--radius: 0.625rem` scale) ──────────────────────── */
+  --office-radius: 0.625rem;
+  --office-radius-sm: calc(var(--office-radius) * 0.6);
+  --office-radius-md: calc(var(--office-radius) * 0.8);
+  --office-radius-lg: var(--office-radius);
+  --office-radius-xl: calc(var(--office-radius) * 1.4);
+  --office-radius-2xl: calc(var(--office-radius) * 1.8);
+  --office-radius-3xl: calc(var(--office-radius) * 2.2);
+  --office-radius-4xl: calc(var(--office-radius) * 2.6);
+  /* Extend/Tailwind `rounded-full`. */
+  --office-radius-full: 9999px;
+
+  /* ── Borders, focus ring, elevation ──────────────────────────────────── */
+  --office-border-width: 1px;
+  --office-ring-width: 2px;
+  --office-ring-offset-width: 1px;
+  --office-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --office-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.1), 0 2px 4px -2px oklab(0 0 0 / 0.1);
+  /* Tailwind `shadow-lg` (overlay sidebar edge); theme-independent upstream. */
+  --office-shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1),
+    0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* ── Icons ───────────────────────────────────────────────────────────── */
+  --office-icon-size: 1rem;
+
+  /* ── Density (comfortable default, compact override below) ───────────── */
+  --office-control-height: 2.25rem;
+  --office-control-height-sm: 2rem;
+  --office-control-height-xs: 1.75rem;
+  --office-control-padding-inline: 0.75rem;
+  --office-control-padding-inline-sm: 0.625rem;
+  --office-control-gap: 0.5rem;
+
+  /* ── Semantic colours, light baseline ────────────────────────────────── */
+  /* Upstream declares background as oklch(1 0 0); keep the same
+   * representation so the page surface matches the reference exactly. */
+  --office-background: oklch(1 0 0);
+  --office-foreground: oklch(26.9% 0 0);
+  /* Extend paints card / popover with `var(--color-white)` (#fff). Keep them
+   * literal white instead of `oklch(1 0 0)`: Chromium serialises that as
+   * color(srgb 0.999871 1.00005 1.00007), and the next compositing step
+   * (border, focus ring, shadow) rounds surface pixels 1/255 away from the
+   * reference. The same drift broke the #157 input focus captures. */
+  --office-card: white;
+  --office-card-foreground: oklch(26.9% 0 0);
+  --office-popover: white;
+  --office-popover-foreground: oklch(26.9% 0 0);
+
+  --office-primary: oklch(26.9% 0 0);
+  --office-primary-foreground: oklch(98.5% 0 0);
+  --office-secondary: color-mix(in oklab, black 4%, transparent);
+  --office-secondary-foreground: oklch(26.9% 0 0);
+  --office-muted: color-mix(in oklab, black 4%, transparent);
+  --office-muted-foreground: color-mix(in srgb, oklch(55.6% 0 0) 90%, black);
+  --office-accent: color-mix(in oklab, black 4%, transparent);
+  --office-accent-foreground: oklch(26.9% 0 0);
+  --office-destructive: oklch(63.7% 0.237 25.331);
+  --office-destructive-foreground: oklch(50.5% 0.213 27.518);
+
+  --office-border: color-mix(in oklab, black 8%, transparent);
+  --office-input: color-mix(in oklab, black 10%, transparent);
+  --office-ring: oklch(70.8% 0 0);
+
+  --office-chart-1: oklch(80.9% 0.105 251.813);
+  --office-chart-2: oklch(62.3% 0.214 259.815);
+  --office-chart-3: oklch(54.6% 0.245 262.881);
+  --office-chart-4: oklch(48.8% 0.243 264.376);
+  --office-chart-5: oklch(42.4% 0.199 265.638);
+
+  --office-sidebar: oklch(98.5% 0 0);
+  --office-sidebar-foreground: color-mix(
+    in srgb,
+    oklch(26.9% 0 0) 64%,
+    var(--office-sidebar)
+  );
+  --office-sidebar-primary: oklch(26.9% 0 0);
+  --office-sidebar-primary-foreground: oklch(98.5% 0 0);
+  --office-sidebar-accent: color-mix(in oklab, black 4%, transparent);
+  --office-sidebar-accent-foreground: oklch(26.9% 0 0);
+  --office-sidebar-border: color-mix(in oklab, black 6%, transparent);
+  --office-sidebar-ring: oklch(70.8% 0 0);
+
+  --office-surface: oklch(98% 0 0);
+  --office-surface-foreground: var(--office-foreground);
+  --office-code: var(--office-surface);
+  --office-code-foreground: var(--office-surface-foreground);
+  --office-code-highlight: oklch(96% 0 0);
+  --office-code-number: oklch(56% 0 0);
+  --office-selection: oklch(14.5% 0 0);
+  --office-selection-foreground: oklch(1 0 0);
+
+  --office-success: oklch(69.6% 0.17 162.48);
+  --office-success-foreground: oklch(50.8% 0.118 165.612);
+  --office-warning: oklch(76.9% 0.188 70.08);
+  --office-warning-foreground: oklch(55.5% 0.163 48.998);
+  --office-info: oklch(62.3% 0.214 259.815);
+  --office-info-foreground: oklch(48.8% 0.243 264.376);
+}
+
+/* Compact density only changes control metrics; colour and type scale are
+ * shared so a layout can switch density without re-theming. */
+[data-office-theme][data-office-density="compact"] {
+  --office-control-height: 2rem;
+  --office-control-height-sm: 1.75rem;
+  --office-control-height-xs: 1.5rem;
+  --office-control-padding-inline: 0.625rem;
+  --office-control-padding-inline-sm: 0.5rem;
+  --office-control-gap: 0.375rem;
+}

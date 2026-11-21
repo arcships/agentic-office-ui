@@ -1,9 +1,17 @@
 {
   "name": "@arcships/xlsx-core",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "license": "Apache-2.0",
   "description": "XLSX workbook model, formulas, charts, images, and instance runtime with Worker/WASM support",
-  "keywords": ["xlsx", "excel", "spreadsheet", "workbook", "charts", "wasm", "worker"],
+  "keywords": [
+    "xlsx",
+    "excel",
+    "spreadsheet",
+    "workbook",
+    "charts",
+    "wasm",
+    "worker"
+  ],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",
   "repository": {
     "type": "git",
@@ -59,7 +67,7 @@
     "copy-wasm": "node scripts/copy-wasm.mjs"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.7.1",
+    "@arcships/office-interaction": "^0.8.0",
     "@dukelib/sheets-wasm": "0.1.17",
     "@xmldom/xmldom": "0.9.10",
     "d3-geo": "^3.1.1",

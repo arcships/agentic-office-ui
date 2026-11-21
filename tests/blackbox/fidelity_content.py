@@ -199,7 +199,14 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         endnote_text = page.locator('[data-testid="docx-endnotes"]').inner_text()
         expect("服务级别摘要" in footnote_text, "脚注正文未展示")
         expect("响应时间变更" in endnote_text, "尾注正文未展示")
+        # Find lives in the DOCX actions menu on the upstream-shaped default
+        # row. Use the visible menu path in the browser suite; the keyboard
+        # shortcut is covered by the toolbar component tests.
+        page.locator('[data-testid="docx-toolbar-actions"]').click()
+        page.locator('[data-testid="docx-actions-menu"]').wait_for(timeout=10_000)
+        page.locator('[data-testid="docx-find"]').click()
         search = page.locator('[data-testid="docx-search-input"]')
+        search.wait_for(timeout=10_000)
         search.fill("reviewed")
         page.locator('[data-testid="docx-search-status"]').wait_for()
         status = page.locator('[data-testid="docx-search-status"]').inner_text()
@@ -214,6 +221,12 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             has_text="OCR document page processing",
         )
         table_paragraph.wait_for(timeout=30_000)
+        # Loading another document closes the find popover; reopen it through
+        # the actions menu before searching the new document.
+        page.locator('[data-testid="docx-toolbar-actions"]').click()
+        page.locator('[data-testid="docx-actions-menu"]').wait_for(timeout=10_000)
+        page.locator('[data-testid="docx-find"]').click()
+        search.wait_for(timeout=10_000)
         search.fill("OCR document page processing")
         page.wait_for_function(
             """() => document.querySelector('[data-testid="docx-search-status"]')?.textContent !== '0/0'""",
@@ -572,6 +585,8 @@ def run_pdf(browser, attempt_dir: Path) -> dict[str, object]:
         return page_text(page_number, marker)
 
     def search(query: str) -> dict[str, object]:
+        if page.locator('[data-testid="pdf-search-input"]').count() == 0:
+            page.locator('[data-testid="pdf-search-toggle"]').click()
         page.locator('[data-testid="pdf-search-input"]').fill(query)
         page.locator('[data-testid="pdf-search-submit"]').click()
         page.wait_for_function(

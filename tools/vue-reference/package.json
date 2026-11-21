@@ -1,0 +1,27 @@
+{
+  "name": "@aou/vue-reference",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Vue comparison surface for the Extend UI pixel-parity harness (uses @arcships/vue-ui sources)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4180",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4180"
+  },
+  "dependencies": {
+    "@arcships/office-interaction": "workspace:*",
+    "@arcships/office-runtime": "workspace:*",
+    "@arcships/xlsx-core": "workspace:*",
+    "@fontsource-variable/geist": "^5.2.0",
+    "@fontsource-variable/geist-mono": "^5.2.0",
+    "@hugeicons/core-free-icons": "4.4.0",
+    "vue": "3.5.39"
+  },
+  "devDependencies": {
+    "@embedpdf/pdfium": "2.14.4",
+    "@vitejs/plugin-vue": "5.2.4",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

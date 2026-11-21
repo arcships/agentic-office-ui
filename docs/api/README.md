@@ -11,7 +11,8 @@ API 分为三层：
 ## 对象引用与选择事件
 
 - `@arcships/office-interaction`：跨格式引用与确认/取消事件、运行时校验、稳定序列化、候选导航、键盘解释器和临时选择 reducer。
-- `@arcships/vue-ui`：`OfficeObjectOutlineLayer` 和 `OfficeRegionSelector` 两个受控选择原语。
+- `@arcships/vue-ui`：`OfficeObjectOutlineLayer` 和 `OfficeRegionSelector` 两个受控选择原语；可选的 `OfficeRegionAnnotator` 与 `captureRegion()`/标注文档合同。
+- 四种格式 Surface 还提供可选的 `getCaptureSurface()`；`captureRegion()` 可直接接受组件实例或普通元素。详见[区域截图与标注](region-capture-and-annotation.md)。
 - 四个格式包均已提供首批引用适配器：DOCX/PDF 覆盖文字、页面与区域；XLSX 覆盖工作表、单元格、范围、行列、图表与区域；PPTX 覆盖幻灯片、精确文字、可见对象、组合层级与区域。
 - `DocxDocumentSurface`、`XlsxSheetSurface`、`PptxStage` 与 `PdfSurface` 统一接受 `documentId`、受控 `selectionMode` 和候选事件开关，并发出确认、取消、区域草稿、revision、解析与错误事件。
 - Surface 不保存确认后的引用集合，不提供提示词、工具栏或 Agent 调用；宿主只需消费同一种引用和事件合同即可自行实现产品交互。

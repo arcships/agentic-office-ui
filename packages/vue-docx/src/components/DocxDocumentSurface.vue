@@ -46,6 +46,9 @@
         }"
       />
     </div>
+    <div v-if="objectOutline" class="docx-document-surface__object-outline" :style="objectOutline.style">
+      <span class="docx-document-surface__object-outline-label">{{ objectOutline.label }}</span>
+    </div>
     <div
       v-if="selectionMode === 'region'"
       class="docx-document-surface__region-layer"
@@ -82,6 +85,7 @@ import type {
 import {
   createDocxBlockReferenceDraft,
   createDocxCommentReferenceDraft,
+  createDocxObjectIndex,
   createDocxImageReferenceDraft,
   createDocxPageReferenceDraft,
   createDocxRegionReferenceDraft,
@@ -117,6 +121,10 @@ import {
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 import {
   findDocxSearchMatches,
   type DocxSearchMatch,
@@ -445,6 +453,69 @@ function commentHitCandidates(element: Element): readonly OfficeHitCandidate[] {
   return candidates
 }
 
+const objectOutline = ref<{ style: Record<string, string>; label: string } | null>(null)
+let candidateElements = new Map<string, Element>()
+
+function clearObjectOutline(): void {
+  objectOutline.value = null
+  candidateElements = new Map()
+}
+
+function updateObjectOutline(candidates: readonly OfficeReferenceCandidatePreview[]): void {
+  const surface = surfaceRef.value
+  const active = candidates[0]
+  const element = active ? candidateElements.get(active.candidateId) : undefined
+  const measure = element && typeof element.getBoundingClientRect === "function"
+    ? element.getBoundingClientRect()
+    : undefined
+  const root = surface?.getBoundingClientRect?.()
+  if (!active || !measure || !root || measure.width <= 0 || measure.height <= 0) {
+    objectOutline.value = null
+    return
+  }
+  objectOutline.value = {
+    style: {
+      left: `${measure.left - root.left}px`,
+      top: `${measure.top - root.top}px`,
+      width: `${measure.width}px`,
+      height: `${measure.height}px`,
+    },
+    label: active.preview?.label ?? "",
+  }
+}
+
+function blockHitCandidates(element: Element): readonly OfficeHitCandidate[] {
+  let index
+  try {
+    index = createDocxObjectIndex(referenceContext())
+  } catch {
+    return []
+  }
+  const candidates: OfficeHitCandidate[] = []
+  const seen = new Set<string>()
+  let current = element.closest<HTMLElement>("[data-docx-source-id]")
+  let depth = 0
+  while (current && depth < 6) {
+    const sourceId = dataAttribute(current, "data-docx-source-id")
+    const block = sourceId ? index.blockBySourceId.get(sourceId) : undefined
+    const object = block ? index.byObjectId.get(`docx:block:${block.id}`) : undefined
+    if (object && !seen.has(object.objectId)) {
+      seen.add(object.objectId)
+      candidateElements.set(`docx:object:${block!.id}`, current)
+      candidates.push({
+        candidateId: `docx:object:${block!.id}`,
+        draft: object.draft,
+        preview: { label: object.label, path: object.path },
+        hit: depth === 0 ? "direct" : "ancestor",
+        depth: 2 + depth,
+      })
+    }
+    current = current.parentElement?.closest?.<HTMLElement>("[data-docx-source-id]") ?? null
+    depth += 1
+  }
+  return candidates
+}
+
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try {
     const elements = elementsAtPoint(point.clientX, point.clientY)
@@ -454,6 +525,7 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     const pageIndex = Number(dataAttribute(pageElement, "data-docx-page-index"))
     const candidates: OfficeHitCandidate[] = []
     const seen = new Set<string>()
+    candidateElements = new Map()
     const push = (candidate: OfficeHitCandidate | undefined): void => {
       if (!candidate || seen.has(candidate.candidateId) || candidates.length >= MAX_OFFICE_VISIBLE_CANDIDATES) return
       seen.add(candidate.candidateId)
@@ -462,9 +534,17 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
 
     for (const element of elements) {
       try {
-        push(tableHitCandidate(element))
-        push(imageHitCandidate(element))
-        for (const comment of commentHitCandidates(element)) push(comment)
+        const tableCandidate = tableHitCandidate(element)
+        push(tableCandidate)
+        if (tableCandidate) candidateElements.set(tableCandidate.candidateId, element)
+        const imageCandidate = imageHitCandidate(element)
+        push(imageCandidate)
+        if (imageCandidate) candidateElements.set(imageCandidate.candidateId, element)
+        for (const comment of commentHitCandidates(element)) {
+          push(comment)
+          candidateElements.set(comment.candidateId, element)
+        }
+        for (const block of blockHitCandidates(element)) push(block)
       } catch {
         // Stale DOM nodes (for example a virtualized page being replaced) must
         // not discard candidates that still resolve against the model.
@@ -472,7 +552,9 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     }
     if (Number.isSafeInteger(pageIndex) && pageIndex >= 0) {
       try {
-        push(pageHitCandidate(pageIndex))
+        const pageCandidate = pageHitCandidate(pageIndex)
+        push(pageCandidate)
+        if (pageCandidate && pageElement) candidateElements.set(pageCandidate.candidateId, pageElement)
       } catch {
         // Page candidates are unavailable until pagination produces a page.
       }
@@ -492,6 +574,7 @@ function flushCandidatePointer(): void {
   pendingCandidatePoint = undefined
   if (!point) return
   const candidates = hitTest(point)
+  updateObjectOutline(candidates)
   emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
 }
 
@@ -518,6 +601,7 @@ function onReferencePointerMove(event: PointerEvent): void {
 
 function onReferencePointerLeave(): void {
   cancelCandidateFrame()
+  clearObjectOutline()
   if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
   emit("referenceCandidateChange", { candidates: [] })
 }
@@ -1391,6 +1475,29 @@ defineExpose({
     return viewerRootRef.value?.scrollContainer
   },
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /**
+   * Optional region-capture hook consumed by `captureRegion()` in
+   * `@arcships/vue-ui`. Returns the currently rendered page wrapper so the
+   * host can crop the page from the same scroll position the user saw.
+   */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; pageIndex?: number }
+    const requestedPage = request.target?.pageIndex
+      ?? (locator.space === "page" ? locator.pageIndex : undefined)
+    const root = surfaceRef.value
+    const pages = Array.from(root?.querySelectorAll<HTMLElement>("[data-docx-page-wrapper]") ?? [])
+    const page = pages.find((element) => Number(element.dataset.docxPageIndex) === requestedPage) ?? pages[0]
+    if (!page) return null
+    const pageIndex = Number(page.dataset.docxPageIndex)
+    return {
+      element: page,
+      format: "docx",
+      space: "page",
+      pageIndex: Number.isSafeInteger(pageIndex) ? pageIndex : requestedPage ?? 0,
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
   /** Extracts the document block tree (body, headers/footers, notes). */
   getDocumentBlocks(
     options: Omit<ExtractDocumentBlocksOptions, "documentId"> = {},
@@ -1513,6 +1620,30 @@ defineExpose({
 .docx-document-surface__search-highlight--active {
   background: rgb(245 158 11 / 58%);
   box-shadow: inset 0 0 0 1px rgb(180 83 9 / 76%);
+}
+
+.docx-document-surface__object-outline {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+  z-index: 9;
+}
+
+.docx-document-surface__object-outline-label {
+  background: #2563eb;
+  border-radius: 2px;
+  color: #fff;
+  font-size: 11px;
+  left: -2px;
+  max-width: 280px;
+  overflow: hidden;
+  padding: 1px 4px;
+  position: absolute;
+  text-overflow: ellipsis;
+  top: -20px;
+  white-space: nowrap;
 }
 
 .docx-document-surface__region-layer {

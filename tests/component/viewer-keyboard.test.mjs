@@ -164,12 +164,25 @@ test("DocxViewer zooms with Ctrl/Cmd +/-/0 and focuses search with Ctrl/Cmd+F", 
   await vue.nextTick();
   assert.equal(zooms(mounted.root), 100, "Ctrl+0 resets the zoom");
 
-  const search = findByTestId(mounted.root, "docx-search-input");
+  // The default row hides the find field (upstream keeps find in the actions
+  // menu); Ctrl/Cmd+F opens the same find popover and focuses its input.
+  assert.equal(
+    findByTestId(mounted.root, "docx-search-input"),
+    undefined,
+    "the default toolbar row must not render an inline find field",
+  );
+  keydown(viewer, "f", { ctrlKey: true });
+  await vue.nextTick();
+  await vue.nextTick();
+  let search = findByTestId(mounted.root, "docx-search-input");
+  assert.ok(search, "Ctrl+F opens the find popover");
   let focused = 0;
   search.focus = () => { focused += 1; };
   keydown(viewer, "f", { ctrlKey: true });
-  assert.equal(focused, 1, "Ctrl+F focuses the toolbar search field");
+  await vue.nextTick();
+  assert.ok(focused >= 1, "Ctrl+F focuses the find field");
 
+  search = findByTestId(mounted.root, "docx-search-input");
   search.value = "needle";
   search.props.onInput({ target: search });
   await vue.nextTick();
@@ -268,16 +281,27 @@ test("PdfViewer moves pages, zooms, searches and cancels search with Escape", as
   await vue.nextTick();
   assert.equal(document().props["data-zoom"], 1, "Cmd+0 resets the zoom");
 
+  keydown(viewer, "f", { ctrlKey: true });
+  await vue.nextTick();
   const search = findByTestId(mounted.root, "pdf-search-input");
+  assert.ok(search, "Ctrl+F opens the PDF search field");
   let focused = 0;
   search.focus = () => { focused += 1; };
   keydown(viewer, "f", { ctrlKey: true });
-  assert.equal(focused, 1, "Ctrl+F focuses the PDF search field");
+  await vue.nextTick();
+  assert.equal(focused, 1, "Ctrl+F focuses the open PDF search field");
 
   search.value = "needle";
   search.dispatchEvent({ type: "input", target: search });
   await vue.nextTick();
   keydown(viewer, "Escape");
+  await vue.nextTick();
+  assert.equal(
+    findByTestId(mounted.root, "pdf-search-input"),
+    undefined,
+    "Escape closes the PDF search field",
+  );
+  keydown(viewer, "f", { ctrlKey: true });
   await vue.nextTick();
   assert.equal(
     findByTestId(mounted.root, "pdf-search-input").value,
@@ -298,6 +322,8 @@ test("PdfViewer Ctrl/Cmd+P follows the editable-target guard but still prints ou
   try {
     const mounted = await mountPdfViewer();
     const viewer = findByTestId(mounted.root, "pdf-viewer");
+    findByTestId(mounted.root, "pdf-search-toggle").props.onClick();
+    await vue.nextTick();
     const search = findByTestId(mounted.root, "pdf-search-input");
     const pageInput = findByTestId(mounted.root, "pdf-page-input");
 

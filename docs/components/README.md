@@ -4,6 +4,11 @@
 
 如果现成组件布局不满足需求，请查看[自定义组件指南](../custom-components/README.md)和[组合函数手册](../composables/README.md)。
 
+> 想找“某个 Extend 上游组件在本仓库对应谁、挂在哪条视觉基线上”看
+> [Extend 组件对照表](ui-component-map.md)；想把旧的裸 hex/px 写法换成 token 看
+> [样式迁移指南](../guide/ui-style-migration.md)；CI 门禁与基线审批看
+> [UI 门禁](../testing/ui-parity-ci.md)；发布前逐项确认看 [发布 checklist](../plan/release-checklist.md)。
+
 ## Office 组件
 
 | 组件 | 包 | 用途 | 详细指南 |
@@ -11,7 +16,7 @@
 | `DocxViewer` | `@arcships/vue-docx` | DOCX 查看、搜索、缩略图、批注和修订显示 | [DOCX](../guide/docx.md) |
 | `DocxEditor` | `@arcships/vue-docx` | DOCX 编辑、撤销重做和导入导出 | [DOCX](../guide/docx.md) |
 | `XlsxViewer` | `@arcships/vue-xlsx` | 工作表、图表、图片、公式和编辑界面 | [XLSX](../guide/xlsx.md) |
-| `PdfViewer` | `@arcships/vue-pdf` | PDFium 查看、搜索、缩略图、旋转和下载 | [PDF](../guide/pdf.md) |
+| `PdfViewer` | `@arcships/vue-pdf` | PDFium 查看、搜索、缩略图、旋转和下载 | [PDF](../guide/pdf.md) · [chrome](pdf-chrome.md) |
 | `PptxViewer` | `@arcships/vue-pptx` | 纵向连续浏览 PPTX；演示模式使用单页播放 | [PPTX](../guide/pptx.md) |
 | `PptxStage` | `@arcships/vue-pptx` | 无 chrome 的纵向 Surface 或单页播放舞台；提供选中、对象点击和右键事件 | [PPTX](../guide/pptx.md) |
 | `PptxThumbnail` | `@arcships/vue-pptx` | 使用现有会话渲染单页缩略图 | [PPTX](../guide/pptx.md) |
@@ -32,44 +37,104 @@
 
 ### Office 对象选择控件
 
-`@arcships/vue-ui` 提供两个与格式无关的受控选择原语：
+`@arcships/vue-ui` 提供与格式无关的受控选择与标注原语：
 
 | 组件 | 输入 | 输出 |
 |---|---|---|
 | `OfficeObjectOutlineLayer` | 当前容器内的 `OfficeObjectOutline[]` 和活动候选 id | `activate`、`confirm`、`dismiss`、`navigate-hierarchy` |
 | `OfficeRegionSelector` | 规范化 `modelValue` 区域 | `update:modelValue`、`selection-start/change/commit/cancel` |
+| `OfficeRegionAnnotator` | 截图 URL/`Blob` 与 `OfficeRegionAnnotationDocument` | `update:modelValue`、`annotation-add/remove/select/change/error` |
 
 轮廓和区域坐标均为当前页面、幻灯片或工作表容器内的 `0..1` 规范坐标。组件不读取 Office 文件、不生成格式定位器、不保存引用集合，也不决定确认后的界面或动作；宿主可以使用 `@arcships/office-interaction` 的临时 reducer，也可以自行处理事件。四种格式 Surface 已直接提供同合同的候选、确认和区域事件；这两个原语用于宿主需要自定义轮廓或区域交互时按需组合，不要求 Surface 固定挂载某种产品 UI。
 
 轮廓层支持 `Tab`、`Shift+Tab`、上下方向键、`Enter`、`Escape` 和左右层级导航事件；点击时 `Shift` 会在 `confirm` 参数中设置 `additiveRequested`，`Alt/Option` 设置 `penetrateRequested`。区域框支持拖选、方向键移动、`Shift + 方向键` 调整大小、`Enter` 确认和 `Escape` 取消。
 
+### `OfficeRegionAnnotator`
+
+在 `captureRegion()` 返回的位图上提供箭头、矩形、文字和高亮工具。`modelValue` 是 `OfficeRegionAnnotationDocument`，坐标相对截图归一化；`toJSON()`/`loadJSON()` 可与 `stringifyOfficeRegionAnnotationDocument()`/`parseOfficeRegionAnnotationDocument()` 往返。`image` 传 `Blob` 时组件会创建并在替换/卸载时撤销 object URL。详细属性、限制和示例见[区域截图与标注](../api/region-capture-and-annotation.md)。
+
+### 区域截图
+
+`captureRegion({ surface, region, scale })` 接受元素、capture provider 或内置 Surface 组件实例。Canvas/图片 Surface 提供 intrinsic `raster` 时按像素精确裁剪；纯 DOM Surface 使用 `foreignObject` 尽力栅格化。返回对象包含 `blob`、`url`、`source` 元数据和幂等 `release()`，宿主必须在替换或卸载时撤销 URL。完整合同见[区域截图与标注](../api/region-capture-and-annotation.md)。
+
 ### `FileUpload`
 
-属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`。事件：`files-accepted` 和 `files-rejected`。拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。
+属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`，以及 0.8 新增的可选视觉/交互属性：`title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam`、`borderBeamTheme`。事件保持 `files-accepted` 和 `files-rejected`；拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。0.8 起默认值与 Extend 对齐：`accept` 为文档/图片白名单、`multiple=true`、`showFileList=true`；旧宿主可显式传 `accept=""`、`:multiple="false"`、`:show-file-list="false"` 恢复旧行为。完整合同、像素对照和状态说明见[File components](file-components.md)。
 
 ### `SignaturePad`
 
-属性：`width`、`height`、`penColor`、`backgroundColor`、`className`。通过 `update:signature` 返回数据地址或 `null`。模板引用公开 `clear()`、`isEmpty()` 和 `toDataURL()`。
+属性：`width`、`height`、`penColor`、`backgroundColor`、`className`；0.8 新增 `mode`（`draw`/`typed`）、`modelValue`、`defaultValue`、`placeholder`、`showControls`、`showClear`、`showCancel`、`showConfirm`、`confirmDisabled`、`disabled`、`guide`、`loading`、`error`、`ariaLabel`。`draw` 模式通过 `update:signature` 返回数据地址或 `null`；两种模式都通过 `update:modelValue` 返回当前值，`confirm` 只在有签名时触发。模板引用公开 `clear()`、`isEmpty()`、`toDataURL()`、`confirm()` 和 `focus()`。
+
+### `ESignatureFields`
+
+电子签名字段面板：`fields: ESignatureField[]`（`label`、`page`、`bbox`、`imageDataUrl`）、`canExport`、`exporting`、`showPreview`、`title`、`description`、`loading`、`error`。事件为 `sign`、`edit`、`clear`、`export`；Signed/Unsigned 徽章和导出禁用态由属性驱动。`showPreview` 默认关闭以匹配 Extend 面板，打开后在卡片内显示签名图。
 
 ### `FileThumbnail`
 
-接收 `file: { name, type, url? }` 和 `size: "sm" | "md" | "lg"`，用于显示文件类型和预览信息。
+接收 `file: { name, type, url?, size? }`、`size`（`sm`/`md`/`lg`，或像素/CSS 长度）、`previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta`、`alt` 和 `className`。方形/自定义比例预览卡包含图片 blur-in、loading overlay、error/empty fallback；Extend 默认的 fallback 是纯 muted 色块，因此 `showTypeGlyph`/`showMeta` 保持 opt-in，需要旧版文件名/类型行或类型 glyph 时显式开启。完整合同见[File components](file-components.md)。
 
 ### `BoundingBoxCitations`
 
-接收原始文件地址和 `BoundingBoxField[]`，通过 `field-click` 返回被点击字段。矩形格式为 `[x, y, width, height]`，页码由字段的 `page` 给出。
+保留 0.8 之前的 `file` + `BoundingBoxField[]` 页卡模式：矩形为 `[x, y, width, height]`，通过 `field-click` 返回被点击字段。新增 Extend review 模式（`reviewFields`）：Form 标签页渲染字段卡（Actual / Expected、类型、置信度位置、修订圆点），`ArrowUp/ArrowDown` 切换字段，`Escape` 清除本地活动态；`activeFieldKey`、`expectedValues`、`showExpected`、`readOnly`、`view`、`loading`、`error`、`emptyMessage` 控制状态。事件为 `field-focus`、`update:activeFieldKey`、`update:expected`，legacy `field-click` 保持不变。
 
 ### `LayoutBlocks`
 
-接收文件地址和 OCR 版面结果，通过 `block-click` 返回被点击的 `LayoutBlock`。
+旧 API（`file` + `ParsedOcrOutput`）保持不变；新 `blocks` 接受 Extend 的 `heading/paragraph/list/table/figure/header/footer/page_number`。`view="split"` 显示页图或 `#viewer` slot + 百分比 block 叠加，`view="panel"` 只渲染 OCR 面板。面板包含类型徽章、置信度、页码、活动态和 `ArrowUp/ArrowDown/Home/End` 焦点导航；`renderMarkdown` 渲染转义后的安全 markdown 子集。空/加载/错误状态、`heading`、`emptyMessage`、`pageWidth/pageHeight` 均为可选。
+
+### `DocumentSplits`
+
+拆分结果列表：`splits`、`thumbnailImages`、`withFrameDivider`、`hideAddSplit`、`disableRemove`、`loading`、`error`、`emptyMessage`。事件为 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。页缩略图使用 `FileThumbnail`；支持页在组内/组间拖放，也提供键盘替代（`ArrowLeft/ArrowRight` 组内重排，`Ctrl/Cmd + ArrowLeft/ArrowRight` 跨组移动，拖拽手柄 `ArrowUp/ArrowDown` 重排拆分卡）。
+
+四个文档 block 的像素证据、状态矩阵、限制和 `FileSystem` / `SchemaBuilder` 的延期论证见[Document blocks：Extend 对齐](document-blocks.md)。
 
 ### `Spinner`
 
-`size` 支持 `sm`、`md` 和 `lg`，没有业务事件。
+`size` 支持 `sm`、`md` 和 `lg`（`md` 等价于 primitive 的 `default`），没有业务事件。内部委托 `OfficeSpinner`；新代码可以直接使用后者，并传 `label` 控制可访问名称。
 
 ### `Tooltip`
 
-属性包括 `content`、`side`、`align` 和 `delayMs`。默认插槽放置触发元素。
+属性包括 `content`、`side`、`align`、`delayMs` 和 `className`。默认插槽放置触发元素。内部委托 `OfficeTooltip`（reka-ui），因此具备碰撞定位、焦点触发的 ARIA 关联和 `delayDuration` 行为；样式和公开 props 保持向后兼容。
+
+## Token 驱动 primitive（0.8）
+
+`@arcships/vue-ui` 在 0.8 提供基于 reka-ui 的完整 primitive 层，视觉全部读取 `--office-*` token，不引入 Tailwind/preflight：
+
+| Primitive | 用途 |
+|---|---|
+| `OfficeButton` / `OfficeIconButton` | 六种 variant、七种 size、disabled/loading/asChild；图标按钮强制 `label` |
+| `OfficeInput` / `OfficeTextarea` | 受控输入、invalid、disabled、readonly、三种尺寸 |
+| `OfficeSelect` | 选项/分组/分隔符数组、portal、键盘选择和碰撞定位 |
+| `OfficeDropdownMenu` / `OfficeContextMenu` | 共用 `OfficeMenuEntry` 描述符；item/checkbox/separator/label/group/submenu |
+| `OfficeDialog` / `OfficeSheet` | v-model:open、焦点陷阱、Esc/backdrop、标题与描述 ARIA、footer、四向 Sheet |
+| `OfficePopover` / `OfficeTooltip` | 可配置 side/align/offset 的 portal 浮层；Tooltip 支持延迟与 disabled |
+| `OfficeTabs` | default/underline、横向/纵向、roving tabindex 和动态面板 slot |
+| `OfficeToggle` | 受控按下态、`aria-pressed`、outline variant |
+| `OfficeBadge` / `OfficeCard` | variant/size；卡片标题、描述、header/body/footer |
+| `OfficeSeparator` / `OfficeSkeleton` / `OfficeSpinner` | 装饰分隔符、reduced-motion 骨架、状态 spinner |
+| `OfficeScrollArea` | Reka 自定义滚动条，viewport 可聚焦 |
+| `OfficeToastProvider` + `useOfficeToast()` | success/error/warning/info/loading、promise、更新与关闭 |
+
+完整 props、事件、slot、键盘/ARIA 合同、token 规则和包体积预算见
+[Vue primitive 层](ui-primitives.md)。示例页在 demo 的 `/primitives` 路由，展示每个 primitive 的
+default/hover/focus/disabled/loading 状态。
+
+## 共享 Office chrome（0.8）
+
+`@arcships/vue-ui` 还提供一层与格式无关的 viewer/editor chrome：
+
+| 组件 | 用途 |
+|---|---|
+| `OfficeToolbar` / `OfficeToolbarGroup` / `OfficeToolbarSeparator` | 48px 最小高度、`px-3 py-2`、4/8px gap、底边和 `bg-background`；390px 可换行 |
+| `OfficeIconButton` | ghost/active/disabled；28/32px 桌面尺寸，coarse pointer 44px 命中区 |
+| `OfficePageControl` | 当前页/总页数、数字输入、Enter/Escape/方向键/Home/End |
+| `OfficeZoomControl` | 缩小/放大、百分比预设、Fit width / Fit page / Actual size |
+| `OfficeSearchPopover` | 查询、命中计数、上一个/下一个、Aa/全字/正则选项 |
+| `OfficeStatusBar` | 页码、状态、文件名、warning/error live region |
+| `OfficeEmptyState` / `OfficeErrorState` / `OfficeLoadingState` | 统一空/错/加载状态与进度条 |
+| `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | 160px 缩略图侧栏；inline/overlay、ResizeObserver、skeleton、200ms open/close 动画 |
+
+完整 API、i18n 键、键盘/ARIA 合同、响应式截图证据和 #159–#162 接入顺序见
+[共享 Office chrome](office-chrome.md)。示例页在 demo 的 `/chrome` 路由。四个 viewer 本批尚未迁移。
 
 ## 通用约定
 

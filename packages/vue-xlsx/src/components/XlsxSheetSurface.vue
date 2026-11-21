@@ -7,6 +7,7 @@
     @keydown="onKeydown"
     @contextmenu="onContextMenu"
     @pointermove="onReferencePointerMove"
+    @pointerleave="onReferencePointerLeave"
     @click="onReferenceClick"
     tabindex="0"
   >
@@ -42,6 +43,9 @@
         :viewport-width="gridViewport.width"
         :viewport-height="gridViewport.height"
       />
+      <div v-if="objectOutline" class="xlsx-sheet-surface__object-outline" :style="objectOutline.style">
+        <span class="xlsx-sheet-surface__object-outline-label">{{ objectOutline.label }}</span>
+      </div>
       <XlsxChartOverlay
         :controller="controller"
         @chart-context-menu="onChartContextMenu"
@@ -115,15 +119,33 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
-import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext, XlsxOfficeReference, XlsxReferenceContext, XlsxReferenceSheet } from "@arcships/xlsx-core"
+import type {
+  XlsxBehaviorRecord,
+  XlsxCellAddress,
+  XlsxCellStyleContext,
+  XlsxOfficeReference,
+  XlsxReferenceComment,
+  XlsxReferenceContext,
+  XlsxReferenceDrawing,
+  XlsxReferenceSheet,
+  XlsxReferenceTable,
+  XlsxViewerController,
+} from "@arcships/xlsx-core"
 import {
+  createXlsxBehaviorRecords,
   createXlsxCellReferenceDraft,
+  createXlsxChartElementReferenceDraft,
+  createXlsxChartReferenceDraft,
+  createXlsxCommentReferenceDraft,
   createXlsxColumnReferenceDraft,
+  createXlsxDrawingReferenceDraft,
   createXlsxRangeReferenceDraft,
   createXlsxRegionReferenceDraft,
   createXlsxRowReferenceDraft,
+  createXlsxTableReferenceDraft,
   createXlsxWorksheetReferenceDraft,
   describeXlsxReference,
+  parseA1RangeReference,
   resolveXlsxReference,
 } from "@arcships/xlsx-core"
 import {
@@ -137,6 +159,7 @@ import {
   type OfficeSelectionMode,
   type SheetRegionPoint,
   type ResolveReferenceResult,
+  type ManualRegionLocator,
 } from "@arcships/office-interaction"
 import XlsxGrid from "./XlsxGrid.vue"
 import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue"
@@ -152,6 +175,10 @@ import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
 import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
+import type {
+  OfficeRegionCaptureRequest,
+  OfficeRegionCaptureSource,
+} from "@arcships/vue-ui"
 
 const props = withDefaults(
   defineProps<{
@@ -279,13 +306,97 @@ function activeReferenceSheet(): XlsxReferenceSheet | undefined {
 
 let cachedReferenceContext: { key: string; context: XlsxReferenceContext } | undefined
 
+function a1ForCell(cell: XlsxCellAddress): string {
+  return `${columnLabel(cell.col)}${cell.row + 1}`
+}
+
+function referenceTables(sheet: XlsxReferenceSheet | undefined): XlsxReferenceTable[] {
+  if (!sheet) return []
+  return (props.controller.tables ?? []).map((table) => ({
+    name: table.name,
+    ...(table.displayName && table.displayName !== table.name ? { displayName: table.displayName } : {}),
+    sheet,
+    a1: table.reference || `${a1ForCell(table.start)}:${a1ForCell(table.end)}`,
+  }))
+}
+
+function sheetDrawings(sheet: XlsxReferenceSheet): XlsxReferenceDrawing[] {
+  const sheetIndex = props.controller.activeSheetIndex
+  const drawings: XlsxReferenceDrawing[] = []
+  for (const image of props.controller.getSheetImages?.(sheetIndex) ?? []) {
+    drawings.push({ id: image.id, objectType: "image", sheet, ...(image.name ? { name: image.name } : {}), ...(image.description ? { alt: image.description } : {}) })
+  }
+  for (const shape of props.controller.getSheetShapes?.(sheetIndex) ?? []) {
+    drawings.push({ id: shape.id, objectType: "shape", sheet, ...(shape.name ? { name: shape.name } : {}) })
+  }
+  for (const control of props.controller.getSheetFormControls?.(sheetIndex) ?? []) {
+    drawings.push({ id: control.id, objectType: "form-control", sheet, ...(control.name ? { name: control.name } : {}) })
+  }
+  return drawings
+}
+
+function sheetComments(sheet: XlsxReferenceSheet): XlsxReferenceComment[] {
+  return (props.controller.activeSheet?.comments ?? []).map((comment) => ({
+    sheet,
+    cellA1: a1ForCell(comment.cell),
+    ...(comment.text ? { text: comment.text } : {}),
+    ...(comment.author ? { author: comment.author } : {}),
+  }))
+}
+
+function sheetBehaviors(sheet: XlsxReferenceSheet): XlsxBehaviorRecord[] {
+  const activeSheet = props.controller.activeSheet
+  if (!activeSheet) return []
+  const behaviors = createXlsxBehaviorRecords({
+    sheet: { index: sheet.index, name: sheet.name, ...(sheet.id ? { id: sheet.id } : {}) },
+    conditionalFormats: (activeSheet.conditionalFormatRules ?? []).flatMap((rule, index) => {
+      const range = rule.ranges?.[0]
+      if (!range) return []
+      const start = a1ForCell(range.start)
+      const end = a1ForCell(range.end)
+      return [{
+        appliesToA1: start === end ? start : `${start}:${end}`,
+        index,
+        ruleType: rule.kind,
+      }]
+    }),
+    dataValidations: (activeSheet.dataValidations ?? []).flatMap((validation, index) => {
+      const range = validation.ranges?.[0]
+      if (!range) return []
+      const start = a1ForCell(range.start)
+      const end = a1ForCell(range.end)
+      return [{
+        appliesToA1: start === end ? start : `${start}:${end}`,
+        index,
+        ...(validation.validationType ? { validationType: validation.validationType } : {}),
+        ...(validation.value1 ? { formula1: validation.value1 } : {}),
+      }]
+    }),
+    definedNames: (activeSheet.definedNames ?? []).map((name) => ({
+      name: name.name,
+      refersTo: name.range,
+      ...(name.scope === "sheet" ? { sheet: { index: sheet.index, name: sheet.name, ...(sheet.id ? { id: sheet.id } : {}) } } : {}),
+    })),
+    ...(activeSheet.protection?.enabled
+      ? { protection: { enabled: true } }
+      : {}),
+  })
+  return [...behaviors]
+}
+
 function referenceContext(): XlsxReferenceContext {
-  const key = `${documentRevision.value.documentId}:${documentRevision.value.revision}`
+  const key = `${documentRevision.value.documentId}:${documentRevision.value.revision}:${props.controller.activeSheetIndex}`
   if (cachedReferenceContext?.key === key) return cachedReferenceContext.context
+  const sheets = referenceSheets()
+  const sheet = sheets[props.controller.activeSheetIndex]
   const context: XlsxReferenceContext = {
     revision: documentRevision.value,
-    sheets: referenceSheets(),
+    sheets,
     charts: props.controller.charts,
+    tables: referenceTables(sheet),
+    drawings: sheet ? sheetDrawings(sheet) : [],
+    comments: sheet ? sheetComments(sheet) : [],
+    behaviors: sheet ? sheetBehaviors(sheet) : [],
     getCellSnapshot(_sheet, cell) {
       return {
         displayValue: props.controller.getCellDisplayValue(cell),
@@ -330,9 +441,220 @@ function columnLabel(columnIndex: number): string {
   return label
 }
 
+const objectOutline = ref<{ style: Record<string, string>; label: string } | null>(null)
+let candidateElements = new Map<string, Element>()
+let candidateSheetRanges = new Map<string, { sheet: XlsxReferenceSheet; a1: string }>()
+
+function clearObjectOutline(): void {
+  objectOutline.value = null
+  candidateElements = new Map()
+  candidateSheetRanges = new Map()
+}
+
+function gridBodyRect(): DOMRect | undefined {
+  const canvas = surfaceRef.value?.querySelector<HTMLCanvasElement>(".xlsx-grid__body")
+  return canvas?.getBoundingClientRect?.()
+}
+
+function updateObjectOutline(candidates: readonly OfficeReferenceCandidatePreview[]): void {
+  const active = candidates[0]
+  if (!active) {
+    objectOutline.value = null
+    return
+  }
+  const root = surfaceRef.value?.getBoundingClientRect?.()
+  if (!root) {
+    objectOutline.value = null
+    return
+  }
+  const element = candidateElements.get(active.candidateId)
+  const elementRect = element && typeof element.getBoundingClientRect === "function"
+    ? element.getBoundingClientRect()
+    : undefined
+  if (elementRect && elementRect.width > 0 && elementRect.height > 0) {
+    objectOutline.value = {
+      style: {
+        left: `${elementRect.left - root.left}px`,
+        top: `${elementRect.top - root.top}px`,
+        width: `${elementRect.width}px`,
+        height: `${elementRect.height}px`,
+      },
+      label: active.preview?.label ?? "",
+    }
+    return
+  }
+  const rangeInfo = candidateSheetRanges.get(active.candidateId)
+  const body = gridBodyRect()
+  const parsed = rangeInfo ? parseA1RangeReference(rangeInfo.a1) ?? undefined : undefined
+  const viewport = rangeInfo && parsed
+    ? gridRef.value?.sheetRegionViewportRect({
+        space: "sheet",
+        sheetId: rangeInfo.sheet.id ?? rangeInfo.sheet.name,
+        start: { row: parsed.start.row, col: parsed.start.col, xOffset: 0, yOffset: 0 },
+        end: { row: parsed.end.row, col: parsed.end.col, xOffset: 1, yOffset: 1 },
+      })
+    : undefined
+  if (!viewport || !body) {
+    objectOutline.value = null
+    return
+  }
+  objectOutline.value = {
+    style: {
+      left: `${body.left - root.left + viewport.x * body.width}px`,
+      top: `${body.top - root.top + viewport.y * body.height}px`,
+      width: `${viewport.width * body.width}px`,
+      height: `${viewport.height * body.height}px`,
+    },
+    label: active.preview?.label ?? "",
+  }
+}
+
+function chartElementCandidateForPoint(point: { clientX: number; clientY: number }): OfficeReferenceCandidatePreview[] {
+  const target = surfaceRef.value?.ownerDocument?.elementFromPoint?.(point.clientX, point.clientY)
+  if (!target) return []
+  const sheet = activeReferenceSheet()
+  if (!sheet) return []
+  const chartElement = target.closest<Element>("[data-xlsx-chart-series-index]")
+  const chartHost = (chartElement ?? target).closest<HTMLElement>("[data-chart-id]")
+  const chartId = chartHost?.dataset.chartId
+  if (!chartId) return []
+  const chart = props.controller.getChartById?.(chartId)
+  if (!chart) return []
+  if (chartElement) {
+    const seriesIndex = Number(chartElement.getAttribute("data-xlsx-chart-series-index"))
+    const pointAttribute = chartElement.getAttribute("data-xlsx-chart-point-index")
+    const pointIndex = pointAttribute === null ? undefined : Number(pointAttribute)
+    try {
+      const target_ = Number.isSafeInteger(pointIndex) && pointIndex !== undefined
+        ? { element: "point" as const, seriesIndex, pointIndex: pointIndex as number }
+        : { element: "series" as const, seriesIndex }
+      const draft = createXlsxChartElementReferenceDraft(referenceContext(), sheet, chartId, target_)
+      const series = chart.series[seriesIndex]
+      const label = target_.element === "series"
+        ? `Series: ${series?.name?.trim() || `Series ${seriesIndex + 1}`}`
+        : `Point ${(target_ as { pointIndex: number }).pointIndex + 1}`
+      const candidateId = `xlsx:chart-element:${chartId}:${target_.element}:${seriesIndex}:${"pointIndex" in target_ ? target_.pointIndex : ""}`
+      candidateElements.set(candidateId, chartElement)
+      return [{
+        candidateId,
+        draft,
+        preview: {
+          label,
+          path: [...worksheetPath(sheet), { kind: "chart", label: chart.name?.trim() || chart.title?.trim() || descriptor("chart") }, { kind: draft.kind, label }],
+        },
+        hit: "direct",
+        depth: 4,
+      }]
+    } catch {
+      return []
+    }
+  }
+  try {
+    const draft = createXlsxChartReferenceDraft(referenceContext(), sheet, chart)
+    const label = chart.name?.trim() || chart.title?.trim() || descriptor("chart")
+    const candidateId = `xlsx:chart:${chartId}`
+    candidateElements.set(candidateId, chartHost!)
+    return [{
+      candidateId,
+      draft,
+      preview: { label, path: [...worksheetPath(sheet), { kind: "chart", label }] },
+      hit: "direct",
+      depth: 3,
+    }]
+  } catch {
+    return []
+  }
+}
+
+function drawingCandidateForPoint(point: { clientX: number; clientY: number }): OfficeReferenceCandidatePreview[] {
+  const target = surfaceRef.value?.ownerDocument?.elementFromPoint?.(point.clientX, point.clientY)
+  const drawingElement = target?.closest?.<HTMLElement>("[data-drawing-id]")
+  const drawingId = drawingElement?.dataset.drawingId
+  const objectType = drawingElement?.dataset.drawingKind
+  const sheet = activeReferenceSheet()
+  if (!drawingElement || !drawingId || !sheet) return []
+  if (objectType !== "image" && objectType !== "shape" && objectType !== "form-control") return []
+  const drawing = sheetDrawings(sheet).find((candidate) => candidate.id === drawingId && candidate.objectType === objectType)
+  if (!drawing) return []
+  try {
+    const draft = createXlsxDrawingReferenceDraft(referenceContext(), drawing)
+    const label = drawing.name?.trim() || drawing.alt?.trim() || objectType
+    const candidateId = `xlsx:drawing:${objectType}:${drawingId}`
+    candidateElements.set(candidateId, drawingElement)
+    return [{
+      candidateId,
+      draft,
+      preview: { label, path: [...worksheetPath(sheet), { kind: draft.kind, label }] },
+      hit: "direct",
+      depth: 3,
+    }]
+  } catch {
+    return []
+  }
+}
+
+function tableCandidateForCell(cell: XlsxCellAddress): OfficeReferenceCandidatePreview[] {
+  const sheet = activeReferenceSheet()
+  if (!sheet) return []
+  const table = referenceTables(sheet).find((candidate) => {
+    const range = parseA1RangeReference(candidate.a1)
+    return range !== null && range !== undefined
+      && cell.row >= range.start.row && cell.row <= range.end.row
+      && cell.col >= range.start.col && cell.col <= range.end.col
+  })
+  if (!table) return []
+  try {
+    const draft = createXlsxTableReferenceDraft(referenceContext(), table)
+    const label = table.displayName?.trim() || table.name
+    const candidateId = `xlsx:table:${table.name}`
+    candidateSheetRanges.set(candidateId, { sheet, a1: table.a1 })
+    return [{
+      candidateId,
+      draft,
+      preview: { label, path: [...worksheetPath(sheet), { kind: "table", label }] },
+      hit: "direct",
+      depth: 2,
+    }]
+  } catch {
+    return []
+  }
+}
+
+function commentCandidateForCell(cell: XlsxCellAddress): OfficeReferenceCandidatePreview[] {
+  const sheet = activeReferenceSheet()
+  if (!sheet) return []
+  const a1 = a1ForCell(cell)
+  const comment = sheetComments(sheet).find((candidate) => candidate.cellA1 === a1)
+  if (!comment) return []
+  try {
+    const draft = createXlsxCommentReferenceDraft(referenceContext(), comment)
+    const label = comment.text ? `Comment: ${comment.text.replace(/\s+/gu, " ").trim().slice(0, 80)}` : `Comment ${a1}`
+    const candidateId = `xlsx:comment:${a1}`
+    candidateSheetRanges.set(candidateId, { sheet, a1 })
+    return [{
+      candidateId,
+      draft,
+      preview: { label, path: [...worksheetPath(sheet), { kind: "cell", label: a1 }, { kind: "comment", label }] },
+      hit: "direct",
+      depth: 3,
+    }]
+  } catch {
+    return []
+  }
+}
+
 function candidateForPoint(point: { clientX: number; clientY: number }): OfficeReferenceCandidatePreview[] {
   const sheet = activeReferenceSheet()
   if (!sheet) return []
+  candidateElements = new Map()
+  candidateSheetRanges = new Map()
+  const objectCandidates = [
+    ...chartElementCandidateForPoint(point),
+    ...drawingCandidateForPoint(point),
+  ]
+  const cell = gridRef.value?.hitTestCell(point.clientX, point.clientY)
+  if (cell) objectCandidates.push(...tableCandidateForCell(cell), ...commentCandidateForCell(cell))
+  if (objectCandidates.length > 0) return objectCandidates
   const axis = gridRef.value?.hitTestAxis(point.clientX, point.clientY)
   if (axis?.kind === "row") {
     const draft = createXlsxRowReferenceDraft(referenceContext(), sheet, axis.actualIndex)
@@ -347,7 +669,6 @@ function candidateForPoint(point: { clientX: number; clientY: number }): OfficeR
     const draft = createXlsxWorksheetReferenceDraft(referenceContext(), sheet)
     return [{ candidateId: `xlsx:worksheet:${sheet.index}`, draft, preview: { label: sheet.name, path: worksheetPath(sheet) }, hit: "direct", depth: 1 }]
   }
-  const cell = gridRef.value?.hitTestCell(point.clientX, point.clientY)
   if (!cell) return []
   const draft = createXlsxCellReferenceDraft(referenceContext(), sheet, cell)
   const label = `${sheet.name}!R${cell.row + 1}C${cell.col + 1}`
@@ -362,8 +683,10 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
 }
 
 function onReferencePointerMove(event: PointerEvent): void {
-  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  if (selectionMode.value !== "object") return
   const candidates = hitTest(event)
+  updateObjectOutline(candidates)
+  if (!props.emitReferenceCandidates) return
   emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
 }
 
@@ -371,6 +694,12 @@ function onReferenceClick(event: MouseEvent): void {
   if (selectionMode.value !== "object") return
   const candidate = hitTest(event)[0]
   if (candidate) confirmDraft(candidate.draft, event.detail === 0 ? "keyboard" : "pointer", candidate.preview, event.shiftKey)
+}
+
+function onReferencePointerLeave(): void {
+  clearObjectOutline()
+  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  emit("referenceCandidateChange", { candidates: [] })
 }
 
 type SheetRegion = { space: "sheet"; sheetId: string; start: SheetRegionPoint; end: SheetRegionPoint }
@@ -731,6 +1060,42 @@ defineExpose({
     emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "XLSX" }), reference.referenceId)
     throw new Error("XLSX reference preview capture is unsupported")
   },
+  /** Region-capture hook for `captureRegion()` in `@arcships/vue-ui`. */
+  getCaptureSurface(request: OfficeRegionCaptureRequest): OfficeRegionCaptureSource | null {
+    const locator = request.region as { space?: string; sheetId?: string }
+    const sheetId = request.target?.sheetId
+      ?? (locator.space === "sheet" ? locator.sheetId : undefined)
+      ?? props.controller.activeTab?.id
+      ?? props.controller.activeSheet?.name
+    const root = surfaceRef.value
+    const body = root?.querySelector<HTMLCanvasElement>(".xlsx-grid__body")
+    const resolved = locator.space === "sheet"
+      ? gridRef.value?.sheetRegionViewportRect(request.region as Extract<ManualRegionLocator, { space: "sheet" }>) ?? undefined
+      : undefined
+    if (body) {
+      return {
+        element: body,
+        raster: { source: body, width: body.width, height: body.height },
+        ...(resolved ? { region: resolved } : {}),
+        format: "xlsx",
+        space: "sheet",
+        ...(sheetId ? { sheetId } : {}),
+        documentId: documentRevision.value.documentId,
+        revision: documentRevision.value.revision,
+      }
+    }
+    const grid = root?.querySelector<HTMLElement>(".xlsx-grid") ?? root
+    if (!grid) return null
+    return {
+      element: grid,
+      ...(resolved ? { region: resolved } : {}),
+      format: "xlsx",
+      space: "sheet",
+      ...(sheetId ? { sheetId } : {}),
+      documentId: documentRevision.value.documentId,
+      revision: documentRevision.value.revision,
+    }
+  },
 })
 </script>
 
@@ -746,6 +1111,30 @@ defineExpose({
   position: relative;
   touch-action: pan-x pan-y;
   background: var(--xlsx-surface-bg, #ffffff);
+}
+
+.xlsx-sheet-surface__object-outline {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+  z-index: 25;
+}
+
+.xlsx-sheet-surface__object-outline-label {
+  background: #2563eb;
+  border-radius: 2px;
+  color: #fff;
+  font-size: 11px;
+  left: -2px;
+  max-width: 280px;
+  overflow: hidden;
+  padding: 1px 4px;
+  position: absolute;
+  text-overflow: ellipsis;
+  top: -20px;
+  white-space: nowrap;
 }
 
 .xlsx-sheet-surface__region-layer {

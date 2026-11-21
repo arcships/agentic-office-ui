@@ -14,6 +14,7 @@
     @drop="onDrop"
     tabindex="0"
   >
+    <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'" :locale="locale" :messages="messages">
     <XlsxToolbar
       v-if="showDefaultToolbar"
       ref="toolbarRef"
@@ -70,7 +71,10 @@
         class="xlsx-viewer__loading"
       >
         <slot name="loading">
-          <span class="xlsx-viewer__loading-text">{{ m.xlsx.viewer.loading }}</span>
+          <OfficeLoadingState
+            :title="m.xlsx.viewer.loading"
+            description=""
+          />
         </slot>
       </div>
       <div
@@ -81,7 +85,10 @@
           name="error"
           :error="localizedError"
         >
-          <span class="xlsx-viewer__error-text">{{ localizedError?.message }}</span>
+          <OfficeErrorState
+            :error="localizedError?.message"
+            :show-retry="false"
+          />
         </slot>
       </div>
       <XlsxChartsheetSurface
@@ -104,7 +111,6 @@
         >
           <div
             class="xlsx-viewer__deferred-card"
-            :class="{ 'xlsx-viewer__deferred-card--dark': isDark }"
           >
             <div class="xlsx-viewer__deferred-title">{{ m.xlsx.viewer.deferredTitle }}</div>
             <div
@@ -146,7 +152,11 @@
         class="xlsx-viewer__empty"
       >
         <slot name="empty">
-          <span class="xlsx-viewer__empty-text">{{ m.xlsx.viewer.empty }}</span>
+          <OfficeEmptyState
+            :title="m.xlsx.viewer.empty"
+            description=""
+            icon="table"
+          />
         </slot>
       </div>
       <template v-else>
@@ -229,7 +239,7 @@
       :controller="controller"
       :kind="authoringKind"
       :is-dark="isDark ?? false"
-      @close="authoringKind = null"
+      @close="closeAuthoring"
     />
     <XlsxSheetTabs
       v-if="showSheetTabs && controller.tabs.length > 0"
@@ -237,12 +247,14 @@
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
       :panel-id="controller.activeSheet ? gridId : undefined"
+      :show-sheet-actions="showSheetActions"
     />
     <XlsxStatusBar
       v-if="showStatusBar && controller.activeSheet"
       :controller="controller"
       :is-dark="isDark ?? false"
     />
+    </OfficeThemeProvider>
   </div>
 </template>
 
@@ -270,6 +282,12 @@ import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
+import {
+  OfficeEmptyState,
+  OfficeErrorState,
+  OfficeLoadingState,
+  OfficeThemeProvider,
+} from "@arcships/vue-ui";
 import { FILE_DROP_OUTLINE, useFileDrop } from "@arcships/vue-ui";
 import { XLSX_FILE_EXTENSIONS, XLSX_FILE_MIME_TYPES } from "../composables/xlsx-file-types";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
@@ -310,6 +328,13 @@ const props = withDefaults(
      * switched by host UI or `controller.setActiveTabIndex()`.
      */
     showSheetTabs?: boolean;
+    /**
+     * Renders Excel's extra sheet controls (previous/next arrows, add and remove
+     * buttons) next to the tab strip. Off by default: the pinned Extend strip
+     * only shows the tabs and scrolls horizontally, and the same commands live
+     * in the tab context menu (`xlsx-insert-sheet` / `xlsx-delete-sheet`).
+     */
+    showSheetActions?: boolean;
     /**
      * Renders the selection status bar under the sheet tabs. It shows the
      * selected cell/range, non-empty and numeric counts, sum, average, min and
@@ -357,6 +382,7 @@ const props = withDefaults(
     showFormulaBar: true,
     showImages: true,
     showSheetTabs: true,
+    showSheetActions: false,
     showStatusBar: true,
     showUpload: false,
     enableGestureZoom: true,
@@ -593,8 +619,25 @@ watch(
   },
 );
 
+/**
+ * Element that opened the authoring dialog. Closing returns focus to it so the
+ * spreadsheet keeps the keyboard after an Escape/backdrop dismissal.
+ */
+let authoringInvoker: HTMLElement | null = null;
+
 function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringInvoker = typeof document === "undefined"
+    ? null
+    : (document.activeElement as HTMLElement | null);
   authoringKind.value = kind;
+}
+
+async function closeAuthoring(): Promise<void> {
+  authoringKind.value = null;
+  const target = authoringInvoker ?? viewerRef.value;
+  authoringInvoker = null;
+  await nextTick();
+  target?.focus?.();
 }
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(
@@ -967,10 +1010,10 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-card {
-  background: #ffffff;
-  border: 1px solid #d4d4d8;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  background: var(--office-popover, #ffffff);
+  border: var(--office-border-width, 1px) solid var(--office-border, #d4d4d8);
+  border-radius: var(--office-radius-lg, 12px);
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--office-foreground, #18181b) 12%, transparent);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -978,11 +1021,6 @@ defineExpose({
   padding: 20px;
   text-align: center;
   width: 100%;
-}
-
-.xlsx-viewer__deferred-card--dark {
-  background: #27272a;
-  border-color: #3f3f46;
 }
 
 .xlsx-viewer__deferred-title {
@@ -998,12 +1036,8 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-size {
-  color: #71717a;
+  color: var(--office-muted-foreground, #71717a);
   line-height: 1.5;
-}
-
-.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-size {
-  color: #a1a1aa;
 }
 
 .xlsx-viewer__deferred-actions {
@@ -1015,17 +1049,13 @@ defineExpose({
 
 .xlsx-viewer__deferred-button {
   background: transparent;
-  border: 1px solid #d4d4d8;
-  border-radius: 7px;
+  border: var(--office-border-width, 1px) solid var(--office-input, #d4d4d8);
+  border-radius: var(--office-radius-md, 7px);
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--office-text-xs, 0.75rem);
   padding: 7px 16px;
-}
-
-.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-button {
-  border-color: #52525b;
 }
 
 .xlsx-viewer__deferred-button:hover:not(:disabled) {
@@ -1033,13 +1063,13 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-button--primary {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
 }
 
 .xlsx-viewer__deferred-button--primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: color-mix(in oklab, var(--office-primary, #2563eb) 88%, transparent);
 }
 
 .xlsx-viewer__deferred-button:disabled {
@@ -1048,7 +1078,7 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-button:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--office-ring, #2563eb);
   outline-offset: 2px;
 }
 

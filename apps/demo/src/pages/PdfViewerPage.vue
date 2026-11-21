@@ -86,8 +86,10 @@
         :max-file-size="maxFileSize"
         :password="pdfPassword.trim() || undefined"
         :default-zoom="1"
+        :is-dark="isDark"
         locale="zh-CN"
         :file-name="fileName || 'verification.pdf'"
+        show-status-bar
         style="height: 80vh;"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
@@ -122,6 +124,7 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue"
 import { PdfViewer, type PdfDiagnostic, type PdfLoadError, type PdfSource, type PdfUrlPolicy } from "@arcships/vue-pdf"
+import { readDemoTheme } from "../lib/demo-visual-settings"
 
 const samples = [
   { file: "sample.pdf", label: "文本 PDF" },
@@ -149,6 +152,7 @@ const maxFileSizeDraft = ref(String(DEFAULT_MAX_FILE_SIZE))
 const maxFileSizeInputError = ref("")
 const pdfPassword = ref("")
 const pageState = ref<"idle" | "loading" | "ready" | "error">("idle")
+const isDark = readDemoTheme() === "dark"
 const pageError = ref<PdfLoadError | null>(null)
 const numPages = ref(0)
 const activePage = ref(1)

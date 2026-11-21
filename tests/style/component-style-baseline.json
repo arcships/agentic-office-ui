@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "node scripts/ci/lint-styles.mjs --write-baseline",
+  "rules": [
+    "color-no-hex",
+    "declaration-property-unit-disallowed-list",
+    "declaration-property-value-disallowed-list"
+  ],
+  "approved": {
+    "reviewer": "dim-agent",
+    "issue": "#161",
+    "reason": "PptxViewerToolbar ring/shadow offsets and PptxSlideCard 150ms transitions mirror the pinned upstream Tailwind utilities landed by #161b; freeze the remaining 22 occurrences. The #fff preview was switched to the identical CSS white keyword, which keeps pixels and removes one violation.",
+    "date": "2026-11-20"
+  },
+  "counts": {
+    "packages/vue-docx/src/components/DocxContextMenu.vue": {
+      "color-no-hex": 16,
+      "declaration-property-unit-disallowed-list": 11,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxDocumentSurface.vue": {
+      "color-no-hex": 4,
+      "declaration-property-unit-disallowed-list": 5,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxDragOverlay.vue": {
+      "color-no-hex": 2,
+      "declaration-property-unit-disallowed-list": 3
+    },
+    "packages/vue-docx/src/components/DocxEditor.vue": {
+      "color-no-hex": 22,
+      "declaration-property-unit-disallowed-list": 5
+    },
+    "packages/vue-docx/src/components/DocxFormFieldDialog.vue": {
+      "color-no-hex": 24,
+      "declaration-property-unit-disallowed-list": 8,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxFormFieldLayer.vue": {
+      "color-no-hex": 10,
+      "declaration-property-unit-disallowed-list": 6,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxGutterAnchorMarkers.vue": {
+      "color-no-hex": 2,
+      "declaration-property-unit-disallowed-list": 5,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxImageLayer.vue": {
+      "color-no-hex": 9,
+      "declaration-property-unit-disallowed-list": 8,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxLinkHoverCard.vue": {
+      "color-no-hex": 18,
+      "declaration-property-unit-disallowed-list": 4
+    },
+    "packages/vue-docx/src/components/DocxNotesSection.vue": {
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxPageFooter.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxPageHeader.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxPageSetupDialog.vue": {
+      "color-no-hex": 27,
+      "declaration-property-unit-disallowed-list": 13,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxPageSurface.vue": {
+      "color-no-hex": 2,
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxPageWrapper.vue": {
+      "color-no-hex": 1
+    },
+    "packages/vue-docx/src/components/DocxParagraphHost.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 3,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxStylePreviewPopover.vue": {
+      "color-no-hex": 14,
+      "declaration-property-unit-disallowed-list": 8,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-docx/src/components/DocxTableHost.vue": {
+      "color-no-hex": 13,
+      "declaration-property-unit-disallowed-list": 8,
+      "declaration-property-value-disallowed-list": 4
+    },
+    "packages/vue-docx/src/components/DocxThumbnailPanel.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 4
+    },
+    "packages/vue-docx/src/components/DocxToolbar.vue": {
+      "color-no-hex": 22,
+      "declaration-property-unit-disallowed-list": 7
+    },
+    "packages/vue-docx/src/components/DocxTrackedChangeGutter.vue": {
+      "color-no-hex": 36,
+      "declaration-property-unit-disallowed-list": 17,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxViewer.vue": {
+      "color-no-hex": 20,
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-docx/src/components/DocxViewerRoot.vue": {
+      "color-no-hex": 2
+    },
+    "packages/vue-docx/src/components/DocxViewerToolbar.vue": {
+      "declaration-property-unit-disallowed-list": 10
+    },
+    "packages/vue-pdf/src/components/PdfOutlinePanel.vue": {
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 3
+    },
+    "packages/vue-pdf/src/components/PdfSurface.vue": {
+      "color-no-hex": 19,
+      "declaration-property-unit-disallowed-list": 9,
+      "declaration-property-value-disallowed-list": 3
+    },
+    "packages/vue-pdf/src/components/PdfThumbnailStrip.vue": {
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-pdf/src/components/PdfViewer.vue": {
+      "color-no-hex": 25,
+      "declaration-property-unit-disallowed-list": 10,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-pdf/src/components/PdfViewerToolbar.vue": {
+      "declaration-property-unit-disallowed-list": 10
+    },
+    "packages/vue-pptx/src/PptxSlideCard.vue": {
+      "declaration-property-unit-disallowed-list": 3
+    },
+    "packages/vue-pptx/src/PptxStage.vue": {
+      "color-no-hex": 1
+    },
+    "packages/vue-pptx/src/PptxViewerToolbar.vue": {
+      "declaration-property-unit-disallowed-list": 19
+    },
+    "packages/vue-pptx/src/style.css": {
+      "color-no-hex": 32,
+      "declaration-property-unit-disallowed-list": 16
+    },
+    "packages/vue-ui/src/components/BoundingBoxCitations.vue": {
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 25,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-ui/src/components/DocumentSplits.vue": {
+      "declaration-property-unit-disallowed-list": 16
+    },
+    "packages/vue-ui/src/components/ESignatureFields.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-ui/src/components/FileThumbnail.vue": {
+      "declaration-property-unit-disallowed-list": 4,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-ui/src/components/FileUpload.vue": {
+      "color-no-hex": 4,
+      "declaration-property-unit-disallowed-list": 5
+    },
+    "packages/vue-ui/src/components/LayoutBlocks.vue": {
+      "declaration-property-unit-disallowed-list": 13,
+      "declaration-property-value-disallowed-list": 2
+    },
+    "packages/vue-ui/src/components/OfficeFindBar.vue": {
+      "color-no-hex": 12,
+      "declaration-property-unit-disallowed-list": 7
+    },
+    "packages/vue-ui/src/components/OfficeObjectOutlineLayer.vue": {
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 5,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-ui/src/components/OfficeRegionAnnotator.vue": {
+      "color-no-hex": 18,
+      "declaration-property-unit-disallowed-list": 13,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-ui/src/components/OfficeRegionSelector.vue": {
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 4,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-ui/src/components/SignaturePad.vue": {
+      "color-no-hex": 8,
+      "declaration-property-unit-disallowed-list": 5
+    },
+    "packages/vue-ui/src/print.css": {
+      "color-no-hex": 2
+    },
+    "packages/vue-ui/src/styles/chrome.css": {
+      "declaration-property-unit-disallowed-list": 7,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-ui/src/styles/ui.css": {
+      "declaration-property-unit-disallowed-list": 6
+    },
+    "packages/vue-xlsx/src/components/XlsxAuthoringDialog.vue": {
+      "color-no-hex": 20,
+      "declaration-property-unit-disallowed-list": 16
+    },
+    "packages/vue-xlsx/src/components/XlsxChartOverlay.vue": {
+      "color-no-hex": 3,
+      "declaration-property-unit-disallowed-list": 1,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxChartsheetSurface.vue": {
+      "color-no-hex": 4,
+      "declaration-property-unit-disallowed-list": 2
+    },
+    "packages/vue-xlsx/src/components/XlsxClipboardNotice.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 4,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxDrawingLayer.vue": {
+      "color-no-hex": 14,
+      "declaration-property-unit-disallowed-list": 4
+    },
+    "packages/vue-xlsx/src/components/XlsxFormulaBar.vue": {
+      "color-no-hex": 6,
+      "declaration-property-unit-disallowed-list": 10,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxGrid.vue": {
+      "color-no-hex": 36,
+      "declaration-property-unit-disallowed-list": 31,
+      "declaration-property-value-disallowed-list": 4
+    },
+    "packages/vue-xlsx/src/components/XlsxGridDomLayer.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxImageLayer.vue": {
+      "color-no-hex": 3,
+      "declaration-property-unit-disallowed-list": 2,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxNameManagerSection.vue": {
+      "color-no-hex": 1,
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxPrintPreview.vue": {
+      "color-no-hex": 24,
+      "declaration-property-unit-disallowed-list": 8,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxRangeHighlightLayer.vue": {
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxRibbon.vue": {
+      "declaration-property-unit-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxSheetSurface.vue": {
+      "color-no-hex": 5,
+      "declaration-property-unit-disallowed-list": 4,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxSheetTabs.vue": {
+      "declaration-property-unit-disallowed-list": 12
+    },
+    "packages/vue-xlsx/src/components/XlsxToolbar.vue": {
+      "color-no-hex": 17,
+      "declaration-property-unit-disallowed-list": 10,
+      "declaration-property-value-disallowed-list": 1
+    },
+    "packages/vue-xlsx/src/components/XlsxViewer.vue": {
+      "color-no-hex": 12,
+      "declaration-property-unit-disallowed-list": 9,
+      "declaration-property-value-disallowed-list": 1
+    }
+  },
+  "totals": {
+    "files": 64,
+    "warnings": 1015,
+    "byRule": {
+      "color-no-hex": 537,
+      "declaration-property-unit-disallowed-list": 434,
+      "declaration-property-value-disallowed-list": 44
+    }
+  }
+}

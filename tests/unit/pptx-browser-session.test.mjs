@@ -356,6 +356,29 @@ test("a failed open keeps the previous document and playback model", async () =>
   }
 });
 
+test("password-protected OLE/CFB containers report UNSUPPORTED_CONTENT", async () => {
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    // PowerPoint writes password-protected decks (and legacy .ppt renamed to
+    // .pptx) as an OLE Compound File, not an OOXML zip. The core detects the
+    // signature and reports the dedicated content code the viewer maps to its
+    // "protected presentation" state.
+    const ole = new Uint8Array(64);
+    ole.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    await assert.rejects(
+      session.open(ole),
+      (error) => error.code === "UNSUPPORTED_CONTENT",
+    );
+    assert.equal(session.document, null);
+  } finally {
+    session.dispose();
+  }
+});
+
 test("a render failure clears the session instead of keeping a dead document", async () => {
   const session = createPptxDocumentSession(createRoot({ failOnRender: true }), {
     lazyMedia: true,

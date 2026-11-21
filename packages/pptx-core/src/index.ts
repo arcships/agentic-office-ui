@@ -64,20 +64,38 @@ export type {
   PptxObjectKeyParts,
 } from "./playback/identity"
 export {
+  createPptxBehaviorDraftFromRecord,
+  createPptxBehaviorReferenceDraft,
   createPptxObjectReferenceDraft,
   createPptxRegionReferenceDraft,
   createPptxSlideReferenceDraft,
+  createPptxSubObjectReferenceDraft,
   createPptxTextReferenceDraft,
   describePptxReference,
+  enumeratePptxBehaviors,
   pptxReferenceKindForObject,
   resolvePptxReference,
 } from "./reference-adapter"
 export type {
+  PptxBehaviorTarget,
+  PptxChartSnapshot,
   PptxObjectReferenceOptions,
   PptxOfficeReference,
   PptxOfficeReferenceDraft,
   PptxReferenceContext,
+  PptxSubObjectTarget,
+  PptxTableSnapshot,
 } from "./reference-adapter"
+export {
+  enumeratePptxSlideBehaviors,
+  PPTX_BEHAVIOR_REFERENCE_KIND,
+} from "./pptx-behaviors"
+export type {
+  PptxBehaviorContext,
+  PptxBehaviorKind,
+  PptxBehaviorRecord,
+} from "./pptx-behaviors"
+export * from "./pptx-object-index"
 export type {
   PptxCapabilityReport,
   PptxEffectKind,

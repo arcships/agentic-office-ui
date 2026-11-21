@@ -1,30 +1,15 @@
 <template>
-  <Teleport to="body">
-    <div class="xlsx-authoring-backdrop" data-testid="xlsx-authoring-backdrop" @pointerdown="emit('close')" />
-    <div
-      ref="dialogRef"
-      class="xlsx-authoring"
-      :class="{ 'xlsx-authoring--dark': isDark }"
-      data-testid="xlsx-authoring-dialog"
-      :data-kind="kind"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="dialogTitle"
-      tabindex="-1"
-      @keydown.escape.stop.prevent="emit('close')"
-      @pointerdown.stop
+  <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
+    <OfficeDialog
+      :open="true"
+      :title="dialogTitle"
+      :close-label="m.xlsx.authoring.close"
+      :close-test-id="'xlsx-authoring-close'"
+      :content-test-id="'xlsx-authoring-dialog'"
+      :content-data="{ 'data-kind': kind }"
+      :class="dialogClasses"
+      @update:open="onDialogOpenChange"
     >
-      <header class="xlsx-authoring__header">
-        <h2 class="xlsx-authoring__title">{{ dialogTitle }}</h2>
-        <button
-          type="button"
-          class="xlsx-authoring__close"
-          data-testid="xlsx-authoring-close"
-          :title="m.xlsx.authoring.close"
-          :aria-label="m.xlsx.authoring.close"
-          @click="emit('close')"
-        >×</button>
-      </header>
       <p class="xlsx-authoring__range" data-testid="xlsx-authoring-range">{{ rangeLabel }}</p>
       <p v-if="statusMessage" class="xlsx-authoring__status" data-testid="xlsx-authoring-status" role="status">
         {{ statusMessage }}
@@ -88,14 +73,14 @@
           <button
             v-if="chartMode === 'insert'"
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-chart-insert"
             @click="insertChart"
           >{{ m.xlsx.authoring.chart.insert }}</button>
           <button
             v-else
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-chart-update"
             :disabled="!selectedChart"
             @click="updateChart"
@@ -103,7 +88,7 @@
           <button
             v-if="selectedChart"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-chart-delete"
             @click="deleteChart"
           >{{ m.xlsx.authoring.chart.delete }}</button>
@@ -133,7 +118,7 @@
         <div class="xlsx-authoring__actions">
           <button
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-comment-save"
             :disabled="!commentText.trim()"
             @click="saveComment"
@@ -141,7 +126,7 @@
           <button
             v-if="existingComment"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-comment-delete"
             @click="deleteComment"
           >{{ m.xlsx.authoring.comment.delete }}</button>
@@ -171,7 +156,7 @@
         <div class="xlsx-authoring__actions">
           <button
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-hyperlink-save"
             :disabled="!hyperlinkTarget.trim()"
             @click="saveHyperlink"
@@ -179,7 +164,7 @@
           <button
             v-if="existingHyperlink"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-hyperlink-remove"
             @click="removeHyperlink"
           >{{ m.xlsx.authoring.hyperlink.remove }}</button>
@@ -207,14 +192,14 @@
         <div class="xlsx-authoring__actions">
           <button
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-table-create"
             @click="createTable"
           >{{ m.xlsx.authoring.table.create }}</button>
           <button
             v-if="tableAtCell"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-table-remove"
             @click="removeTable"
           >{{ m.xlsx.authoring.table.remove }}</button>
@@ -295,14 +280,14 @@
         <div class="xlsx-authoring__actions">
           <button
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-conditional-add"
             @click="submitConditionalRule"
           >{{ editingConditionalIndex === null ? m.xlsx.authoring.conditional.add : m.xlsx.authoring.conditional.update }}</button>
           <button
             v-if="editingConditionalIndex !== null"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-conditional-cancel"
             @click="resetConditionalForm"
           >{{ m.xlsx.authoring.close }}</button>
@@ -362,14 +347,14 @@
         <div class="xlsx-authoring__actions">
           <button
             type="button"
-            class="xlsx-authoring__button xlsx-authoring__button--primary"
+            class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
             data-testid="xlsx-validation-apply"
             @click="applyValidation"
           >{{ m.xlsx.authoring.validation.apply }}</button>
           <button
             v-if="existingValidation"
             type="button"
-            class="xlsx-authoring__button"
+            class="office-button office-button--outline office-button--size-sm xlsx-authoring__button"
             data-testid="xlsx-validation-remove"
             @click="removeValidation"
           >{{ m.xlsx.authoring.validation.remove }}</button>
@@ -395,12 +380,12 @@
         v-else-if="kind === 'names'"
         :controller="controller"
       />
-    </div>
-  </Teleport>
+    </OfficeDialog>
+  </OfficeThemeProvider>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import type {
   XlsxCellAddress,
@@ -409,6 +394,7 @@ import type {
   XlsxConditionalFormatRule,
   XlsxViewerController,
 } from "@arcships/xlsx-core";
+import { OfficeDialog, OfficeThemeProvider } from "@arcships/vue-ui";
 import { useXlsxMessages } from "../i18n";
 import XlsxNameManagerSection from "./XlsxNameManagerSection.vue";
 import XlsxNumberFormatSection from "./XlsxNumberFormatSection.vue";
@@ -424,7 +410,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const m = useXlsxMessages();
-const dialogRef = ref<HTMLElement | null>(null);
+
 const statusMessage = ref("");
 const activeCell = computed<XlsxCellAddress | null>(() => props.controller.activeCell ?? null);
 const selectionRange = computed<XlsxCellRange | null>(() => {
@@ -444,6 +430,15 @@ const rangeLabel = computed(() => {
     : props.controller.activeCellAddress;
   return formatOfficeMessage(m.value.xlsx.authoring.rangeLabel, { range: address ?? "" });
 });
+
+const dialogClasses = computed(() => (props.isDark
+  ? "xlsx-authoring xlsx-authoring--dark"
+  : "xlsx-authoring"));
+
+/** Reka owns Esc/backdrop dismissal; both funnel into the public close event. */
+function onDialogOpenChange(value: boolean): void {
+  if (!value) emit("close");
+}
 
 const dialogTitle = computed(() => {
   switch (props.kind) {
@@ -466,10 +461,6 @@ const dialogTitle = computed(() => {
     default:
       return m.value.xlsx.authoring.validation.title;
   }
-});
-
-onMounted(() => {
-  void nextTick(() => dialogRef.value?.focus?.());
 });
 
 // ── Chart ────────────────────────────────────────────────────────────
@@ -861,127 +852,268 @@ function removeValidation() {
 }
 </script>
 
+/* Shared section controls. The paste-special, number-format and Name Manager
+   sections are child components, so they need these rules unscoped. */
+/* The authoring surface keeps its compact width on top of the shared dialog. */
+.xlsx-authoring.office-dialog__content {
+  gap: var(--office-ui-space-2, 0.5rem);
+  max-block-size: min(82vh, 720px);
+  max-inline-size: min(92vw, 520px);
+}
+.xlsx-authoring .office-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2, 0.5rem);
+  padding-block-start: 0;
+}
+
+.xlsx-authoring__field { display: flex; flex-direction: column; font-size: var(--office-text-xs, 0.75rem); gap: 4px; }
+.xlsx-authoring__field select,
+.xlsx-authoring__field input,
+.xlsx-authoring__field textarea {
+  background: var(--office-background, #fff);
+  border: var(--office-border-width, 1px) solid var(--office-input, #d4d4d8);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: var(--office-foreground, #18181b);
+  font: inherit;
+  font-size: var(--office-text-sm, 0.875rem);
+  padding: 6px 8px;
+}
+.xlsx-authoring__field select:focus-visible,
+.xlsx-authoring__field input:focus-visible,
+.xlsx-authoring__field textarea:focus-visible {
+  border-color: var(--office-ring, #a1a1aa);
+  outline: 2px solid color-mix(in oklab, var(--office-ring, #a1a1aa) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width, 1px);
+}
+.xlsx-authoring__check { align-items: center; display: flex; font-size: var(--office-text-xs, 0.75rem); gap: 6px; }
+.xlsx-authoring__check input { accent-color: var(--office-primary, #2563eb); }
+.xlsx-authoring__actions { display: flex; flex-wrap: wrap; gap: var(--office-ui-space-2, 0.5rem); }
+.xlsx-authoring__hint { color: var(--office-muted-foreground, #71717a); font-size: var(--office-text-xs, 0.75rem); margin: 0; }
+.xlsx-authoring__rules { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.xlsx-authoring__rule { align-items: center; display: flex; font-size: var(--office-text-xs, 0.75rem); gap: var(--office-ui-space-2, 0.5rem); justify-content: space-between; }
+.xlsx-authoring__link {
+  background: transparent;
+  border: 0;
+  color: var(--office-info-foreground, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 0;
+}
+
 <style>
 /* Shared section controls. The paste-special, number-format and Name Manager
    sections are child components, so they need these rules unscoped. */
-.xlsx-authoring__field { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+/* The authoring surface keeps its compact width on top of the shared dialog. */
+.xlsx-authoring.office-dialog__content {
+  gap: var(--office-ui-space-2, 0.5rem);
+  max-block-size: min(82vh, 720px);
+  max-inline-size: min(92vw, 520px);
+}
+.xlsx-authoring .office-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--office-ui-space-2, 0.5rem);
+  padding-block-start: 0;
+}
+.xlsx-authoring__field {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: 4px;
+}
 .xlsx-authoring__field select,
 .xlsx-authoring__field input,
 .xlsx-authoring__field textarea {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; font: inherit; font-size: 12px; padding: 6px 8px;
+  background: var(--office-background, #fff);
+  border: var(--office-border-width, 1px) solid var(--office-input, #d4d4d8);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: var(--office-foreground, #18181b);
+  font: inherit;
+  font-size: var(--office-text-sm, 0.875rem);
+  padding: 6px 8px;
 }
-.xlsx-authoring--dark .xlsx-authoring__field select,
-.xlsx-authoring--dark .xlsx-authoring__field input,
-.xlsx-authoring--dark .xlsx-authoring__field textarea { background: #27272a; border-color: #52525b; }
-.xlsx-authoring__check { align-items: center; display: flex; font-size: 12px; gap: 6px; }
-.xlsx-authoring__check input { accent-color: #2563eb; }
-.xlsx-authoring__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.xlsx-authoring__field select:focus-visible,
+.xlsx-authoring__field input:focus-visible,
+.xlsx-authoring__field textarea:focus-visible {
+  border-color: var(--office-ring, #a1a1aa);
+  outline: 2px solid color-mix(in oklab, var(--office-ring, #a1a1aa) 40%, transparent);
+  outline-offset: var(--office-ring-offset-width, 1px);
+}
+.xlsx-authoring__check {
+  align-items: center;
+  display: flex;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: 6px;
+}
+.xlsx-authoring__check input { accent-color: var(--office-primary, #2563eb); }
+.xlsx-authoring__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--office-ui-space-2, 0.5rem);
+}
 .xlsx-authoring__button {
-  background: transparent; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; cursor: pointer; font: inherit; font-size: 12px; padding: 6px 12px;
+  background: transparent;
+  border: var(--office-border-width, 1px) solid var(--office-border, #d4d4d8);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 6px 12px;
 }
-.xlsx-authoring__button--primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
-.xlsx-authoring__button:disabled { cursor: default; opacity: .5; }
-.xlsx-authoring__hint { color: #71717a; font-size: 12px; margin: 0; }
-.xlsx-authoring__rules { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
-.xlsx-authoring__rule { align-items: center; display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
-.xlsx-authoring__link { background: transparent; border: 0; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+.xlsx-authoring__button--primary {
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
+}
+.xlsx-authoring__button:disabled { cursor: default; opacity: 0.5; }
+.xlsx-authoring__hint {
+  color: var(--office-muted-foreground, #71717a);
+  font-size: var(--office-text-xs, 0.75rem);
+  margin: 0;
+}
+.xlsx-authoring__rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.xlsx-authoring__rule {
+  align-items: center;
+  display: flex;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: var(--office-ui-space-2, 0.5rem);
+  justify-content: space-between;
+}
+.xlsx-authoring__link {
+  background: transparent;
+  border: 0;
+  color: var(--office-info-foreground, #2563eb);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 0;
+}
 </style>
 
 <style scoped>
-.xlsx-authoring-backdrop {
-  background: rgba(24, 24, 27, .38);
-  inset: 0;
-  position: fixed;
-  z-index: 9998;
+/*
+ * `OfficeDialog` owns the shell (overlay, header/title/close, scroll body), so
+ * this block only styles slot content: the range chip, status line, sections
+ * and the conditional-format controls.
+ */
+.xlsx-authoring__range {
+  color: var(--office-muted-foreground, #71717a);
+  font-size: var(--office-text-xs, 0.75rem);
+  margin: 0;
 }
-.xlsx-authoring {
-  background: #ffffff;
-  border: 1px solid #d4d4d8;
-  border-radius: 10px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, .22);
-  color: #18181b;
+
+.xlsx-authoring__status {
+  color: var(--office-success-foreground, #15803d);
+  font-size: var(--office-text-xs, 0.75rem);
+  margin: 0;
+}
+
+.xlsx-authoring__section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  left: 50%;
-  max-height: min(82vh, 720px);
-  max-width: min(92vw, 440px);
-  overflow: auto;
-  padding: 16px;
-  position: fixed;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 440px;
-  z-index: 9999;
+  gap: var(--office-ui-space-2, 0.5rem);
 }
-.xlsx-authoring--dark { background: #18181b; border-color: #3f3f46; color: #f4f4f5; }
-.xlsx-authoring__header { align-items: center; display: flex; justify-content: space-between; }
-.xlsx-authoring__title { font-size: 14px; font-weight: 600; margin: 0; }
-.xlsx-authoring__close {
-  background: transparent; border: 0; border-radius: 6px; color: inherit;
-  cursor: pointer; font-size: 18px; height: 28px; line-height: 1; width: 28px;
+
+.xlsx-authoring__tabs {
+  display: flex;
+  gap: var(--office-ui-space-1, 0.25rem);
 }
-.xlsx-authoring__close:hover { background: rgba(113, 113, 122, .14); }
-.xlsx-authoring__range { color: #71717a; font-size: 11px; margin: 0; }
-.xlsx-authoring__status { color: #15803d; font-size: 11px; margin: 0; }
-.xlsx-authoring--dark .xlsx-authoring__status { color: #4ade80; }
-.xlsx-authoring__section { display: flex; flex-direction: column; gap: 10px; }
-.xlsx-authoring__tabs { display: flex; gap: 4px; }
+
 .xlsx-authoring__tab {
-  background: transparent; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 10px;
+  background: transparent;
+  border: var(--office-border-width, 1px) solid var(--office-border, #e4e4e7);
+  border-radius: var(--office-radius-md, 0.5rem);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 5px 10px;
 }
-.xlsx-authoring__tab--active { background: rgba(37, 99, 235, .14); border-color: #2563eb; color: #1d4ed8; }
-.xlsx-authoring__field { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
-.xlsx-authoring__field select,
-.xlsx-authoring__field input,
-.xlsx-authoring__field textarea {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; font: inherit; font-size: 12px; padding: 6px 8px;
+
+.xlsx-authoring__tab--active {
+  background: var(--office-accent, rgba(37, 99, 235, 0.14));
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-accent-foreground, #18181b);
 }
-.xlsx-authoring--dark .xlsx-authoring__field select,
-.xlsx-authoring--dark .xlsx-authoring__field input,
-.xlsx-authoring--dark .xlsx-authoring__field textarea { background: #27272a; border-color: #52525b; }
-.xlsx-authoring__check { align-items: center; display: flex; font-size: 12px; gap: 6px; }
-.xlsx-authoring__check input { accent-color: #2563eb; }
-.xlsx-authoring__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.xlsx-authoring__button {
-  background: transparent; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; cursor: pointer; font: inherit; font-size: 12px; padding: 6px 12px;
+
+.xlsx-authoring__rule-actions {
+  display: flex;
+  gap: var(--office-ui-space-2, 0.5rem);
 }
-.xlsx-authoring__button--primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
-.xlsx-authoring__button:disabled { cursor: default; opacity: .5; }
-.xlsx-authoring__hint { color: #71717a; font-size: 12px; margin: 0; }
-.xlsx-authoring__rules { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
-.xlsx-authoring__rule { align-items: center; display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
-.xlsx-authoring__rule-actions { display: flex; gap: 8px; }
-.xlsx-authoring__link { background: transparent; border: 0; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+
 .xlsx-authoring__thresholds {
-  border: 1px solid #e4e4e7; border-radius: 6px; display: flex; flex-direction: column;
-  gap: 6px; margin: 0; padding: 8px;
+  border: var(--office-border-width, 1px) solid var(--office-border, #e4e4e7);
+  border-radius: var(--office-radius-md, 0.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
 }
-.xlsx-authoring__thresholds legend { color: #71717a; font-size: 11px; padding: 0 4px; }
-.xlsx-authoring__threshold { display: flex; gap: 8px; }
-.xlsx-authoring__threshold select { flex: 1 1 55%; }
-.xlsx-authoring__threshold input { flex: 1 1 45%; min-width: 0; }
-.xlsx-authoring__threshold select,
+
+.xlsx-authoring__thresholds legend {
+  color: var(--office-muted-foreground, #71717a);
+  font-size: var(--office-text-xs, 0.75rem);
+  padding: 0 4px;
+}
+
+.xlsx-authoring__threshold {
+  display: flex;
+  gap: var(--office-ui-space-2, 0.5rem);
+}
+
+.xlsx-authoring__threshold select {
+  flex: 1 1 55%;
+}
+
 .xlsx-authoring__threshold input {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  color: inherit; font: inherit; font-size: 12px; padding: 6px 8px;
+  flex: 1 1 45%;
+  min-width: 0;
 }
-.xlsx-authoring--dark .xlsx-authoring__threshold select,
-.xlsx-authoring--dark .xlsx-authoring__threshold input { background: #27272a; border-color: #52525b; }
-.xlsx-authoring__colors { display: flex; flex-wrap: wrap; gap: 8px; }
-.xlsx-authoring__color { align-items: center; display: flex; font-size: 11px; gap: 6px; }
-.xlsx-authoring__color input { block-size: 24px; border: none; cursor: pointer; inline-size: 32px; padding: 0; }
+
+.xlsx-authoring__colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--office-ui-space-2, 0.5rem);
+}
+
+.xlsx-authoring__color {
+  align-items: center;
+  display: flex;
+  font-size: var(--office-text-xs, 0.75rem);
+  gap: 6px;
+}
+
+.xlsx-authoring__color input {
+  block-size: 24px;
+  border: none;
+  cursor: pointer;
+  inline-size: 32px;
+  padding: 0;
+}
+
 .xlsx-authoring button:focus-visible,
 .xlsx-authoring input:focus-visible,
 .xlsx-authoring select:focus-visible,
-.xlsx-authoring textarea:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.xlsx-authoring textarea:focus-visible {
+  outline: 2px solid var(--office-ring, #2563eb);
+  outline-offset: var(--office-ring-offset-width, 2px);
+}
+
 @media (pointer: coarse) {
   .xlsx-authoring__button,
-  .xlsx-authoring__tab { min-height: 44px; }
+  .xlsx-authoring__tab {
+    min-height: 44px;
+  }
 }
 </style>

@@ -10,6 +10,7 @@ import type {
   PptxObjectLocator,
   PptxReferenceKind,
   PptxSlideLocator,
+  PptxSubObjectPathSegment,
   ResolveReferenceResult,
 } from "@arcships/office-interaction";
 import type {
@@ -17,6 +18,8 @@ import type {
   PptxPlaybackDocument,
   PptxPlaybackSlide,
 } from "./playback/types";
+import type { PptxBehaviorRecord } from "./pptx-behaviors";
+import { enumeratePptxSlideBehaviors } from "./pptx-behaviors";
 import type { PptxPreviewDocument } from "./types";
 
 export type PptxOfficeReference = Extract<
@@ -37,6 +40,31 @@ export interface PptxReferenceContext {
   slideIds?: readonly (string | undefined)[];
   /** Current text paragraphs for a rendered/native object, used by precise text references. */
   getObjectParagraphs?: (slideIndex: number, objectKey: string) => readonly string[] | undefined;
+  /**
+   * Rendered table grid of an object, when the host can read it. PowerPoint
+   * stores cell text inside the table shape; the adapter accepts it from the
+   * Surface so `pptx-core` does not need a DOM.
+   */
+  getObjectTable?: (slideIndex: number, objectKey: string) => PptxTableSnapshot | undefined;
+  /**
+   * Chart series/point labels of a chart object, when the host can read them.
+   * Chart internals are a stage 3 object family; without this provider the
+   * chart itself stays selectable and its internals are simply absent.
+   */
+  getObjectChart?: (slideIndex: number, objectKey: string) => PptxChartSnapshot | undefined;
+}
+
+/** One rendered table: rows of cell text, in visual order. */
+export interface PptxTableSnapshot {
+  rows: readonly (readonly string[])[];
+}
+
+/** One chart's series names and per-series point labels/categories. */
+export interface PptxChartSnapshot {
+  series: readonly {
+    name?: string;
+    points?: readonly string[];
+  }[];
 }
 
 export interface PptxObjectReferenceOptions {
@@ -63,6 +91,20 @@ const PPTX_TEXT_RELIABILITY: OfficeObjectReliability = {
   boundary: { level: "exact", score: 1, reasonCodes: ["pptx.paragraph-offsets"] },
   hierarchy: { level: "exact", score: 1, reasonCodes: ["pptx.object-key-and-paragraph"] },
   relocation: { level: "likely", reasonCodes: ["pptx.object-and-text-quote"] },
+};
+
+const PPTX_SUB_OBJECT_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pptx.native-sub-object"] },
+  boundary: { level: "likely", reasonCodes: ["pptx.rendered-grid-or-plot"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pptx.object-and-index"] },
+  relocation: { level: "likely", reasonCodes: ["pptx.object-key-and-index"] },
+};
+
+const PPTX_BEHAVIOR_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pptx.native-behavior"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["pptx.behavior-native-id"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pptx.slide-id"] },
+  relocation: { level: "likely", reasonCodes: ["pptx.behavior-native-id"] },
 };
 
 const PPTX_REGION_RELIABILITY: OfficeObjectReliability = {
@@ -354,6 +396,326 @@ export function createPptxTextReferenceDraft(
     },
     fingerprint: textFingerprint(identity, text, slideId(context, slideIndex)),
     reliability: copyReliability(PPTX_TEXT_RELIABILITY),
+  };
+}
+
+export type PptxSubObjectTarget = PptxSubObjectPathSegment;
+
+function subObjectSegment(target: PptxSubObjectTarget): PptxSubObjectPathSegment {
+  return { ...target };
+}
+
+function tableSnapshot(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+): PptxTableSnapshot {
+  const snapshot = context.getObjectTable?.(slideIndex, identity.key);
+  if (!snapshot) {
+    throw new RangeError("PPTX table cells require getObjectTable evidence");
+  }
+  return snapshot;
+}
+
+function assertSubObjectTarget(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): void {
+  const nodeType = identity.nodeType.toLowerCase();
+  if (target.kind === "table-cell") {
+    if (nodeType !== "table") {
+      throw new RangeError("PPTX table-cell references require a table object");
+    }
+    if (!Number.isSafeInteger(target.rowIndex) || target.rowIndex < 0
+      || !Number.isSafeInteger(target.cellIndex) || target.cellIndex < 0) {
+      throw new TypeError("PPTX table cell indices must be non-negative safe integers");
+    }
+    const snapshot = tableSnapshot(context, slideIndex, identity);
+    const row = snapshot.rows[target.rowIndex];
+    if (!row || !row[target.cellIndex]) {
+      throw new RangeError("PPTX table cell is outside the rendered table grid");
+    }
+    return;
+  }
+  if (nodeType !== "chart") {
+    throw new RangeError("PPTX chart element references require a chart object");
+  }
+  const chart = context.getObjectChart?.(slideIndex, identity.key);
+  if (!chart) throw new RangeError("PPTX chart elements require getObjectChart evidence");
+  if (target.kind === "chart-series") {
+    if (!Number.isSafeInteger(target.seriesIndex) || target.seriesIndex < 0 || !chart.series[target.seriesIndex]) {
+      throw new RangeError("PPTX chart series is outside the current chart");
+    }
+    return;
+  }
+  if (target.kind === "chart-point") {
+    const series = chart.series[target.seriesIndex];
+    if (!series) throw new RangeError("PPTX chart series is outside the current chart");
+    if (!Number.isSafeInteger(target.pointIndex) || target.pointIndex < 0
+      || (series.points !== undefined && target.pointIndex >= series.points.length)) {
+      throw new RangeError("PPTX chart point is outside the current series");
+    }
+    return;
+  }
+  if (!Number.isSafeInteger(target.legendIndex) || target.legendIndex < 0 || !chart.series[target.legendIndex]) {
+    throw new RangeError("PPTX chart legend entry is outside the current chart");
+  }
+  if (target.seriesIndex !== undefined
+    && (!Number.isSafeInteger(target.seriesIndex) || target.seriesIndex < 0 || !chart.series[target.seriesIndex])) {
+    throw new RangeError("PPTX chart legend series is outside the current chart");
+  }
+}
+
+function subObjectFingerprint(
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+  resolvedSlideId: string | undefined,
+  text: string | undefined,
+): OfficeObjectFingerprint {
+  const base = objectFingerprint(identity, resolvedSlideId);
+  return {
+    ...base,
+    ancestorKeys: [
+      ...(base.ancestorKeys ?? []),
+      `pptx.sub-object:${target.kind}`,
+    ],
+    ...(text ? { contentHash: textContentHash(text) } : {}),
+  };
+}
+
+function subObjectText(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+): string | undefined {
+  if (target.kind === "table-cell") {
+    return context.getObjectTable?.(slideIndex, identity.key)?.rows[target.rowIndex]?.[target.cellIndex];
+  }
+  const chart = context.getObjectChart?.(slideIndex, identity.key);
+  if (!chart) return undefined;
+  if (target.kind === "chart-series") return chart.series[target.seriesIndex]?.name;
+  if (target.kind === "chart-point") {
+    return chart.series[target.seriesIndex]?.points?.[target.pointIndex];
+  }
+  const seriesIndex = target.seriesIndex ?? target.legendIndex;
+  return chart.series[seriesIndex]?.name;
+}
+
+/**
+ * Create a reference to a table cell or chart internal element (stage 3).
+ *
+ * The target path is validated against the rendered table grid or chart
+ * snapshot the Surface provides; without that evidence the reference is
+ * rejected instead of guessing.
+ */
+export function createPptxSubObjectReferenceDraft(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  objectKey: string,
+  target: PptxSubObjectTarget,
+): PptxOfficeReferenceDraft {
+  assertContext(context);
+  const slide = assertSlideIndex(context, slideIndex);
+  const identity = slide.objects.find((object) => object.key === objectKey);
+  if (!identity) throw new RangeError("PPTX objectKey is not present on the selected slide");
+  assertSubObjectTarget(context, slideIndex, identity, target);
+  const kind = target.kind === "table-cell"
+    ? "table-cell"
+    : target.kind === "chart-series"
+      ? "chart-series"
+      : target.kind === "chart-point" ? "chart-point" : "chart-legend-entry";
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind,
+    source: "native",
+    locator: {
+      type: "format",
+      format: "pptx",
+      value: {
+        kind: "sub-object",
+        slide: slideLocator(context, slideIndex),
+        object: objectLocator(identity),
+        path: [subObjectSegment(target)],
+      },
+    },
+    fingerprint: subObjectFingerprint(
+      identity,
+      target,
+      slideId(context, slideIndex),
+      subObjectText(context, slideIndex, identity, target),
+    ),
+    reliability: copyReliability(PPTX_SUB_OBJECT_RELIABILITY),
+  };
+}
+
+function subObjectLabel(
+  target: PptxSubObjectTarget,
+  text: string | undefined,
+): string {
+  if (target.kind === "table-cell") {
+    return text?.trim()
+      ? `Cell ${target.rowIndex + 1}, ${target.cellIndex + 1}: ${text.replace(/\s+/gu, " ").trim().slice(0, 60)}`
+      : `Cell ${target.rowIndex + 1}, ${target.cellIndex + 1}`;
+  }
+  if (target.kind === "chart-series") return `Series: ${text?.trim() || `Series ${target.seriesIndex + 1}`}`;
+  if (target.kind === "chart-point") {
+    return text?.trim() ? `Point ${target.pointIndex + 1}: ${text.slice(0, 60)}` : `Point ${target.pointIndex + 1}`;
+  }
+  return `Legend entry ${target.legendIndex + 1}`;
+}
+
+function subObjectDescriptor(
+  reference: PptxOfficeReference,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  target: PptxSubObjectTarget,
+  text: string | undefined,
+): OfficeObjectDescriptor {
+  const kind = reference.kind === "region" || reference.kind === "slide" ? "shape" : reference.kind;
+  const objectLabel = identity.name?.trim() || `Object ${identity.shapeId}`;
+  return {
+    objectId: `pptx:sub-object:${identity.key}:${target.kind}:${JSON.stringify(target)}`,
+    draft: draftFromReference(reference),
+    label: subObjectLabel(target, text),
+    path: [
+      { kind: "document", label: "Presentation" },
+      { kind: "slide", label: `Slide ${slideIndex + 1}` },
+      ...identity.groupPath.map((id) => ({ kind: "group" as const, label: `Group ${id}` })),
+      { kind: identity.nodeType === "table" ? "table" : "chart", label: objectLabel },
+      { kind, label: subObjectLabel(target, text) },
+    ],
+    childrenState: "none",
+    ...(text ? { content: { text } } : {}),
+    facets: {
+      slideIndex,
+      objectKey: identity.key,
+      nodeType: identity.nodeType,
+      path: [subObjectSegment(target)],
+    },
+  };
+}
+
+function resolvePptxSubObjectReference(
+  context: PptxReferenceContext,
+  reference: PptxOfficeReference,
+  slideIndex: number,
+  identity: PptxObjectIdentity,
+  locator: Extract<PptxObjectLocator, { kind: "sub-object" }>,
+  currentRevision: boolean,
+): ResolveReferenceResult {
+  const segment = locator.path[locator.path.length - 1];
+  if (!segment) return { status: "unsupported", reasonCode: "pptx.sub-object-path-empty" };
+  try {
+    assertSubObjectTarget(context, slideIndex, identity, segment);
+  } catch (reason) {
+    const evidenceMissing = reason instanceof RangeError
+      && /evidence/u.test(reason.message);
+    return evidenceMissing
+      ? { status: "unsupported", reasonCode: "pptx.sub-object-evidence-unavailable" }
+      : { status: "not-found", reasonCode: "pptx.sub-object-not-found" };
+  }
+  const text = subObjectText(context, slideIndex, identity, segment);
+  if (currentRevision) {
+    return {
+      status: "exact",
+      reference,
+      descriptor: subObjectDescriptor(reference, slideIndex, identity, segment, text),
+    };
+  }
+  const relocated = currentFormatReference(context, reference, {
+    kind: "sub-object",
+    slide: slideLocator(context, slideIndex),
+    object: objectLocator(identity),
+    path: [segment],
+  }, subObjectFingerprint(identity, segment, slideId(context, slideIndex), text));
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: subObjectDescriptor(relocated, slideIndex, identity, segment, text),
+    reasonCodes: ["pptx.revision-changed", "pptx.object-key-and-index"],
+  };
+}
+
+export interface PptxBehaviorTarget {
+  behavior: PptxBehaviorRecord["behavior"];
+  /** Native id from `enumeratePptxBehaviors()`; deterministic per slide. */
+  instanceId: string;
+}
+
+/** Enumerate stage 4 behaviors for one slide. */
+export function enumeratePptxBehaviors(
+  context: PptxReferenceContext,
+  slideIndex: number,
+): readonly PptxBehaviorRecord[] {
+  return enumeratePptxSlideBehaviors(context, slideIndex);
+}
+
+/** Create an invisible-behavior reference draft (stage 4). */
+export function createPptxBehaviorReferenceDraft(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  target: PptxBehaviorTarget,
+): PptxOfficeReferenceDraft {
+  assertContext(context);
+  assertSlideIndex(context, slideIndex);
+  const record = enumeratePptxBehaviors(context, slideIndex)
+    .find((candidate) => candidate.instanceId === target.instanceId);
+  if (!record || record.behavior !== target.behavior) {
+    throw new RangeError(`PPTX behavior ${target.instanceId} is not present on the selected slide`);
+  }
+  return createPptxBehaviorDraftFromRecord(context, slideIndex, record);
+}
+
+/** Draft for an already-enumerated behavior record. */
+export function createPptxBehaviorDraftFromRecord(
+  context: PptxReferenceContext,
+  slideIndex: number,
+  record: PptxBehaviorRecord,
+): PptxOfficeReferenceDraft {
+  assertContext(context);
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: record.behavior,
+    source: "native",
+    locator: {
+      type: "format",
+      format: "pptx",
+      value: {
+        kind: "behavior",
+        slide: slideLocator(context, slideIndex),
+        behavior: record.behavior,
+        nativeId: record.instanceId,
+        ...(record.ownerObjectKey === undefined ? {} : { ownerObjectKey: record.ownerObjectKey }),
+      },
+    },
+    fingerprint: {
+      ancestorKeys: [
+        `pptx.slide-id:${slideId(context, slideIndex) ?? slideIndex}`,
+        `pptx.behavior:${record.behavior}`,
+        `pptx.behavior-native-id:${record.instanceId}`,
+      ],
+    },
+    reliability: copyReliability(PPTX_BEHAVIOR_RELIABILITY),
+  } as PptxOfficeReferenceDraft;
+}
+
+function behaviorDescriptor(
+  reference: PptxOfficeReference,
+  record: PptxBehaviorRecord,
+): OfficeObjectDescriptor {
+  return {
+    objectId: `pptx:behavior:${record.instanceId}`,
+    draft: draftFromReference(reference),
+    label: record.label,
+    path: record.path.map((entry) => ({ ...entry })),
+    childrenState: "none",
+    ...(record.content === undefined ? {} : { content: { ...record.content } }),
+    facets: { ...record.facets, behavior: record.behavior, instanceId: record.instanceId },
   };
 }
 
@@ -706,7 +1068,8 @@ export function resolvePptxReference(
   }
 
   const locator = pptxReference.locator.value;
-  if (locator.kind !== "slide" && locator.kind !== "object" && locator.kind !== "text-range") {
+  if (locator.kind !== "slide" && locator.kind !== "object" && locator.kind !== "text-range"
+    && locator.kind !== "sub-object" && locator.kind !== "behavior") {
     return { status: "unsupported", reasonCode: "pptx.reference-kind-unsupported" };
   }
   const candidates = slideCandidates(context, locator.slide, currentRevision, pptxReference.fingerprint);
@@ -725,6 +1088,46 @@ export function resolvePptxReference(
         return [slideDescriptor(current, index)];
       }
       const slide = slideAt(context, index)!;
+      if (locator.kind === "behavior") {
+        return enumeratePptxBehaviors(context, index)
+          .filter((record) => record.instanceId === locator.nativeId)
+          .map((record) => behaviorDescriptor(
+            currentFormatReference(context, pptxReference, {
+              kind: "behavior",
+              slide: slideLocator(context, index),
+              behavior: record.behavior,
+              nativeId: record.instanceId,
+              ...(record.ownerObjectKey === undefined ? {} : { ownerObjectKey: record.ownerObjectKey }),
+            }),
+            record,
+          ));
+      }
+      if (locator.kind === "sub-object") {
+        return slide.objects
+          .filter((identity) => identity.key === locator.object.objectKey)
+          .flatMap((identity) => {
+            const segment = locator.path[locator.path.length - 1];
+            if (!segment) return [];
+            try {
+              assertSubObjectTarget(context, index, identity, segment);
+            } catch {
+              return [];
+            }
+            const current = currentFormatReference(context, pptxReference, {
+              kind: "sub-object",
+              slide: slideLocator(context, index),
+              object: objectLocator(identity),
+              path: [segment],
+            });
+            return [subObjectDescriptor(
+              current,
+              index,
+              identity,
+              segment,
+              subObjectText(context, index, identity, segment),
+            )];
+          });
+      }
       if (locator.kind === "text-range") {
         return slide.objects.flatMap((identity) => {
           const objectMatches = identity.key === locator.object.objectKey
@@ -758,6 +1161,31 @@ export function resolvePptxReference(
   }
 
   const slide = slideAt(context, index)!;
+
+  if (locator.kind === "behavior") {
+    const record = enumeratePptxBehaviors(context, index)
+      .find((candidate) => candidate.instanceId === locator.nativeId);
+    if (!record || record.behavior !== locator.behavior) {
+      return { status: "not-found", reasonCode: "pptx.behavior-not-found" };
+    }
+    if (currentRevision) {
+      return { status: "exact", reference: pptxReference, descriptor: behaviorDescriptor(pptxReference, record) };
+    }
+    const relocated = currentFormatReference(context, pptxReference, {
+      kind: "behavior",
+      slide: slideLocator(context, index),
+      behavior: record.behavior,
+      nativeId: record.instanceId,
+      ...(record.ownerObjectKey === undefined ? {} : { ownerObjectKey: record.ownerObjectKey }),
+    });
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: behaviorDescriptor(relocated, record),
+      reasonCodes: ["pptx.revision-changed", "pptx.behavior-native-id"],
+    };
+  }
+
   let identities = slide.objects.filter((identity) => identity.key === locator.object.objectKey);
   let objectReason = "pptx.object-key-match";
   if (identities.length === 0) {
@@ -773,6 +1201,26 @@ export function resolvePptxReference(
     objectReason = "pptx.object-name-type-match";
   }
   if (identities.length === 0) return { status: "not-found", reasonCode: "pptx.object-not-found" };
+  if (locator.kind === "sub-object") {
+    if (identities.length === 0) return { status: "not-found", reasonCode: "pptx.object-not-found" };
+    if (identities.length > 1) {
+      const segment = locator.path[locator.path.length - 1];
+      return {
+        status: "ambiguous",
+        candidates: segment === undefined ? [] : identities.flatMap((identity) => {
+          try {
+            assertSubObjectTarget(context, index, identity, segment);
+          } catch {
+            return [];
+          }
+          return [subObjectDescriptor(pptxReference, index, identity, segment, subObjectText(context, index, identity, segment))];
+        }),
+        reasonCodes: ["pptx.multiple-object-matches"],
+      };
+    }
+    return resolvePptxSubObjectReference(context, pptxReference, index, identities[0]!, locator, currentRevision);
+  }
+
   if (locator.kind === "text-range") {
     if (!context.getObjectParagraphs) return { status: "unsupported", reasonCode: "pptx.text-evidence-unavailable" };
     const matches = identities.flatMap((identity) => textMatchesForIdentity(context, pptxReference, index, identity)

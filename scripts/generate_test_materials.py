@@ -4,6 +4,7 @@ import argparse
 import json
 import random
 import re
+import sys
 import zipfile
 from pathlib import Path
 from textwrap import wrap
@@ -35,6 +36,12 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Image as PdfImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from generate_test_materials_0_8 import (  # noqa: E402
+    new_fixture_builders,
+    update_corpus_manifests,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = ROOT / "apps" / "demo" / "public" / "samples"
@@ -1649,7 +1656,7 @@ def fixture_builders() -> dict[str, Callable[[], None]]:
     """Every generated fixture, keyed by file name, in generation order."""
     invoice_png = SAMPLES / "invoice.png"
     contract_png = SAMPLES / "contract-page.png"
-    return {
+    builders = {
         "invoice.png": lambda: make_invoice_png(invoice_png),
         "contract-page.png": lambda: make_contract_page_png(contract_png),
         "legal-contract.docx": lambda: make_docx_legal_contract(SAMPLES / "legal-contract.docx"),
@@ -1679,6 +1686,8 @@ def fixture_builders() -> dict[str, Callable[[], None]]:
         "field-citations.json": make_json_fixtures,
         "ocr-layout.json": make_json_fixtures,
     }
+    builders.update(new_fixture_builders(SAMPLES))
+    return builders
 
 
 def main(argv: list[str] | None = None):
@@ -1710,7 +1719,7 @@ def main(argv: list[str] | None = None):
 
     for name in selected:
         path = SAMPLES / name
-        if path.suffix in {".docx", ".xlsx"} and not name.startswith("corrupted."):
+        if path.suffix in {".docx", ".xlsx", ".xlsm", ".pptx"} and not name.startswith("corrupted."):
             normalize_ooxml_zip(path)
 
     manifest = []
@@ -1720,6 +1729,9 @@ def main(argv: list[str] | None = None):
     (SAMPLES / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    # The top-level manifest and the coverage matrix are derived from the files
+    # on disk, so a partial `--only` run still leaves both valid.
+    update_corpus_manifests(SAMPLES)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 
