@@ -46,6 +46,7 @@ const navItems = [
   { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-surface", title: "XLSX Surface", desc: "最小工作表网格：选择单元格、范围、行列、图表或区域。", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },
+  { path: "/csv-viewer", title: "CSV Viewer", desc: "Parse CSV/TSV with BOM and UTF-16 support, search cells, zoom, upload and download", status: "Ready", statusClass: "ready" },
   { path: "/pptx-surface", title: "PPTX Surface", desc: "纵向或单页舞台：选择幻灯片文字、可见对象、组合或区域。", status: "Ready", statusClass: "ready" },
   { path: "/pptx-viewer", title: "PPTX Viewer", desc: "View PPTX with browse/present modes, playback and search", status: "Ready", statusClass: "ready" },
   { path: "/pptx-headless", title: "PPTX 最小组合", desc: "组合文档、播放和舞台三个公开接口", status: "Ready", statusClass: "ready" },

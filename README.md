@@ -137,7 +137,7 @@ See the [reference selection guide](docs/guide/reference-selection.md) for `cont
 
 | Goal | Recommended entry |
 |---|---|
-| Display a file quickly | `DocxViewer`, `XlsxViewer`, `PdfViewer`, `PptxViewer` |
+| Display a file quickly | `DocxViewer`, `XlsxViewer`, `PdfViewer`, `PptxViewer`, `CsvViewer` |
 | Build your own toolbar around the document | `DocxDocumentSurface`, `XlsxSheetSurface`, `PdfSurface`, `PptxStage` |
 | Build a custom DOCX editor | `DocxEditor` or `useDocxEditor` |
 | Build a custom PPTX player | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
@@ -157,7 +157,7 @@ See the [reference selection guide](docs/guide/reference-selection.md) for `cont
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium Surface, Viewer, reference adapter, and rendering Runtime |
 | [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX preview/playback model, object identity, reference adapter, and browser controller |
 | [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | PPTX Stage, Viewer, thumbnails, Surface events, and playback composables |
-| [`@arcships/vue-ui`](packages/vue-ui/README.md) | Office selection primitives plus upload, signature, thumbnail, citation, and layout components |
+| [`@arcships/vue-ui`](packages/vue-ui/README.md) | Office selection primitives plus upload, signature, thumbnail, citation, layout, and CSV viewer components |
 
 The nine public packages share one release train. The npm stable line is `0.5.4`; the current source candidate is `0.7.0`. PPTX packages became public in `0.3.0`, and `0.4.0` added their minimal composable interface.
 

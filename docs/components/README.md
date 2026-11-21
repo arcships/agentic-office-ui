@@ -16,6 +16,7 @@
 | `DocxViewer` | `@arcships/vue-docx` | DOCX 查看、搜索、缩略图、批注和修订显示 | [DOCX](../guide/docx.md) |
 | `DocxEditor` | `@arcships/vue-docx` | DOCX 编辑、撤销重做和导入导出 | [DOCX](../guide/docx.md) |
 | `XlsxViewer` | `@arcships/vue-xlsx` | 工作表、图表、图片、公式和编辑界面 | [XLSX](../guide/xlsx.md) |
+| `CsvViewer` | `@arcships/vue-ui` | 只读 CSV/TSV 查看器：解析、搜索、缩放、上传/下载和行窗口表格 | [CSV](csv-viewer.md) |
 | `PdfViewer` | `@arcships/vue-pdf` | PDFium 查看、搜索、缩略图、旋转和下载 | [PDF](../guide/pdf.md) · [chrome](pdf-chrome.md) |
 | `PptxViewer` | `@arcships/vue-pptx` | 纵向连续浏览 PPTX；演示模式使用单页播放 | [PPTX](../guide/pptx.md) |
 | `PptxStage` | `@arcships/vue-pptx` | 无 chrome 的纵向 Surface 或单页播放舞台；提供选中、对象点击和右键事件 | [PPTX](../guide/pptx.md) |
@@ -86,6 +87,10 @@
 拆分结果列表：`splits`、`thumbnailImages`、`withFrameDivider`、`hideAddSplit`、`disableRemove`、`loading`、`error`、`emptyMessage`。事件为 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。页缩略图使用 `FileThumbnail`；支持页在组内/组间拖放，也提供键盘替代（`ArrowLeft/ArrowRight` 组内重排，`Ctrl/Cmd + ArrowLeft/ArrowRight` 跨组移动，拖拽手柄 `ArrowUp/ArrowDown` 重排拆分卡）。
 
 四个文档 block 的像素证据、状态矩阵、限制和 `FileSystem` / `SchemaBuilder` 的延期论证见[Document blocks：Extend 对齐](document-blocks.md)。
+
+### `CsvViewer`
+
+只读分隔文本查看器：`data` / `file` / `src` 三种输入，UTF-8 BOM 与 UTF-16LE/BE 解码，RFC 4180 解析，语义表格 + 行窗口虚拟化，搜索高亮、缩放、上传和下载。默认 560px，复用 `OfficeToolbar`、`OfficeZoomControl`、`OfficeSearchPopover` 和三个状态组件；完整 props、事件、实例方法和视觉差异见 [CSV Viewer](csv-viewer.md)。
 
 ### `Spinner`
 

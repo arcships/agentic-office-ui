@@ -85,6 +85,7 @@ async function captureRegionPreview() {
 | `ESignatureFields` | 电子签名字段面板（Signed/Unsigned、预览、导出） |
 | `FileUpload` | 文件上传（含校验、可选内置文件列表与 BorderBeam） |
 | `FileThumbnail` | 文件预览卡（方形/自定义比例、blur-in、loading/error/fallback） |
+| `CsvViewer` | 只读 CSV/TSV 查看器（560px surface、搜索、缩放、上传/下载、行虚拟化） |
 | `BoundingBoxCitations` | 引用框标注 / Extend review 字段面板（Actual/Expected、页高亮） |
 | `LayoutBlocks` | OCR 版面块面板与页叠加（置信度、页码、安全 markdown） |
 | `DocumentSplits` | 文档拆分结果列表（缩略图、增删、拖放与键盘重排） |
@@ -139,6 +140,8 @@ import { OfficeIcon, OfficeThemeProvider } from "@arcships/vue-ui"
 `captureRegion()` 返回的 `url` 由调用方释放；`OfficeRegionAnnotator` 只为 `Blob` 类型的 `image` 创建 URL，并在替换/卸载时撤销。
 
 `FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；默认值与 Extend 对齐：`accept` 为文档/图片白名单、`multiple=true`、`showFileList=true`（按 Extend 布局渲染大小/类型/Ready）。旧宿主可传 `accept=""`、`:multiple="false"`、`:show-file-list="false"` 恢复旧行为。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数；Extend 的默认 tile 没有 glyph/meta，因此这两个扩展默认保持 `false`。`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`。
+
+`CsvViewer`（#178）接受 `data` / `file` / `src` 三种输入，按 BOM 解码 UTF-8/UTF-16，解析 RFC 4180 CSV/TSV；提供 `load`、`error`、`download`、`update:data` 事件和 `runSearch`/`nextResult`/`setZoom`/`download`/`getState` 等实例方法。默认 560px，可用 `height` 或宿主 class 覆盖；视觉差异与决策见 [CSV Viewer ADR](https://github.com/arcships/agentic-office-ui/blob/master/docs/design/csv-viewer-adr.md)。
 
 
 ## 文档

@@ -88,6 +88,7 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 | `apps/v4/components/extend/layout-blocks.tsx` + `registry/new-york-v4/blocks/layout-blocks-block.tsx` | adapted | `LayoutBlocks` | `layout-blocks` | ✅ blocking | OCR 面板、叠加层、markdown；7 状态 0px（#164） |
 | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | adapted | `ESignatureFields` / `SignaturePad` | `e-signature` | ✅ blocking | Unsigned/Signed/Exporting/Preview；6 状态 0px（#164） |
 | `apps/v4/components/extend/document-splits.tsx` + `registry/new-york-v4/blocks/document-splits-block.tsx` | adapted | `DocumentSplits` | `document-splits` | ✅ blocking | 区间/缩略图/增删/键盘排序；8 状态 0px（#164） |
+| `apps/v4/components/extend/csv-viewer.tsx` | adapted | `CsvViewer` | — | — | 语义表格 + 行虚拟化替代 Glide canvas；解析/搜索/缩放/上传/下载和空/错/loading；结构测试 `tests/component/csv-viewer.test.mjs`，视觉差异见 [CSV ADR](../design/csv-viewer-adr.md)（#178） |
 | `apps/v4/components/extend/file-system.tsx` + `registry/new-york-v4/blocks/file-system-block.tsx` | reference-only | — | — | — | 延期：私有文件系统依赖，已记录在 [document-blocks.md](document-blocks.md) |
 | `apps/v4/registry/new-york-v4/blocks/schema-builder.tsx` | reference-only | — | — | — | 延期：独立表单构建器，已记录在 [document-blocks.md](document-blocks.md) |
 | Extend 选区/标注 blocks | reference-only | `OfficeRegionSelector` / `OfficeRegionAnnotator` / `OfficeObjectOutlineLayer` | — | — | 规范坐标选区原语，见[组件手册](README.md) |
@@ -101,6 +102,7 @@ toolbar / sheet tabs / status strip 的 markup 与 class 串全部来自固定 c
 | `@arcships/vue-xlsx` | `XlsxViewer` | `apps/v4/components/extend/xlsx-viewer.tsx`, `xlsx-editor.tsx` | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar`, `xlsx-ribbon` | ✅ blocking（#160：32 + 24 + 8 case；#170：32 case，全部 0px） |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxStage` | `apps/v4/components/extend/pptx-viewer.tsx` | 无上游可渲染 surface（presenter 布局私有） | 见 [pptx-chrome.md](pptx-chrome.md) |
 | `@arcships/vue-pptx` | `PptxViewer` / `PptxViewerToolbar` / `PptxSlideCard` / `PptxPresenterPanel` | `apps/v4/components/extend/pptx-viewer.tsx` | `pptx-toolbar`, `pptx-sorter`（presenter 无上游布局） | ✅ blocking（#161：40/40 + 24/24 像素 0；`pptx-presenter` 为 unreachable） |
+| `@arcships/vue-ui` | `CsvViewer` | `apps/v4/components/extend/csv-viewer.tsx` | 无（Glide canvas 与语义表格不可像素比较） | 结构/行为测试；视觉差异见 [CSV ADR](../design/csv-viewer-adr.md)（#178） |
 
 
 ## 7. 面板与文档

@@ -1,0 +1,10 @@
+﻿Opportunity,Account,Amount,Stage,Owner,Notes
+"Enterprise renewal","Acme, Inc.",48000,Closing,Ada Lovelace,"Follow-up in Q1.
+Legal review pending."
+"Data platform","上海远航",36000,Discovery,Grace Hopper,Initial call complete
+"Pilot expansion","Globex ""International""",12000,Proposal,Alan Turing,Needs security review
+"Support retainer","Initech",9000,Won,Ada Lovelace,
+"Regional rollout","Umbrella Health",27500,Negotiation,Katherine Johnson,Procurement wants a discount
+"Analytics add-on","Hooli",7200,Discovery,Grace Hopper,Budget confirmed
+"Compliance package","Soylent Corp",15400,Proposal,Alan Turing,
+"Mobile pilot","Vandelay Industries",5100,Closing,Ada Lovelace,Legal approved

@@ -13,7 +13,7 @@
 3. **我们不是从零写引擎。** `docx-core`、`xlsx-core`、`vue-docx`、`vue-xlsx` 的源码头直接标注了上游移植来源（例如 [packages/docx-core/src/index.ts:3](../../packages/docx-core/src/index.ts#L3) `@extend-ai/react-docx @ commit 6f70b92`）。缺的主要是 **chrome 组合 + 若干宿主能力**，不是渲染内核。
 4. **`unreachable` 只剩一条，而且理由错了。** `pptx-presenter` 的 manifest 理由写着 presenter 在 `@extend-ai/react-pptx` 内；实测 0.5.0 的 `dist` 里 `presenter` 出现 0 次，只有 `.rpv-notes` 与 `showNotes`。presenter 在公开层和 private 包都不存在 → 应归为 **office-reference**（#183）。
 5. **FileSystem / SchemaBuilder 的“私有依赖”论据不成立。** `@pierre/trees@1.0.0`、`@pierre/diffs@1.6.4` 均为 Apache-2.0（npm registry，2026-11-21），`@dnd-kit/*` 为 MIT。这两个 block 是**产品范围/工作量缺口**，必须用产品理由关闭，不能用许可证或“私有引擎”关闭（#179）。
-6. **CSV 不是 `not-used`，是 `product-gap`。** 上游 `csv-viewer.tsx` 975 行全公开；我们只有 XLSX 的 CSV 路径（[packages/vue-xlsx/src/composables/workbook-state.ts:585](../../packages/vue-xlsx/src/composables/workbook-state.ts#L585)），没有独立 block、没有 fixture、没有 parity surface（#178）。
+6. **CSV 不再是 `product-gap`。** 上游 `csv-viewer.tsx` 975 行全公开；我们新增独立 `CsvViewer`（`packages/vue-ui/src/components/CsvViewer.vue`）与 fixture/测试，同时保留 `XlsxViewer` 的 CSV 兼容路径（#178）。
 7. **L2（#182）的差异根因已定位**：我们的 demo 页面有 `product-header`（样例选择、props 面板），上游 docs 页只有 `[data-slot="component-preview"]` 演示框；且两侧容器高度不一致（上游演示多为固定 620/640px，我们 XLSX 用 `clamp(420px, 70vh, 760px)`）。L2 必须先固定 region + 尺寸，再谈像素。
 
 ## 1. 术语与分类（先读这一节）
@@ -69,7 +69,7 @@
 | **PPTX viewer** | done（解析 + playback + 对象索引） | done | done（`PptxViewer`/`PptxStage`/sorter） | done（`pptx-toolbar`/`pptx-sorter` 0px） | done（2 条 blocking；presenter pending） | public-vendored（chrome） | #161 |
 | **PPTX presenter** | done（notes 自 OOXML 读取） | done（timer/next） | done（`PptxPresenterPanel`） | done（Extend primitives 重组） | **missing**（上游无布局，private 包也无） | **office-reference** | #183 |
 | **PPTX chart internals** | partial（`getObjectChart` + snapshot + 可选 `geometry` 接缝） | partial（geometry 合同已定义；Surface 未接入） | missing | — | missing | **provider-dependent** | #184 / #176 |
-| **CSV** | partial（仅经 XLSX 路径） | missing | missing（无 `CsvViewer`） | missing | missing | **product-gap** | #178 |
+| **CSV** | done（解析/序列化/搜索/窗口在 `vue-ui/src/csv.ts`） | missing | done（`CsvViewer`） | done（toolbar/zoom/search/states） | structural（无 canvas 像素对照） | **public-vendored，已实现** | #178 |
 | **FileSystem** | missing（无文件树模型） | missing | missing | missing | missing | **product-gap** | #179 |
 | **SchemaBuilder** | missing（无 schema 持久化模型） | missing | missing | missing | missing | **product-gap** | #179 |
 
@@ -95,8 +95,7 @@
 | XLSX page setup dialog | office-reference | **实现（#171）** | 上游 `xlsx-editor.tsx` 没有独立 dialog，因此参考 Excel 页面设置（四选项卡的可写子集）；`XlsxPageSetupDialog` + `setPageSetup` + `_xlnm.Print_Area` | #171 |
 | XLSX pivot 控件 | product-gap | **不计划（0.8/0.9）** | 上游 pivot 是 2,034+503 行专用 UI，且需要 pivot 编辑能力；无宿主消费方 | #160 文档已声明 |
 | PPTX presenter | office-reference | **调查 → 实现** | 公开层与 0.5.0 包内都没有 presenter；必须由 Office 产品规格定义（#183） | #183 |
-| PPTX chart internals | provider-dependent | **定义 provider → 接入（合同已落地）** | 几何只在 renderer 内产生；`pptx-core` 已有 `PptxChartSnapshot` 与 `getObjectChart` 钩子，并新增可选 `geometry` 接缝；XLSX 已有具体 provider 可作样例 | #184 / #176 |
-| CSV 独立 block | product-gap | **调查（ADR #178）** | 上游全公开可 vendored；问题是要不要第二套 grid 运行时 | #178 |
+
 | FileSystem | product-gap | **调查 → 决定（#179）** | 依赖公开（Apache-2.0），真正成本是文件模型 + 四个 viewer 集成 | #179 |
 | SchemaBuilder | product-gap | **调查 → 决定（#179）** | 缺 schema 持久化契约与宿主入口，不是许可证问题 | #179 |
 
@@ -386,6 +385,8 @@
 
 ## 8. CSV
 
+> **状态（#178，2026-11-21）**：已实现独立 `CsvViewer`（`@arcships/vue-ui`）。决策、API 和视觉差异见 [csv-viewer-adr.md](csv-viewer-adr.md)；组件合同见 [../components/csv-viewer.md](../components/csv-viewer.md)。
+
 ### 8.1 上游组件树
 
 | 文件 | 行数 | 公开入口 | 作用 | DOM 归属 |
@@ -396,44 +397,46 @@
 
 ### 8.2 状态 / 命令 / 渲染管线
 
-| 环节 | 上游 | 我们 |
+| 环节 | 上游 | 我们（#178） |
 |---|---|---|
-| 数据 | `data?: string`（CSV 文本）+ 上传文件 `file.text()`；只有 `headers/rows` 字符串数组，没有工作簿/单元格模型 | CSV → XLSX 转换：`convertCsvBufferToXlsx`（`vue-xlsx/src/composables/workbook-state.ts:585`）+ `Workbook.fromCsvString`（duke-sheets wasm） |
-| 状态 | 组件内 `useState`（parsed/zoom/selection/search） | `XlsxViewer` controller（工作簿模型） |
-| 渲染 | Glide canvas + 自定义 `Theme`（:700 起） | XLSX canvas grid |
-| 搜索 | 内部 popover，`CSV_SEARCH_BATCH_ROW_COUNT = 500`、debounce 300ms | `useXlsxSearch`（XLSX 语义） |
-| 导出 | 文件菜单下载原始 CSV | `exportCsv`（重新序列化，格式信息丢失） |
+| 数据 | `data?: string`（CSV 文本）+ 上传文件 `file.text()`；只有 `headers/rows` 字符串数组，没有工作簿/单元格模型 | `CsvViewer` 的 `data` / `file` / `src`；`parseCsvText` + `decodeCsvBuffer`（UTF-8/BOM、UTF-16LE/BE） |
+| 状态 | 组件内 `useState`（parsed/zoom/selection/search） | Vue refs + `getState()` expose；`load` / `error` / `download` / `update:data` 事件 |
+| 渲染 | Glide canvas + 自定义 `Theme`（:700 起） | 语义 `<table role="grid">` + 行窗口虚拟化；`OfficeToolbar` / `OfficeZoomControl` / `OfficeSearchPopover` / states |
+| 搜索 | 内部 popover，`CSV_SEARCH_BATCH_ROW_COUNT = 500`、debounce 300ms | `OfficeSearchPopover` + `findCsvMatches`（500 行/批，debounce 300ms）+ `<mark>` 高亮 |
+| 导出 | 文件菜单下载原始 CSV | 文件菜单 `download()`；`serializeCsv` 重新序列化（RFC 4180，默认 `\r\n`） |
 
 ### 8.3 我们的层
 
 | 层 | 覆盖 | 缺 |
 |---|---|---|
-| core | 仅 URL/格式识别（`xlsx-url-policy.ts:302`）；CSV→XLSX 转换实际住在 `vue-xlsx`（`workbook-state.ts:585`），**层次错位** | 独立 CSV 模型（分隔符、引号、编码探测） |
-| interaction | 无 | CSV 单元格/区域引用 |
-| vue | `XlsxViewer` 接受 `.csv` | `CsvViewer` |
-| ui | 无 | CSV toolbar/搜索 |
+| core | CSV 解析/序列化/搜索/可见窗口在 `vue-ui/src/csv.ts`（纯函数，公共导出） | 独立 `*-core` 包（当前 UI 包内足够；若需要 Worker 分块再下沉） |
+| interaction | 无 | CSV 单元格/区域引用（0.9 候选） |
+| vue | `CsvViewer`（`@arcships/vue-ui`）；`XlsxViewer` 保留 CSV 兼容路径 | 编辑事务、冻结列、列宽拖拽 |
+| ui | `CsvViewer` 复用 `OfficeToolbar`/`OfficeToolbarGroup`/`OfficeToolbarSeparator`/`OfficeZoomControl`/`OfficeSearchPopover`/`OfficeEmptyState`/`OfficeErrorState`/`OfficeLoadingState`/`OfficeDropdownMenu` | 独立 `csv-viewer` L1 像素 surface（canvas 与 DOM 不可逐像素比较） |
 
 ### 8.4 参考可行性
 
 | 能力 | 分类 | 证据 | 缺口 |
 |---|---|---|---|
-| CSV viewer block | `product-gap` | `apps/v4/components/extend/csv-viewer.tsx:622` 全公开（无 `@extend-ai/*`，grid 走 `glide.DataEditor` :948） | 我们没有该 block、没有 fixture、没有 surface；`docs/upstream/extend-ui.md` 仍写 `not-used`，与事实不一致 |
-| CSV 读取能力 | `public-vendored`（经 XLSX）**partial** | `docs/guide/xlsx.md:449` “CSV 输入” | 无独立 block；无“只读/格式丢失/编码”限制说明 |
+| CSV viewer block | `public-vendored` **done**（结构/行为） | `apps/v4/components/extend/csv-viewer.tsx:622` 全公开；`CsvViewer.vue` 带 MIT 来源头 | 无 Glide canvas；视觉差异记录在 ADR，L1 不设 blocking surface |
+| CSV 读取能力 | `public-vendored`（经 XLSX）**done** | `docs/guide/xlsx.md` “CSV 输入” + “CSV 路径的限制” | 无独立 CSV 编辑能力（明确只读） |
 
-### 8.5 实现方案（#178 ADR 要回答的问题）
+### 8.5 决策（#178 ADR）
 
-| 选项 | 内容 | 成本 | 风险 |
-|---|---|---|---|
-| A. 复用 `XlsxViewer` | 现状 + 文档化限制 | S | 视觉/交互与上游 CSV 不一致；无法做 CSV 专属 L1 |
-| B. 独立 `CsvViewer`（推荐若要“与上游一致”） | vendor `csv-viewer.tsx`（975 行）+ `@glideapps/glide-data-grid` + `papaparse`；L1 `csv-viewer`；L2 `/csv` | M（3–5 人日） | 第二套 grid 运行时（canvas）；主题/缩放/搜索重复实现 |
-| C. 不提供独立 block | 明确 `not planned` + 产品理由 | S | 与上游组件清单永久分叉 |
+采用独立 `CsvViewer`，同时保留 `XlsxViewer` 的 CSV 兼容路径：
 
-建议：**先做 A 的文档收口**（0.8.1），把 B 作为 0.9 候选；若 B，则 `CsvViewer.vue` 只依赖 `papaparse` + glide，不引入 XLSX controller。
+| 选项 | 结论 |
+|---|---|
+| A. 复用 `XlsxViewer` | 保留为兼容入口；CSV 专属 API/视觉不做 |
+| B. 独立 `CsvViewer` | **采用**：不引入 Glide/papaparse，复用共享 chrome；语义表格 + 行虚拟化 |
+| C. 不提供独立 block | 拒绝：上游公开且宿主有真实消费需求 |
 
-### 8.6 L1 / L2 验收
+### 8.6 验收
 
-- L1（若 B）：`csv-viewer`（default/search/empty/error 4 状态）。
-- L2（若 B）：`/csv` vs `/docs/components/csv-tsv-viewer`。
+- 组件：`tests/component/csv-viewer.test.mjs`（解析/搜索/缩放/上传/下载/空/错误/loading/UTF-16/src/大表）。
+- fixture：`test-data/csv/sales-pipeline.csv`（UTF-8 BOM、引号逗号、引号换行、CJK、短行）。
+- demo：`/csv-viewer`（`apps/demo/src/pages/CsvViewerPage.vue`）。
+- L1：不新增 `csv-viewer` 像素 surface；共享 chrome surface 继续覆盖 toolbar/zoom/search/states。L2：`/csv-viewer` 为产品演示，不作为上游路由像素对照。
 
 ---
 
@@ -535,7 +538,7 @@
 | `xlsx-ribbon` | `xlsx-editor.tsx:1319` 格式行（静态 resting 子集，vendored） | **done（#170）**：32/32 pass、0px、有基线 | #170 |
 | `xlsx-page-setup` | 无上游（office-reference） | 视 #171 | #171 |
 | `pdf-editor-toolbar` / `pdf-editor-panels` | `pdf-editor.tsx:4069`、`pdf-editor-panels.tsx:144` | 新增 | #172 |
-| `csv-viewer` | `csv-viewer.tsx:622` | 视 #178 | #178 |
+| `csv-viewer` | `csv-viewer.tsx:622` | **done（#178）**：结构/行为测试；不做 Glide canvas 像素对照 | #178 |
 | `file-system` | `file-system.tsx:1440` | 视 #179 | #179 |
 | `schema-builder` | `schema-builder.tsx:2338` | 视 #179 | #179 |
 | `pptx-presenter` | 无上游（office-reference 截图） | 改造 | #183 |
@@ -558,7 +561,7 @@
 | `/pptx-viewer` | `/docs/components/pptx-viewer` | `components/pptx-viewer-demo.tsx:33` | 同上 | P1 |
 | `/pdf-viewer` | `/docs/components/pdf-viewer` | `components/pdf-viewer-docs.tsx:207` | 同上 | P1 |
 | `/pdf-editor` | `/docs/components/pdf-editor` | `components/pdf-editor-docs.tsx:100` | 新建 demo 页 | P3 |
-| `/csv` | `/docs/components/csv-tsv-viewer` | `components/csv-viewer-docs.tsx:47` | 视 #178 | P3 |
+| `/csv-viewer` | `/docs/components/csv-tsv-viewer` | `components/csv-viewer-docs.tsx:47` | 产品演示；Glide canvas 与 DOM table 不做像素对照（#178 ADR） | P3 |
 | `/file-system` | `/docs/components/file-system` | `components/file-system-docs.tsx:464` | 视 #179 | P3 |
 | `/schema-builder` | `/docs/components/schema-builder` | `components/schema-builder-demo.tsx:9` | 视 #179 | P3 |
 
@@ -633,7 +636,7 @@
 | DOCX/XLSX port 基线过期 | 行为差异难归因 | 先做 0.15.0/0.23.0 的逐文件 diff，再补功能 |
 | presenter 无参考 | 继续 `pending` | #183 产出 office-reference 规格 + 截图基线 |
 
-**建议顺序**：#172（PDF surface 决策）→ #183（presenter 规格）→ #184（chart provider）→ #178（CSV ADR）→ #179（FileSystem/SchemaBuilder 决策）→ #171（page setup）→ #182 P1 routes → #176（对象矩阵收尾）。
+**建议顺序**：#172（PDF surface 决策）→ #183（presenter 规格）→ #184（chart provider）→ ~~#178（CSV ADR，已实现）~~ → #179（FileSystem/SchemaBuilder 决策）→ #171（page setup）→ #182 P1 routes → #176（对象矩阵收尾）。
 
 ---
 
@@ -651,7 +654,7 @@
 | XLSX 公式行归属 | `xlsx-editor.tsx:1355`（`formulaDraft`）、:1502（`commitFormula`）在公开文件内 |
 | 许可证 | npm registry：`@pierre/trees` apache-2.0、`@pierre/diffs` apache-2.0、`@glideapps/glide-data-grid` MIT、`papaparse` MIT、`@dnd-kit/core` MIT、`@aiden0z/pptx-renderer` Apache-2.0、`@embedpdf/core` Apache-2.0 |
 | 我们的 port 来源 | `packages/docx-core/src/index.ts:3`；`docs/xlsx-migration-architecture.md`（`f285a1c`） |
-| CSV 路径 | `packages/vue-xlsx/src/composables/workbook-state.ts:585`；`docs/guide/xlsx.md:449` |
+| CSV 路径 | `packages/vue-xlsx/src/composables/workbook-state.ts:585`；`docs/guide/xlsx.md` “CSV 输入”；独立 block `packages/vue-ui/src/components/CsvViewer.vue` |
 | PPTX renderer | `packages/pptx-core/src/browser.ts:8`（`@aiden0z/pptx-renderer`）+ `patches/@aiden0z__pptx-renderer@1.2.4.patch` |
 | L1 surfaces | `tools/parity-fixtures/manifest.json`（26 条，25 blocking，1 pending） |
 | L2 region | 上游 `[data-slot="component-preview"]`（`docx-viewer-docs.tsx:42` 等）；我们 `.viewer-container`（`apps/demo/src/pages/*.vue`） |
@@ -667,9 +670,9 @@
 | `reference-only` | `office-reference` / `provider-dependent` / `product-gap`（三选一，需在本文对应格式节写明） |
 | `not-used` | `product-gap`（必须补产品理由）或 `office-reference` |
 
-当前需要修正的 attribution 叙述（不在本 issue 改状态，由 owner issue 处理）：
+当前需要修正的 attribution 叙述（`#178` 已在本 issue 完成，其余由 owner issue 处理）：
 
-- `csv-viewer.tsx` 写着 “CSV is out of scope for the 0.8 Office surfaces”，与 #178 的“重新评估”冲突 → 由 #178 决定后改成 `reference-only` + 产品理由，或实现。
+- `csv-viewer.tsx` 已从 `not-used` 改为 `adapted`，target 为 `packages/vue-ui/src/components/CsvViewer.vue`；MIT 来源头已补，视觉差异见 [csv-viewer-adr.md](csv-viewer-adr.md)。
 - `file-system.tsx` / `schema-builder.tsx` 的 notes 把依赖描述成不可用；实际是 Apache-2.0，需要改写为工作量/产品范围理由（#179）。
 
 ## 附录 C：issue 更新建议（可直接贴到对应 issue）
@@ -678,7 +681,7 @@
 - **#183**：`unreachableReason` 中“presenter 在私有 `@extend-ai/react-pptx` 内”不成立（0.5.0 dist 中 `presenter` 出现 0 次，只有 `showNotes`/`.rpv-notes`）。presenter 应归 `office-reference`；`pptx-presenter` 的验收改为 office-reference 截图 + 组件测试。
 - **#184**：已产出 [chart-internals-reference.md](chart-internals-reference.md) + `office-interaction` geometry 合同 + XLSX 2-D bar/line/combo provider（fixture 几何与 SVG parity 各一条测试）；PPTX 只留 `PptxChartSnapshot.geometry?` 接缝，pie/scatter/3-D/手动 layout/Surface 消费列为 follow-up。
 - **#176**：PPTX chart internals 行改 `provider-dependent`；PDF 附件/OCG/签名/权限保持 `provider-dependent`（视觉识别器需 provider）；DOCX 页眉/脚注字段与嵌套表格为 `product-gap`（可在 #159 follow-up 实现）。
-- **#178**：CSV 的现状不是 `not-used`，是 `product-gap`；ADR 在 A/B/C 中选一个，B 需要新增 `csv-viewer` L1 + `/csv` L2。
+- **#178（已实现）**：CSV 不是 `not-used`；采用独立 `CsvViewer`（语义表格 + 行虚拟化，不引入 Glide/papaparse），新增 fixture/测试/demo 和 ADR；`/csv-viewer` 是产品演示而非上游像素 surface。
 - **#179**：FileSystem/SchemaBuilder 的“私有依赖”理由不成立（Apache-2.0）。若不做，写成 “无宿主消费方 + 文件模型/schema 契约缺失”；若做，按 §9.5/§10.5 拆 issue。
 - **#171**（已实现）：上游没有独立 page setup dialog，所以参考是 office-reference（Excel 页面设置），不是上游像素；规格与未做项见 [xlsx-page-setup-reference.md](xlsx-page-setup-reference.md)。
 - **#172**（已实现）：PDF editor 的 toolbar 在 `pdf-editor.tsx` 内是公开的；`PdfSurface` 选择方案 B——增加可选 `showToolbar`（默认 `false`），复用 `PdfViewerToolbar`，layout 组因 `pageLayout` 受控而 disabled。默认足迹、现有事件/expose 不变；`PdfEditor` 本身仍是后续工作，避免出现“editor 有 toolbar、Surface 没有”的双标准。

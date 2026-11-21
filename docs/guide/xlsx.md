@@ -489,3 +489,14 @@ const controller = useXlsxViewerController({
 ```
 
 远程 CSV 根据最终 URL 的 `.csv` 扩展名或响应的 `Content-Type: text/csv` 识别。CSV 会作为单工作表打开，支持 UTF-8（含 BOM）以及带 BOM 的 UTF-16；格式、图表和多工作表等 XLSX 专属信息不属于 CSV 文件内容。
+
+### CSV 路径的限制
+
+`XlsxViewer` 的 CSV 路径是“把 CSV 当单工作表打开”的兼容入口，不是 CSV 专用 viewer：
+
+- **只读语义**：CSV 没有单元格格式、公式、合并、图表、条件格式、数据验证或多工作表；打开后看到的是普通工作表。导出 `.xlsx` 会把这些 XLSX 专属信息写成默认值，不保留“CSV 原本没有”的状态。
+- **格式丢失**：CSV→XLSX 转换只保留文本和列位置；原文件的引号、分隔符、行尾风格不会在导出时恢复。下载回 CSV 使用 `exportCsv` 重新序列化，默认逗号 + 平台换行，不能保证与源文件逐字节一致。
+- **编码**：只支持 UTF-8（含 BOM）和带 BOM 的 UTF-16LE/BE。没有 BOM 的 GBK/GB18030、Shift-JIS、Latin-1 等编码会被当成 UTF-8 解码，可能出现替换字符；需要这些编码时，宿主应先用 `TextDecoder` 转成字符串，再交给 `CsvViewer` 的 `data` prop。
+- **大文件**：CSV 走 Workbook 转换路径，会把整份文本构造成工作表模型；超大 CSV 的内存/时间成本高于独立 `CsvViewer` 的行窗口渲染。
+
+需要独立的 560px CSV 查看器（搜索高亮、上传、下载、UTF-16 自动解码、虚拟化行窗口）时使用 [`CsvViewer`](../components/csv-viewer.md)；它的决策与视觉差异见 [CSV Viewer ADR](../design/csv-viewer-adr.md)。
