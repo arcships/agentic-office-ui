@@ -2,7 +2,9 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
-## [Unreleased]
+## [0.8.1] - 2026-11-21
+
+0.8.1 closes the 0.8 follow-up audit: L1/L2 parity, a11y and style debt, PDF route alignment, XLSX page setup/ribbon, DOCX/PPTX fixes, CSV/FileSystem/SchemaBuilder blocks, and object-selection stage 2–4 rows.
 
 ### FileSystem & SchemaBuilder blocks (#179)
 - New `FileSystem` in `@arcships/vue-ui`: Finder-style browser over an explicit nested `FileSystemItem[]` tree, with breadcrumb navigation, back/forward history, list/grid toggle, `FileThumbnail` previews for image entries, selection (`update:selectedId`/`selection-change`), `open-folder`/`open-file`/`delete-item` events, empty/loading/error states, a read-only mode and roving-tabindex keyboard navigation (arrows, Home/End, Enter/Space, ArrowRight, ArrowLeft/Backspace, Delete). No `@pierre/trees` dependency; the exported `file-system.ts` helpers build the index, order children, resolve breadcrumbs, format sizes and resolve preview URLs.
