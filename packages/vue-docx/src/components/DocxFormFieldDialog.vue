@@ -1,38 +1,17 @@
 <template>
-  <div
-    v-if="open"
-    class="docx-form-field-dialog-backdrop"
-    :class="{ 'docx-form-field-dialog-backdrop--dark': isDark }"
-    :data-office-theme="isDark ? 'dark' : 'light'"
-    data-office-density="comfortable"
-    data-docx-thumbnail-exclude="true"
-    @mousedown.self="close()"
+  <OfficeDialog
+    :open="open"
+    :title="m.docx.formFieldDialog.title"
+    :close-label="m.docx.formFieldDialog.close"
+    close-test-id="docx-form-field-dialog-close"
+    content-test-id="docx-form-field-dialog"
+    :content-data="contentData"
+    @update:open="onDialogOpenChange"
   >
     <div
-      ref="dialogEl"
       class="docx-form-field-dialog"
-      role="dialog"
-      aria-modal="true"
-      tabindex="-1"
-      :aria-label="m.docx.formFieldDialog.title"
-      data-testid="docx-form-field-dialog"
-      :data-docx-form-field-dialog="true"
-      @keydown.esc.stop.prevent="close()"
+      :class="{ 'docx-form-field-dialog--dark': isDark }"
     >
-      <OfficeCard class="docx-form-field-dialog__card">
-      <header class="docx-form-field-dialog__header">
-        <h2 class="docx-form-field-dialog__title">{{ m.docx.formFieldDialog.title }}</h2>
-        <OfficeIconButton
-          variant="ghost"
-          size="icon-sm"
-          class="docx-form-field-dialog__close"
-          :label="m.docx.formFieldDialog.close"
-          icon="x"
-          @click="close()"
-        />
-      </header>
-
-      <div class="docx-form-field-dialog__body">
         <label class="docx-form-field-dialog__row">
           <span class="docx-form-field-dialog__label">{{ m.docx.formFieldDialog.fieldType }}</span>
           <select
@@ -183,40 +162,38 @@
           <span class="docx-form-field-dialog__label">{{ m.docx.formFieldDialog.required }}</span>
         </label>
 
-        <p v-if="error" class="docx-form-field-dialog__error" role="alert">
-          {{ error }}
-        </p>
-      </div>
-
-      <footer class="docx-form-field-dialog__footer">
-        <OfficeButton
-          type="button"
-          size="sm"
-          class="docx-form-field-dialog__save"
-          data-testid="docx-form-field-dialog-save"
-          @click="submit"
-        >
-          {{ m.docx.formFieldDialog.save }}
-        </OfficeButton>
-        <OfficeButton
-          type="button"
-          variant="outline"
-          size="sm"
-          class="docx-form-field-dialog__cancel"
-          data-testid="docx-form-field-dialog-cancel"
-          @click="close()"
-        >
-          {{ m.docx.formFieldDialog.cancel }}
-        </OfficeButton>
-      </footer>
-      </OfficeCard>
+      <p v-if="error" class="docx-form-field-dialog__error" role="alert">
+        {{ error }}
+      </p>
     </div>
-  </div>
+
+    <template #footer>
+      <OfficeButton
+        type="button"
+        size="sm"
+        class="docx-form-field-dialog__save"
+        data-testid="docx-form-field-dialog-save"
+        @click="submit"
+      >
+        {{ m.docx.formFieldDialog.save }}
+      </OfficeButton>
+      <OfficeButton
+        type="button"
+        variant="outline"
+        size="sm"
+        class="docx-form-field-dialog__cancel"
+        data-testid="docx-form-field-dialog-cancel"
+        @click="close()"
+      >
+        {{ m.docx.formFieldDialog.cancel }}
+      </OfficeButton>
+    </template>
+  </OfficeDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from "vue"
-import { OfficeButton, OfficeCard, OfficeIconButton } from "@arcships/vue-ui"
+import { OfficeButton, OfficeDialog } from "@arcships/vue-ui"
 import type {
   DocxEditorController,
   DocxFormFieldLocation,
@@ -253,6 +230,14 @@ const emit = defineEmits<{
 
 const m = useDocxMessages()
 const isDark = computed(() => props.controller.documentTheme === "dark")
+const contentData = computed(() => ({
+  "data-docx-form-field-dialog": true,
+  "data-office-theme": isDark.value ? "dark" : "light",
+  "data-office-density": "comfortable",
+  "data-docx-thumbnail-exclude": "true",
+  // Reka's dialog sets role but not aria-modal; the editor contract keeps it.
+  "aria-modal": "true",
+}))
 
 interface FormFieldDialogDraft {
   fieldType: FormFieldType
@@ -265,7 +250,6 @@ interface FormFieldDialogDraft {
   options: Array<{ displayText: string; value: string }>
 }
 
-const dialogEl = ref<HTMLElement | undefined>()
 const firstFieldEl = ref<HTMLInputElement | undefined>()
 const error = ref("")
 
@@ -313,21 +297,29 @@ watch(
       return
     }
     draft.value = draftFromField(props.field)
-    void nextTick(() => {
-      firstFieldEl.value?.focus?.()
-      dialogEl.value?.focus?.()
-    })
+    focusFirstField()
   }
 )
 
 onMounted(() => {
-  if (props.open) {
-    void nextTick(() => {
-      firstFieldEl.value?.focus?.()
-      dialogEl.value?.focus?.()
-    })
-  }
+  if (props.open) focusFirstField()
 })
+
+/**
+ * Reka's dialog focuses the first tabbable control (the field-type select),
+ * while the form-field dialog has always landed on the name field. Wait for
+ * the primitive's focus pass, then move focus to the first property field.
+ */
+function focusFirstField(): void {
+  void nextTick(() => {
+    void nextTick(() => firstFieldEl.value?.focus?.())
+  })
+}
+
+/** Esc, backdrop and the close button all funnel into the public close event. */
+function onDialogOpenChange(value: boolean): void {
+  if (!value) close()
+}
 
 function addOption(): void {
   draft.value.options.push({ displayText: "", value: "" })
@@ -416,56 +408,13 @@ defineExpose({
 </script>
 
 <style scoped>
-.docx-form-field-dialog-backdrop {
-  align-items: center;
-  background: rgba(15, 23, 42, 0.32);
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  position: fixed;
-  z-index: 60;
-}
+/* `OfficeDialog` owns the modal shell (backdrop, header, body scroll, footer),
+ * so this block only lays out the form fields inside the slot. */
 .docx-form-field-dialog {
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
-  max-width: 460px;
-  min-width: 320px;
-  outline: none;
-  width: 32rem;
-}
-.docx-form-field-dialog__card {
-  background: var(--office-card, #ffffff);
-  border-color: var(--office-border, #d1d5db);
-  color: var(--office-card-foreground, #111827);
-  max-height: 80vh;
-  overflow: auto;
-  padding: var(--office-ui-space-4, 16px);
-  box-shadow: var(--office-shadow-sm, 0 20px 48px rgba(15, 23, 42, 0.28));
-}
-.docx-form-field-dialog__card :deep(.office-card__content) {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0;
-}
-.docx-form-field-dialog__header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
-.docx-form-field-dialog__title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0;
-}
-.docx-form-field-dialog__close {
-  color: var(--office-muted-foreground, #6b7280);
-}
-.docx-form-field-dialog__body {
-  display: flex;
-  flex-direction: column;
   gap: 10px;
+  min-inline-size: 0;
 }
 .docx-form-field-dialog__row {
   align-items: center;
@@ -476,12 +425,12 @@ defineExpose({
   gap: 6px;
 }
 .docx-form-field-dialog__label {
-  color: #4b5563;
+  color: var(--office-muted-foreground, #4b5563);
   flex: 0 0 7.5rem;
   font-size: 12px;
 }
 .docx-form-field-dialog__control {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--office-border, #d1d5db);
   border-radius: 4px;
   flex: 1;
   font: inherit;
@@ -490,8 +439,8 @@ defineExpose({
   padding: 4px 6px;
 }
 .docx-form-field-dialog__control:focus {
-  border-color: #3b82f6;
-  outline: 1px solid #3b82f6;
+  border-color: var(--office-primary, #3b82f6);
+  outline: 1px solid var(--office-primary, #3b82f6);
 }
 .docx-form-field-dialog__options {
   display: flex;
@@ -511,19 +460,14 @@ defineExpose({
   align-self: flex-start;
 }
 .docx-form-field-dialog__hint {
-  color: #6b7280;
+  color: var(--office-muted-foreground, #6b7280);
   font-size: 12px;
   margin: 0;
 }
 .docx-form-field-dialog__error {
-  color: #b91c1c;
+  color: var(--office-destructive-foreground, #b91c1c);
   font-size: 12px;
   margin: 0;
-}
-.docx-form-field-dialog__footer {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 .docx-form-field-dialog__save,
 .docx-form-field-dialog__cancel {
@@ -534,30 +478,22 @@ defineExpose({
   border-color: var(--office-primary, #2563eb);
   color: var(--office-primary-foreground, #ffffff);
 }
-.docx-form-field-dialog-backdrop--dark {
-  background: rgba(2, 6, 23, 0.64);
+.docx-form-field-dialog--dark .docx-form-field-dialog__label {
+  color: var(--office-muted-foreground, #a1a1aa);
 }
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__card {
-  background: var(--office-card, #18181b);
+.docx-form-field-dialog--dark .docx-form-field-dialog__control {
+  background: var(--office-background, #09090b);
   border-color: var(--office-border, #3f3f46);
-  color: var(--office-card-foreground, #f4f4f5);
+  color: var(--office-popover-foreground, #f4f4f5);
 }
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__label {
-  color: #a1a1aa;
+.docx-form-field-dialog--dark .docx-form-field-dialog__option-remove,
+.docx-form-field-dialog--dark .docx-form-field-dialog__add-option,
+.docx-form-field-dialog--dark .docx-form-field-dialog__cancel {
+  background: var(--office-muted, #27272a);
+  border-color: var(--office-border, #3f3f46);
+  color: var(--office-popover-foreground, #e4e4e7);
 }
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__control {
-  background: #09090b;
-  border-color: #3f3f46;
-  color: #f4f4f5;
-}
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__option-remove,
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__add-option,
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__cancel {
-  background: #27272a;
-  border-color: #3f3f46;
-  color: #e4e4e7;
-}
-.docx-form-field-dialog-backdrop--dark .docx-form-field-dialog__hint {
-  color: #a1a1aa;
+.docx-form-field-dialog--dark .docx-form-field-dialog__hint {
+  color: var(--office-muted-foreground, #a1a1aa);
 }
 </style>

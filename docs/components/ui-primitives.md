@@ -227,7 +227,11 @@ Slot：`trigger`、`title`、`description`、`header`、默认内容、`footer`�
 ```
 
 Popover 支持 `#trigger`、`label`、`triggerVariant`、`triggerSize`、`side`、`align`、
-`sideOffset`、`alignOffset`、`modal` 和 `v-model:open`。Tooltip 支持 `content`、`#content`、
+`sideOffset`、`alignOffset`、`modal` 和 `v-model:open`。定位也可以不依赖可见 trigger：
+传 `#anchor` 插槽，或传 `virtualRef`（一个带 `getBoundingClientRect()` 的虚拟元素），内部
+渲染 Reka `PopoverAnchor`；虚拟锚点自身是零尺寸且不参与布局。`contentTestId` 给浮层
+surface 加 `data-testid`，`contentData` 追加 surface 属性；未声明的属性和原生事件监听器也
+落到 surface（例如 `aria-label`、`@pointerenter`/`@pointerleave`）。Tooltip 支持 `content`、`#content`、
 `side`、`align`、`sideOffset`、`delayDuration`（默认 300ms）和 `disabled`；悬浮或聚焦后显示，
 失焦/Esc 隐藏，并通过 `aria-describedby` 关联 trigger。
 

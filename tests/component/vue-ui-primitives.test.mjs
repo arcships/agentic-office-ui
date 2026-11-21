@@ -731,6 +731,69 @@ test("Popover opens on the trigger and closes on Escape", async (t) => {
   assert.equal(open.value, false);
 });
 
+test("Popover anchors on a virtual reference and forwards surface contracts", async (t) => {
+  let referenceCalls = 0;
+  const pointer = [];
+  const virtualRef = {
+    getBoundingClientRect() {
+      referenceCalls += 1;
+      return { x: 12, y: 34, width: 0, height: 0, top: 34, right: 12, bottom: 34, left: 12 };
+    },
+  };
+  const { cleanup } = mountRoot(() =>
+    h(
+      OfficePopover,
+      {
+        open: true,
+        virtualRef,
+        contentTestId: "popover-surface",
+        contentData: { "data-contract": "link-card" },
+        "aria-label": "Link actions",
+        onPointerenter: () => pointer.push("enter"),
+        onPointerleave: () => pointer.push("leave"),
+      },
+      () => h("p", "Virtual body"),
+    ),
+  );
+  t.after(cleanup);
+  await flush();
+
+  const surface = document.querySelector('[data-testid="popover-surface"]');
+  assert.ok(surface, "contentTestId lands on the portalled surface");
+  assert.equal(surface.getAttribute("data-contract"), "link-card");
+  assert.equal(surface.getAttribute("aria-label"), "Link actions");
+  assert.equal(surface.getAttribute("aria-labelledby"), null);
+  assert.equal(surface.getAttribute("role"), "dialog");
+  assert.equal(bySlot("popover-trigger"), null, "a virtual anchor suppresses the trigger");
+  const anchor = bySlot("popover-anchor");
+  assert.ok(anchor);
+  assert.match(anchor.className, /office-popover__anchor/);
+  assert.ok(referenceCalls > 0, "Floating UI reads the virtual reference");
+
+  surface.dispatchEvent(new PointerEvent("pointerenter"));
+  surface.dispatchEvent(new PointerEvent("pointerleave"));
+  assert.deepEqual(pointer, ["enter", "leave"]);
+});
+
+test("Popover anchors on the anchor slot", async (t) => {
+  const { cleanup } = mountRoot(() =>
+    h(
+      OfficePopover,
+      { open: true, contentTestId: "slot-anchored" },
+      {
+        anchor: () => h("span", { "data-testid": "custom-anchor" }),
+        default: () => h("p", "Slot body"),
+      },
+    ),
+  );
+  t.after(cleanup);
+  await flush();
+
+  assert.ok(document.querySelector('[data-testid="custom-anchor"]'));
+  assert.ok(document.querySelector('[data-testid="slot-anchored"]'));
+  assert.equal(bySlot("popover-trigger"), null);
+});
+
 test("Tooltip shows on focus, links itself and honours disabled", async (t) => {
   const { cleanup } = mountRoot(() =>
     h("div", [
