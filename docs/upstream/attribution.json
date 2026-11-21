@@ -707,10 +707,10 @@
     {
       "upstreamFile": "apps/v4/components/extend/csv-viewer.tsx",
       "purpose": "CSV table viewer.",
-      "target": "",
-      "status": "not-used",
-      "issues": ["#160"],
-      "notes": "CSV is out of scope for the 0.8 Office surfaces."
+      "target": "packages/vue-ui/src/components/CsvViewer.vue",
+      "status": "adapted",
+      "issues": ["#178"],
+      "notes": "RFC 4180 parsing, toolbar/zoom/search/upload/download, empty/error/loading states on shared chrome. Glide canvas replaced by a semantic virtualized table; visual delta recorded in docs/design/csv-viewer-adr.md."
     },
     {
       "upstreamFile": "apps/v4/components/extend/schema-builder.tsx",

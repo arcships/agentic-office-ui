@@ -1664,6 +1664,35 @@ export interface OfficeMessages {
     fileThumbnail: {
       unknownType: string
     }
+    csvViewer: {
+      label: string
+      searchLabel: string
+      searchPlaceholder: string
+      emptyTitle: string
+      emptyDescription: string
+      upload: string
+      uploadShort: string
+      uploadPending: string
+      loadingTitle: string
+      loadingDescription: string
+      errorTitle: string
+      errorDescription: string
+      parseError: string
+      invalidDelimiter: string
+      unterminatedQuote: string
+      readError: string
+      loadError: string
+      /** Template with `{actual}` and `{allowed}` placeholders. */
+      fileTooLarge: string
+      download: string
+      actions: string
+      /** Template with an `{index}` placeholder. */
+      column: string
+      /** Template with an `{index}` placeholder. */
+      extraColumn: string
+      /** Template with `{rows}` and `{columns}` placeholders. */
+      status: string
+    }
   }
 }
 
@@ -3093,6 +3122,33 @@ export const officeMessagesEn: OfficeMessages = {
     fileThumbnail: {
       unknownType: "Unknown type",
     },
+    csvViewer: {
+      label: "CSV viewer",
+      searchLabel: "Search CSV",
+      searchPlaceholder: "Search CSV",
+      emptyTitle: "Upload a CSV to preview",
+      emptyDescription:
+        "Pass delimited text with the data prop or upload a CSV file.",
+      upload: "Upload CSV",
+      uploadShort: "Upload",
+      uploadPending: "Reading CSV…",
+      loadingTitle: "Opening CSV",
+      loadingDescription: "Parsing delimited text…",
+      errorTitle: "Unable to open this CSV",
+      errorDescription: "Check the file and try again.",
+      parseError: "Could not parse the CSV data.",
+      invalidDelimiter: "Unsupported CSV delimiter.",
+      unterminatedQuote: "A quoted cell is not closed.",
+      readError: "Could not read the CSV file.",
+      loadError: "Could not load the CSV file.",
+      fileTooLarge:
+        "CSV file size {actual} bytes exceeds the allowed maximum of {allowed} bytes.",
+      download: "Download",
+      actions: "Open CSV actions",
+      column: "Column {index}",
+      extraColumn: "Extra {index}",
+      status: "{rows} rows × {columns} columns",
+    },
   },
 }
 
@@ -4510,6 +4566,31 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
     fileThumbnail: {
       unknownType: "未知类型",
+    },
+    csvViewer: {
+      label: "CSV 查看器",
+      searchLabel: "搜索 CSV",
+      searchPlaceholder: "搜索 CSV",
+      emptyTitle: "上传 CSV 以预览",
+      emptyDescription: "通过 data 属性传入分隔文本，或上传 CSV 文件。",
+      upload: "上传 CSV",
+      uploadShort: "上传",
+      uploadPending: "正在读取 CSV…",
+      loadingTitle: "正在打开 CSV",
+      loadingDescription: "正在解析分隔文本…",
+      errorTitle: "无法打开此 CSV",
+      errorDescription: "请检查文件后重试。",
+      parseError: "无法解析 CSV 数据。",
+      invalidDelimiter: "不支持此 CSV 分隔符。",
+      unterminatedQuote: "引号单元格未闭合。",
+      readError: "无法读取 CSV 文件。",
+      loadError: "无法加载 CSV 文件。",
+      fileTooLarge: "CSV 文件大小 {actual} 字节，超过允许的最大值 {allowed} 字节。",
+      download: "下载",
+      actions: "打开 CSV 操作",
+      column: "列 {index}",
+      extraColumn: "额外列 {index}",
+      status: "{rows} 行 × {columns} 列",
     },
   },
 }

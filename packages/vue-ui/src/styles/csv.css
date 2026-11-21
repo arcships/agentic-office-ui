@@ -1,0 +1,147 @@
+/**
+ * CSV viewer surface.
+ *
+ * The reference block renders a 560px flex column with a 48px toolbar and a
+ * canvas grid. This surface keeps the same outer geometry and control order
+ * but renders a virtualized semantic table instead of loading
+ * `@glideapps/glide-data-grid`, so every visual value resolves from the
+ * `--office-*` token layer.
+ */
+
+.office-csv-viewer {
+  --csv-viewer-height: 560px;
+
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  block-size: var(--csv-viewer-height);
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font-family: var(--office-font-sans);
+}
+
+.office-csv-viewer *,
+.office-csv-viewer *::before,
+.office-csv-viewer *::after {
+  box-sizing: border-box;
+}
+
+.office-csv-viewer__meta {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  line-height: var(--office-leading-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.office-csv-viewer__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.office-csv-viewer__state {
+  block-size: 100%;
+}
+
+.office-csv-viewer__file-input {
+  display: none;
+}
+
+.office-csv-viewer__viewport {
+  block-size: 100%;
+  min-block-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--office-background);
+}
+
+.office-csv-viewer__table {
+  min-inline-size: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  background: var(--office-background);
+  color: var(--office-foreground);
+  font-family: var(--office-font-sans);
+  font-size: var(--office-text-sm);
+}
+
+.office-csv-viewer__table th,
+.office-csv-viewer__table td {
+  overflow: hidden;
+  padding: var(--office-ui-space-1) var(--office-ui-space-2);
+  border-block-end: var(--office-border-width) solid var(--office-border);
+  border-inline-end: var(--office-border-width) solid var(--office-border);
+  line-height: var(--office-leading-sm);
+  text-align: start;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.office-csv-viewer__table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--office-surface);
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.office-csv-viewer__table tbody tr:hover td {
+  background: var(--office-surface);
+}
+
+.office-csv-viewer__table tbody tr:hover td.office-csv-viewer__cell--selected {
+  background: var(--office-accent);
+}
+
+.office-csv-viewer__row-header,
+.office-csv-viewer__header-cell.office-csv-viewer__row-header {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  color: var(--office-muted-foreground);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  background: var(--office-surface);
+}
+
+.office-csv-viewer__table thead .office-csv-viewer__row-header {
+  z-index: 3;
+}
+
+.office-csv-viewer__cell {
+  cursor: default;
+  color: var(--office-foreground);
+}
+
+.office-csv-viewer__cell--selected {
+  background: var(--office-accent);
+  box-shadow: inset 0 0 0 var(--office-ring-width) var(--office-ring);
+}
+
+.office-csv-viewer__cell:focus-visible {
+  outline: var(--office-ring-width) solid var(--office-ring);
+  outline-offset: calc(var(--office-ring-width) * -1);
+}
+
+.office-csv-viewer__match {
+  padding: 0;
+  border-radius: var(--office-radius-sm);
+  background: color-mix(in oklab, var(--office-warning) 38%, transparent);
+  color: inherit;
+}
+
+.office-csv-viewer__spacer td {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}

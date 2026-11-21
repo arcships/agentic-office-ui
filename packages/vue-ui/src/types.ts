@@ -323,6 +323,87 @@ export interface DocumentSplitsProps {
   className?: string
 }
 
+export interface CsvViewerProps {
+  /** Delimited text. When set it wins over `file` and `src`. */
+  data?: string
+  /** Initial file to read (UTF-8/UTF-16, BOM aware). */
+  file?: Blob | null
+  /** URL to fetch when neither `data` nor `file` is supplied. */
+  src?: string
+  /** Download name and the value reported by `getState().fileName`. */
+  fileName?: string
+  /** Explicit separator, or `auto` (default) to detect from the first records. */
+  delimiter?: string
+  /** Render the search control. Defaults to `true` (upstream defaults off). */
+  search?: boolean
+  /** Debounce for search typing, in milliseconds. Defaults to 300. */
+  searchDebounce?: number
+  /** Root height. Numbers are pixels; defaults to the 560px CSS surface. */
+  height?: number | string
+  /** Maximum accepted upload size. Defaults to 50 MiB. */
+  maxFileSize?: number
+  /** External busy state (for example while a host fetches the file). */
+  loading?: boolean
+  /** Active locale for the shared message catalog. */
+  locale?: OfficeLocale
+  /** Deep message overrides merged on top of the locale catalog. */
+  messages?: OfficeMessagesOverride
+  /** Extra classes merged on the root. */
+  class?: string
+}
+
+/** Machine-readable reason `CsvViewer` could not render the input. */
+export type CsvViewerErrorCode =
+  | "INVALID_DELIMITER"
+  | "UNTERMINATED_QUOTE"
+  | "PARSE_ERROR"
+  | "READ_ERROR"
+  | "FETCH_ERROR"
+  | "FILE_TOO_LARGE"
+
+export interface CsvViewerError {
+  code: CsvViewerErrorCode
+  /** Raw diagnostic detail; not shown verbatim as the localized message. */
+  detail?: string
+  /** Actual upload size in bytes (`FILE_TOO_LARGE`). */
+  actual?: number
+  /** Configured upload limit in bytes (`FILE_TOO_LARGE`). */
+  allowed?: number
+}
+
+/** Payload emitted after a data prop, file, URL or upload parses. */
+export interface CsvViewerLoadEvent {
+  fileName: string | null
+  headers: string[]
+  rows: string[][]
+  delimiter: string
+}
+
+/** Payload emitted by the download action before the browser saves the file. */
+export interface CsvViewerDownloadEvent {
+  fileName: string
+  text: string
+}
+
+/** Snapshot exposed by `CsvViewer` via `defineExpose`. */
+export interface CsvViewerState {
+  status: "empty" | "loading" | "error" | "ready"
+  fileName: string | null
+  headers: string[]
+  rows: string[][]
+  delimiter: string
+  zoom: number
+  searchQuery: string
+  searchResults: Array<{
+    row: number
+    col: number
+    value: string
+    address: string
+  }>
+  activeResultIndex: number
+  error: CsvViewerError | null
+}
+
 export interface SpinnerProps {
   size?: "sm" | "md" | "lg"
   className?: string

@@ -7,6 +7,7 @@
 import "./print.css"
 import "./styles/ui.css"
 import "./styles/chrome.css"
+import "./styles/csv.css"
 
 // Signature pad
 export { default as SignaturePad } from "./components/SignaturePad.vue"
@@ -26,6 +27,40 @@ export { default as LayoutBlocks } from "./components/LayoutBlocks.vue"
 
 // Document splits
 export { default as DocumentSplits } from "./components/DocumentSplits.vue"
+
+// CSV viewer (issue #178): read-only delimited-text surface
+export { default as CsvViewer } from "./components/CsvViewer.vue"
+export {
+  csvCellAddress,
+  csvColumnLetters,
+  decodeCsvBuffer,
+  detectCsvDelimiter,
+  findCsvMatches,
+  normalizeCsvDelimiter,
+  parseCsvText,
+  resolveCsvVisibleRange,
+  serializeCsv,
+} from "./csv"
+export type {
+  CsvDelimiter,
+  CsvMatch,
+  CsvParseError,
+  CsvParseErrorCode,
+  CsvParseResult,
+  CsvVisibleRange,
+  CsvVisibleRangeOptions,
+  FindCsvMatchesOptions,
+  ParseCsvOptions,
+  SerializeCsvOptions,
+} from "./csv"
+export type {
+  CsvViewerDownloadEvent,
+  CsvViewerError,
+  CsvViewerErrorCode,
+  CsvViewerLoadEvent,
+  CsvViewerProps,
+  CsvViewerState,
+} from "./types"
 
 // Base UI
 export { default as Spinner } from "./components/Spinner.vue"

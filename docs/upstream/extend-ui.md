@@ -193,7 +193,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/document-preview-card.tsx` | 文档引用悬浮预览卡 | `packages/vue-ui/src/components/DocumentPreviewCard.vue` | reference-only | 与 FileSystem 一并后置，先登记避免以后从头找来源 |
 | `apps/v4/components/extend/pdf-block-resizable-shell.tsx` | 文档站 PDF block 可缩放外壳 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | 只有 PDF 叠加块支持缩放时才相关 |
 | `apps/v4/components/extend/document-scroll-content.tsx` | Radix ScrollArea content 的薄封装 | — | not-used | 没有可移植行为 |
-| `apps/v4/components/extend/csv-viewer.tsx` | CSV 表格查看器 | — | not-used | CSV 不在 0.8 范围 |
+| `apps/v4/components/extend/csv-viewer.tsx` | CSV 表格查看器 | `packages/vue-ui/src/components/CsvViewer.vue` | adapted | #178：RFC 4180 解析、toolbar/zoom/search/upload/download、空/错误/loading 复用共享 chrome；Glide canvas 改为语义表格 + 行虚拟化，视觉差异见 [ADR](../design/csv-viewer-adr.md) |
 | `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 编辑器 | — | not-used | #164 评估后延期：上游 2,703 行（嵌套字段/类型编辑、校验、抽取预览），0.8 无消费方；证据见 [`../components/document-blocks.md`](../components/document-blocks.md#schemabuilder-暂缓) |
 | `apps/v4/components/extend/ui-toast.tsx` | Toast manager provider | — | not-used | 通知归宿主，库不内置 toast manager |
 | `apps/v4/components/extend/xlsx-pivot-controls.tsx` | 数据透视表控件 | — | not-used | 透视表不在 0.8 范围 |

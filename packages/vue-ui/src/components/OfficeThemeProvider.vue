@@ -52,7 +52,14 @@ const context: OfficeThemeContext = Object.freeze({
 provideOfficeTheme(context)
 provideOfficeUiMessages(
   () => props.locale ?? inheritedLocale.value,
-  () => props.messages ?? inheritedMessages.value,
+  () => {
+    if (props.messages !== undefined) return props.messages
+    // The fallback catalog is English, so merging it as an override would
+    // replace every zh-CN key. Only inherit an ambient catalog when the host
+    // did not select a locale explicitly.
+    if (props.locale !== undefined) return undefined
+    return inheritedMessages.value
+  },
 )
 
 // Portalled overlays must stay inside the themed subtree; see office-portal.ts.

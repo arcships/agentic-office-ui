@@ -21,10 +21,12 @@
 | [components/docx-ui-stories.md](components/docx-ui-stories.md) | DOCX viewer/editor chrome 的确定性截图 story、390/768/1440 与 inline/overlay 证据（#159） |
 | [components/file-components.md](components/file-components.md) | FileUpload / FileThumbnail 的 Extend 对齐合同、像素对照、story 与 DocumentViewerSidebar 集成 seam（#163） |
 | [components/document-blocks.md](components/document-blocks.md) | BoundingBoxCitations / LayoutBlocks / SignaturePad / ESignatureFields / DocumentSplits 的 Extend 对齐、232 个像素 case、API 与 FileSystem/SchemaBuilder 延期论证（#164） |
+| [components/csv-viewer.md](components/csv-viewer.md) | `CsvViewer` 的 props/事件/实例方法、解析/搜索/虚拟化合同与可访问性（#178） |
 | [components/pptx-chrome.md](components/pptx-chrome.md) | PPTX viewer/presenter/sorter 的共享 chrome、sorter/presenter 结构、右键菜单、状态与 390/768/1440 截图证据（#161） |
 | [design/pptx-presenter-reference.md](design/pptx-presenter-reference.md) | PPTX 演讲者视图参考规格：五个产品的区域/尺寸/交互对照、备注与计时规则、`office-reference` 验收与实现计划（#183） |
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
 | [design/xlsx-page-setup-reference.md](design/xlsx-page-setup-reference.md) | XLSX 页面设置参考：Excel 对话框四选项卡、0.8 采用子集、未做项的产品理由与交互验收（#171） |
+| [design/csv-viewer-adr.md](design/csv-viewer-adr.md) | CSV 独立 block 的 A/B/C 决策、API、与 Glide 上游的精确视觉差异和后续边界（#178） |
 | [design/viewer-editor-architecture.md](design/viewer-editor-architecture.md) | PDF/DOCX/XLSX/PPTX/CSV/FileSystem/SchemaBuilder 的上游组件树、包边界、层映射、参考可行性分类与 L1/L2 验收计划（#185） |
 | [design/chart-internals-reference.md](design/chart-internals-reference.md) | OOXML/Excel 图表内部几何、LibreOffice/ONLYOFFICE/ECharts 对照、chart geometry provider 合同与 exact/approximate/provider 边界（#184） |
 | [testing/ui-parity-ci.md](testing/ui-parity-ci.md) | `ui-parity` / 样式 guard / axe 门禁：job、阈值、基线审批与最终开关（#165） |

@@ -314,6 +314,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/vue-ui-theme-icon.test.mjs",
       "tests/component/vue-ui-primitives.test.mjs",
       "tests/component/vue-ui-chrome.test.mjs",
+      "tests/component/csv-viewer.test.mjs",
 
     ]),
 command("vue-component-behavior-2", process.execPath, [

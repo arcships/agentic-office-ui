@@ -137,7 +137,7 @@ Surface 只发出引用。把它放进聊天输入框、命令面板、多引用
 
 | 目标 | 推荐入口 |
 |---|---|
-| 尽快显示一个文件 | `DocxViewer`、`XlsxViewer`、`PdfViewer`、`PptxViewer` |
+| 尽快显示一个文件 | `DocxViewer`、`XlsxViewer`、`PdfViewer`、`PptxViewer`、`CsvViewer` |
 | 围绕文档自建工具栏 | `DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface`、`PptxStage` |
 | 自建 DOCX 编辑器 | `DocxEditor` 或 `useDocxEditor` |
 | 自建 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
@@ -157,7 +157,7 @@ Surface 只发出引用。把它放进聊天输入框、命令面板、多引用
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium Surface、Viewer、引用适配器和渲染 Runtime |
 | [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX 预览/播放模型、对象身份、引用适配器和浏览器控制器 |
 | [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | PPTX Stage、Viewer、缩略图、Surface 事件和播放组合函数 |
-| [`@arcships/vue-ui`](packages/vue-ui/README.md) | Office 选择原语，以及上传、签名、缩略图、引用框和版面组件 |
+| [`@arcships/vue-ui`](packages/vue-ui/README.md) | Office 选择原语，以及上传、签名、缩略图、引用框、版面组件和 CSV 查看器 |
 
 九个公开包使用同一发布版本线。npm 稳定版为 `0.5.4`，当前源码候选为 `0.6.0`。PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加最小组合接口。
 
