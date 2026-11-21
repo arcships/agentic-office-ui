@@ -195,7 +195,7 @@ pnpm ui:parity:routes -- --self-check          # reference 自己跟自己比（
 | 例外 | 位置 | 负责 |
 |---|---|---|
 | `pptx-presenter` 无上游布局 | parity 报告（unreachable） | #161（组件测试覆盖） |
-| `/pdf-viewer` L2 路由仍是 `report-only`（画布背景、页面栅格、暗色反转等 5 条产品差异） | `output/ui-parity-routes/` | #182 follow-up |
+| `/pdf-viewer` L2 路由仍是 `report-only`（画布背景、页面栅格、暗色反转等 6 条阻断差异，另 1 条亚像素差异不阻断） | `output/ui-parity-routes/` | #182 follow-up |
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` destructive 有意偏离上游 red-500 | manifest `expectedDiffs` + `tests/visual/extend/button/destructive/` 基线 | #169；参考页保持上游 red-500，gate 报告 `WAIVED`（bounded pixel-ratio waiver） |
 | 1,015 条存量组件 CSS 裸值 | `tests/style/component-style-baseline.json` | #159–#164 收尾时逐步还债 |
