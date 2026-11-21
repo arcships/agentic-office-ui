@@ -409,7 +409,7 @@ test("a11y config covers the core surfaces and allowlists only owned findings", 
 });
 
 test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the final all gate", () => {
-  for (const job of ["ui-contracts", "ui-parity-core", "ui-parity-nightly", "ui-a11y"]) {
+  for (const job of ["ui-contracts", "ui-parity-core", "ui-parity-nightly", "ui-parity-routes", "ui-a11y"]) {
     assert.match(workflow, new RegExp(`\\n  ${job}:`), `missing job ${job}`);
   }
   const jobBlock = (name) => {
@@ -424,7 +424,11 @@ test("ui-parity workflow wires the PR subset, nightly matrix, artifacts and the 
   assert.match(workflow, /UI_PARITY_SUBSET: core/);
   assert.ok((workflow.match(/--gate-mode all/g) || []).length >= 2, "both parity jobs use the final gate");
   assert.ok(!workflow.includes("inputs.strict"), "the strict dispatch input is gone");
-  assert.ok(!workflow.includes("--gate-mode ready"), "no job falls back to the ready mode");
+  const routeJob = jobBlock("ui-parity-routes");
+  assert.match(routeJob, /--gate-mode ready/, "route pilot gates blocking routes without failing report-only ones");
+  for (const job of ["ui-parity-core", "ui-parity-nightly"]) {
+    assert.ok(!jobBlock(job).includes("--gate-mode ready"), `${job} must use the final gate`);
+  }
   assert.match(workflow, /--baseline/);
   assert.match(workflow, /pnpm ui:baseline:verify/);
   assert.match(workflow, /pnpm lint:style/);

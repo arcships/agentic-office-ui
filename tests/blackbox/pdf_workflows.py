@@ -384,6 +384,11 @@ def pdf_002_navigation(
     capture("last", 4)
     click_pdf_action(page, "pdf-first-page")
     capture("first", 1)
+    # The viewer now follows the upstream default (sidebar closed). Open it
+    # before navigating through a thumbnail so the button is not behind the
+    # stage's pointer interception.
+    page.locator('[data-testid="pdf-sidebar-toggle"]').click()
+    page.locator('[data-testid="pdf-thumbnail"][data-page-number="4"]').wait_for()
     page.locator('[data-testid="pdf-thumbnail"][data-page-number="4"]').click()
     capture("thumbnail", 4)
     assert_no_native_pdf_embed(page)
