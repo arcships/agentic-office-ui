@@ -1693,6 +1693,88 @@ export interface OfficeMessages {
       /** Template with `{rows}` and `{columns}` placeholders. */
       status: string
     }
+    fileSystem: {
+      title: string
+      breadcrumb: string
+      back: string
+      forward: string
+      view: string
+      listView: string
+      gridView: string
+      /** Template with a `{name}` placeholder. */
+      openFolder: string
+      /** Template with a `{name}` placeholder. */
+      openFile: string
+      /** Template with a `{name}` placeholder. */
+      deleteItem: string
+      empty: string
+      loading: string
+      error: string
+      folderKind: string
+      /** Template with `{size}` and `{date}` placeholders. */
+      itemMeta: string
+    }
+    schemaBuilder: {
+      title: string
+      addField: string
+      /** Template with a `{name}` placeholder. */
+      addNestedField: string
+      fieldName: string
+      fieldNamePlaceholder: string
+      fieldType: string
+      arrayItemType: string
+      fieldDescription: string
+      fieldDescriptionPlaceholder: string
+      required: string
+      /** Template with a `{name}` placeholder. */
+      removeField: string
+      /** Template with a `{name}` placeholder. */
+      moveFieldUp: string
+      /** Template with a `{name}` placeholder. */
+      moveFieldDown: string
+      nestedFields: string
+      arrayItems: string
+      empty: string
+      loading: string
+      error: string
+      jsonTitle: string
+      showJson: string
+      hideJson: string
+      exportJson: string
+      importJson: string
+      importClose: string
+      importPlaceholder: string
+      importApply: string
+      importCancel: string
+      importEmpty: string
+      /** Template with a `{message}` placeholder. */
+      importInvalidJson: string
+      importInvalidRoot: string
+      /** Template with a `{path}` placeholder. */
+      importInvalidProperties: string
+      /** Template with a `{path}` placeholder. */
+      importInvalidProperty: string
+      /** Template with a `{path}` and `{type}` placeholder. */
+      importUnsupportedType: string
+      /** Template with a `{path}` and `{type}` placeholder. */
+      importUnsupportedItemType: string
+      /** Template with a `{path}` placeholder. */
+      importUnsupportedItemShape: string
+      /** Template with a `{path}` placeholder. */
+      importMissingName: string
+      issueEmptyName: string
+      /** Template with a `{name}` placeholder. */
+      issueDuplicateName: string
+      /** Template with a `{type}` placeholder. */
+      issueInvalidType: string
+      types: {
+        string: string
+        number: string
+        boolean: string
+        object: string
+        array: string
+      }
+    }
   }
 }
 
@@ -3149,6 +3231,71 @@ export const officeMessagesEn: OfficeMessages = {
       extraColumn: "Extra {index}",
       status: "{rows} rows × {columns} columns",
     },
+    fileSystem: {
+      title: "Files",
+      breadcrumb: "Folder path",
+      back: "Back",
+      forward: "Forward",
+      view: "View",
+      listView: "List view",
+      gridView: "Grid view",
+      openFolder: "Open folder {name}",
+      openFile: "Open {name}",
+      deleteItem: "Delete {name}",
+      empty: "This folder is empty.",
+      loading: "Loading files…",
+      error: "Files could not be loaded.",
+      folderKind: "Folder",
+      itemMeta: "{size} · {date}",
+    },
+    schemaBuilder: {
+      title: "Schema",
+      addField: "Add field",
+      addNestedField: "Add nested field to {name}",
+      fieldName: "Field name",
+      fieldNamePlaceholder: "field_name",
+      fieldType: "Field type",
+      arrayItemType: "Array item type",
+      fieldDescription: "Description",
+      fieldDescriptionPlaceholder: "Optional description",
+      required: "Required",
+      removeField: "Remove {name}",
+      moveFieldUp: "Move {name} up",
+      moveFieldDown: "Move {name} down",
+      nestedFields: "Nested fields",
+      arrayItems: "Array items",
+      empty: "No fields yet.",
+      loading: "Loading schema…",
+      error: "The schema could not be loaded.",
+      jsonTitle: "JSON Schema",
+      showJson: "Show JSON",
+      hideJson: "Hide JSON",
+      exportJson: "Copy JSON",
+      importJson: "Import JSON",
+      importClose: "Close import",
+      importPlaceholder: "Paste a JSON Schema object",
+      importApply: "Import",
+      importCancel: "Cancel",
+      importEmpty: "Paste a JSON Schema object first.",
+      importInvalidJson: "Not valid JSON: {message}",
+      importInvalidRoot: "The document must be a JSON Schema object with a properties map.",
+      importInvalidProperties: "Properties at {path} must be an object.",
+      importInvalidProperty: "Field {path} must be an object.",
+      importUnsupportedType: "{path}: type {type} is not supported; used string.",
+      importUnsupportedItemType: "{path}: array item type {type} is not supported; used string.",
+      importUnsupportedItemShape: "{path}: only scalar or object array items are supported.",
+      importMissingName: "{path}: the property name is empty.",
+      issueEmptyName: "Field names cannot be empty.",
+      issueDuplicateName: "Duplicate field name: {name}",
+      issueInvalidType: "Unsupported field type: {type}",
+      types: {
+        string: "String",
+        number: "Number",
+        boolean: "Boolean",
+        object: "Object",
+        array: "Array",
+      },
+    },
   },
 }
 
@@ -4591,6 +4738,71 @@ export const officeMessagesZhCN: OfficeMessages = {
       column: "列 {index}",
       extraColumn: "额外列 {index}",
       status: "{rows} 行 × {columns} 列",
+    },
+    fileSystem: {
+      title: "文件",
+      breadcrumb: "文件夹路径",
+      back: "后退",
+      forward: "前进",
+      view: "视图",
+      listView: "列表视图",
+      gridView: "网格视图",
+      openFolder: "打开文件夹 {name}",
+      openFile: "打开 {name}",
+      deleteItem: "删除 {name}",
+      empty: "此文件夹为空。",
+      loading: "正在加载文件…",
+      error: "文件加载失败。",
+      folderKind: "文件夹",
+      itemMeta: "{size} · {date}",
+    },
+    schemaBuilder: {
+      title: "Schema",
+      addField: "添加字段",
+      addNestedField: "向 {name} 添加嵌套字段",
+      fieldName: "字段名",
+      fieldNamePlaceholder: "field_name",
+      fieldType: "字段类型",
+      arrayItemType: "数组元素类型",
+      fieldDescription: "描述",
+      fieldDescriptionPlaceholder: "可选描述",
+      required: "必填",
+      removeField: "移除 {name}",
+      moveFieldUp: "上移 {name}",
+      moveFieldDown: "下移 {name}",
+      nestedFields: "嵌套字段",
+      arrayItems: "数组元素",
+      empty: "尚未添加字段。",
+      loading: "正在加载 schema…",
+      error: "schema 加载失败。",
+      jsonTitle: "JSON Schema",
+      showJson: "显示 JSON",
+      hideJson: "隐藏 JSON",
+      exportJson: "复制 JSON",
+      importJson: "导入 JSON",
+      importClose: "关闭导入",
+      importPlaceholder: "粘贴一个 JSON Schema 对象",
+      importApply: "导入",
+      importCancel: "取消",
+      importEmpty: "请先粘贴一个 JSON Schema 对象。",
+      importInvalidJson: "JSON 无效：{message}",
+      importInvalidRoot: "文档必须是带 properties 映射的 JSON Schema 对象。",
+      importInvalidProperties: "{path} 处的 properties 必须是对象。",
+      importInvalidProperty: "字段 {path} 必须是对象。",
+      importUnsupportedType: "{path}：不支持类型 {type}，已改用 string。",
+      importUnsupportedItemType: "{path}：不支持数组元素类型 {type}，已改用 string。",
+      importUnsupportedItemShape: "{path}：仅支持标量或对象数组元素。",
+      importMissingName: "{path}：属性名为空。",
+      issueEmptyName: "字段名不能为空。",
+      issueDuplicateName: "字段名重复：{name}",
+      issueInvalidType: "不支持的字段类型：{type}",
+      types: {
+        string: "字符串",
+        number: "数字",
+        boolean: "布尔值",
+        object: "对象",
+        array: "数组",
+      },
     },
   },
 }

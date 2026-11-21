@@ -11,8 +11,8 @@
 | `LayoutBlocks` | `packages/vue-ui/src/components/LayoutBlocks.vue` | 完成（OCR 面板、叠加、markdown） | `layout-blocks`，7 个状态 |
 | `SignaturePad` / E-Signature | `SignaturePad.vue` + `ESignatureFields.vue` | 完成（手写/输入、清除、确认、预览） | `e-signature`，6 个状态 |
 | `DocumentSplits` | `packages/vue-ui/src/components/DocumentSplits.vue` | 完成（区间、缩略图、增删、拖放/键盘） | `document-splits`，8 个状态 |
-| `FileSystem` | — | **延期**（见下文证据） | — |
-| `SchemaBuilder` | — | **延期**（见下文证据） | — |
+| `FileSystem` | `packages/vue-ui/src/components/FileSystem.vue` | 完成（#179，浏览外壳：面包屑、列表/网格、缩略图、键盘） | 无（见 [file-system.md](file-system.md)） |
+| `SchemaBuilder` | `packages/vue-ui/src/components/SchemaBuilder.vue` | 完成（#179，字段/嵌套、JSON 导入导出、校验） | 无（见 [schema-builder.md](schema-builder.md)） |
 
 四个已完成 block 的参考实现分别在 `tools/extend-reference/src/vendor/extend/`：
 `bounding-box-citations.tsx`、`layout-blocks-panel.tsx`、`signature-fields.tsx`、
@@ -32,7 +32,9 @@ PYTHON=/tmp/bb-venv/bin/python pnpm ui:parity \
 - 产物：`output/ui-parity-164-final/report.{json,html,md}`、`SUMMARY.md`、`cases/**`。
 - 门禁（#165）：四条 surface 已切为 `gateStatus: blocking`，`tests/visual/extend` 下提交
   29 state × 2 viewport × 2 theme = 116 张对照基线；nightly 全矩阵改坏任一 block 即失败。
-  FileSystem / SchemaBuilder 没有 parity surface，不参与门禁，也不标 `blocking`。
+  FileSystem / SchemaBuilder 在 #179 实现，但没有 parity surface：不参与门禁，也不标 `blocking`，
+  与上游的差异逐条登记在 [file-system.md](file-system.md#7-与上游的差异明确登记) 与
+  [schema-builder.md](schema-builder.md#7-与上游的差异明确登记)。
 
 复现时的两个 harness 约定：
 
@@ -153,36 +155,19 @@ interface DocumentSplitsProps {
   缩略图缺失时 `FileThumbnail` 显示加载覆盖层。
 - 默认不自动滚动宿主 PDF；`select-page` 交由宿主定位页面。
 
-## FileSystem 暂缓
+## FileSystem / SchemaBuilder（#179 已实现）
 
-上游：`apps/v4/components/extend/file-system.tsx`，**5,381 行**。评估证据：
+两者在原计划里被 #164 延期，理由是“工作量 + 缺宿主消费方”，不是许可证（`@pierre/trees` 为 Apache-2.0）。
+#179 按组件解剖结论落地了**最小可用面**，并明确登记了未移植部分：
 
-- 运行时依赖 `@pierre/trees`（`FileTree`、`useFileTree`、sprite sheet、file-tree 输入归一化）以及
-  `Command`、`DropdownMenu`、`Popover`、`Dialog`、`ContextMenu` 等一整套 shadcn primitive；
-  本仓库 0.8 依赖中没有 `@pierre/trees`，也没有 `command`/`context-menu` 的 Vue parity 层。
-- 交互面包括 Finder 风格列表/网格切换、面包屑、排序、重命名/新建/删除、拖放移动、缩略图、
-  空状态、DocumentPreviewCard 悬浮预览；这些都需要先有文件系统数据模型与宿主持久化契约。
-- 0.8 的宿主（demo、viewer 组合）没有文件浏览入口；`FileUpload` / `FileThumbnail` 已覆盖上传与缩略图需求。
-- 若后续启动，需要新增 `FileSystem.vue`、`DocumentPreviewCard.vue`、文件树数据模型与至少 2 个
-  parity surface；预计工作量与 #163 同级，不适合在 #164 内静默塞入。
-
-结论：**延期**。`docs/upstream/attribution.json` 与 `docs/upstream/extend-ui.md` 保留条目和本页链接；
-不创建空壳组件，避免宿主误以为已支持。
-
-## SchemaBuilder 暂缓
-
-上游：`apps/v4/components/extend/schema-builder.tsx`，**2,703 行**。评估证据：
-
-- 依赖 `@dnd-kit/core` + `@dnd-kit/sortable`（拖拽字段树）、`@pierre/diffs`（JSON 预览）、
-  `next-themes`，以及完整的 shadcn 对话框/下拉/命令面板 primitive；本仓库没有这些运行时依赖。
-- 功能面是抽取 schema 编辑器：字段/类型/嵌套编辑、枚举、必填、校验、排序、JSON 预览；
-  目前产品没有 schema 编辑入口（没有宿主消费方）。
-- 与 `LayoutBlocks`/`BoundingBoxCitations` 的 review 数据模型只有弱耦合；强行实现会引入
-  尚未定义的 schema 持久化契约。
-- 若后续启动，建议先定义 `ExtractionSchema` 数据模型与宿主保存/发布流程，再拆成独立的
-  `SchemaBuilder.vue` + primitive 层；不在 #164 内做半成品。
-
-结论：**延期**，登记为 `not-used`，并保留固定 commit 的上游路径以便后续复刻。
+- [file-system.md](file-system.md)：`FileSystem.vue` + `packages/vue-ui/src/file-system.ts`。面包屑、
+  列表/网格、`FileThumbnail` 缩略图、选择/打开/删除事件、空/加载/错误、键盘导航、只读。未做：
+  `@pierre/trees` FileTree、排序/筛选/搜索、columns/gallery 视图、拖放、重命名/新建、
+  内嵌四 viewer 预览对话框、`DocumentPreviewCard`。
+- [schema-builder.md](schema-builder.md)：`SchemaBuilder.vue` + `SchemaBuilderFieldRow.vue` +
+  `packages/vue-ui/src/schema-builder.ts`。字段行、嵌套 object/数组、按钮排序、JSON Schema
+  导入/导出、同级校验、只读。未做：dnd-kit 拖拽、enum/integer/null 类型、`@pierre/diffs`
+  JSON 视图、抽取预览。
 
 ## 测试
 
@@ -190,3 +175,5 @@ interface DocumentSplitsProps {
   空/加载/错误、markdown 转义、split 高亮、legacy API、typed/drawn 签名、字段面板事件、
   拆分增删/跨组移动/拖放/键盘重排。
 - 运行：`node --test --test-concurrency=1 tests/component/document-blocks.test.mjs`。
+- #179 的两个 block 另有独立文件：`tests/component/file-system.test.mjs`（14 个用例）与
+  `tests/component/schema-builder.test.mjs`（13 个用例），细节见各自的组件文档。

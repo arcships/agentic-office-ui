@@ -151,7 +151,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/ui/color-picker.tsx` | 带预设与 alpha 的取色器 | `packages/vue-xlsx/src/components/XlsxAuthoringDialog.vue` | reference-only | #160 计划用于填充色/字体色；真正复制前必须复核状态 |
 | `apps/v4/components/ui/accordion.tsx` | Accordion | — | not-used | Office 界面不需要 |
 | `apps/v4/components/ui/aspect-ratio.tsx` | 比例容器 | — | not-used | 需要时直接用 CSS aspect-ratio |
-| `apps/v4/components/ui/breadcrumb.tsx` | 面包屑 | — | not-used | 后置的 FileSystem 暂无面包屑计划 |
+| `apps/v4/components/ui/breadcrumb.tsx` | 面包屑 | — | not-used | #179 的 FileSystem 自带有序列表面包屑（button + `aria-current`），不是 shadcn Breadcrumb 的移植 |
 | `apps/v4/components/ui/collapsible.tsx` | 折叠 | — | not-used | DocumentViewerSidebar 只有 inline/overlay 两种模式 |
 | `apps/v4/components/ui/command.tsx` | 命令面板 | — | not-used | 搜索弹层使用普通 input + 列表，过滤权归还宿主 |
 | `apps/v4/components/ui/group.tsx` | 分段按钮组 | — | not-used | OfficeToolbarGroup 覆盖工具栏分组 |
@@ -189,12 +189,15 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/layout-blocks.tsx` | Layout blocks viewer、OCR blocks、PDF 叠加 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：页图/宿主 viewer slot、block 叠加几何、类型配色 |
 | `apps/v4/components/extend/layout-blocks-panel.tsx` | block 列表、置信度、markdown | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：卡片列表、置信度/页码、空/加载/错误、安全 markdown 子集 |
 | `apps/v4/components/extend/document-splits.tsx` | 拆分区间选择与结果列表 | `packages/vue-ui/src/components/DocumentSplits.vue` | adapted | #164：拆分卡片、页缩略图、增删、拖放与键盘重排 |
-| `apps/v4/components/extend/file-system.tsx` | Finder 风格文件浏览 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 评估后暂缓：上游 5,381 行，依赖完整文件模型、面包屑、预览卡与 DocumentPreviewCard，0.8 无宿主消费方；证据见 [`../components/document-blocks.md`](../components/document-blocks.md#filesystem-暂缓) |
-| `apps/v4/components/extend/document-preview-card.tsx` | 文档引用悬浮预览卡 | `packages/vue-ui/src/components/DocumentPreviewCard.vue` | reference-only | 与 FileSystem 一并后置，先登记避免以后从头找来源 |
+| `apps/v4/components/extend/file-system.tsx` | Finder 风格文件浏览 | `packages/vue-ui/src/components/FileSystem.vue` | adapted | #179 移植浏览外壳：面包屑、列表/网格、FileThumbnail 预览、选择/打开/删除事件、空/加载/错误与键盘导航。`@pierre/trees` FileTree、排序/筛选/搜索、columns/gallery 视图、拖放与四 viewer 内嵌对话框不在范围内；见 [`../components/file-system.md`](../components/file-system.md) |
+| `apps/v4/components/extend/file-system.tsx` | 文件树索引与文件夹辅助 | `packages/vue-ui/src/file-system.ts` | adapted | #179 用显式嵌套树替代上游按路径推断的扁平 manifest：子项排序、祖先链、大小格式化与预览 URL 解析 |
+| `apps/v4/components/extend/document-preview-card.tsx` | 文档引用悬浮预览卡 | `packages/vue-ui/src/components/DocumentPreviewCard.vue` | reference-only | 仍未移植：#179 的 FileSystem 通过 `open-file` 把 URL 交给宿主，自身没有悬浮预览卡；先登记避免以后从头找来源 |
 | `apps/v4/components/extend/pdf-block-resizable-shell.tsx` | 文档站 PDF block 可缩放外壳 | `packages/vue-ui/src/components/LayoutBlocks.vue` | reference-only | 只有 PDF 叠加块支持缩放时才相关 |
 | `apps/v4/components/extend/document-scroll-content.tsx` | Radix ScrollArea content 的薄封装 | — | not-used | 没有可移植行为 |
 | `apps/v4/components/extend/csv-viewer.tsx` | CSV 表格查看器 | `packages/vue-ui/src/components/CsvViewer.vue` | adapted | #178：RFC 4180 解析、toolbar/zoom/search/upload/download、空/错误/loading 复用共享 chrome；Glide canvas 改为语义表格 + 行虚拟化，视觉差异见 [ADR](../design/csv-viewer-adr.md) |
-| `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 编辑器 | — | not-used | #164 评估后延期：上游 2,703 行（嵌套字段/类型编辑、校验、抽取预览），0.8 无消费方；证据见 [`../components/document-blocks.md`](../components/document-blocks.md#schemabuilder-暂缓) |
+| `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 编辑器 | `packages/vue-ui/src/components/SchemaBuilder.vue` | adapted | #179 移植字段名/类型/必填/描述行、嵌套 object 与 object 数组、增删与按钮排序、JSON Schema 导入导出、同级校验与只读。dnd-kit 拖拽排序、enum/integer/null 类型与 `@pierre/diffs` 渲染不在范围内；见 [`../components/schema-builder.md`](../components/schema-builder.md) |
+| `apps/v4/components/extend/schema-builder.tsx` | 递归字段行 | `packages/vue-ui/src/components/SchemaBuilderFieldRow.vue` | adapted | #179 把上游嵌套编辑器拆成递归 Vue 行，用注入的变更上下文驱动 |
+| `apps/v4/components/extend/schema-builder.tsx` | 抽取 schema 模型与 JSON Schema 契约 | `packages/vue-ui/src/schema-builder.ts` | adapted | #179 补上审计指出的持久化契约：JSON 安全树、确定性序列化、宽容导入与结构校验 |
 | `apps/v4/components/extend/ui-toast.tsx` | Toast manager provider | — | not-used | 通知归宿主，库不内置 toast manager |
 | `apps/v4/components/extend/xlsx-pivot-controls.tsx` | 数据透视表控件 | — | not-used | 透视表不在 0.8 范围 |
 | `apps/v4/components/extend/xlsx-pivot-header.tsx` | 透视表表头菜单 | — | not-used | 透视表不在 0.8 范围 |
@@ -207,7 +210,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/registry/new-york-v4/blocks/layout-blocks-block.tsx` | Layout blocks block 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：页叠加 + OCR block 面板 |
 | `apps/v4/registry/new-york-v4/blocks/document-splits-block.tsx` | 文档拆分 block 组合 | `packages/vue-ui/src/components/DocumentSplits.vue` | adapted | #164：拆分面板 + 宿主页选择回调 |
 | `apps/v4/registry/new-york-v4/blocks/e-signature.tsx` | 电子签名流程、手写/打印签名预览 | `packages/vue-ui/src/components/SignaturePad.vue`、`packages/vue-ui/src/components/ESignatureFields.vue` | adapted | #164：手写/输入签名、清除/确认/预览；字段面板独立为 `ESignatureFields` |
-| `apps/v4/registry/new-york-v4/blocks/file-system-block.tsx` | 文件系统 block 组合 | `packages/vue-ui/src/components/FileSystem.vue` | reference-only | #164 后置，与 FileSystem 同一结论 |
+| `apps/v4/registry/new-york-v4/blocks/file-system-block.tsx` | 文件系统 block 组合 | `apps/demo/src/pages/FileSystemPage.vue` | reference-only | `/file-system` demo 页参考该组合（浏览器 + 宿主事件面板），未复制标记 |
 | `apps/v4/registry/new-york-v4/blocks/docx-editor.tsx` | DOCX editor block 组合 | `packages/vue-docx/src/components/DocxEditor.vue` | reference-only | #159 |
 | `apps/v4/registry/new-york-v4/blocks/docx-layout-blocks.tsx` | DOCX + layout blocks 组合 | `packages/vue-ui/src/components/LayoutBlocks.vue` | adapted | #164：`#viewer` slot 可接入 DOCX surface；block 面板共用 |
 | `apps/v4/registry/new-york-v4/blocks/excel-editor.tsx` | Excel editor block 组合 | `packages/vue-xlsx/src/components/XlsxViewer.vue` | reference-only | #160 |

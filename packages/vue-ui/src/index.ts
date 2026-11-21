@@ -62,6 +62,14 @@ export type {
   CsvViewerState,
 } from "./types"
 
+// File system browser (0.8.1, #179)
+export { default as FileSystem } from "./components/FileSystem.vue"
+export * from "./file-system"
+
+// Extraction schema builder (0.8.1, #179)
+export { default as SchemaBuilder } from "./components/SchemaBuilder.vue"
+export * from "./schema-builder"
+
 // Base UI
 export { default as Spinner } from "./components/Spinner.vue"
 export { default as Tooltip } from "./components/Tooltip.vue"

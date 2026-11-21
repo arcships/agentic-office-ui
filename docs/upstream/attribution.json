@@ -407,8 +407,8 @@
       "purpose": "Breadcrumb navigation.",
       "target": "",
       "status": "not-used",
-      "issues": ["#164"],
-      "notes": "The deferred FileSystem block plan does not include breadcrumbs yet."
+      "issues": ["#164", "#179"],
+      "notes": "FileSystem ships an original ordered-list breadcrumb (buttons plus aria-current), not a port of the shadcn Breadcrumb primitive."
     },
     {
       "upstreamFile": "apps/v4/components/ui/collapsible.tsx",
@@ -676,9 +676,17 @@
       "upstreamFile": "apps/v4/components/extend/file-system.tsx",
       "purpose": "Finder-style file browser.",
       "target": "packages/vue-ui/src/components/FileSystem.vue",
-      "status": "reference-only",
-      "issues": ["#164"],
-      "notes": "Deferred in #164 after assessment: the upstream file is 5,381 LOC and depends on the full Finder-style file model, preview cards, breadcrumb navigation and document preview cards that no 0.8 surface consumes. Evidence is recorded in docs/components/document-blocks.md."
+      "status": "adapted",
+      "issues": ["#164", "#179"],
+      "notes": "#179 ports the browser shell: breadcrumb navigation, list/grid views, FileThumbnail previews, selection/open/delete events, empty/loading/error states and keyboard navigation. The @pierre/trees FileTree, sort/filter/search, columns/gallery views, drag and drop and the embedded four-viewer dialog are out of scope; see docs/components/file-system.md."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/file-system.tsx",
+      "purpose": "File tree index and folder helpers.",
+      "target": "packages/vue-ui/src/file-system.ts",
+      "status": "adapted",
+      "issues": ["#179"],
+      "notes": "#179 replaces the upstream path-keyed manifest with an explicit nested tree: child ordering, ancestor chain, size formatting and preview-URL resolution."
     },
     {
       "upstreamFile": "apps/v4/components/extend/document-preview-card.tsx",
@@ -686,7 +694,7 @@
       "target": "packages/vue-ui/src/components/DocumentPreviewCard.vue",
       "status": "reference-only",
       "issues": ["#164"],
-      "notes": "Deferred with FileSystem; listed so a later implementation starts from the pinned source."
+      "notes": "Still not ported: the #179 FileSystem emits `open-file` with the host URL and has no built-in hover preview card. Listed so a later implementation starts from the pinned source."
     },
     {
       "upstreamFile": "apps/v4/components/extend/pdf-block-resizable-shell.tsx",
@@ -715,10 +723,26 @@
     {
       "upstreamFile": "apps/v4/components/extend/schema-builder.tsx",
       "purpose": "Extraction schema builder.",
-      "target": "",
-      "status": "not-used",
-      "issues": ["#164"],
-      "notes": "Deferred in #164 after assessment: 2,703 LOC schema editor (nested field/type editing, validation, extraction preview) with no host consumer in 0.8; recorded in docs/components/document-blocks.md."
+      "target": "packages/vue-ui/src/components/SchemaBuilder.vue",
+      "status": "adapted",
+      "issues": ["#164", "#179"],
+      "notes": "#179 ports the editor: field name/type/required/description rows, nested object and object-array fields, add/remove/reorder buttons, JSON Schema import/export, sibling validation and read-only. dnd-kit drag sorting, enum/integer/null field types and @pierre/diffs rendering are out of scope; see docs/components/schema-builder.md."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/schema-builder.tsx",
+      "purpose": "Recursive schema field row.",
+      "target": "packages/vue-ui/src/components/SchemaBuilderFieldRow.vue",
+      "status": "adapted",
+      "issues": ["#179"],
+      "notes": "#179 splits the upstream nested editor into a recursive Vue row driven by an injected mutation context."
+    },
+    {
+      "upstreamFile": "apps/v4/components/extend/schema-builder.tsx",
+      "purpose": "Extraction schema model and JSON Schema contract.",
+      "target": "packages/vue-ui/src/schema-builder.ts",
+      "status": "adapted",
+      "issues": ["#179"],
+      "notes": "#179 defines the persistence contract the audit found missing: JSON-safe tree, deterministic JSON Schema serializer, tolerant importer and structural validation."
     },
     {
       "upstreamFile": "apps/v4/components/extend/ui-toast.tsx",
@@ -788,9 +812,10 @@
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/file-system-block.tsx",
       "purpose": "File system block composition.",
-      "target": "packages/vue-ui/src/components/FileSystem.vue",
+      "target": "apps/demo/src/pages/FileSystemPage.vue",
       "status": "reference-only",
-      "issues": ["#164"]
+      "issues": ["#164", "#179"],
+      "notes": "The /file-system demo page follows the composition (browser plus host event panel) without copying markup."
     },
     {
       "upstreamFile": "apps/v4/registry/new-york-v4/blocks/docx-editor.tsx",

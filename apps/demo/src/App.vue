@@ -17,6 +17,8 @@
         <router-link to="/pdf-viewer">PDF Viewer</router-link>
         <router-link to="/components">Components</router-link>
         <router-link to="/file-components">File components</router-link>
+        <router-link to="/file-system">File system</router-link>
+        <router-link to="/schema-builder">Schema builder</router-link>
         <router-link to="/primitives">Primitives</router-link>
         <router-link to="/chrome">Chrome</router-link>
       </div>
