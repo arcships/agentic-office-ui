@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "kind": "product-visual-matrix-baseline",
-  "label": "post-ui-migration",
-  "generatedAt": "2026-11-21T05:38:28.292116+00:00",
-  "gitHead": "ba6da77652944156e6e9a3e67360c67727ef0752",
+  "label": "pre-ui-migration",
+  "generatedAt": "2026-11-21T06:09:18.729839+00:00",
+  "gitHead": "cd87cbd26333ada23efddb76cf72f109519bbedd",
   "browser": "149.0.7827.55",
   "determinism": {
     "deviceScaleFactor": 1,
@@ -3432,10 +3432,10 @@
       "theme": "light",
       "zoom": 100,
       "screenshot": "tests/baseline/visual/evidence/docx-editor-floating-behind.webp",
-      "screenshotSha256": "e1c282e518c821938d65907255fe3f6bb8320b7dd4f160c9e62c6fb820830fa6",
-      "screenshotBytes": 32510,
+      "screenshotSha256": "c8ac4c9e6cd3f043c02b78bbbc1fcd92addb886231a746348e80fe254babf059",
+      "screenshotBytes": 32560,
       "structure": "tests/baseline/visual/evidence/docx-editor-floating-behind.json",
-      "structureSha256": "171a92f44937de5b2f2685d29cbfd12940c6ad0e00f56a8904862afe8f758a01",
+      "structureSha256": "a07c673427bb0349d3fa53d9ed86529942b301bd84938e98887627c7c687f01c",
       "structural": "PASS"
     },
     {
