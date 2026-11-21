@@ -136,7 +136,7 @@ file、PDF、DOCX/PPTX/XLSX chrome），10 个 chrome/block surface 只在 night
 ## 5. 最终开关
 
 1. **当前形态（2026-11-21，含 #174/#170）**：26 个可渲染 surface 全部 `blocking`，4 个 viewport
-   都有提交基线（896 张 / 9 条审批）。PR core 仍只跑 `1440x900,390x844`（264 case）；nightly
+   都有提交基线（896 张 / 9 条审批）。PR core 仍只跑 `1440x900,390x844`（264 case）；`strict` dispatch 输入已删除；nightly
    全矩阵跑 4 个 viewport 并逐 case 比对基线（896 case）。`pptx-presenter` 仍是无上游布局的
    pending surface，不参与像素计数。`#169` 的 8 个 destructive button case 为 `waived`；
    `xlsx-ribbon` 32/32（4 state × 4 viewport × 2 theme）为 `pass`。

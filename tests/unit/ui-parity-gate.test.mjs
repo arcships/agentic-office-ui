@@ -188,6 +188,7 @@ test("manifest marks every surface core/blocking with an owner for pending ones"
     "pptx-toolbar",
     "select",
     "tooltip",
+    "xlsx-ribbon",
     "xlsx-sheet-tabs",
     "xlsx-status-bar",
     "xlsx-toolbar",
@@ -240,7 +241,7 @@ test("committed baselines cover exactly the gate-blocking matrix", () => {
   }
   const recorded = new Set(baselineManifest.files.map((file) => file.path));
   assert.deepEqual([...recorded].sort(), [...expected].sort());
-  assert.equal(baselineManifest.files.length, 864);
+  assert.equal(baselineManifest.files.length, 896);
   assert.equal(baselineManifest.files.length, expected.size);
 
   for (const file of baselineManifest.files) {
