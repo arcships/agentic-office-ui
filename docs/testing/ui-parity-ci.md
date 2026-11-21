@@ -8,7 +8,7 @@
 
 | Job | 触发 | 做什么 | 现在是否阻断 |
 |---|---|---|---|
-| `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值：历史 baseline + parity-literal allowlist）+ `pnpm ui:baseline:verify`（基线审批） | 是（新违规、非法/过期 allowlist、未审批的基线改动） |
+| `ui-contracts` | PR / nightly / dispatch | `pnpm lint:style`（组件 CSS 裸值：历史 baseline + parity-literal allowlist）+ `pnpm ui:baseline:verify`（基线审批）+ `pnpm icons:check`（图标双轨 ledger） | 是（新违规、非法/过期 allowlist、未审批的基线改动、allowlist 外的 Hugeicons 直连或第三个图标库） |
 | `ui-parity-core` | PR / dispatch | 核心子集 × `1440x900,390x844`（`coreSubset.viewports`，快速门槛）× light/dark，参考页 vs 对照页 + 提交基线比对 | 是（`--gate-mode all`） |
 | `ui-parity-nightly` | nightly / dispatch | 全矩阵（26 surface × 4 viewport × 2 theme）+ **4 个 viewport** 的提交基线比对（896 case） | 是（`--gate-mode all`） |
 | `ui-a11y` | PR / nightly / dispatch | axe-core WCAG A/AA + 键盘 smoke（Tab/焦点环/可访问名/Select 开合），light + dark | 是，`tests/a11y/allowlist.json` 为空，任何发现即失败 |
@@ -142,6 +142,30 @@ pnpm lint:style:baseline --approve --reviewer <handle> --issue "#nnn" \
 单元测试 `tests/unit/style-parity-allowlist.test.mjs` 锁住：新裸值失败、allowlisted 上游字面值通过并出现在证据、
 stale 被报告、过期/非法条目 fail closed、legacy baseline 仍然工作，以及真实 allowlist 的 22 条 seed。
 
+## 2.3 图标双轨（#180）
+
+图标不是第三本样式账：`OfficeIcon` + `@lucide/vue` 是默认入口，`HugeIcon` +
+`@hugeicons/core-free-icons` 只允许出现在 `tests/icons/allowlist.json` 的**精确文件**行里，每个行子都带
+parity surface、上游快照、owner issue 和 `reviewBy`。策略与清单见
+[design/icon-policy.md](../design/icon-policy.md)。
+
+```bash
+pnpm icons:check
+```
+
+| 失败代码 | 含义 |
+|---|---|
+| `ICON_IMPORT_NOT_ALLOWLISTED` | 新文件直连 Hugeicons（或未登记 Lucide），改成 `<OfficeIcon name="...">` 或走 #180 的登记流程 |
+| `ICON_MIXED_ICON_SYSTEMS` | 同一文件同时 import 两套图标数据；拆文件，或在 ledger 里写 `mixed: true` + `mixedReason` |
+| `ICON_THIRD_PARTY_LIBRARY` / `ICON_THIRD_PARTY_DEPENDENCY` | 源码或 `package.json` 出现第三个图标库 |
+| `ICON_ALLOWLIST_*` | 条目非法、文件不存在、已不再 import、重复/未排序或 `reviewBy` 过期（fail closed） |
+| `ICON_POLICY_DOC_DRIFT` | ledger 条目在 `docs/design/icon-policy.md` 里没有对应行 |
+
+PASS 时脚本打印允许文件清单（文件、轨道、图标包、surface），并写入
+`output/acceptance/.../icon-policy/summary.json`。单元测试 `tests/unit/icon-policy.test.mjs`
+覆盖允许/拒绝两侧。新增条目与新增图标的流程见
+[design/icon-policy.md §4–§5](../design/icon-policy.md)。
+
 ## 3. 视觉基线审批（不允许随手 `--update`）
 
 基线目录：`tests/visual/extend/<surface>/<state>/<theme>-<viewport>.png`。
@@ -237,6 +261,7 @@ pnpm lint:style                    # 组件 CSS 裸值 guard（对比冻结基�
 pnpm test:a11y                     # axe-core + 键盘 smoke（light+dark；需先 build tools/vue-reference）
 pnpm test:a11y -- --build          # 先构建 workspace 依赖 + tools/vue-reference 再检查（CI 用）
 pnpm ui:tokens:check               # token 报告与固定上游 CSS 同步
+pnpm icons:check                   # 图标双轨 guard：allowlist 外的 Hugeicons 直连 / 第三个图标库 / 失效条目
 ```
 
 常用筛选：`--only <id[,id]>`（`core` 展开为 PR 子集）、`--viewports`、`--themes`、`--no-build`、`--skip-tokens`。
@@ -270,6 +295,7 @@ pnpm ui:parity:routes -- --self-check          # reference 自己跟自己比（
 | `file-upload` / `file-thumbnail` 19 个 `pass-with-AA`（单通道 1/255） | parity 报告 | #163 已知残差，低于 0.1% 阈值 |
 | `button` destructive 有意偏离上游 red-500 | manifest `expectedDiffs` + `tests/visual/extend/button/destructive/` 基线 | #169；参考页保持上游 red-500，gate 报告 `WAIVED`（bounded pixel-ratio waiver） |
 | 971 条存量组件 CSS 裸值 + 22 条 #161b PPTX parity literal | `tests/style/component-style-baseline.json` + `tests/style/parity-literal-allowlist.json` | #159–#164 收尾时逐步还债；parity 条目按 `reviewBy` 复核 |
+| 11 个文件直连 Hugeicons 图标数据（5 个 viewer chrome + 6 个 Extend 对齐组件） | `tests/icons/allowlist.json` | #180：保留像素 parity，按 `reviewBy` 复核；新增文件一律用 `OfficeIcon` |
 
 `tests/a11y/allowlist.json` 在 #169 后为空：button loading 通过 `aria-label` + `aria-disabled`
 保留可访问名与焦点，destructive 实心按钮使用 4.83:1 的 token 对，PDF 缩略图列表补上

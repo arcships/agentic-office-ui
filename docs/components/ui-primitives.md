@@ -375,6 +375,11 @@ node --test --test-concurrency=1 tests/unit/vue-ui-primitives-contract.test.mjs
 `OfficeIcon` 的内置注册表或宿主按需提供。预算测试同时断言 `dist/index.js` 不内联
 `reka-ui`/Floating UI 源码。
 
+图标只有一个入口：新增图标加在 `packages/vue-ui/src/icons.ts` 的 `OFFICE_ICONS`，组件写
+`<OfficeIcon name="..." />`。`@hugeicons/core-free-icons` 只允许出现在
+[图标策略](../design/icon-policy.md) 列出的 pixel-parity 文件里，源码和 `package.json` 中的第三个
+图标库会被 `pnpm icons:check` 拒绝（#180）。
+
 ## 7. Extend / shadcn 视觉对照状态
 
 已接入 #155 harness（`tools/extend-reference` + `tools/vue-reference` +

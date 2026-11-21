@@ -244,6 +244,10 @@ chrome、工具栏、面板和表单控件。
 
 `@lucide/vue` 是 `@arcships/vue-ui` 的运行时依赖，构建时保持 external，不复制进每个包。
 
+> 图标是受控双轨：本节描述的 `OfficeIcon` 是默认轨道；viewer chrome / Extend 组件的
+> Hugeicons 像素例外、逐文件清单和新增图标规则见
+> [icon-policy.md](icon-policy.md)（#180，门禁 `pnpm icons:check`）。
+
 | Prop | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `name` | `string` | — | 注册名，支持 `chevron-down`、`ChevronDown`、`chevron_down` |

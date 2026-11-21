@@ -3,7 +3,8 @@ name: UI parity (Extend reference)
 # Visual and accessibility gates for the Extend UI alignment (#165).
 #
 # Gate behaviour:
-#   - `ui-contracts`      style-token guards + committed-baseline approval contract.
+#   - `ui-contracts`      style-token guards + committed-baseline approval contract
+#                         + the icon policy ledger (`pnpm icons:check`, #180).
 #   - `ui-parity-core`    pull-request core subset against the pinned reference AND
 #                         the committed baselines at the fast 1440x900 + 390x844
 #                         viewports, in the final `--gate-mode all`.
@@ -27,6 +28,11 @@ name: UI parity (Extend reference)
 # updated through `pnpm ui:baseline capture --approve ...` (see
 # tests/visual/extend/README.md). `ui-contracts` fails when a baseline changed
 # without a matching approval record.
+#
+# Icon policy (#180): `pnpm icons:check` fails on a direct `@hugeicons/*` import
+# that is not in `tests/icons/allowlist.json`, on Lucide/Hugeicons mixing, on
+# any third icon library and on drift between the ledger and
+# docs/design/icon-policy.md. OfficeIcon + @lucide/vue stays the default.
 on:
   workflow_dispatch:
   pull_request:
@@ -36,6 +42,7 @@ on:
       - "tests/visual/**"
       - "tests/style/**"
       - "tests/a11y/**"
+      - "tests/icons/**"
       - "docs/design/**"
       - "docs/testing/ui-parity-ci.md"
       - "docs/testing/ui-parity-routes.md"
@@ -53,7 +60,10 @@ on:
       - "scripts/ci/a11y-check.mjs"
       - "scripts/ci/a11y-check.py"
       - "scripts/ci/lint-styles.mjs"
+      - "scripts/ci/verify-icons.mjs"
+      - "scripts/ci/icon-allowlist.mjs"
       - "scripts/ci/extend-tokens.mjs"
+      - "packages/*/package.json"
       - ".github/workflows/ui-parity.yml"
   schedule:
     # Nightly full matrix, before the blackbox browser suites.
@@ -105,6 +115,15 @@ jobs:
       - name: Lint component styles against the token layer
         run: pnpm lint:style
 
+      # Icon policy (#180): OfficeIcon/Lucide is the default; a direct
+      # @hugeicons/* import outside tests/icons/allowlist.json, Lucide/Hugeicons
+      # mixing, a third icon library or ledger drift against
+      # docs/design/icon-policy.md fails here.
+      - name: Verify the icon policy ledger
+        run: pnpm icons:check
+        env:
+          ICON_GUARD_EVIDENCE_DIR: output/icons-guard
+
       # A baseline PNG may only change together with an approval record
       # (pnpm ui:baseline capture --approve ...). Hand edits fail here.
       - name: Verify the visual baseline approval contract
@@ -115,7 +134,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ui-style-guard
-          path: output/style-guard/
+          path: |
+            output/style-guard/
+            output/icons-guard/
           if-no-files-found: ignore
           retention-days: 30
 

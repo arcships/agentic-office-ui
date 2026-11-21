@@ -72,6 +72,7 @@ const suites = {
       "tests/unit/vue-ui-primitives-contract.test.mjs",
       "tests/unit/product-visual-matrix.test.mjs",
       "tests/unit/vue-ui-chrome-contract.test.mjs",
+      "tests/unit/icon-policy.test.mjs",
 
 
       "tests/unit/runtime-demo-limits.test.mjs",
@@ -693,6 +694,16 @@ command("vue-component-behavior-5", process.execPath, [
     ], {
       env: {
         DOCS_EVIDENCE_DIR: path.join(suiteDir, "documentation-contract"),
+      },
+    }),
+    // #180: OfficeIcon/Lucide is the default icon entry point; Hugeicons is a
+    // per-file pixel-parity exception in tests/icons/allowlist.json, and a
+    // third icon library (source or dependency) is rejected.
+    command("icon-policy", process.execPath, [
+      "scripts/ci/verify-icons.mjs",
+    ], {
+      env: {
+        ICON_GUARD_EVIDENCE_DIR: path.join(suiteDir, "icon-policy"),
       },
     }),
     // #165: component map / token table / migration guide / release checklist
