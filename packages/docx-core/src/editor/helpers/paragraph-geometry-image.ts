@@ -513,6 +513,85 @@ export function resolveFloatingImageStackingZIndex(
     : normalizedZIndex ?? 4;
 }
 
+/** Origin offsets a floating image is positioned against, in page pixels. */
+export interface FloatingAnchorOriginOptions {
+  pageOriginLeft?: number;
+  pageOriginTop?: number;
+  marginOriginLeft?: number;
+  marginOriginTop?: number;
+  columnOriginLeft?: number;
+  columnOriginTop?: number;
+  paragraphOriginLeft?: number;
+  paragraphOriginTop?: number;
+}
+
+export interface FloatingAnchorOrigin {
+  /** Page-space horizontal position, when the anchor carries an `xPx`. */
+  leftPx?: number;
+  /** Page-space vertical position, when the anchor carries a `yPx`. */
+  topPx?: number;
+}
+
+/**
+ * Resolve a floating image's page-space position from the `wp:anchor` offset
+ * and the `relativeFrom` origin it is measured against.
+ *
+ * This is the single origin rule for floating images: the flow renderer
+ * (`absoluteFloatingImageStyle`) and the edit-mode interaction layer
+ * (`DocxImageLayer`) both resolve through it, so a `margin`/`column` anchor
+ * lands on the same pixel whether the page is painted read-only or edited. A
+ * missing origin degrades to the page corner (offset `0`), which keeps a
+ * host that renders without a page origin on the pre-#194 page-edge behaviour.
+ */
+export function resolveFloatingAnchorOriginPx(
+  floating?: ImageRunNode["floating"],
+  options?: FloatingAnchorOriginOptions
+): FloatingAnchorOrigin {
+  if (!floating) {
+    return {};
+  }
+
+  const horizontalRelativeTo = floating.simplePos
+    ? "page"
+    : floating.horizontalRelativeTo?.toLowerCase();
+  const verticalRelativeTo = floating.simplePos
+    ? "page"
+    : floating.verticalRelativeTo?.toLowerCase();
+
+  let leftPx: number | undefined;
+  if (floating.xPx !== undefined) {
+    leftPx =
+      horizontalRelativeTo === "page"
+        ? floating.xPx + (options?.pageOriginLeft ?? 0)
+        : horizontalRelativeTo === "margin"
+        ? floating.xPx +
+          (options?.marginOriginLeft ?? options?.pageOriginLeft ?? 0)
+        : horizontalRelativeTo === "column"
+        ? floating.xPx + (options?.columnOriginLeft ?? 0)
+        : horizontalRelativeTo === "paragraph" ||
+          horizontalRelativeTo === "line"
+        ? floating.xPx + (options?.paragraphOriginLeft ?? 0)
+        : floating.xPx;
+  }
+
+  let topPx: number | undefined;
+  if (floating.yPx !== undefined) {
+    topPx =
+      verticalRelativeTo === "page"
+        ? floating.yPx + (options?.pageOriginTop ?? 0)
+        : verticalRelativeTo === "margin"
+        ? floating.yPx +
+          (options?.marginOriginTop ?? options?.pageOriginTop ?? 0)
+        : verticalRelativeTo === "column"
+        ? floating.yPx + (options?.columnOriginTop ?? 0)
+        : verticalRelativeTo === "paragraph" || verticalRelativeTo === "line"
+        ? floating.yPx + (options?.paragraphOriginTop ?? 0)
+        : floating.yPx;
+  }
+
+  return { leftPx, topPx };
+}
+
 export function absoluteFloatingImageStyle(
   image: ImageRunNode,
   options?: {
@@ -533,12 +612,6 @@ export function absoluteFloatingImageStyle(
     return {};
   }
 
-  const horizontalRelativeTo = floating.simplePos
-    ? "page"
-    : floating.horizontalRelativeTo?.toLowerCase();
-  const verticalRelativeTo = floating.simplePos
-    ? "page"
-    : floating.verticalRelativeTo?.toLowerCase();
   const horizontalAlign = floating.horizontalAlign?.toLowerCase();
   const verticalAlign = floating.verticalAlign?.toLowerCase();
   const usesWrapDistance = Boolean(
@@ -556,33 +629,8 @@ export function absoluteFloatingImageStyle(
     : 0;
   const resolvedZIndex = resolveFloatingImageStackingZIndex(floating) ?? 4;
 
-  const resolvedLeft =
-    floating.xPx !== undefined
-      ? horizontalRelativeTo === "page"
-        ? floating.xPx + (options?.pageOriginLeft ?? 0)
-        : horizontalRelativeTo === "margin"
-        ? floating.xPx +
-          (options?.marginOriginLeft ?? options?.pageOriginLeft ?? 0)
-        : horizontalRelativeTo === "column"
-        ? floating.xPx + (options?.columnOriginLeft ?? 0)
-        : horizontalRelativeTo === "paragraph" ||
-          horizontalRelativeTo === "line"
-        ? floating.xPx + (options?.paragraphOriginLeft ?? 0)
-        : floating.xPx
-      : undefined;
-  const resolvedTop =
-    floating.yPx !== undefined
-      ? verticalRelativeTo === "page"
-        ? floating.yPx + (options?.pageOriginTop ?? 0)
-        : verticalRelativeTo === "margin"
-        ? floating.yPx +
-          (options?.marginOriginTop ?? options?.pageOriginTop ?? 0)
-        : verticalRelativeTo === "column"
-        ? floating.yPx + (options?.columnOriginTop ?? 0)
-        : verticalRelativeTo === "paragraph" || verticalRelativeTo === "line"
-        ? floating.yPx + (options?.paragraphOriginTop ?? 0)
-        : floating.yPx
-      : undefined;
+  const { leftPx: resolvedLeft, topPx: resolvedTop } =
+    resolveFloatingAnchorOriginPx(floating, options);
 
   const style: Record<string, string | number | undefined> = {
     position: "absolute",

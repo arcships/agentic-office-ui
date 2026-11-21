@@ -8,7 +8,9 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxImageLayer, DocxPageSurface, renderParagraphRuns } = await importFromDemo("@arcships/vue-docx");
+const { DocxImageLayer, DocxPageSurface, renderParagraphRuns, useDocxEditor } =
+  await importFromDemo("@arcships/vue-docx");
+const core = await importFromDemo("@arcships/docx-core");
 
 const PAGE_ORIGIN = {
   left: 0,
@@ -384,6 +386,250 @@ test("edit mode splits floating images into a behind-text layer and a front laye
   }
 });
 
+// --- Anchor origin (issue #194) ----------------------------------------
+
+/**
+ * The vnode carrying the absolute-float style: unrotated floats style the
+ * `<img>` itself, 90°/270° floats style the swapped frame `<span>`.
+ */
+function absoluteFloatingStyle(vnodes) {
+  const node = flatten(vnodes).find(
+    (child) => child?.props?.style?.position === "absolute",
+  );
+  assert.ok(node, "expected a rendered absolute float");
+  return node.props.style;
+}
+
+function originPageModel(children) {
+  return { ...core.createBlankDocumentModel(), nodes: [paragraphWith(children)] };
+}
+
+test("edit mode paints a column-relative behind-text float from the column origin (#194)", async () => {
+  const floating = {
+    xPx: 75.591,
+    yPx: 12,
+    horizontalRelativeTo: "column",
+    verticalRelativeTo: "column",
+    // The "Behind text" command turns a wrapped anchor into `wrapType: none`;
+    // the column anchor and its offset survive the conversion (#194).
+    wrapType: "none",
+    behindDocument: true,
+    zIndex: 251658240,
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({
+        starterModel: originPageModel([imageRun({ floating })]),
+      });
+      return () =>
+        vue.h(DocxPageSurface, {
+          pageIndex: 0,
+          pageLayout: pageLayout(),
+          pageNodeSegments: [{ nodeIndex: 0 }],
+          model: controller.model,
+          pageWidthPx: 816,
+          pageContentWidthPx: 624,
+          pageNumber: 1,
+          totalPages: 1,
+          editable: true,
+          controller,
+        });
+    },
+  });
+  const mounted = await mount(Harness);
+  try {
+    const container = walk(mounted.root).find(
+      (node) => node.props?.["data-testid"] === "docx-floating-image",
+    );
+    assert.ok(container, "edit mode renders the floating image");
+
+    const viewStyle = absoluteFloatingStyle(
+      renderRuns(paragraphWith([imageRun({ floating })]), { origin: PAGE_ORIGIN }),
+    );
+    assert.equal(viewStyle.left, 171.591, "page 0 + left margin 96 + offset 75.591");
+    assert.equal(viewStyle.top, 84, "page 0 + top margin 72 + offset 12");
+    assert.equal(
+      container.props.style.left,
+      `${viewStyle.left}px`,
+      "edit mode must start at the page+margin origin, not the page edge",
+    );
+    assert.equal(container.props.style.top, `${viewStyle.top}px`);
+
+    // Behind-text identity is independent of the origin fix.
+    assert.equal(container.props["data-image-behind"], "true");
+    assert.equal(container.props.style.pointerEvents, "none");
+    assert.equal(
+      container.props.style.zIndex,
+      String(core.resolveFloatingImageStackingZIndex(floating)),
+      "the relativeHeight paint order is unchanged",
+    );
+    const behindLayer = walk(mounted.root).find(
+      (node) => node.props?.["data-docx-image-layer"] === "behind",
+    );
+    assert.ok(behindLayer, "the float still renders in the behind-text layer");
+    assert.ok(Number(behindLayer.props.style.zIndex) < 0);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("edit-mode absolute floats resolve the same anchor origin as view mode", async () => {
+  const variants = [
+    {
+      name: "page",
+      floating: { xPx: 75.591, yPx: 12, horizontalRelativeTo: "page", verticalRelativeTo: "page" },
+    },
+    {
+      name: "margin",
+      floating: { xPx: 75.591, yPx: 12, horizontalRelativeTo: "margin", verticalRelativeTo: "margin" },
+    },
+    {
+      name: "column",
+      floating: { xPx: 75.591, yPx: 12, horizontalRelativeTo: "column", verticalRelativeTo: "column" },
+    },
+    {
+      name: "simplePos",
+      floating: {
+        xPx: 75.591,
+        yPx: 12,
+        horizontalRelativeTo: "column",
+        verticalRelativeTo: "column",
+        simplePos: true,
+      },
+    },
+    {
+      name: "rotated column",
+      floating: { xPx: 20, yPx: 30, horizontalRelativeTo: "column", verticalRelativeTo: "column" },
+      sourceXml: `<a:xfrm rot="${ROTATED_90}"><a:off x="0" y="0"/><a:ext cx="1905000" cy="952500"/></a:xfrm>`,
+    },
+  ];
+  const controller = controllerWith(
+    variants.map((variant) =>
+      imageRun({
+        floating: variant.floating,
+        ...(variant.sourceXml ? { sourceXml: variant.sourceXml } : {}),
+      }),
+    ),
+  );
+  const mounted = await mountLayer(controller, {
+    floatingPageOriginPx: PAGE_ORIGIN,
+  });
+  try {
+    const containers = walk(mounted.root).filter(
+      (node) => node.props?.["data-testid"] === "docx-floating-image",
+    );
+    assert.equal(containers.length, variants.length);
+
+    variants.forEach((variant, childIndex) => {
+      const container = containers.find(
+        (node) => node.props["data-image-child-index"] === childIndex,
+      );
+      assert.ok(container, `expected a container for the ${variant.name} float`);
+      const viewStyle = absoluteFloatingStyle(
+        renderRuns(
+          paragraphWith([
+            imageRun({
+              floating: variant.floating,
+              ...(variant.sourceXml ? { sourceXml: variant.sourceXml } : {}),
+            }),
+          ]),
+          { origin: PAGE_ORIGIN },
+        ),
+      );
+      assert.equal(
+        container.props.style.left,
+        `${viewStyle.left}px`,
+        `${variant.name}: edit-mode left must match the view-mode origin`,
+      );
+      assert.equal(
+        container.props.style.top,
+        `${viewStyle.top}px`,
+        `${variant.name}: edit-mode top must match the view-mode origin`,
+      );
+    });
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+function installPointerDocument(t) {
+  const originalDocument = globalThis.document;
+  const listeners = new Map();
+  globalThis.document = {
+    addEventListener(type, listener) {
+      const entries = listeners.get(type) ?? new Set();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+  };
+  t.after(() => {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  });
+  return (type, event) => {
+    for (const listener of [...(listeners.get(type) ?? [])]) listener(event);
+  };
+}
+
+test("dragging a column-anchored float previews in page coordinates and commits the model offset (#194)", async (t) => {
+  const dispatch = installPointerDocument(t);
+  const committed = [];
+  const controller = controllerWith([
+    imageRun({
+      widthPx: 100,
+      heightPx: 60,
+      floating: {
+        wrapType: "none",
+        horizontalRelativeTo: "column",
+        verticalRelativeTo: "column",
+        xPx: 0,
+        yPx: 0,
+      },
+    }),
+  ]);
+  controller.moveFloatingImage = (_location, next) => committed.push(next);
+  const mounted = await mountLayer(controller, {
+    floatingPageOriginPx: PAGE_ORIGIN,
+  });
+  try {
+    const container = () =>
+      walk(mounted.root).find(
+        (node) => node.props?.["data-testid"] === "docx-floating-image",
+      );
+    assert.equal(container().props.style.left, "96px", "the float starts on the column origin");
+
+    container().props.onMousedown({ preventDefault() {}, clientX: 100, clientY: 100 });
+    dispatch("mousemove", { type: "mousemove", clientX: 150, clientY: 120 });
+    await vue.nextTick();
+    assert.equal(
+      container().props.style.left,
+      "146px",
+      "the drag preview keeps the column origin: 96 + 50",
+    );
+    dispatch("mouseup", { type: "mouseup", clientX: 150, clientY: 120 });
+    assert.deepEqual(
+      committed,
+      [{ xPx: 50, yPx: 20 }],
+      "the committed offset stays in anchor-relative model coordinates",
+    );
+
+    // The page bound is measured on the painted position: dragging far right
+    // stops the image at pageWidth - 16, which is model offset 704 here.
+    container().props.onMousedown({ preventDefault() {}, clientX: 100, clientY: 100 });
+    dispatch("mousemove", { type: "mousemove", clientX: 2100, clientY: 120 });
+    await vue.nextTick();
+    assert.equal(container().props.style.left, "800px");
+    dispatch("mouseup", { type: "mouseup", clientX: 2100, clientY: 120 });
+    assert.deepEqual(committed[1], { xPx: 704, yPx: 20 });
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
 // --- Hit box re-measurement --------------------------------------------
 
 function installLayoutEnvironment(t) {
@@ -437,7 +683,9 @@ test("the wrapped drag target follows the paragraph after a text edit", async (t
     { type: "text", text: "first line" },
   ]);
 
-  const mounted = await mountLayer(controller);
+  const mounted = await mountLayer(controller, {
+    floatingPageOriginPx: PAGE_ORIGIN,
+  });
   try {
     const root = walk(mounted.root).find(
       (node) => node.props?.class === "docx-image-layer-root",
@@ -471,7 +719,11 @@ test("the wrapped drag target follows the paragraph after a text edit", async (t
         (node) => node.props?.["data-testid"] === "docx-floating-image",
       );
     const firstBox = containerNode().props.style;
-    assert.equal(firstBox.left, "96px", "the drag target matches the wrapped image");
+    assert.equal(
+      firstBox.left,
+      "96px",
+      "the drag target matches the measured wrapped image, not the column origin",
+    );
     assert.equal(firstBox.top, "120px");
     assert.equal(firstBox.width, "120px");
     assert.equal(firstBox.height, "80px");

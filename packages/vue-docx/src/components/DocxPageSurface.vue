@@ -218,6 +218,7 @@
         :page-index="pageIndex"
         :page-width-px="pageWidthPx"
         :page-height-px="pageLayout.pageHeightPx"
+        :floating-page-origin-px="floatingPageOriginPx"
         :controller="controller"
         :page-node-segments="pageNodeSegments"
         :editable="editable"
