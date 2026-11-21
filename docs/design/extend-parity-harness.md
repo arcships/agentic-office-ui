@@ -110,7 +110,7 @@ evidence；命中时 case 仍保留 reference/subject/diff 截图，并在报告
 | `xlsx-ribbon` | default、hover、focus、disabled(no selection) | ✅ `XlsxRibbonSurface.vue`（OfficeToolbar/OfficeButton/OfficeToggle + HugeIcon；32/32 pass） |
 | `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
 | `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
-| `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
+| `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局；#183 定义 `office-reference`（规格 checklist + 自基线，见 [pptx-presenter-reference.md](pptx-presenter-reference.md)），manifest 切换在实现 issue |
 | `bounding-box-citations` | default、hover、focus、selected、modified、empty、loading、error | ✅ `BoundingBoxCitations.vue`（Form 标量字段；232/232 pass） |
 | `layout-blocks` | default、hover、focus、active、empty、loading、error | ✅ `LayoutBlocks.vue`（OCR 面板；232/232 pass） |
 | `e-signature` | unsigned、signed、exporting、preview、loading、error | ✅ `ESignatureFields.vue`（字段面板；232/232 pass） |
@@ -210,9 +210,10 @@ viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
   全部 pass，0 像素差、0 几何差；#165 在合并后的 0.8 树上复跑 64/64 后补基线并切
   `blocking`，两条都进 PR 子集（摘要见 [pptx-chrome.md](../components/pptx-chrome.md#7-测试与像素证据)）。
   `pptx-presenter` 在固定 commit 没有上游布局（presenter 在私有
-  `@extend-ai/react-pptx` 内），manifest 用 `referenceStatus: "unreachable"`
-  描述它：harness 在 report/SUMMARY 的 unreachable 表列出原因并跳过采集，
-  不把“自己拼的参考”当成 parity 证据。
+  `@extend-ai/react-pptx` 内）。#183 已把它的参考改成 `office-reference`：
+  [pptx-presenter-reference.md](pptx-presenter-reference.md) 定义区域/尺寸/交互与
+  checklist，验收靠规格 checklist + 自基线 + 组件测试；manifest 字段与 runner
+  分支在实现 issue 中接入，在那之前仍按 `unreachable` 跳过采集。
 - 环境对齐：Extend 参考页的 `.dark` 只切 token，而 #156 的 `theme.css` 同时设置 `color-scheme`。
   `ParitySurface` 现在按主题写入 `color-scheme`，避免 focus ring 因为原生控件配色不同而误报。
 

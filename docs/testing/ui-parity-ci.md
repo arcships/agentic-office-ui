@@ -202,7 +202,7 @@ pnpm ui:baseline:verify
 | `bounding-box-citations`, `layout-blocks`, `e-signature`, `document-splits` | ❌ | blocking | #164 232/232 像素 0；有基线（nightly 阻断） |
 | `xlsx-toolbar`, `xlsx-sheet-tabs`, `xlsx-status-bar` | ✅ | blocking | #160 64/64 像素 0；有基线，PR 即阻断 |
 | `xlsx-ribbon` | ❌ | blocking | #170 32/32 像素 0（4 viewport × light/dark × default/hover/focus/disabled）；有基线（nightly 阻断） |
-| `pptx-presenter` | ❌ | pending（#161） | 上游无 presenter 布局（`referenceStatus: unreachable`），由组件测试覆盖 |
+| `pptx-presenter` | ❌ | pending（#161 → #183） | 上游无 presenter 布局；#183 已产出 `office-reference` 规格（[pptx-presenter-reference.md](../design/pptx-presenter-reference.md)），状态切换与门禁接线在实现 issue，当前仍为 `unreachable` |
 
 26 个可渲染 surface 已全部 `blocking` 并提交 4 个 viewport 的基线（896 张）；16 个进 PR 子集（全部 primitive、
 file、PDF、DOCX/PPTX/XLSX chrome），10 个 chrome/block surface 只在 nightly 全矩阵跑。`pptx-presenter` 是

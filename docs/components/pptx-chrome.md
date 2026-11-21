@@ -135,13 +135,17 @@ aside[data-testid=pptx-presenter]
 计时、`role="timer"`、`aria-label`、`data-presenter-mode`、空备注文案和
 `notes` 插槽都保持原行为；备注区在面板内滚动，不再让整个 aside 滚动。
 
-**上游参照不可达**：固定 commit 的 `apps/v4/components/extend/pptx-viewer.tsx`
+**上游没有 presenter 布局**：固定 commit 的 `apps/v4/components/extend/pptx-viewer.tsx`
 只包含工具栏、缩略图 rail 和 loading/empty/error；presenter 视图与演讲者备注
-在私有 `@extend-ai/react-pptx` 引擎内部，本仓库不 vendor 该引擎。用 Extend
-primitive 拼一个“参考”只会重复我们自己的组合，因此
-`tools/parity-fixtures/manifest.json` 把 `pptx-presenter` 登记为
-`referenceStatus: "unreachable"`，报告会列出原因而不是伪造像素 pass；该面板由
-共享 primitive、组件测试和 §7 的 chrome story 验证。
+在私有 `@extend-ai/react-pptx` 引擎内部（0.6.1 只有 `showNotes` 的 `.rpv-notes`
+文本段），本仓库不 vendor 该引擎。
+
+#183 不再以 `unreachable` 收尾：演讲者视图的参考规格改由
+[pptx-presenter-reference.md](../design/pptx-presenter-reference.md) 定义
+（区域表、尺寸/断点、交互清单、备注与计时规则），验收状态为
+`office-reference` = 规格 checklist + 自基线截图 + 组件测试。
+`referenceStatus` 的切换与门禁接线在 #183 的实现 issue 中完成；**在此之前
+manifest 里仍是 `unreachable`**，报告如实列出而不是伪造像素 pass。
 
 ## 5. 链接右键菜单
 
@@ -206,7 +210,7 @@ pnpm ui:parity -- --only pptx-toolbar,pptx-sorter,pptx-presenter
 |---|---|---|---|---|---|
 | `pptx-toolbar` | default/hover/focus/active/disabled | 4×2×5 = 40 | 40 pass | 0px | 0% |
 | `pptx-sorter` | default/hover/selected | 4×2×3 = 24 | 24 pass | 0px | 0% |
-| `pptx-presenter` | — | — | unreachable（§4） | — | — |
+| `pptx-presenter` | — | — | unreachable（§4；#183 后改为 `office-reference`） | — | — |
 
 矩阵阈值未修改（`maxChannelDelta: 2`、`maxDiffPixelRatio: 0.001`、0px 几何）。#165 在合并后的 0.8 树上复跑同一命令仍为 **64/64 pass、0 AA**，随后把 `pptx-toolbar` / `pptx-sorter` 切为 `gateStatus: "blocking"` 并提交对照侧基线（8 state × 2 viewport × 2 theme = 32 张），两条都进 PR 子集。`pptx-presenter` 以 `referenceStatus: "unreachable"` 出现在 report 的 unreachable 表，不参与 pass/fail 计数，保持 `pending`。
 

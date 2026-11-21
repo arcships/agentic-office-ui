@@ -366,13 +366,13 @@
 |---|---|---|---|
 | toolbar / 缩略图 rail | `public-vendored` **done** | `tools/extend-reference/src/vendor/extend/pptx-toolbar.tsx`、`pptx-slide-card.tsx` | 无 |
 | sorter 网格 | `public-vendored`（重组）**done** | 上游没有 sorter 网格；参考取 rail item + `file-thumbnail.tsx`，manifest 注明 | 上游无网格布局 |
-| presenter | `office-reference` **missing** | `pptx-viewer.tsx` 无 presenter；`@extend-ai/react-pptx@0.5.0` 的 `dist` 中 `presenter` 出现 0 次；只有 `showNotes` 与 `.rpv-notes` | 需要 PowerPoint/Keynote/Google Slides/LibreOffice/ONLYOFFICE 的区域与尺寸规格（#183） |
+| presenter | `office-reference` **spec ready**（#183） | [pptx-presenter-reference.md](pptx-presenter-reference.md)；`pptx-viewer.tsx` 无 presenter；`@extend-ai/react-pptx@0.6.1` 的 `dist` 中 `presenter` 出现 0 次，`ViewerMode = 'slide' \| 'continuous'`；只有 `showNotes` 与 `.rpv-notes` | 实现 issue A/B/C（面板增强 / 演讲者布局 / 验收接线）未开 |
 | chart internals | `provider-dependent` | `pptx-core/src/reference-adapter.ts:54` `getObjectChart?`；`pptx-object-index.ts:218` 使用 `PptxChartSnapshot` | Surface 未接入；几何来源是 `@aiden0z/pptx-renderer` 的 chart 数据 |
 | 备注 | `public-vendored`（自读 OOXML）**done** | `pptx-core/src/notes.ts`；`PptxPresenterPanel` | 上游 notes 无公开布局 |
 
 ### 7.5 实现方案
 
-- **#183（presenter）**：产出 `docs/design/pptx-presenter-reference.md`（区域图、尺寸表、交互清单、截图来源），再决定 `pptx-presenter` 的验收方式：**office-reference 截图基线 + 组件测试**，不再用 `referenceStatus: "unreachable"`。
+- **#183（presenter）**：已产出 [pptx-presenter-reference.md](pptx-presenter-reference.md)（区域图、尺寸表、交互清单、截图来源、实现计划）；`pptx-presenter` 的验收方式定为 **office-reference：规格 checklist + 自基线截图 + 组件测试**，`referenceStatus: "unreachable"` 退役，manifest/门禁接线见该文档 §11.4。
 - **#184（chart internals）**：定义 `PptxChartGeometryProvider`（series/point rect、legend item、axis tick），由 renderer 适配器实现；`PptxStage` 消费 provider 输出做命中/高亮；L1 不承诺像素，只做 provider 合同测试。
 - **#176（对象矩阵）**：把 PPTX 行从“provider 已有但未接入”改为“provider 合同 + Surface 接入”两步，附 fixture。
 - **风险**：`@aiden0z/pptx-renderer` 需要本地 patch（`patches/@aiden0z__pptx-renderer@1.2.4.patch`），升级时要同步维护 patch 与 chart 几何适配。
