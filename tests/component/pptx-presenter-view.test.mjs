@@ -4,12 +4,14 @@ import test from "node:test";
 import {
   findByTestId,
   importFromDemo,
+  keydownEvent,
   mount,
   textContent,
   vue,
   waitFor,
   walk,
 } from "./vue-test-renderer.mjs";
+import { readFileSync } from "node:fs";
 
 // Vue's native v-model directive checks these browser constructors during an
 // update. The custom component renderer intentionally has no browser DOM.
@@ -303,6 +305,125 @@ test("the presenter rail is localized", async () => {
     assert.equal(rail.props["aria-label"], "演讲者视图");
     assert.match(textContent(findByTestId(mounted.root, "pptx-presenter-notes")), /备注/);
     assert.equal(textContent(findByTestId(mounted.root, "pptx-presenter-timer")).trim(), "00:00");
+  } finally {
+    mounted.app.unmount();
+  }
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("fullscreen projects the audience surface only, never the speaker notes", async () => {
+  const listeners = new Map();
+  let exitCalls = 0;
+  const fakeDocument = {
+    fullscreenElement: null,
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
+    async exitFullscreen() { exitCalls += 1; },
+  };
+  const previousDocument = globalThis.document;
+  globalThis.document = fakeDocument;
+  try {
+    const mounted = await mountViewer({ mode: "present", showNotes: true, height: "640px" });
+    try {
+      const viewer = findByTestId(mounted.root, "pptx-viewer");
+      const surface = findByTestId(mounted.root, "pptx-audience-surface");
+      assert.ok(surface, "the audience surface is rendered");
+      assert.equal(surface.type, "div");
+      assert.equal(surface.props.tabindex, "-1", "the projected surface can take focus");
+      assert.ok(findByTestId(surface, "pptx-stage"), "the audience surface owns the slide stage");
+      assert.ok(findByTestId(mounted.root, "pptx-presenter-notes"), "notes still render in the presenter rail");
+      assert.equal(findByTestId(surface, "pptx-presenter"), undefined, "the presenter rail is outside the projection target");
+      assert.equal(
+        walk(surface).filter((node) => node.props?.["data-pptx-notes"] !== undefined).length,
+        0,
+        "the fullscreen subtree contains no speaker-notes node",
+      );
+      assert.equal(
+        walk(surface).filter((node) => node.props?.["data-pptx-presenter"] !== undefined).length,
+        0,
+        "the fullscreen subtree contains no presenter rail",
+      );
+      assert.ok(
+        walk(mounted.root).some((node) => node.props?.["data-pptx-notes"] !== undefined),
+        "notes exist only outside the projection target",
+      );
+
+      let surfaceRequests = 0;
+      let viewerRequests = 0;
+      surface.requestFullscreen = async () => { surfaceRequests += 1; };
+      viewer.requestFullscreen = async () => { viewerRequests += 1; };
+      const fullscreenButton = walk(mounted.root).find(
+        (node) => node.type === "button" && node.props?.["aria-label"] === "Fullscreen",
+      );
+      assert.ok(fullscreenButton, "the present playback bar has a fullscreen control");
+      fullscreenButton.props.onClick();
+      await waitFor(() => surfaceRequests === 1, "audience surface fullscreen request");
+      assert.equal(viewerRequests, 0, "the viewer root (which holds the notes rail) is never the fullscreen target");
+
+      fakeDocument.fullscreenElement = {
+        contains: (node) => String(node?.props?.class ?? "").includes("pptx-viewer__audience"),
+      };
+      listeners.get("fullscreenchange")();
+      await vue.nextTick();
+      assert.equal(viewer.props.style, undefined, "fullscreen drops the inline viewer height");
+
+      const { event } = keydownEvent("Escape");
+      const handlers = Array.isArray(viewer.props.onKeydown) ? viewer.props.onKeydown : [viewer.props.onKeydown];
+      for (const handler of handlers) handler?.(event);
+      await waitFor(() => exitCalls === 1, "present Escape exits fullscreen");
+      fakeDocument.fullscreenElement = null;
+      listeners.get("fullscreenchange")();
+      await vue.nextTick();
+      assert.deepEqual(viewer.props.style, { height: "640px", maxHeight: "640px" });
+    } finally {
+      mounted.app.unmount();
+    }
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+
+  // Source guard: keep the request on the audience ref so a future edit cannot
+  // silently route fullscreen back to the viewer root (and its notes rail).
+  const viewerSource = readFileSync(
+    new URL("../../packages/vue-pptx/src/PptxViewer.vue", import.meta.url),
+    "utf8",
+  );
+  const enterSource = viewerSource.slice(
+    viewerSource.indexOf("async function enterFullscreen"),
+    viewerSource.indexOf("async function exitFullscreen"),
+  );
+  assert.match(enterSource, /audienceRef\.value/);
+  assert.doesNotMatch(enterSource, /viewerRef\.value/);
+  assert.match(viewerSource, /ref="audienceRef"/);
+  assert.match(viewerSource, /data-testid="pptx-audience-surface"/);
+});
+
+test("browse fullscreen also targets the audience surface, not the viewer chrome", async () => {
+  const mounted = await mountViewer({ showNotes: true });
+  try {
+    const viewer = findByTestId(mounted.root, "pptx-viewer");
+    const surface = findByTestId(mounted.root, "pptx-audience-surface");
+    assert.ok(surface, "the audience surface is rendered in browse mode too");
+    assert.ok(findByTestId(mounted.root, "pptx-presenter"), "browse notes rail is mounted");
+    assert.equal(findByTestId(surface, "pptx-presenter"), undefined);
+
+    let surfaceRequests = 0;
+    let viewerRequests = 0;
+    surface.requestFullscreen = async () => { surfaceRequests += 1; };
+    viewer.requestFullscreen = async () => { viewerRequests += 1; };
+
+    findByTestId(mounted.root, "pptx-actions").props.onClick();
+    await vue.nextTick();
+    const fullscreenItem = findByTestId(mounted.root, "pptx-toolbar-fullscreen");
+    assert.ok(fullscreenItem, "the toolbar actions menu exposes fullscreen");
+    fullscreenItem.props.onClick();
+    await waitFor(() => surfaceRequests === 1, "browse audience surface fullscreen request");
+    assert.equal(viewerRequests, 0, "browse fullscreen does not request the viewer root");
+    assert.equal(findByTestId(surface, "pptx-viewer-toolbar"), undefined, "toolbar stays outside fullscreen");
   } finally {
     mounted.app.unmount();
   }

@@ -47,7 +47,18 @@
 .pptx-viewer:focus-visible { outline: 2px solid var(--pptx-accent); outline-offset: -2px; }
 
 /* The inline height keeps the demo's "calc(100vh - 190px)" box in the page;
-   fullscreen must fill the screen instead of leaving black bars. */
+   fullscreen must fill the screen instead of leaving black bars. Fullscreen is
+   requested on the audience surface (`main`), not the viewer root, so the
+   presenter notes rail and playback chrome never reach a projector. */
+.pptx-viewer__audience:fullscreen {
+  background: var(--pptx-bg);
+  block-size: 100vh;
+  inline-size: 100vw;
+  max-block-size: none;
+  max-inline-size: none;
+}
+.pptx-viewer__audience::backdrop { background: var(--pptx-bg); }
+/* Host-requested root fullscreen stays supported (`syncFullscreen` accepts it). */
 .pptx-viewer:fullscreen {
   block-size: 100vh;
   inline-size: 100vw;
@@ -113,6 +124,9 @@
 }
 
 .pptx-viewer__body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+/* Audience surface: slide stage + sorter overlay only. Fullscreen targets this
+   node, so the sidebar, notes rail and playback chrome stay out of projection. */
+.pptx-viewer__audience { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: block; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; position: relative; }
 /* Browse layout toggle lives in the shared toolbar; only the sorter surface
@@ -413,6 +427,7 @@
   .pptx-viewer__playback-controls,
   .pptx-viewer__message { display: none !important; }
   .pptx-viewer__body,
+  .pptx-viewer__audience,
   .pptx-viewer__stage-wrap { display: block !important; overflow: visible !important; }
   .pptx-viewer__stage {
     inline-size: 100% !important;

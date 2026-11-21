@@ -980,6 +980,8 @@ test("pptx-viewer stylesheet keeps the fullscreen and letterbox rules", async ()
     "utf8",
   );
   assert.match(css, /\.pptx-viewer:fullscreen\s*\{/);
+  assert.match(css, /\.pptx-viewer__audience:fullscreen\s*\{/);
+  assert.match(css, /\.pptx-viewer__audience::backdrop\s*\{/);
   assert.match(css, /aspect-ratio:\s*var\(--pptx-slide-aspect/);
   assert.match(css, /--pptx-slide-ratio/);
 });

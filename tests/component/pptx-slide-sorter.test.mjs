@@ -132,6 +132,9 @@ test("PPTX sorter renders a numbered slide grid in browse mode", async () => {
   await waitFor(() => findByTestId(mounted.root, "pptx-sorter") !== undefined, "slide sorter grid");
 
   const grid = findByTestId(mounted.root, "pptx-sorter-grid") ?? nodesWithClass(mounted.root, "pptx-viewer__sorter-grid")[0];
+  const surface = findByTestId(mounted.root, "pptx-audience-surface");
+  assert.ok(findByTestId(surface, "pptx-sorter"), "the sorter is part of the fullscreen audience surface");
+  assert.equal(findByTestId(surface, "pptx-viewer-toolbar"), undefined, "the toolbar stays out of the audience surface");
   assert.equal(grid.props.style.gridTemplateColumns, "repeat(3, minmax(0, 1fr))");
   assert.deepEqual(
     sorterItems(mounted.root).map((item) => item.props["data-slide-index"]),
