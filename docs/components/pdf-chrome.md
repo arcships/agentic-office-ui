@@ -78,8 +78,26 @@
 | 批注详情 | `OfficeDialog`（`show-annotation-dialog`，默认关闭） |
 | 表单字段提示 | `OfficeTooltip`（`PdfFieldTooltip`，浏览器 only） |
 
-`PdfSurface` 仍是最小嵌入 Surface：不新增内部 toolbar（宿主拥有搜索/缩放/翻页控件，
-这是公开合同）；状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
+`PdfSurface` 默认仍是最小嵌入 Surface：宿主拥有搜索/缩放/翻页控件。自 #172 起它增加可选
+`showToolbar`（默认 `false`）；开启后在页面区上方复用同一个 `PdfViewerToolbar`，命令接到
+Surface 自己的状态。状态、侧栏和可选 `OfficeStatusBar` 与查看器使用同一套组件。
+
+### 3.1 `PdfSurface` 可选 toolbar（#172）
+
+- `showToolbar="true"` 时渲染 `PdfViewerToolbar`（`data-testid="pdf-toolbar"`、`role="toolbar"`），
+  行结构、尺寸、test id 与 viewer 完全一致；默认 `false` 时 DOM 与像素足迹不变。
+- 页码、上一/下一/首/末页 → `scrollToPage()`；zoom → Surface `zoom`（受控时仍只发
+  `update:zoom`）；rotate → `rotation`；侧栏 toggle → `navOpen` / `showThumbnails`；
+  search → Surface `searchState` / `searchStateChange`；download → 已验证字节；
+  print → 浏览器打印（`beforeprint` 仍会栅格化全部页面）。
+- layout 是唯一没有 Surface 等价物的命令。`PdfSurface.pageLayout` 仍是宿主控制的 prop，
+  本 issue 不新增 `update:pageLayout`，所以三个 layout 菜单项渲染为 disabled，并带
+  `data-layout-disabled="true"`；宿主改布局仍通过 `pageLayout` prop。
+- 窄容器不新增溢出规则：toolbar 继续使用 `flex-wrap: wrap` 的两组布局，390px 时换行到
+  多行；`DocumentViewerSidebar` 在 <768px 自动 overlay。搜索/actions 未打开时，toolbar 的
+  `Escape` 转发给 Surface 关闭 overlay 侧栏。
+- `showToolbar` 同时启用 Surface 的 `Ctrl/Cmd + F`（打开并聚焦 toolbar 搜索框）；默认关闭时
+  Surface 键盘映射不变。
 
 ### #199 路由对齐后的默认值
 
@@ -102,6 +120,7 @@ toggle 仍可打开），可选状态栏默认不渲染（`showStatusBar` 仍是
 | `PdfViewer` | `showStatusBar` | `false` | 可见 `OfficeStatusBar` |
 | `PdfSurface` | `showStatusBar` | `false` | 可见 `OfficeStatusBar` |
 | `PdfSurface` | `showAnnotationDialog` | `false` | 点击批注打开 `OfficeDialog` |
+| `PdfSurface` | `showToolbar` | `false` | 复用 `PdfViewerToolbar`；layout 组 disabled（#172） |
 
 新增消息键（en / zh-CN）：`pdf.viewer.print`、`pdf.viewer.moreActions`、
 `pdf.viewer.rotateCounterclockwise`、`pdf.viewer.passwordRequired`、
@@ -148,11 +167,16 @@ PDF sidebar：**PASS — 24/24**（1440/1280/768/390 × light/dark × open/close
 parity/桌面测量为 1440/768 48px、390 125px。侧栏在窄容器为 overlay，1440 为
 inline；状态栏 32px；coarse pointer 下 10 个可见控件均 ≥44px。
 
+`PdfSurface.showToolbar` 复用同一个 `PdfViewerToolbar`，截图 story 的 `#/pdf-surface`
+分支仍覆盖默认 host-toolbar 版本；Surface toolbar 的 390px 换行合同由 §5 的 L1
+`pdf-toolbar` parity 与 `tests/component/pdf-surface-toolbar.test.mjs` 覆盖。
+
 ## 7. 验证
 
 ```bash
 pnpm --filter @arcships/vue-pdf build
 node --test --test-concurrency=1 tests/component/pdf-chrome.test.mjs
+node --test --test-concurrency=1 tests/component/pdf-surface-toolbar.test.mjs
 node --test --test-concurrency=1 tests/component/pdf-navigation-aids.test.mjs
 node --test --test-concurrency=1 tests/component/pdf-view-modes.test.mjs
 node --test --test-concurrency=1 tests/component/pdf-page-lifecycle.test.mjs

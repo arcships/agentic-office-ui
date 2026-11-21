@@ -89,7 +89,7 @@
 
 | 缺口 | 分类 | 结论 | 产品理由 / 前置 | owner |
 |---|---|---|---|---|
-| PDF editor 外壳与面板 | public-vendored | **实现** | 上游 8 个文件全公开、EmbedPDF 插件全 Apache-2.0；引用/表单/签名是 PDF 的核心编辑价值 | #172（先决策 Surface toolbar）→ 新 issue |
+| PDF editor 外壳与面板 | public-vendored | **实现** | 上游 8 个文件全公开、EmbedPDF 插件全 Apache-2.0；引用/表单/签名是 PDF 的核心编辑价值 | #172（Surface toolbar 已决策）→ 新 issue |
 | PDF annotation/form/stamp/redaction/export | public-vendored | **实现（分期）** | 先注释 + 表单（读/写），再做 stamp/redaction/export | 新 issue |
 | DOCX chrome 与 0.15.0 对齐 | public-partial | **调查 → 实现** | 我们的 port 基线 `6f70b92` 在本地浅克隆里不可解析；需与 0.15.0 逐文件 diff | #159 follow-up |
 | XLSX page setup dialog | office-reference | **实现（#171）** | 上游 `xlsx-editor.tsx` 没有独立 dialog，因此参考 Excel 页面设置（四选项卡的可写子集）；`XlsxPageSetupDialog` + `setPageSetup` + `_xlnm.Print_Area` | #171 |
@@ -170,7 +170,7 @@
 |---|---|---|
 | core | `vue-pdf/src/pdf/`：render runtime、页布局、页面签名、annotation 映射、outline、参考适配 | 编辑事务（注释增删改、表单写回）、导出 |
 | interaction | page/text/region/visual/native/behavior 六类引用（`pdf-reference-adapter.ts`） | 注释对象引用 |
-| vue | `PdfViewer`（toolbar/搜索/缩略图/outline/打印/旋转/下载）、`PdfSurface`（无 toolbar，见 #172） | `PdfEditor` 及面板 |
+| vue | `PdfViewer`（toolbar/搜索/缩略图/outline/打印/旋转/下载）、`PdfSurface`（默认最小嵌入；可选共享 toolbar，默认关闭，见 #172） | `PdfEditor` 及面板 |
 | ui | `pdf-toolbar` 40/40、`pdf-sidebar`；`OfficeEmptyState` 来自 `PdfEditorEmptyState` | 面板级组件（字段属性、签名、图章） |
 
 ### 4.4 参考可行性
@@ -188,7 +188,7 @@
 - **stub**：`@/components/ui/*` → `vue-ui` primitive；`react-resizable-panels` → `OfficeSplitPane`（需新增）；`@/components/icon-placeholder` → `HugeIcon`。
 - **provider**：无（全部公开）；但 `@embedpdf` 版本要先对齐（上游 2.15.0，我们 2.14.4）。
 - **工作量/风险**：L（8–12 人日）；风险：EmbedPDF 大版本升级会动 render/selection 代码；PDF 编辑是安全敏感面（表单写回需权限校验）。
-- **顺序**：① #172 决定 `PdfSurface` 是否带 toolbar；② 升级 EmbedPDF；③ 建 `PdfEditor` 外壳 + 空态；④ 注释面板；⑤ 表单；⑥ 签名/图章；⑦ 导出。
+- **顺序**：① #172 已决策：`PdfSurface.showToolbar` 为可选 prop（默认 `false`），复用 `PdfViewerToolbar`，layout 仍由宿主 `pageLayout` 控制；② 升级 EmbedPDF；③ 建 `PdfEditor` 外壳 + 空态；④ 注释面板；⑤ 表单；⑥ 签名/图章；⑦ 导出。
 - **验收**：L1 新增 `pdf-editor-toolbar`、`pdf-editor-panels`；L2 新增 `/pdf-editor`。
 
 ### 4.6 L1 / L2 验收
@@ -681,4 +681,4 @@
 - **#178**：CSV 的现状不是 `not-used`，是 `product-gap`；ADR 在 A/B/C 中选一个，B 需要新增 `csv-viewer` L1 + `/csv` L2。
 - **#179**：FileSystem/SchemaBuilder 的“私有依赖”理由不成立（Apache-2.0）。若不做，写成 “无宿主消费方 + 文件模型/schema 契约缺失”；若做，按 §9.5/§10.5 拆 issue。
 - **#171**（已实现）：上游没有独立 page setup dialog，所以参考是 office-reference（Excel 页面设置），不是上游像素；规格与未做项见 [xlsx-page-setup-reference.md](xlsx-page-setup-reference.md)。
-- **#172**：PDF editor 的 toolbar 在 `pdf-editor.tsx` 内是公开的；`PdfSurface` 是否带 toolbar 与本 issue 的 A/B 决策应同时定，避免出现“editor 有 toolbar、Surface 没有”的双标准。
+- **#172**（已实现）：PDF editor 的 toolbar 在 `pdf-editor.tsx` 内是公开的；`PdfSurface` 选择方案 B——增加可选 `showToolbar`（默认 `false`），复用 `PdfViewerToolbar`，layout 组因 `pageLayout` 受控而 disabled。默认足迹、现有事件/expose 不变；`PdfEditor` 本身仍是后续工作，避免出现“editor 有 toolbar、Surface 没有”的双标准。
