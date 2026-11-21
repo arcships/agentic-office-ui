@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "policy": "docs/design/icon-policy.md",
+  "description": "Direct icon-package imports allowed in packages/*/src and apps/*/src. OfficeIcon + @lucide/vue is the default; @hugeicons/core-free-icons is a pixel-parity exception for the viewer chrome and Extend component set. scripts/ci/verify-icons.mjs fails on any file that is not listed here, on Lucide/Hugeicons mixing without `mixed: true`, and on any third icon library. Entries are exact files: no globs, no directories.",
+  "exemptDependencies": [],
+  "entries": [
+    {
+      "file": "packages/vue-docx/src/components/DocxViewerToolbar.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "office-chrome",
+      "surface": "docx-toolbar",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/docx-toolbar.tsx",
+      "issue": "#159",
+      "reason": "上游 DocxToolbar 的侧栏、缩放、⋯、评论和修订 glyph 是 Hugeicons 原始字形；换成 Lucide 等价图标会改变笔画几何，docx-toolbar 的 32/32 case 就不是 0px 了。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-pdf/src/components/PdfViewerToolbar.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "office-chrome",
+      "surface": "pdf-toolbar",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/pdf-toolbar.tsx",
+      "issue": "#162",
+      "reason": "上游 PdfToolbar 的旋转、缩放和侧栏 glyph 只有复用同一 Hugeicons 数据才能保持 0px（pdf-toolbar 40/40）；Lucide 的 rotate-cw 端帽与笔画长度不同。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-pptx/src/PptxViewerToolbar.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "office-chrome",
+      "surface": "pptx-toolbar",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/pptx-toolbar.tsx",
+      "issue": "#161",
+      "reason": "pptx-toolbar 的 40/40 case 依赖上游 ArrowLeft01、CirclePlus、MoreHorizontal 等 Hugeicons 字形；Lucide 箭头的笔画长度和端帽不同。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "bounding-box-citations",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/bounding-box-citations.tsx",
+      "issue": "#164",
+      "reason": "review 页签的 TextCheck、SourceCodeSquare、CancelCircle 等字形来自 Extend 的 Hugeicons 集合，bounding-box-citations 的 232 个像素 case 依赖同一份 icon data。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/DocumentSplits.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "document-splits",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/document-splits.tsx",
+      "issue": "#164",
+      "reason": "拆分卡片的 Add01、DragDropVertical、Delete02 必须与上游一致才能保持 document-splits 0px；Lucide 的拖拽手柄点阵几何不同。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/ESignatureFields.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "e-signature",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/signature-fields.tsx",
+      "issue": "#164",
+      "reason": "e-signature surface 的 FilePen、Pen01、Download01 使用 Extend 的 Hugeicons 字形，替换会改变字段卡与导出按钮的像素。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/FileThumbnail.vue",
+      "iconPackages": ["@lucide/vue"],
+      "track": "default-adapter",
+      "issue": "#180",
+      "reason": "历史直连：文件类型 glyph 用了 7 个不在 OFFICE_ICONS 的 Lucide 图标（file-archive/audio/image/spreadsheet/video 等）。迁到注册表需要新增 5 个注册名，登记为显式例外；新代码仍然只能走 OFFICE_ICONS。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/FileUpload.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "file-upload",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/file-upload.tsx",
+      "issue": "#163",
+      "reason": "上传 chip、拖拽区和文件列表的 Upload01 必须与 Extend file-upload 同字形；换图标会让已归档的 file-upload 像素对照重新漂移。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "layout-blocks",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/layout-blocks-panel.tsx",
+      "issue": "#164",
+      "reason": "block 类型徽章使用上游 LayoutBlocks 面板的 Hugeicons 字形，layout-blocks 的 232 个像素 case 依赖同一份 icon data。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/components/SignaturePad.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "extend-parity",
+      "surface": "e-signature",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/signature-fields.tsx",
+      "issue": "#164",
+      "reason": "签名控件的 Pen01、Delete02、CheckmarkCircle02 来自上游 glyph 集；换成 Lucide 等价图标后 signer 控件的像素会漂移。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-ui/src/icons.ts",
+      "iconPackages": ["@lucide/vue"],
+      "track": "default-adapter",
+      "issue": "#180",
+      "reason": "唯一允许直连 @lucide/vue 的适配层：新增 Lucide 图标只在这里做命名导入并登记进 OFFICE_ICONS，其他文件通过 <OfficeIcon name=\"...\"> 使用，消费者 bundle 只带注册表里的图标。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-xlsx/src/components/XlsxRibbon.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "office-chrome",
+      "surface": "xlsx-ribbon",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx",
+      "issue": "#170",
+      "reason": "ribbon 的 B/I/U/S、插入/删除行列、文字/填充色全部是上游 Hugeicons 字形（xlsx-ribbon 32/32 为 0px，xlsx-office-chrome 测试断言 29 个 Hugeicons）；混入 Lucide 会同时改变字形和计数断言。",
+      "reviewBy": "2027-05-21"
+    },
+    {
+      "file": "packages/vue-xlsx/src/components/XlsxToolbar.vue",
+      "iconPackages": ["@hugeicons/core-free-icons"],
+      "track": "office-chrome",
+      "surface": "xlsx-toolbar",
+      "upstreamSource": "tools/extend-reference/src/vendor/extend/xlsx-toolbar.tsx",
+      "issue": "#160",
+      "reason": "xlsx-toolbar 的缩放、搜索、⋯ 触发器与上游 Hugeicons 字形一致（64/64 case 0px）；Lucide 的 search/plus 笔画几何不同。",
+      "reviewBy": "2027-05-21"
+    }
+  ]
+}

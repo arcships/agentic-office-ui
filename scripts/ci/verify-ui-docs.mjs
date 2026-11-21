@@ -106,6 +106,7 @@ for (const target of [
   "plan/release-checklist.md",
   "design/office-theme.md",
   "components/ui-primitives.md",
+  "design/icon-policy.md",
 ]) {
   check(`docs index links ${target}`, index.includes(target));
 }
@@ -255,7 +256,51 @@ for (const surface of a11yConfig.surfaces || []) {
   );
 }
 
-// 10. Baselines exist and are named by component/state/theme/viewport.
+// 10. Icon policy (#180): one Lucide adapter, a ledgered Hugeicons exception,
+// and no third icon system. `scripts/ci/verify-icons.mjs` validates the ledger
+// entries themselves; this contract keeps the prose and the wiring honest.
+const iconLedger = readJson("tests/icons/allowlist.json");
+const iconPolicyDoc = read("docs/design/icon-policy.md");
+check(
+  "icon ledger has schemaVersion 1 and exact entries",
+  iconLedger.schemaVersion === 1 &&
+    Array.isArray(iconLedger.entries) &&
+    iconLedger.entries.length > 0 &&
+    iconLedger.entries.every(
+      (entry) =>
+        typeof entry.file === "string" &&
+        !/[*?[\]{}]/u.test(entry.file) &&
+        Array.isArray(entry.iconPackages) &&
+        entry.issue &&
+        entry.reason &&
+        entry.reviewBy,
+    ),
+);
+for (const entry of iconLedger.entries || []) {
+  check(`icon policy doc lists ${entry.file}`, iconPolicyDoc.includes(entry.file));
+}
+check(
+  "icon policy doc documents the guard command",
+  iconPolicyDoc.includes("pnpm icons:check") && iconPolicyDoc.includes("scripts/ci/verify-icons.mjs"),
+);
+check("icon policy doc forbids a third icon library", /第三个图标库/u.test(iconPolicyDoc));
+check(
+  "the icon policy is reachable from the icon entry points",
+  read("docs/design/office-theme.md").includes("icon-policy.md") &&
+    read("docs/components/ui-primitives.md").includes("icon-policy.md"),
+);
+for (const snippet of ["icons:check", "ICON_IMPORT_NOT_ALLOWLISTED", "mixed"]) {
+  check(`CI doc documents the icon guard (${snippet})`, ciDoc.includes(snippet));
+}
+for (const snippet of [
+  "pnpm icons:check",
+  "docs/design/icon-policy.md",
+  "tests/icons/allowlist.json",
+]) {
+  check(`ui-parity workflow contains ${snippet}`, workflow.includes(snippet));
+}
+
+// 11. Baselines exist and are named by component/state/theme/viewport.
 const baselineManifestPath = "tests/visual/extend/manifest.json";
 if (existsSync(path.join(root, baselineManifestPath))) {
   const baselines = readJson(baselineManifestPath);

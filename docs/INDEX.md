@@ -12,6 +12,7 @@
 | 文档 | 用途 |
 |---|---|
 | [design/office-theme.md](design/office-theme.md) | Office 设计 token、light/dark/system 主题、Geist 字体与 Lucide 图标适配（0.8） |
+| [design/icon-policy.md](design/icon-policy.md) | 图标策略：`OfficeIcon` 默认 Lucide、Hugeicons viewer-chrome 例外清单、新增图标规则与 `pnpm icons:check` 门禁（#180） |
 | [design/extend-parity-harness.md](design/extend-parity-harness.md) | Extend UI 对照 harness：矩阵、阈值、DOM 协议、产物与各 issue 的 delta（#155） |
 | [design/extend-tokens.md](design/extend-tokens.md) | `docs/design/extend-tokens.json` 的生成方式、解析规则与 `--office-*` 映射差异（#155） |
 | [components/ui-primitives.md](components/ui-primitives.md) | reka-ui primitive 层：Button/Input/Select/Menu/Dialog/Sheet/Tooltip/Tabs/Toast 的 props、键盘/ARIA 与 token 规则（0.8） |

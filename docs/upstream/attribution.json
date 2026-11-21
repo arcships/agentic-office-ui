@@ -153,7 +153,7 @@
       "sourceUrl": "https://github.com/hugeicons/hugeicons",
       "pinnedUrl": "https://github.com/hugeicons/hugeicons",
       "licenseUrl": "https://github.com/hugeicons/hugeicons/blob/main/LICENSE",
-      "usage": "Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored."
+      "usage": "Icon data for the pixel-parity exceptions listed in docs/design/icon-policy.md (#159–#164, #170, #180; @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored."
     }
   ],
   "index": [

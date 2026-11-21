@@ -29,7 +29,7 @@ commit and the MIT copyright. See the index for the exact format and for the sta
 | reka-ui (runtime primitive dependency) | MIT | Copyright (c) 2023 radix-vue | Runtime dependency for the Vue primitive layer planned in #157 (reka-ui 2.11.x). Installed through pnpm; the MIT notice ships with the dependency. |
 | Lucide (@lucide/vue) | ISC | Copyright (c) 2026 Lucide Icons and Contributors | Icon set for the planned OfficeIcon adapter (#156, @lucide/vue 1.76.x). Icons are consumed as a dependency, not vendored. |
 | Geist and Geist Mono fonts | SIL Open Font License 1.1 | Copyright (c) 2023 Vercel, in collaboration with basement.studio | Default sans and mono font tokens for the Office theme (#156); consumed through @fontsource-variable/geist (OFL-1.1) or a host-provided Geist installation. |
-| Hugeicons (@hugeicons/core-free-icons) | MIT | Copyright (c) 2025 Hugeicons | Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
+| Hugeicons (@hugeicons/core-free-icons) | MIT | Copyright (c) 2025 Hugeicons | Icon data for the pixel-parity exceptions listed in docs/design/icon-policy.md (#159–#164, #170, #180; @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
 
 ## Full notices
 
@@ -422,7 +422,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 |---|---|
 | License | MIT |
 | Copyright | Copyright (c) 2025 Hugeicons |
-| Usage scope | Icon data for the Extend-aligned FileUpload glyphs and chip (#163, @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
+| Usage scope | Icon data for the pixel-parity exceptions listed in docs/design/icon-policy.md (#159–#164, #170, #180; @hugeicons/core-free-icons 4.4.0); consumed as a runtime dependency, not vendored. |
 | Source | https://github.com/hugeicons/hugeicons |
 | Pinned reference | https://github.com/hugeicons/hugeicons |
 | License URL | https://github.com/hugeicons/hugeicons/blob/main/LICENSE |
@@ -459,7 +459,8 @@ Their license texts are reproduced above and stored in [docs/upstream/licenses/]
 
 - **reka-ui** 2.11.x (MIT) for the Vue primitive layer planned in #157.
 - **@lucide/vue** 1.76.x (Lucide, ISC) for the Office icon adapter planned in #156.
-- **@hugeicons/core-free-icons** 4.4.0 (Hugeicons, MIT) for the Extend-aligned FileUpload glyphs in #163.
+- **@hugeicons/core-free-icons** 4.4.0 (Hugeicons, MIT) for the pixel-parity viewer chrome and Extend
+  components listed in [docs/design/icon-policy.md](docs/design/icon-policy.md) (#159–#164, #170, #180).
 - **@fontsource-variable/geist** 5.3.x (SIL OFL 1.1) or a host-provided Geist installation for the
   default sans and mono tokens planned in #156.
 

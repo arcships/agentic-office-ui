@@ -57,6 +57,7 @@
     "ui:tokens": "node scripts/ci/extract-extend-tokens.mjs",
     "ui:tokens:check": "node scripts/ci/extract-extend-tokens.mjs --check",
     "ui:docs": "node scripts/ci/verify-ui-docs.mjs",
+    "icons:check": "node scripts/ci/verify-icons.mjs",
     "check": "node scripts/ci/run-suite.mjs check"
   },
   "devDependencies": {
