@@ -50,9 +50,9 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.7.1",
-    "@arcships/pptx-core": "^0.7.1",
-    "@arcships/vue-ui": "^0.7.1",
+    "@arcships/office-interaction": "^0.8.0",
+    "@arcships/pptx-core": "^0.8.0",
+    "@arcships/vue-ui": "^0.8.0",
     "@hugeicons/core-free-icons": "4.4.0"
   },
   "peerDependencies": {

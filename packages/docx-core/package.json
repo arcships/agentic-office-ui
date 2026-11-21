@@ -71,7 +71,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.7.1",
+    "@arcships/office-interaction": "^0.8.0",
     "@chenglou/pretext": "^0.0.8",
     "@xmldom/xmldom": "0.9.10",
     "fast-png": "^8.0.0",

@@ -67,7 +67,7 @@
     "vue-tsc": "^3.3.6"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.7.1",
+    "@arcships/office-interaction": "^0.8.0",
     "@hugeicons/core-free-icons": "4.4.0",
     "@lucide/vue": "^1.76.0",
     "reka-ui": "^2.11",
