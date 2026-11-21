@@ -51,7 +51,7 @@ import "@arcships/vue-pptx/style.css"
 
 `limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 
-模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
+模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。`enterFullscreen()` 只投影舞台（`data-testid="pptx-audience-surface"`）：工具栏、侧栏、播放控制条和演讲者备注 rail 都不进入全屏；备注投到第二块屏需要宿主自建窗口（#202）。
 
 ### 超链接与右键菜单
 

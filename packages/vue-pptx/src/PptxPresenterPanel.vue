@@ -2,6 +2,7 @@
   <aside
     class="pptx-presenter"
     data-testid="pptx-presenter"
+    data-pptx-presenter="true"
     :data-presenter-mode="present ? 'present' : 'browse'"
     :aria-label="present ? m.pptx.viewer.notes.presenter : m.pptx.viewer.notes.panel"
   >
@@ -30,7 +31,7 @@
         </div>
       </div>
       <OfficeSeparator v-if="present" class="pptx-presenter__separator" />
-      <div class="pptx-presenter__body" data-testid="pptx-presenter-notes">
+      <div class="pptx-presenter__body" data-testid="pptx-presenter-notes" data-pptx-notes="true">
         <p class="pptx-presenter__label">{{ m.pptx.viewer.notes.title }}</p>
         <OfficeScrollArea class="pptx-presenter__scroll">
           <slot name="notes" :notes="notesText" :slide="slide?.index ?? 0">

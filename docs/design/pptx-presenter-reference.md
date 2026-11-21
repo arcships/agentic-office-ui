@@ -1,6 +1,7 @@
 # PPTX 演讲者视图参考规格（#183）
 
-> 状态：研究 + 规格（未实现）。本文回答"演讲者视图在办公软件里怎么组成和渲染"，
+> 状态：研究 + 规格（Issue A/B/C 未实现；#202 已把全屏目标收窄到 audience surface，
+> 备注/presenter rail 不再进入投影）。本文回答"演讲者视图在办公软件里怎么组成和渲染"，
 > 给出我们的目标区域模型、尺寸、交互与验收方式，供实现 issue 直接拆分。
 >
 > 相关：[pptx-chrome.md](../components/pptx-chrome.md)（现状与截图证据）、
@@ -22,8 +23,10 @@
    文件格式层面的事实，不是本仓库的借口。
 3. **我们的现状是"备注栏"，不是演讲者视图**：`PptxPresenterPanel` 有下一页缩略图、
    只读计时、备注滚动区；缺当前页区域（由 stage 承担，面板独立使用时没有）、
-   控制条、备注字号、可拖拽分栏、跳页/缩略图、黑屏，以及最关键的
-   **观众面与演讲者面分离**（`requestFullscreen()` 请求的是包含备注栏的整个 viewer）。
+   控制条、备注字号、可拖拽分栏、跳页/缩略图、黑屏。**观众面与演讲者面分离的
+   全屏漏洞已在 #202 修复**：`enterFullscreen()` 只请求 audience surface
+   （`div[data-testid=pptx-audience-surface]`），备注 rail、工具栏与播放控制条
+   都在其外，不再进入投影区域；真正的双窗口演讲者面仍属 P2（§7.3）。
 4. **建议**：保留 `PptxPresenterPanel` 作为 rail，新增 `PptxPresenterView` 布局组件
    由它组合当前页 + 侧列；**不重写** `PptxViewer` 的播放状态机。分三个 issue 落地
    （面板增强 → 演讲者布局 → 验收接线），多窗口/多显示器单列，0.8 内只做宿主
@@ -76,7 +79,9 @@
   （跳页/缩略图/黑屏）、计时写权限、独立窗口，其余具备。
 - **备注字号和分栏拖拽出现频率高于预期**（PPT/Keynote/Google/LO 都有字号；
   PPT/Keynote/Google 都有分栏），是"长备注可读性"的直接手段，不能算锦上添花。
-- **观众面必须不含备注**是五个产品的共同硬约束；我们的同窗口实现是当前最大偏差。
+- **观众面必须不含备注**是五个产品的共同硬约束。#202 已把同窗口全屏目标
+  收窄到 audience surface（舞台），备注 rail 不进入全屏；仍需补的是独立窗口/
+  多显示器下的真正演讲者面（P2，§7.3）。
 
 ## 3. 我们采用的目标区域模型
 
@@ -178,7 +183,7 @@ P0 = 0.8 必须；P1 = 紧随其后；P2 = 明确延后。来源列写"产品（
 | 11 | 分栏拖拽（指针）+ 键盘调整（`←/→` 在分隔条上，步长 16px，`Home`/`End` 到极值） | PPT、Google、Keynote | — | P1 |
 | 12 | 黑屏 `B` / 恢复 | PPT、Keynote、Google、LO | — | P1 |
 | 13 | 退出 present（按钮 + `Esc`） | 全部 | ✓ 按钮 | P0 |
-| 14 | 全屏（同窗口） | 全部 | ✓ 工具栏 | P0 |
+| 14 | 全屏（同窗口） | 全部 | ✓ 工具栏；目标 = audience surface（#202） | P0 |
 | 15 | 独立窗口 / 多显示器 | 全部 | — | P2（§7.3） |
 | 16 | 笔/激光、标注 | PPT、Google、LO、ONLYOFFICE | — | P2（与 `PptxStage` 标注引擎耦合） |
 | 17 | 备注内编辑（PPT 允许边讲边改备注） | PPT | — | P2（我们是只读查看器，写入不在范围） |
@@ -208,20 +213,30 @@ P0 = 0.8 必须；P1 = 紧随其后；P2 = 明确延后。来源列写"产品（
 
 ### 7.3 观众面与演讲者面（最重要的结构约束）
 
-五个产品都保证"观众只看到幻灯片"。我们现在的 `enterFullscreen()` 请求的是
-`.pptx-viewer` 根节点（`PptxViewer.vue:1442-1452`），**包含备注栏**；把它投到
-外接屏就是把备注给观众看。这不是像素差异，是产品语义缺陷。
+五个产品都保证"观众只看到幻灯片"。#202 之前 `enterFullscreen()` 请求的是
+`.pptx-viewer` 根节点，**包含备注栏**；把它投到外接屏就是把备注给观众看。
+这不是像素差异，是产品语义缺陷。
 
-0.8 的处理（不引入第二个窗口的实现成本）：
+0.8 的处理：
 
-1. **文档化**：`mode="present" + showNotes` 明确标注为"单窗口预览/演练"，
-   宿主负责不要把它直接投屏。
-2. **导出 `PptxPresenterPanel`**（现在没导出，见 §9.2），宿主可用
+1. **全屏目标已收窄（#202，已实现）**：`enterFullscreen()` 请求
+   `div[data-testid=pptx-audience-surface]`（带 `.pptx-viewer__audience`），
+   该节点只包含 stage、状态层与浏览 sorter；presenter rail（`data-pptx-presenter` /
+   `data-pptx-notes`）、工具栏、侧栏、播放控制条都是它的兄弟节点。
+   全屏后焦点移到 audience surface（`tabindex="-1"`），键盘/`Escape`/播放状态机
+   不变；退出全屏由浏览器恢复进入前的焦点。组件测试
+   `tests/component/pptx-presenter-view.test.mjs` 断言全屏子树不含备注，并锁定
+   "不再请求 viewer 根节点"。
+2. **presenter 面全屏不开放**：把备注投到第二块屏需要独立窗口/API（`window.open`
+   + 状态同步），**不能**复用 `enterFullscreen()`；调用方若需要，等 P2。
+   `mode="present" + showNotes` 是同窗口演练布局：全屏时备注位于非投影 rail，
+   投影只显示舞台。
+3. **导出 `PptxPresenterPanel`**（现在没导出，见 §9.2），宿主可用
    `PptxStage` + 面板在第二个窗口自行组合观众面与演讲者面。
-3. **P1 结构钩子**：`PptxPresenterView` 的当前页区域与侧列拆成两个根节点
+4. **P1 结构钩子**：`PptxPresenterView` 的当前页区域与侧列拆成两个根节点
    （`data-presenter-region="stage"` / `"side"`），未来 `window.open` 方案
    只需把 stage 根节点搬到另一窗口，不必重写布局。
-4. **P2**：组件级 `presenterWindow` API（`window.open` + `BroadcastChannel` 同步
+5. **P2**：组件级 `presenterWindow` API（`window.open` + `BroadcastChannel` 同步
    页码/计时/播放状态）单列 issue；涉及弹窗拦截、Focus、Audio 与 0.8 范围无关。
 
 ## 8. 与 OOXML 的关系
@@ -262,7 +277,7 @@ P0 = 0.8 必须；P1 = 紧随其后；P2 = 明确延后。来源列写"产品（
 
 | # | 缺口 | 证据 | 影响 | 归入 |
 |---|---|---|---|---|
-| G1 | 观众面与演讲者面同窗口，全屏包含备注 | `PptxViewer.vue:1442-1452` | 投屏即泄备注 | A（文档化）+ D（P2） |
+| G1 | 观众面与演讲者面同窗口，全屏曾包含备注 | #202：`enterFullscreen()` 现请求 `pptx-audience-surface` | 已修复：全屏 DOM 不含备注/presenter rail；双窗口仍缺 | 已关闭（#202）；D（P2）保留多窗口 |
 | G2 | 面板不含当前页，不能独立当演讲者面 | `PptxPresenterPanel.vue:1-40` | 无法两窗口组合 | B |
 | G3 | 无控制条（上一页/下一页/跳页/黑屏/缩略图） | `PptxViewer.vue:310-346` 只有播放条 | 演讲时手要回到工具栏/键盘 | B |
 | G4 | 计时只读，不能暂停/重置 | `presenter-clock.ts:24-56` | 被打断无法校准 | A |
@@ -362,6 +377,7 @@ presenter-surface
   [ ] 备注字号 4 档，md=15px，切档后 px 变化符合表 §3.3
   [ ] 计时：初始 00:00；+65s 后 01:05；暂停 10s 后仍 01:05；重置回 00:00
   [ ] Esc：全屏时只退全屏；再按退 present，data-presenter-mode=browse 或面板消失
+  [ ] 全屏元素 == `[data-testid=pptx-audience-surface]`，且其子树无 `[data-pptx-notes]` / `[data-pptx-presenter]`（#202）
   [ ] 键盘：→/Space/PageDown 前进，←/PageUp 后退，Home/End 首末，数字+Enter 跳页
   [ ] 所有控件有可访问名称（en + zh-CN 都不为空）
   [ ] 390×844 无横向溢出；768×1024 两列；1440×900 侧列 <= 380
@@ -452,6 +468,7 @@ presenter-surface
 ## 13. 验收清单（0.8 出口）
 
 - [ ] Issue A/B/C 合并，`presenterSurface` 默认关闭时旧截图零变化
+- [x] #202：`enterFullscreen()` 只投影 `pptx-audience-surface`，备注/presenter rail 不进入全屏
 - [ ] §11.3 checklist 全绿（脚本化，不是人工勾选）
 - [ ] 4 viewport × 2 主题的 presenter 自基线已提交并审批（`tests/baseline/visual/`）
 - [ ] `docs/components/pptx-chrome.md` §4 指向本文，`docs/testing/ui-parity-ci.md` 表格更新

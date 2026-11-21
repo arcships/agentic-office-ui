@@ -59,7 +59,7 @@
 | 幻灯片浏览 | `pptx-view-mode-sorter` | `menuitemcheckbox` |
 | 演示 | `pptx-view-mode-present` | `menuitem`，进入演示模式 |
 | 演讲者备注 | `pptx-notes-toggle` | `menuitemcheckbox`，切换 presenter rail |
-| 全屏 | `pptx-toolbar-fullscreen` | `menuitem`，进入/退出全屏 |
+| 全屏 | `pptx-toolbar-fullscreen` | `menuitem`，进入/退出全屏；目标为 `pptx-audience-surface`（§2.4） |
 | 搜索幻灯片 | `pptx-search-toggle` | 打开下方 find bar（`aria-expanded`） |
 
 菜单关闭时不渲染内容；按钮/菜单项的 testid 保持不变，宿主 e2e 需要先点
@@ -94,13 +94,44 @@
 | `pptx-actions` / `pptx-actions-menu` | 操作菜单触发器 / 菜单内容 |
 | `pptx-view-mode-single` / `-sorter` / `-present` | 视图模式（菜单项） |
 | `pptx-notes-toggle` / `pptx-toolbar-fullscreen` | 备注 / 全屏（菜单项） |
+| `pptx-audience-surface` | 全屏目标：舞台容器（stage/浏览 sorter，不含备注 rail/控制条） |
 | `pptx-zoom-out` / `pptx-zoom-reset` / `pptx-zoom-in` / `pptx-zoom-select` | 缩放按钮、可见数值、原生选择框 |
 | `pptx-search-toggle` / `pptx-search-input` / `pptx-search-close` | find bar |
 | `pptx-sorter` / `pptx-sorter-grid` / `pptx-sorter-item` | sorter（格子带 `data-slide-index` / `data-active`） |
 | `pptx-thumbnail-skeleton` / `pptx-thumbnail-error` / `pptx-thumbnail-hidden` | 缩略图状态 |
-| `pptx-presenter` / `pptx-presenter-timer` / `pptx-presenter-notes` / `pptx-presenter-last` | presenter |
+| `pptx-presenter` / `pptx-presenter-timer` / `pptx-presenter-notes` / `pptx-presenter-last` | presenter（根节点带 `data-pptx-presenter`，备注区带 `data-pptx-notes`） |
 | `pptx-context-menu` | 菜单内容（`role="menu"`，`aria-label` 为 `link.menu`） |
 | `pptx-empty` / `pptx-waiting` / `pptx-loading` / `pptx-cancelled` / `pptx-encrypted` / `pptx-error` | 状态 |
+
+### 2.4 全屏合同
+
+`enterFullscreen()` / `exitFullscreen()` 方法名、`Escape` 语义和轨道引用暴露面不变；
+**全屏目标从 `.pptx-viewer` 根节点改为 audience surface**：
+
+```
+section[data-testid=pptx-viewer]
+├─ toolbar / searchbar / warnings            ← 不进全屏
+├─ div.pptx-viewer__body
+│  ├─ aside[data-testid=pptx-sidebar]         ← 不进全屏
+│  ├─ div[data-testid=pptx-audience-surface]  ← 全屏目标（audience surface）
+│  │  ├─ main.pptx-viewer__stage-wrap          （stage + 状态层）
+│  │  └─ div[data-testid=pptx-sorter]          （仅浏览布局）
+│  └─ aside[data-testid=pptx-presenter]       ← 不进全屏（data-pptx-notes）
+├─ PptxLinkMenu                               ← 不进全屏
+└─ footer.playback-controls                   ← 不进全屏
+```
+
+- 演示模式全屏只显示当前页；浏览模式全屏只显示幻灯片表面（单页或 sorter）。
+  工具栏、侧栏、播放控制条和 presenter rail 都是 audience 容器的兄弟节点，
+  即使 `showNotes` 打开也不会进入投影区域。
+- 进入全屏后焦点移到 audience 容器（`tabindex="-1"`），查看器的键盘映射继续工作；
+  退出时由浏览器恢复进入前的焦点。`Escape` 在演示模式先退全屏（现有行为）。
+- CSS：`.pptx-viewer__audience:fullscreen` 填满视口，`::backdrop` 使用 `var(--pptx-bg)`（present 为黑色）；
+  `.pptx-viewer:fullscreen` 规则保留，供宿主自行请求根节点全屏。
+- **presenter 面全屏不在 0.8**：把备注投到第二块屏需要独立窗口/API
+  （[#183 §7.3](../design/pptx-presenter-reference.md)），不能复用
+  `enterFullscreen()`；`mode="present" + showNotes` 是同窗口演练布局，
+  进入全屏后备注只存在于非投影的 rail 中（不可见）。
 
 ## 3. 缩略图与 slide sorter
 
@@ -124,16 +155,20 @@
 `PptxPresenterPanel` 的结构：
 
 ```
-aside[data-testid=pptx-presenter]
+aside[data-testid=pptx-presenter][data-pptx-presenter=true]
 └─ OfficeCard
    ├─ meta：next slide 标签 + 下一页缩略图（或“最后一页”）+ clock 图标 + 计时
    ├─ OfficeSeparator（仅演示模式）
-   └─ body[data-testid=pptx-presenter-notes]
+   └─ body[data-testid=pptx-presenter-notes][data-pptx-notes=true]
       └─ OfficeScrollArea → 备注段落 / notes 插槽
 ```
 
 计时、`role="timer"`、`aria-label`、`data-presenter-mode`、空备注文案和
 `notes` 插槽都保持原行为；备注区在面板内滚动，不再让整个 aside 滚动。
+`data-pptx-presenter` / `data-pptx-notes` 是投影守卫的稳定锚点：
+`tests/component/pptx-presenter-view.test.mjs` 断言全屏元素
+（`pptx-audience-surface`）的子树上既没有 presenter rail 也没有备注节点；
+组件源码守卫则确保 `enterFullscreen()` 不再请求 `viewerRef`（§2.4）。
 
 **上游没有 presenter 布局**：固定 commit 的 `apps/v4/components/extend/pptx-viewer.tsx`
 只包含工具栏、缩略图 rail 和 loading/empty/error；presenter 视图与演讲者备注

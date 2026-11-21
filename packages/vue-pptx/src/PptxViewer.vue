@@ -134,156 +134,168 @@
         />
       </aside>
 
-      <main ref="stageScrollRef" class="pptx-viewer__stage-wrap">
-        <div v-if="state === 'empty'" class="pptx-viewer__message">
-          <OfficeEmptyState
-            icon="file-text"
-            data-testid="pptx-empty"
+      <!-- Audience surface: fullscreen targets this node (never the viewer root),
+           so the presenter notes rail, toolbar, sidebar and playback controls can
+           never leak onto a projector. It holds the slide stage and, in browse
+           mode, the sorter grid. `tabindex="-1"` lets `enterFullscreen()` move
+           focus here and keep the viewer keyboard map working in fullscreen. -->
+      <div
+        ref="audienceRef"
+        class="pptx-viewer__audience"
+        data-testid="pptx-audience-surface"
+        tabindex="-1"
+      >
+        <main ref="stageScrollRef" class="pptx-viewer__stage-wrap">
+          <div v-if="state === 'empty'" class="pptx-viewer__message">
+            <OfficeEmptyState
+              icon="file-text"
+              data-testid="pptx-empty"
+            >
+              <slot name="empty">{{ m.pptx.viewer.empty }}</slot>
+            </OfficeEmptyState>
+          </div>
+          <div v-else-if="state === 'waiting'" class="pptx-viewer__message">
+            <OfficeLoadingState
+              :title="m.pptx.viewer.waiting"
+              data-testid="pptx-waiting"
+            >
+              <slot name="waiting">{{ m.common.chrome.loadingDescription }}</slot>
+            </OfficeLoadingState>
+          </div>
+          <div v-else-if="state === 'loading'" class="pptx-viewer__message">
+            <OfficeLoadingState
+              :title="m.pptx.viewer.loading"
+              data-testid="pptx-loading"
+            >
+              <slot name="loading">{{ m.common.chrome.loadingDescription }}</slot>
+            </OfficeLoadingState>
+          </div>
+          <div v-else-if="state === 'cancelled'" class="pptx-viewer__message">
+            <OfficeErrorState
+              :title="m.pptx.viewer.cancelled"
+              icon="circle-x"
+              :show-retry="false"
+              data-testid="pptx-cancelled"
+            >
+              <slot name="cancelled" :error="error">{{ error?.message ?? m.common.chrome.errorDescription }}</slot>
+              <template #actions>
+                <OfficeButton
+                  variant="outline"
+                  size="sm"
+                  data-testid="pptx-cancelled-retry"
+                  @click="run(reopen)"
+                >{{ m.pptx.viewer.reload }}</OfficeButton>
+              </template>
+            </OfficeErrorState>
+          </div>
+          <div v-else-if="isEncryptedError" class="pptx-viewer__message">
+            <OfficeErrorState
+              :title="m.pptx.viewer.encryptedTitle"
+              :description="m.pptx.viewer.encryptedDescription"
+              icon="lock"
+              :show-retry="false"
+              data-testid="pptx-encrypted"
+            />
+          </div>
+          <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error">
+            <OfficeErrorState
+              :title="m.common.chrome.errorTitle"
+              :error="error?.message"
+              :show-retry="false"
+              data-testid="pptx-error"
+            >
+              <slot name="error" :error="error">{{ error?.message }}</slot>
+              <template #actions>
+                <OfficeButton
+                  v-if="effectiveSource"
+                  variant="outline"
+                  size="sm"
+                  data-testid="pptx-error-retry"
+                  @click="run(reopen)"
+                >{{ m.pptx.viewer.retry }}</OfficeButton>
+              </template>
+            </OfficeErrorState>
+          </div>
+          <div
+            v-if="slideFailure"
+            class="pptx-viewer__slide-error"
+            role="alert"
+            data-testid="pptx-slide-error"
           >
-            <slot name="empty">{{ m.pptx.viewer.empty }}</slot>
-          </OfficeEmptyState>
-        </div>
-        <div v-else-if="state === 'waiting'" class="pptx-viewer__message">
-          <OfficeLoadingState
-            :title="m.pptx.viewer.waiting"
-            data-testid="pptx-waiting"
+            <slot name="slide-error" :error="slideFailure.error" :index="slideFailure.index">
+              <span>{{ formatOfficeMessage(m.pptx.viewer.slideRenderFailed, { page: slideFailure.index + 1, message: slideFailure.error.message }) }}</span>
+            </slot>
+            <span class="pptx-viewer__slide-error-actions">
+              <OfficeButton variant="outline" size="xs" data-testid="pptx-slide-retry" @click="run(retrySlide)">{{ m.pptx.viewer.retry }}</OfficeButton>
+              <OfficeButton variant="ghost" size="xs" data-testid="pptx-slide-skip" @click="run(skipSlide)">{{ m.pptx.viewer.skip }}</OfficeButton>
+            </span>
+          </div>
+          <PptxStage
+            ref="stageRef"
+            class="pptx-viewer__stage"
+            :style="stageStyle"
+            :aria-hidden="state !== 'ready' || isSorter"
+            :zoom="zoom / 100"
+            :enable-gesture-zoom="!isPresent"
+            :locale="locale"
+            :messages="messages"
+            :scroll-container="stageScrollRef"
+            @update:zoom="run(() => setZoom($event * 100))"
+            @click="run(() => onStageClick($event))"
+            @context-menu="onStageContextMenu"
+            @link-activate="run(() => onLinkActivate($event))"
+          />
+        </main>
+
+        <div
+          v-if="sorterVisible"
+          ref="sorterRef"
+          class="pptx-viewer__sorter"
+          data-testid="pptx-sorter"
+          role="listbox"
+          :aria-label="m.pptx.viewer.sorter"
+          :style="{ '--pptx-sorter-item-height': `${sorterItemHeight}px` }"
+          @scroll.passive="onSorterScroll"
+        >
+          <div
+            class="pptx-viewer__sorter-spacer"
+            :style="{ height: `${sorterWindow.startRow * sorterItemHeight}px` }"
+            aria-hidden="true"
+          />
+          <div
+            class="pptx-viewer__sorter-grid"
+            data-testid="pptx-sorter-grid"
+            :style="{ gridTemplateColumns: `repeat(${sorterColumns}, minmax(0, 1fr))` }"
           >
-            <slot name="waiting">{{ m.common.chrome.loadingDescription }}</slot>
-          </OfficeLoadingState>
-        </div>
-        <div v-else-if="state === 'loading'" class="pptx-viewer__message">
-          <OfficeLoadingState
-            :title="m.pptx.viewer.loading"
-            data-testid="pptx-loading"
-          >
-            <slot name="loading">{{ m.common.chrome.loadingDescription }}</slot>
-          </OfficeLoadingState>
-        </div>
-        <div v-else-if="state === 'cancelled'" class="pptx-viewer__message">
-          <OfficeErrorState
-            :title="m.pptx.viewer.cancelled"
-            icon="circle-x"
-            :show-retry="false"
-            data-testid="pptx-cancelled"
-          >
-            <slot name="cancelled" :error="error">{{ error?.message ?? m.common.chrome.errorDescription }}</slot>
-            <template #actions>
-              <OfficeButton
-                variant="outline"
-                size="sm"
-                data-testid="pptx-cancelled-retry"
-                @click="run(reopen)"
-              >{{ m.pptx.viewer.reload }}</OfficeButton>
-            </template>
-          </OfficeErrorState>
-        </div>
-        <div v-else-if="isEncryptedError" class="pptx-viewer__message">
-          <OfficeErrorState
-            :title="m.pptx.viewer.encryptedTitle"
-            :description="m.pptx.viewer.encryptedDescription"
-            icon="lock"
-            :show-retry="false"
-            data-testid="pptx-encrypted"
+            <PptxSlideCard
+              v-for="slide in sorterSlides"
+              :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
+              class="pptx-viewer__sorter-item"
+              :index="slide.index"
+              :number="slide.number"
+              :active="slide.index === activeIndex"
+              :hidden="slide.hidden"
+              :hidden-label="m.pptx.thumbnail.hidden"
+              :aspect-ratio="slideAspectRatio"
+              :label="formatOfficeMessage(m.pptx.thumbnail.label, { number: slide.number })"
+            >
+              <PptxThumbnail
+                :session="requireSession()"
+                :slide="slide"
+                :active="slide.index === activeIndex"
+                :width="sorterThumbnailWidth"
+                :show-label="false"
+                tabindex="-1"
+                @select="run(() => goTo($event))"
+              />
+            </PptxSlideCard>
+          </div>
+          <div
+            class="pptx-viewer__sorter-spacer"
+            :style="{ height: `${Math.max(0, sorterRowCount - sorterWindow.endRow) * sorterItemHeight}px` }"
+            aria-hidden="true"
           />
         </div>
-        <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error">
-          <OfficeErrorState
-            :title="m.common.chrome.errorTitle"
-            :error="error?.message"
-            :show-retry="false"
-            data-testid="pptx-error"
-          >
-            <slot name="error" :error="error">{{ error?.message }}</slot>
-            <template #actions>
-              <OfficeButton
-                v-if="effectiveSource"
-                variant="outline"
-                size="sm"
-                data-testid="pptx-error-retry"
-                @click="run(reopen)"
-              >{{ m.pptx.viewer.retry }}</OfficeButton>
-            </template>
-          </OfficeErrorState>
-        </div>
-        <div
-          v-if="slideFailure"
-          class="pptx-viewer__slide-error"
-          role="alert"
-          data-testid="pptx-slide-error"
-        >
-          <slot name="slide-error" :error="slideFailure.error" :index="slideFailure.index">
-            <span>{{ formatOfficeMessage(m.pptx.viewer.slideRenderFailed, { page: slideFailure.index + 1, message: slideFailure.error.message }) }}</span>
-          </slot>
-          <span class="pptx-viewer__slide-error-actions">
-            <OfficeButton variant="outline" size="xs" data-testid="pptx-slide-retry" @click="run(retrySlide)">{{ m.pptx.viewer.retry }}</OfficeButton>
-            <OfficeButton variant="ghost" size="xs" data-testid="pptx-slide-skip" @click="run(skipSlide)">{{ m.pptx.viewer.skip }}</OfficeButton>
-          </span>
-        </div>
-        <PptxStage
-          ref="stageRef"
-          class="pptx-viewer__stage"
-          :style="stageStyle"
-          :aria-hidden="state !== 'ready' || isSorter"
-          :zoom="zoom / 100"
-          :enable-gesture-zoom="!isPresent"
-          :locale="locale"
-          :messages="messages"
-          :scroll-container="stageScrollRef"
-          @update:zoom="run(() => setZoom($event * 100))"
-          @click="run(() => onStageClick($event))"
-          @context-menu="onStageContextMenu"
-          @link-activate="run(() => onLinkActivate($event))"
-        />
-      </main>
-
-      <div
-        v-if="sorterVisible"
-        ref="sorterRef"
-        class="pptx-viewer__sorter"
-        data-testid="pptx-sorter"
-        role="listbox"
-        :aria-label="m.pptx.viewer.sorter"
-        :style="{ '--pptx-sorter-item-height': `${sorterItemHeight}px` }"
-        @scroll.passive="onSorterScroll"
-      >
-        <div
-          class="pptx-viewer__sorter-spacer"
-          :style="{ height: `${sorterWindow.startRow * sorterItemHeight}px` }"
-          aria-hidden="true"
-        />
-        <div
-          class="pptx-viewer__sorter-grid"
-          data-testid="pptx-sorter-grid"
-          :style="{ gridTemplateColumns: `repeat(${sorterColumns}, minmax(0, 1fr))` }"
-        >
-          <PptxSlideCard
-            v-for="slide in sorterSlides"
-            :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
-            class="pptx-viewer__sorter-item"
-            :index="slide.index"
-            :number="slide.number"
-            :active="slide.index === activeIndex"
-            :hidden="slide.hidden"
-            :hidden-label="m.pptx.thumbnail.hidden"
-            :aspect-ratio="slideAspectRatio"
-            :label="formatOfficeMessage(m.pptx.thumbnail.label, { number: slide.number })"
-          >
-            <PptxThumbnail
-              :session="requireSession()"
-              :slide="slide"
-              :active="slide.index === activeIndex"
-              :width="sorterThumbnailWidth"
-              :show-label="false"
-              tabindex="-1"
-              @select="run(() => goTo($event))"
-            />
-          </PptxSlideCard>
-        </div>
-        <div
-          class="pptx-viewer__sorter-spacer"
-          :style="{ height: `${Math.max(0, sorterRowCount - sorterWindow.endRow) * sorterItemHeight}px` }"
-          aria-hidden="true"
-        />
       </div>
       <PptxPresenterPanel
         v-if="presenterVisible"
@@ -558,6 +570,8 @@ const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
 watch(() => props.source, () => { droppedSource.value = null; dropError.value = "" })
 
 const viewerRef = ref<HTMLElement | null>(null)
+/** Slide surface wrapper: the only subtree that may enter fullscreen. */
+const audienceRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const stageScrollRef = ref<HTMLElement | null>(null)
 const stageRef = ref<PptxStageExpose | null>(null)
@@ -839,11 +853,13 @@ const stageStyle = computed(() => {
 
 function syncFullscreen(): void {
   const active = globalThis.document?.fullscreenElement ?? null
-  const element = viewerRef.value
+  const element = audienceRef.value
   if (!active || !element) {
     isFullscreen.value = false
     return
   }
+  // The viewer owns the audience surface; a host that fullscreens a wrapper
+  // containing it counts as fullscreen too (same contract as before).
   isFullscreen.value = active === element
     || (typeof active.contains === "function" && active.contains(element))
 }
@@ -1232,7 +1248,9 @@ function closeContextMenu(): void {
 }
 
 function focusViewerRoot(): HTMLElement | null {
-  return viewerRef.value
+  // In fullscreen the viewer root is outside the rendered subtree; putting
+  // focus back there would drop the keyboard map. Focus the projected surface.
+  return (isFullscreen.value ? audienceRef.value : null) ?? viewerRef.value
 }
 
 function onLinkMenuOpenChange(open: boolean): void {
@@ -1440,12 +1458,18 @@ function togglePlayback(): void {
 }
 
 async function enterFullscreen(): Promise<void> {
-  const element = viewerRef.value
+  // Audience-only target: the `.pptx-viewer__audience` wrapper holds the slide
+  // stage (and the browse sorter). The presenter rail and every presenter-only
+  // control are siblings, so they stay out of fullscreen. A presenter-surface
+  // fullscreen (notes on a second display) is deliberately not exposed here; it
+  // needs its own window/API (see #183 §7.3).
+  const element = audienceRef.value
   if (!element?.requestFullscreen) {
     throw new PptxPlaybackError("FULLSCREEN_REJECTED", m.value.pptx.viewer.error.fullscreenUnsupported)
   }
   try {
     await element.requestFullscreen()
+    element.focus?.({ preventScroll: true })
   } catch (reason) {
     throw new PptxPlaybackError("FULLSCREEN_REJECTED", m.value.pptx.viewer.error.fullscreenEnterRejected, { cause: reason })
   }
@@ -1467,7 +1491,7 @@ async function onStageClick(event: MouseEvent): Promise<void> {
     onBrowseLinkClick(event)
     return
   }
-  viewerRef.value?.focus()
+  focusViewerRoot()?.focus()
   const target = event.target as Element | null
   const objectElement = typeof target?.closest === "function"
     ? target.closest<HTMLElement>("[data-pptx-object-key]")
