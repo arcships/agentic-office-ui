@@ -21,6 +21,7 @@ export { default as OfficeButton } from "../../../../packages/vue-ui/src/compone
 export { default as OfficeIconButton } from "../../../../packages/vue-ui/src/components/ui/OfficeIconButton.vue";
 export { default as OfficeInput } from "../../../../packages/vue-ui/src/components/ui/OfficeInput.vue";
 export { default as OfficeSelect } from "../../../../packages/vue-ui/src/components/ui/OfficeSelect.vue";
+export { default as OfficeToggle } from "../../../../packages/vue-ui/src/components/ui/OfficeToggle.vue";
 export { default as OfficeDialog } from "../../../../packages/vue-ui/src/components/ui/OfficeDialog.vue";
 export { default as OfficeTooltip } from "../../../../packages/vue-ui/src/components/ui/OfficeTooltip.vue";
 export { default as OfficeThemeProvider } from "../../../../packages/vue-ui/src/components/OfficeThemeProvider.vue";

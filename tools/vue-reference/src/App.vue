@@ -25,6 +25,7 @@ import PptxSorterSurface from "./surfaces/PptxSorterSurface.vue";
 import PptxToolbarSurface from "./surfaces/PptxToolbarSurface.vue";
 import SelectSurface from "./surfaces/SelectSurface.vue";
 import TooltipSurface from "./surfaces/TooltipSurface.vue";
+import XlsxRibbonSurface from "./surfaces/XlsxRibbonSurface.vue";
 import XlsxSheetTabsSurface from "./surfaces/XlsxSheetTabsSurface.vue";
 import XlsxStatusBarSurface from "./surfaces/XlsxStatusBarSurface.vue";
 import XlsxToolbarSurface from "./surfaces/XlsxToolbarSurface.vue";
@@ -153,6 +154,10 @@ function subjectStatus(surface: Surface): "available" | "missing" {
     />
     <DocumentSplitsSurface
       v-else-if="surface.id === 'document-splits'"
+      :cell-width="surface.cellWidth"
+    />
+    <XlsxRibbonSurface
+      v-else-if="surface.id === 'xlsx-ribbon'"
       :cell-width="surface.cellWidth"
     />
     <XlsxToolbarSurface

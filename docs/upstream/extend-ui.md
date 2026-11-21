@@ -181,6 +181,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/docx-annotation-card.tsx` | 评论与修订 gutter 卡片 | `packages/vue-docx/src/components/DocxAnnotationCard.vue` | reference-only | #159 |
 | `apps/v4/components/extend/xlsx-viewer.tsx` | XLSX ribbon、sheet tabs、状态栏、菜单 | `packages/vue-xlsx/src/components/XlsxViewer.vue` | reference-only | #160 |
 | `apps/v4/components/extend/xlsx-editor.tsx` | XLSX 编辑 ribbon 与作者入口 | `packages/vue-xlsx/src/components/XlsxViewer.vue` | reference-only | #160 |
+| `apps/v4/components/extend/xlsx-editor.tsx` | XLSX 编辑 ribbon 格式行（静态 resting 子集） | `tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx` | adapted | #170：私有 `useXlsxViewer*` hook 改成 props，select/popover/dropdown 弹层不渲染；pivot/sheet 选择器/zoom/公式行不在该子集内 |
 | `apps/v4/components/extend/xlsx-controls.tsx` | ribbon 按钮、输入、下拉 | `packages/vue-xlsx/src/components/XlsxRibbon.vue` | reference-only | #160 |
 | `apps/v4/components/extend/workbook-select.tsx` | 工作簿/sheet 选择 | `packages/vue-xlsx/src/components/XlsxSheetTabs.vue` | reference-only | #160 |
 | `apps/v4/components/extend/pptx-viewer.tsx` | PPTX viewer、presenter、sorter chrome | `packages/vue-pptx/src/PptxViewer.vue` | reference-only | #161 |
@@ -234,8 +235,8 @@ tools/extend-reference/
 ├── src/
 │   ├── vendor/
 │   │   ├── NOTICE.md                # Extend UI MIT 全文或指向 licenses/extend-ui-MIT.txt
-│   │   ├── ui/                      # button/card/select/separator/spinner ...
-│   │   └── extend/                  # pdf-toolbar, file-upload, file-thumbnail, document-viewer-sidebar
+│   │   ├── ui/                      # button/card/select/separator/spinner, toggle/group/color-picker
+│   │   └── extend/                  # pdf/docx/pptx/xlsx chrome subsets, xlsx-ribbon
 │   ├── styles/
 │   │   ├── extend-globals.css       # vendored apps/v4/app/globals.css
 │   │   ├── extend-shadcn-tailwind.css
@@ -253,7 +254,7 @@ tools/extend-reference/
 5. 如果改为从仓库外 checkout 读取上游源码而不 vendoring，则 `src/vendor/` 不创建，本行保持 `copied` 但校验器只报告 pending；此时必须在 `UPSTREAM.md` 记录 checkout 的 commit 和获取方式。
 6. `tools/extend-reference` 只用于对照验证，不进入任何公开包的构建产物。
 
-2026-11-20 状态（#155/#157）：上表路径已落地。`src/vendor/` 下 12 个组件文件、`src/styles/extend-globals.css`、`src/styles/extend-shadcn-tailwind.css`、`src/lib/cn.ts` 均带来源头；`src/vendor/NOTICE.md`、`src/vendor/` 同级 `UPSTREAM.md` 与 `README.md` 记录改动清单。上游 CSS 正文的 sha256 由 `docs/design/extend-token-sources.json` 固定并在 `scripts/ci/extract-extend-tokens.mjs --extend-dir <checkout>` 时与上游 checkout 交叉校验。
+2026-11-21 状态（#155/#157/#170）：上表路径已落地。`src/vendor/` 下 18 个 `extend/` 组件文件与 12 个 `ui/` 文件、`src/styles/extend-globals.css`、`src/styles/extend-shadcn-tailwind.css`、`src/lib/cn.ts` 均带来源头；`src/vendor/NOTICE.md`、`src/vendor/` 同级 `UPSTREAM.md` 与 `README.md` 记录改动清单。上游 CSS 正文的 sha256 由 `docs/design/extend-token-sources.json` 固定并在 `scripts/ci/extract-extend-tokens.mjs --extend-dir <checkout>` 时与上游 checkout 交叉校验。
 
 ## 维护流程
 

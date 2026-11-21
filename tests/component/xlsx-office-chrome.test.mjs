@@ -39,6 +39,7 @@ function readComponent(name) {
 
 const SHEET_TABS_SOURCE = readComponent("XlsxSheetTabs");
 const TOOLBAR_SOURCE = readComponent("XlsxToolbar");
+const RIBBON_SOURCE = readComponent("XlsxRibbon");
 
 const CHROME_READINESS = "viewer chrome migration";
 
@@ -188,6 +189,22 @@ test("XlsxRibbon is a shared toolbar of clusters and honours the read-only gate"
     const freeze = findByTestId(mounted.root, "xlsx-ribbon-freeze");
     assert.equal(freeze.props["aria-pressed"], false, "an inactive toggle has no pressed state");
     assert.ok(findByTestId(mounted.root, "xlsx-ribbon-read-only"), "read-only switch is kept");
+
+    // Issue #170: the ribbon draws every glyph through `HugeIcon` (the icon set
+    // the pinned Extend editor resolves), so the source keeps no inline `<svg>`
+    // and the rendered icons are Hugeicons icon data (24x24, stroked paths).
+    assert.equal(RIBBON_SOURCE.includes("<svg"), false, "the ribbon keeps no inline SVG");
+    assert.match(RIBBON_SOURCE, /HugeIcon/, "the ribbon renders Hugeicons");
+    assert.doesNotMatch(RIBBON_SOURCE, /icon="(undo-2|redo-2|align-left|align-center|align-right|link|table|check)"/, "no Lucide registry glyph survives in the ribbon");
+    const icons = walk(mounted.root).filter((node) => node.type === "svg");
+    assert.ok(icons.length >= 29, `every ribbon glyph is an icon: ${icons.length}`);
+    for (const icon of icons) {
+      assert.equal(icon.props.viewBox, "0 0 24 24", "Hugeicons keep the upstream 24x24 viewBox");
+      assert.ok(
+        walk(icon).some((node) => node.type === "path" && node.props.stroke === "currentColor"),
+        "Hugeicons carry their own stroke data instead of CSS overrides",
+      );
+    }
   } finally {
     mounted.app.unmount();
   }

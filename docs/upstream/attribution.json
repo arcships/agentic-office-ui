@@ -611,6 +611,14 @@
       "issues": ["#160"]
     },
     {
+      "upstreamFile": "apps/v4/components/extend/xlsx-editor.tsx",
+      "purpose": "XLSX editor ribbon format row (static resting subset for the pixel-parity harness).",
+      "target": "tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx",
+      "status": "adapted",
+      "issues": ["#170"],
+      "notes": "Private useXlsxViewer* hooks become props, select/popover/dropdown popups are dropped and the format row renders as static markup; the pivot controls, sheet selector, zoom cluster and formula row stay outside this subset."
+    },
+    {
       "upstreamFile": "apps/v4/components/extend/xlsx-controls.tsx",
       "purpose": "Ribbon control buttons, inputs, and selects.",
       "target": "packages/vue-xlsx/src/components/XlsxRibbon.vue",

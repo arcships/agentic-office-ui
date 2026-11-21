@@ -7,7 +7,7 @@
 | Commit date | 2026-11-17 |
 | License | MIT (Copyright (c) 2026 CrowdView Inc, dba Extend; Portions Copyright (c) 2023 shadcn) |
 | License copy | [`docs/upstream/licenses/extend-ui-MIT.txt`](../../../docs/upstream/licenses/extend-ui-MIT.txt) |
-| Copied on | 2026-11-20 |
+| Copied on | 2026-11-20 (last added #170, 2026-11-21) |
 | Local tool versions | react 19.2.7, vite 6.4.3, tailwindcss 4.2.4, @tailwindcss/vite 4.2.4, @hugeicons/react 1.1.10, @hugeicons/core-free-icons 4.4.0 |
 
 ## Copied files
@@ -19,6 +19,10 @@
 | `src/vendor/ui/card.tsx` | `apps/v4/registry/new-york-v4/ui/card.tsx` | adapted |
 | `src/vendor/ui/separator.tsx` | `apps/v4/registry/new-york-v4/ui/separator.tsx` | adapted |
 | `src/vendor/ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | adapted |
+| `src/vendor/ui/toggle.tsx` | `apps/v4/components/ui/toggle.tsx` | adapted (#170) |
+| `src/vendor/ui/group.tsx` | `apps/v4/components/ui/group.tsx` | adapted (#170) |
+| `src/vendor/ui/color-picker.tsx` | `apps/v4/components/ui/color-picker.tsx` | adapted, swatch trigger only (#170) |
+| `src/vendor/ui/registry-icon-props.ts` | `apps/v4/lib/registry-icon-props.ts` | copied (#170) |
 | `src/vendor/extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | copied |
 | `src/vendor/extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | adapted |
 | `src/vendor/extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | copied |
@@ -32,6 +36,7 @@
 | `src/vendor/extend/xlsx-toolbar.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` | adapted (#160) |
 | `src/vendor/extend/xlsx-sheet-tabs.tsx` | `apps/v4/components/extend/xlsx-viewer.tsx` (+ registry `tabs.tsx`) | adapted (#160) |
 | `src/vendor/extend/xlsx-status-bar.tsx` | `apps/v4/components/extend/file-system.tsx` | adapted (#160) |
+| `src/vendor/extend/xlsx-ribbon.tsx` | `apps/v4/components/extend/xlsx-editor.tsx` (`EditorToolbar` format row) | adapted (#170) |
 | `src/styles/extend-globals.css` | `apps/v4/app/globals.css` | adapted (import graph only) |
 | `src/styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | copied (provenance header added) |
 | `src/lib/cn.ts` | `apps/v4/lib/utils.ts` | adapted |

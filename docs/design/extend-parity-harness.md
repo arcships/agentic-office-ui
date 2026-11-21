@@ -107,6 +107,7 @@ evidence；命中时 case 仍保留 reference/subject/diff 截图，并在报告
 | `xlsx-toolbar` | default、hover、focus、disabled(empty workbook) | ✅ `XlsxToolbar.vue`（32/32 pass） |
 | `xlsx-sheet-tabs` | default、hover、focus | ✅ `XlsxSheetTabs.vue`（24/24 pass） |
 | `xlsx-status-bar` | default | ✅ `XlsxStatusBar.vue`（8/8 pass） |
+| `xlsx-ribbon` | default、hover、focus、disabled(no selection) | ✅ `XlsxRibbonSurface.vue`（OfficeToolbar/OfficeButton/OfficeToggle + HugeIcon；32/32 pass） |
 | `pptx-toolbar` | default、hover、focus、active、disabled(empty presentation) | ✅ `PptxViewerToolbar.vue`（40/40 pass） |
 | `pptx-sorter` | default、hover、selected | ✅ `PptxSlideCard.vue` + `PptxThumbnail.vue`（24/24 pass） |
 | `pptx-presenter` | browse、present（声明） | — 上游无 presenter 布局，`referenceStatus: "unreachable"`，只进 report 的 unreachable 表 |
@@ -182,8 +183,13 @@ viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
   vendored 子集（`tools/extend-reference/src/vendor/extend/xlsx-*.tsx`）只剔除私有引擎 hook 与弹层，
   class 串、图标、间距一字未改。`pnpm ui:parity -- --only xlsx-toolbar,xlsx-sheet-tabs,xlsx-status-bar`
   在 4 viewport × light/dark × 全部 state 上 **64/64 pass、0px、0 AA**；三条 surface 已补基线并切
-  `blocking`。`xlsx-ribbon` / 公式行仍无对照（上游 editor 的格式行来自私有包，且控件集合不同），
-  结论与细节见 [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
+  `blocking`。
+- `xlsx-ribbon` 已由 **#170** 建成：`xlsx-editor.tsx` 的 `EditorToolbar` 格式行静态化后
+  vendored 到 `tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`（私有 hook → props，
+  弹层不渲染），Vue 侧用 production primitives 复现；4 viewport × light/dark ×
+  default/hover/focus/disabled = **32/32 pass、0px、0 AA**，已补基线并切 `blocking`。
+  公式行仍是 product-gap；例外清单见
+  [design/xlsx-office-chrome-migration.md §4.2](xlsx-office-chrome-migration.md)。
 - `document-sidebar` 已由 #158 补齐对照侧：`DocumentViewerSidebar.vue` + `DocumentViewerSidebarSkeleton.vue`
   与 vendored `DocumentViewerThumbnailSidebar` 对齐，5 个状态 × 4 viewport × 2 theme = 40/40 `pass`，
   0 px、几何 0 px；已补基线并切 `blocking`。
@@ -232,7 +238,7 @@ viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
 - #158：共享 viewer chrome + 规范 `DocumentViewerSidebar`（`components/chrome/`）；
   `document-sidebar` 与 4 个 office-state surface 已合入、补基线并切 `blocking`。
 - #159：DOCX toolbar/sidebar（已合入，32/32 + 24/24 像素 0）。
-- #160：XLSX toolbar/sheet tabs/status（已合入，64/64 像素 0；ribbon 无对照）。
+- #160：XLSX toolbar/sheet tabs/status（已合入，64/64 像素 0）；#170 补 `xlsx-ribbon`（32/32 像素 0）。
 - #161b：PPTX toolbar/sorter/presenter（已合入；toolbar/sorter 64/64 像素 0，已补基线并切
   `blocking`；presenter 无上游布局，保持 `unreachable`）。
 - #162：PDF toolbar/sidebar（已合入，40/40 + 24/24 像素 0）。

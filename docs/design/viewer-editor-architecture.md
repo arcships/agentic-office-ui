@@ -65,7 +65,7 @@
 | **PDF viewer** | done（pdfium worker + render runtime，`vue-pdf/src/pdf/`） | done（page/text/region/visual/native/behavior 引用） | done（`PdfViewer`、`PdfSurface`） | done（`pdf-toolbar`、`pdf-sidebar` 0px） | done（`pdf-toolbar`/`pdf-sidebar` blocking） | public-vendored，已收口 | #162 |
 | **PDF editor** | partial（annotation 映射、表单值；无编辑事务） | partial（引用可用，编辑命令缺失） | missing（无 `PdfEditor`） | partial（`PdfEditorEmptyState` → `OfficeEmptyState`） | missing（无 editor surface） | public-vendored，未实现 | #172 + 新 issue |
 | **DOCX viewer/editor** | done（port @6f70b92） | done | done（`DocxViewer`/`DocxEditor`/`DocxDocumentSurface`） | done（`docx-toolbar`/`docx-sidebar` 0px） | partial（DOCX chrome 参考是**裁剪 vendored 副本**，不是原文件） | public-partial（需与 0.15.0 对齐） | #159 |
-| **XLSX viewer/editor** | done（worker + duke-sheets wasm + chart 解析/authoring） | done | done（`XlsxViewer` 含 ribbon/sheet tabs/authoring） | done（3 条 surface 64/64） | partial（ribbon/公式行无上游对照） | public-vendored（chrome）+ product-gap（pivot/page setup） | #160 / #171 |
+| **XLSX viewer/editor** | done（worker + duke-sheets wasm + chart 解析/authoring） | done | done（`XlsxViewer` 含 ribbon/sheet tabs/authoring） | done（4 条 surface 96/96，含 `xlsx-ribbon`） | partial（公式行无上游对照） | public-vendored（chrome + ribbon 格式行）+ product-gap（pivot/page setup） | #160 / #170 / #171 |
 | **PPTX viewer** | done（解析 + playback + 对象索引） | done | done（`PptxViewer`/`PptxStage`/sorter） | done（`pptx-toolbar`/`pptx-sorter` 0px） | done（2 条 blocking；presenter pending） | public-vendored（chrome） | #161 |
 | **PPTX presenter** | done（notes 自 OOXML 读取） | done（timer/next） | done（`PptxPresenterPanel`） | done（Extend primitives 重组） | **missing**（上游无布局，private 包也无） | **office-reference** | #183 |
 | **PPTX chart internals** | partial（`getObjectChart` provider + snapshot） | missing（Surface 未接入） | missing | — | missing | **provider-dependent** | #184 / #176 |
@@ -266,7 +266,7 @@
 | 文件 | 行数 | 公开入口 | 作用 | DOM 归属 |
 |---|---:|---|---|---|
 | `xlsx-viewer.tsx` | 1,844 | `XlsxViewerPreview`（:1,490）、`XlsxWorkbookSurface`（:1,371）、`WorkbookToolbar`（:915）、`WorkbookSheetTabs`（:1,099）、`WorkbookTableHeaderMenu`（:592） | 查看器外壳：toolbar、sheet tabs、搜索 popover、表头菜单 | toolbar/sheet tabs/状态私有与公开混合：公开文件写，数据来自 `<XlsxViewer>` 内 hooks |
-| `xlsx-editor.tsx` | 2,835 | `XlsxEditorSurface`（:2,458）、`XlsxEditorPreview`（:2,546）、`EditorToolbar`（:1,319） | 编辑 ribbon（字体/字号/颜色/边框/合并/数字格式/对齐/换行）、公式行 | ribbon 与公式行都在公开文件；但模块级 import 私有 hook，无法单独运行 |
+| `xlsx-editor.tsx` | 2,835 | `XlsxEditorSurface`（:2,458）、`XlsxEditorPreview`（:2,546）、`EditorToolbar`（:1,319） | 编辑 ribbon（字体/字号/颜色/边框/合并/数字格式/对齐/换行）、公式行 | 格式行已静态化并 vendored（#170，`xlsx-ribbon` 32/32）；公式行仍模块级 import 私有 hook |
 | `xlsx-controls.tsx` | 464 | `renderWorkbookContextMenu`、`renderWorkbookChartLoading`、`renderWorkbookFormControl`、`renderWorkbookImageSelection` | 私有 runtime 的 render prop 实现 | 公开 |
 | `xlsx-pivot-controls.tsx` | 2,034 | `WorkbookPivotControls` | 透视表控件 | 公开（数据来自私有 pivot hooks） |
 | `xlsx-pivot-header.tsx` | 503 | `WorkbookPivotHeaderMenu` | 透视表头菜单 | 公开 |
@@ -296,15 +296,16 @@
 |---|---|---|
 | core | 70 文件 / 35,812 行：worker、charts 解析/导出/插入、authoring（merge/filter/structure/visibility/number format）、print、images/form controls、pivot 元数据、引用 | pivot 计算/编辑；page setup 写回 |
 | interaction | 单元格/区域/对象引用、对象索引 | 表格行独立对象、z 序候选（#176） |
-| vue | `XlsxViewer` 1,109 行 + `XlsxRibbon`/`XlsxSheetTabs`/`XlsxToolbar`/`XlsxStatusBar`/`XlsxAuthoringDialog`/`XlsxPrintPreview` | ribbon/公式行无上游像素对照；page setup dialog |
-| ui | `xlsx-toolbar` 32/32、`xlsx-sheet-tabs` 24/24、`xlsx-status-bar` 8/8 | — |
+| vue | `XlsxViewer` 1,109 行 + `XlsxRibbon`/`XlsxSheetTabs`/`XlsxToolbar`/`XlsxStatusBar`/`XlsxAuthoringDialog`/`XlsxPrintPreview` | 公式行无上游像素对照；page setup dialog |
+| ui | `xlsx-toolbar` 32/32、`xlsx-sheet-tabs` 24/24、`xlsx-status-bar` 8/8、`xlsx-ribbon` 32/32 | — |
 
 ### 6.4 参考可行性
 
 | 能力 | 分类 | 证据 | 缺口 |
 |---|---|---|---|
 | toolbar / sheet tabs / status | `public-vendored` **done** | `tools/extend-reference/src/vendor/extend/xlsx-*.tsx`；64/64 pass | 无 |
-| ribbon / 公式行 | `public-partial` | `xlsx-editor.tsx:1319` 的 `EditorToolbar` 与 :1355 起的公式行都在**公开文件**里，但模块级 import 了 `useXlsxViewerEditing`/`useXlsxViewerSelection` 等私有 hook，不能脱离 `@extend-ai/react-xlsx` 单独渲染 | 需要 L1 `xlsx-ribbon`：参考 = 安装 pinned 私有包后渲染同一公开文件（R2），或降级为结构断言 |
+| ribbon（格式行） | `public-vendored` **done（#170）** | `tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`：`EditorToolbar` 格式行的静态 resting 子集（私有 `useXlsxViewer*` hook → props，弹层不渲染）；`xlsx-ribbon` 32/32 pass、0 AA | 生产 ribbon 的 clipboard/structure/authoring cluster 由组件测试与 `xlsx-chrome` 截图覆盖（上游无对应控件） |
+| 公式行 | `product-gap` | `xlsx-editor.tsx:1355` 起的公式行在公开文件内，但 `Group`/编辑态依赖私有 hook，无独立静息态 | 后续 issue；当前由组件测试覆盖 |
 | authoring dialogs | `public-vendored` **done**（除 page setup） | `XlsxAuthoringDialog.vue` + 16 条组件测试 | page setup（#171） |
 | pivot | `product-gap` | `xlsx-pivot-controls.tsx` 2,034 行；私有 pivot hooks | 0.8/0.9 不做（已有产品决策） |
 | chart internals 几何 | `provider-dependent` | 私有 `chart-renderer.tsx`；我们 SVG 移植已有 axis/labels/legend | 精确 Office 布局规则（#184） |
@@ -312,14 +313,17 @@
 ### 6.5 实现方案
 
 - **page setup（#171）**：先做 A/B 决策。若做：`XlsxPageSetupDialog.vue` = `OfficeDialog` + `xlsx-core/print/page-setup.ts` 读写 + 撤销；L1 `xlsx-page-setup`（参考为 `xlsx-editor.tsx` 无独立 dialog → **office-reference**，用 Excel 页面设置对话框截图）。
-- **ribbon 对照**：在上游公开文件 `xlsx-editor.tsx` 外套一个只提供 controller 的 React 壳（安装 `@extend-ai/react-xlsx@0.23.0`，MIT），渲染 ribbon/公式行子集；若成本过高，明确标 `public-partial` 只做结构断言。
+- **ribbon 对照（已完成，#170）**：把 `EditorToolbar` 的格式行 vendor 成静态 resting 子集
+  （`tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`），用 production primitives
+  实现 Vue 对照页（`tools/vue-reference/src/surfaces/XlsxRibbonSurface.vue`），4 viewport ×
+  light/dark × default/hover/focus/disabled = 32/32 pass、0 AA、0px。公式行仍是 `product-gap`。
 - **订正既有文档**：[components/ui-component-map.md:80](../components/ui-component-map.md) 写的“公式行是私有包内部的 `Group`”不准确：公式行在公开文件内，私有的是它依赖的 hook。
 - **pivot**：保持 `not planned`，在 `docs/guide/xlsx.md` 与 #160 文档写明。
 - **风险**：canvas 像素对照依赖字体度量；ribbon 参考取样需要私有包版本锁定。
 
 ### 6.6 L1 / L2 验收
 
-- L1：新增 `xlsx-ribbon`（`public-partial` 或 office-reference）、`xlsx-page-setup`（若 #171 做）。
+- L1：`xlsx-ribbon` 已完成（`public-vendored`，32/32 pass）；`xlsx-page-setup` 视 #171。
 - L2：`/xlsx-viewer` vs `/docs/components/xlsx-viewer`；`/xlsx-editor`（demo 暂无，需新增）vs `xlsx-editor.mdx`。
 
 ---
@@ -528,7 +532,7 @@
 | surface | reference 来源 | 状态 | owner |
 |---|---|---|---|
 | `docx-editor-toolbar` | `docx-editor.tsx:937`（vendored 或原文件参考） | 新增 | #159 |
-| `xlsx-ribbon` | `xlsx-editor.tsx:1319` + 公式行 :1355（`public-partial`：公开文件依赖私有 hook） | 新增 | #160 |
+| `xlsx-ribbon` | `xlsx-editor.tsx:1319` 格式行（静态 resting 子集，vendored） | **done（#170）**：32/32 pass、0px、有基线 | #170 |
 | `xlsx-page-setup` | 无上游（office-reference） | 视 #171 | #171 |
 | `pdf-editor-toolbar` / `pdf-editor-panels` | `pdf-editor.tsx:4069`、`pdf-editor-panels.tsx:144` | 新增 | #172 |
 | `csv-viewer` | `csv-viewer.tsx:622` | 视 #178 | #178 |
@@ -612,7 +616,7 @@
 | PPTX presenter 区域模型 | 上游与 `react-pptx@0.5.0` 都无 presenter；我们已有简化 rail（next/timer/notes） | current/next/notes/timer/controls/缩略图的区域、比例、断点；多显示器/全屏行为；CJK 长备注 | PowerPoint Presenter View、Keynote Presenter Display、Google Slides、LibreOffice Impress Console、ONLYOFFICE 截图/文档 | #183 |
 | PPTX notes 映射 | `notes.ts` 直读 `notesMaster`/备注页 | 备注占位符继承、字体缩放、溢出策略 | OOXML `notesMaster` 规范 + Office 行为 | #183 |
 | Chart internals 几何 | 我们有 `PptxChartSnapshot`（series/point/legend）+ XLSX SVG chart 布局 | plotArea/legend/axis/label 的碰撞与换行规则；百分比/日期轴 | LibreOffice chart、ONLYOFFICE、Univer、ECharts 布局（仅借鉴） | #184 |
-| XLSX ribbon 参考 | ribbon/公式行都在公开 `xlsx-editor.tsx` 内，依赖私有 hook | 私有 controller 的最小可用喂数（哪些 hook 必需） | 安装 `@extend-ai/react-xlsx@0.23.0` 跑参考（R2） | #160 |
+| XLSX 公式行参考 | 公式行在公开 `xlsx-editor.tsx` 内，但编辑态依赖私有 hook，无独立静息态 | 静态子集能否覆盖公式栏的 `Group`/`GroupText` 视觉 | #170 已证明格式行可静态化；公式行留给后续 issue | #170 |
 | DOCX port 基线 | 源码标注 `6f70b92` | 该 commit 与 0.15.0 的差异 | `git fetch --unshallow` + `git diff 6f70b92..<0.15.0 tag>` | #159 |
 | FileSystem 文件模型 | 公开 props 完整 | 宿主是否真的需要浏览入口、权限/URL 契约 | 产品决策（demo 无消费方） | #179 |
 | SchemaBuilder 持久化 | 公开 schema 类型 | `ExtractionSchema` 的保存/发布/校验契约 | 产品决策 | #179 |

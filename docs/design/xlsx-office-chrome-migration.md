@@ -12,7 +12,19 @@
 **0.8 重开结论（第四轮）**：上游 chrome markup 是自包含的，因此 `xlsx-toolbar`、
 `xlsx-sheet-tabs`、`xlsx-status-bar` 三条 `ui-parity` surface 已经建成并在
 4 viewport × light/dark × 全部 state 上**全部 0px**（64/64 pass），默认行只保留上游控件，
-其余命令移进上游本来就有的 ⋯ 菜单。细节见 §4.2；仍不可达的只有 ribbon/公式行的对照。
+其余命令移进上游本来就有的 ⋯ 菜单。细节见 §4.2。
+
+**#170 补完（第五轮）**：`xlsx-editor.tsx` 的 `EditorToolbar` 格式行（undo/redo、字体/字号、
+B/I/U/S、文字/填充色、水平/垂直对齐、换行、数字格式、边框、合并）已经以**静态 resting 子集**
+vendored 到 `tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`，并新增 `xlsx-ribbon`
+surface：4 viewport × light/dark × default/hover/focus/disabled = **32/32 pass、0 AA、0px**。
+ribbon 的 17 个 inline `<svg>`、8 个 Lucide registry 图标（undo/redo、三个水平对齐、link、table、
+check）以及 B/I/U/S 的文本字形全部换成同一套 Hugeicons（上游 `IconPlaceholder` 的 hugeicons 字形），
+`XlsxRibbon.vue` 里不再有 inline `<svg>`；`xlsx-office-chrome.test.mjs` 断言 29 个 Hugeicons
+（24x24 viewBox + 自带 stroke 数据）。
+仍未覆盖的只有**公式行**（`Group` + 私有 `@extend-ai/react-xlsx` 编辑态），以及上游格式行里
+本仓库 ribbon 没有的命令（pivot、sheet 选择器、zoom）——它们分别属于 sheet-tabs/toolbar
+surface 或产品缺口。
 
 ## 0. 相对 issue 验收清单的审计（0.8 复审）
 
@@ -25,7 +37,7 @@
 | 状态栏用 `OfficeStatusBar`；空/加载/错误用 `Office*State` | ✅ | `xlsx-office-chrome.test.mjs` |
 | 保留公式编辑/AutoFilter/冻结/图表/绘图/Worker/导出/RTL/DOM render | ✅ | §5 + 750 条 XLSX 测试 |
 | 截图 story：viewer/authoring、light/dark、390/768/1440 | ✅ | §4.3 每 viewport × theme 输出 viewer/toolbar/menu/**authoring** 截图 |
-| XLSX toolbar/ribbon 与 Extend 参考 diff ≤0.1% | ✅ toolbar + sheet tabs + status bar 0px；ribbon 不可达 | §4.2：`xlsx-toolbar` 32/32、`xlsx-sheet-tabs` 24/24、`xlsx-status-bar` 8/8，合计 64/64 pass；ribbon/公式行仍缺上游对照 |
+| XLSX toolbar/ribbon 与 Extend 参考 diff ≤0.1% | ✅ toolbar + sheet tabs + status bar + ribbon 全部 0px | §4.2：`xlsx-toolbar` 32/32、`xlsx-sheet-tabs` 24/24、`xlsx-status-bar` 8/8、`xlsx-ribbon` 32/32，合计 96/96 pass；公式行仍缺上游对照（见 §4.2 例外） |
 | 现有 XLSX unit/component/blackbox 全绿 | ✅（本轮实测） | unit 275 + component 475（含新增 happy-dom 套件）+ touch blackbox 20/20 + xlsx 导出/Worker 黑盒 |
 | 菜单键盘/焦点/关闭不回归 | ✅ | §4.3 浏览器断言 + 组件测试 |
 | 移动端 toolbar 换行且 grid 可用高度 | ✅（改为“单行不裁切”） | 390px：上游行不换行（`wrapped=false`，48px），grid 360px；`verify-xlsx-chrome-interaction.py` 断言见 §4.2.1 |
@@ -188,18 +200,28 @@ python3 scripts/ci/run-python.mjs scripts/ci/capture-office-chrome.py --serve ap
 | `xlsx-toolbar` | 4 viewport × light/dark × 4 state = 32 | **32 pass，0 fail，0px**（`pass-with-AA` 也为 0） |
 | `xlsx-sheet-tabs` | 4 × 2 × 3 = 24 | **24 pass，0 fail，0px** |
 | `xlsx-status-bar` | 4 × 2 × 1 = 8 | **8 pass，0 fail，0px** |
-| 合计 | 64 | **64/64 pass** |
+| `xlsx-ribbon` | 4 × 2 × 4 = 32 | **32 pass，0 fail，0px** |
+| 合计 | 96 | **96/96 pass** |
 
 矩阵与阈值（`geometryTolerancePx: 0`、`maxDiffPixelRatio: 0.001`）一字未改。
 #165 在 0.8 集成分支上复跑同一命令仍为 **64/64 pass、0 AA**，随后把三条 surface 切为
 `gateStatus: blocking` 并提交对照侧基线（8 state × 2 viewport × 2 theme = 32 张）；
-采集/审批流程见 [ui-parity-ci.md §5](../testing/ui-parity-ci.md)。`xlsx-ribbon` 仍无对照基线。
+采集/审批流程见 [ui-parity-ci.md §5](../testing/ui-parity-ci.md)。`xlsx-ribbon` 在 #170 补上
+参考/对照与基线（16 张，审批见 `tests/visual/extend/APPROVALS.md`）。
 
-仍然**不可达**的对照：
+仍然**不可达**的对照（逐项列出，不再用“ribbon unreachable”概括）：
 
-- `xlsx-ribbon` / `xlsx-formula-bar`：上游 editor 的格式行在 `xlsx-editor.tsx`（2835 行）里，
-  `Group`/公式行来自私有包，而且控件集合不同（我们的 ribbon 多了图表/批注/超链接/表格/
-  条件格式/数据验证/名称管理器等 authoring 入口）。这一对留给后续 issue，不在 #160 伪造对照。
+- `xlsx-formula-bar`：上游公式行（`xlsx-editor.tsx` L1355 起）的 `Group`/`GroupText` 来自私有
+  `@extend-ai/react-xlsx` 编辑态，且没有独立静息态可渲染；留给后续 issue。
+- 上游格式行里本仓库 ribbon 没有的命令：pivot insert/fields（产品缺口，`not planned`）、
+  add/remove sheet + active-sheet select（由 `xlsx-sheet-tabs` surface 覆盖）、zoom cluster
+  （由 `xlsx-toolbar` surface 覆盖）。
+- 本仓库 ribbon 有、上游格式行没有的 cluster：clipboard（cut/copy/paste/paste special）、
+  structure（插入/删除行列）、authoring（图表/批注/超链接/表格/条件格式/数据验证/冻结/名称管理器）、
+  read-only 开关。这些由 `tests/component/xlsx-*.test.mjs` 与 `xlsx-chrome` 截图覆盖，
+  `xlsx-ribbon` surface 不伪造上游对照。
+- 颜色控件的 **text colour** well 保留 Excel 的 “A” 字形（fill/border 用 Hugeicons）；
+  它不在像素对照的控件集合内。
 
 #### 4.2.1 默认 chrome 只剩上游控件
 
@@ -295,6 +317,7 @@ pnpm test:xlsx:chrome
 | 导出 | `xlsx-export.test.mjs`、`tests/blackbox/xlsx_export_openpyxl.py` |
 | RTL / DOM render | `xlsx-grid-rtl.test.mjs`、`xlsx-dom-render.test.mjs` |
 | 触摸 | `tests/blackbox/touch_mobile.py`（选择器 `.xlsx-toolbar__icon-button`、`.xlsx-toolbar__zoom-select`、`.xlsx-ribbon__icon-button` 均保留） |
+| ribbon 图标 | `xlsx-office-chrome.test.mjs`：ribbon 源码无 `<svg>`、无 Lucide 名称图标，渲染出 29 个 Hugeicons（`xlsx-ribbon` surface 用同一字形做像素对照） |
 | 键盘/焦点/菜单关闭 | 组件：`xlsx-menu-state.test.mjs`、`xlsx-office-chrome.test.mjs`（Escape/Tab/只读项）；浏览器：§4.3（焦点进入菜单、ArrowDown 走项、Escape 还焦） |
 | 触摸 44px | `tests/blackbox/touch_mobile.py` → `TOUCH-XLSX-TARGETS-44PX` PASS |
 | Sheet tabs 主题/anchor | `xlsx-office-chrome.test.mjs`（token + provider）、`xlsx-sheet-tabs.test.mjs`（键盘/ARIA） |
