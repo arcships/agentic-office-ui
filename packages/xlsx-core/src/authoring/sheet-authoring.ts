@@ -10,10 +10,16 @@ import type {
   XlsxConditionalFormatRule,
   XlsxDataValidation,
   XlsxFreezePanes,
+  XlsxPageMargins,
+  XlsxPageSetup,
+  XlsxPageSetupInput,
+  XlsxPrintOptions,
+  XlsxResolvedPageSetupInput,
   XlsxTable,
   XlsxThemePalette,
 } from "../types";
 import { columnLabel } from "../core";
+import { parseWorksheetPrintState } from "../print/page-setup";
 import {
   CONTENT_TYPES_NS,
   HYPERLINK_REL_TYPE,
@@ -30,6 +36,7 @@ import {
   parseWorksheetTableMetadata,
   getChildElements,
   getFirstChild,
+  getFirstDescendant,
   getLocalElements,
   getRelationshipId,
   normalizeArchivePath,
@@ -501,6 +508,338 @@ export function setWorkbookFreezePanes(
     }
   }
   writeSheetDocument(assets, sheetPath, document);
+  return true;
+}
+
+// ── Page set-up ──────────────────────────────────────────────────────────────
+
+const PAGE_MARGIN_KEYS = ["left", "right", "top", "bottom", "header", "footer"] as const;
+const PRINT_OPTION_KEYS = [
+  "gridLines",
+  "headings",
+  "horizontalCentered",
+  "verticalCentered",
+] as const;
+/** Excel's `Adjust to` range; a `scale` outside it makes Excel repair the file. */
+const MIN_PAGE_SCALE = 10;
+const MAX_PAGE_SCALE = 400;
+const MAX_FIT_PAGES = 32_767;
+const MAX_PAGE_MARGIN_INCHES = 100;
+
+function clampPageNumber(value: number, minimum: number, maximum: number) {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.min(maximum, Math.max(minimum, Math.floor(value)));
+}
+
+function normalizePageSetupRecord(
+  current: XlsxPageSetup,
+  patch: Partial<XlsxPageSetup>,
+): XlsxPageSetup {
+  const next: XlsxPageSetup = { ...current };
+  if (patch.orientation === "portrait" || patch.orientation === "landscape") {
+    next.orientation = patch.orientation;
+  }
+  if (patch.pageOrder === "downThenOver" || patch.pageOrder === "overThenDown") {
+    next.pageOrder = patch.pageOrder;
+  }
+  const paperSize = readSpreadsheetNumber(patch.paperSize);
+  if (paperSize !== null) {
+    next.paperSize = clampPageNumber(paperSize, 1, 118);
+  }
+  if (typeof patch.fitToPage === "boolean") {
+    next.fitToPage = patch.fitToPage;
+  }
+  const fitToWidth = readSpreadsheetNumber(patch.fitToWidth);
+  if (fitToWidth !== null) {
+    // `0` is OOXML's "as many pages as needed", so it has to survive as 0.
+    next.fitToWidth = clampPageNumber(fitToWidth, 0, MAX_FIT_PAGES);
+  }
+  const fitToHeight = readSpreadsheetNumber(patch.fitToHeight);
+  if (fitToHeight !== null) {
+    next.fitToHeight = clampPageNumber(fitToHeight, 0, MAX_FIT_PAGES);
+  }
+  const scale = readSpreadsheetNumber(patch.scale);
+  if (scale !== null) {
+    next.scale = clampPageNumber(scale, MIN_PAGE_SCALE, MAX_PAGE_SCALE);
+  }
+  if (typeof patch.useFirstPageNumber === "boolean") {
+    next.useFirstPageNumber = patch.useFirstPageNumber;
+  }
+  const firstPageNumber = readSpreadsheetNumber(patch.firstPageNumber);
+  if (firstPageNumber !== null) {
+    next.firstPageNumber = clampPageNumber(firstPageNumber, 1, MAX_FIT_PAGES);
+  }
+  if (typeof patch.blackAndWhite === "boolean") {
+    next.blackAndWhite = patch.blackAndWhite;
+  }
+  if (typeof patch.draft === "boolean") {
+    next.draft = patch.draft;
+  }
+  if (patch.cellComments === "none" || patch.cellComments === "asDisplayed" || patch.cellComments === "atEnd") {
+    next.cellComments = patch.cellComments;
+  }
+  if (patch.errors === "displayed" || patch.errors === "blank" || patch.errors === "dash" || patch.errors === "NA") {
+    next.errors = patch.errors;
+  }
+  return next;
+}
+
+function normalizePageMarginsRecord(
+  current: XlsxPageMargins,
+  patch: Partial<XlsxPageMargins>,
+): XlsxPageMargins {
+  const next: XlsxPageMargins = { ...current };
+  for (const key of PAGE_MARGIN_KEYS) {
+    const value = readSpreadsheetNumber(patch[key]);
+    if (value === null) continue;
+    next[key] = Math.min(MAX_PAGE_MARGIN_INCHES, Math.max(0, value));
+  }
+  return next;
+}
+
+function normalizePrintOptionsRecord(
+  current: XlsxPrintOptions,
+  patch: Partial<XlsxPrintOptions>,
+): XlsxPrintOptions {
+  const next: XlsxPrintOptions = { ...current };
+  for (const key of PRINT_OPTION_KEYS) {
+    const value = patch[key];
+    if (typeof value === "boolean") {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function normalizePrintAreaRanges(printAreas: readonly XlsxCellRange[] | null) {
+  if (!printAreas) return [];
+  return printAreas.flatMap((range) => {
+    if (!range?.start || !range?.end) return [];
+    if (!Number.isFinite(range.start.row) || !Number.isFinite(range.start.col)) return [];
+    if (!Number.isFinite(range.end.row) || !Number.isFinite(range.end.col)) return [];
+    return [normalizeRange(range)];
+  });
+}
+
+/**
+ * Merges a page set-up patch into a sheet's current print records.
+ *
+ * The dialog uses this for its live summary and the controller uses it for the
+ * model patch, so both describe exactly what {@link setWorkbookPageSetup}
+ * writes into the worksheet part.
+ */
+export function resolvePageSetupInput(
+  current: {
+    pageSetup: XlsxPageSetup;
+    pageMargins: XlsxPageMargins;
+    printOptions: XlsxPrintOptions;
+  },
+  input: XlsxPageSetupInput,
+): XlsxResolvedPageSetupInput {
+  return {
+    pageMargins: normalizePageMarginsRecord(current.pageMargins, input.pageMargins ?? {}),
+    pageSetup: normalizePageSetupRecord(current.pageSetup, input.pageSetup ?? {}),
+    printAreas: input.printAreas === undefined ? undefined : normalizePrintAreaRanges(input.printAreas),
+    printOptions: normalizePrintOptionsRecord(current.printOptions, input.printOptions ?? {}),
+  };
+}
+
+function formatInches(value: number) {
+  return String(Number(value.toFixed(4)));
+}
+
+/** Absolute A1 reference, the form `_xlnm.Print_Area` stores. */
+function absoluteRangeReference(range: XlsxCellRange) {
+  const normalized = normalizeRange(range);
+  const start = `$${columnLabel(normalized.start.col)}$${normalized.start.row + 1}`;
+  const end = `$${columnLabel(normalized.end.col)}$${normalized.end.row + 1}`;
+  return start === end ? start : `${start}:${end}`;
+}
+
+/** Quotes a sheet name only when a defined-name formula needs it. */
+function sheetReferencePrefix(name: string) {
+  const escaped = name.replace(/'/g, "''");
+  return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(escaped) ? escaped : `'${escaped}'`;
+}
+
+// ── Page set-up: worksheet writers ──────────────────────────────────────────
+
+/**
+ * Writes `sheetPr/pageSetUpPr/@fitToPage`.
+ *
+ * The attribute is removed when it turns false and nothing else lives on the
+ * element, so a workbook cannot keep a stale `<pageSetUpPr/>` after the user
+ * leaves fit-to mode.
+ */
+function writeFitToPage(document: XMLDocument, enabled: boolean) {
+  const existing = getFirstDescendant(document, "pageSetUpPr");
+  if (!enabled) {
+    if (!existing) return;
+    existing.removeAttribute("fitToPage");
+    const hasAttributes = Array.from(existing.attributes ?? []).length > 0;
+    if (!hasAttributes && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    return;
+  }
+  if (existing) {
+    existing.setAttribute("fitToPage", "1");
+    return;
+  }
+  const node = createSheetElement(document, "pageSetUpPr");
+  node.setAttribute("fitToPage", "1");
+  ensureSheetChild(document, "sheetPr").appendChild(node);
+}
+
+/**
+ * Writes the Page tab fields Excel keeps on `<pageSetup>`.
+ *
+ * Only the attributes this repository models are touched; anything else the
+ * source file carried (DPI, copies, printer defaults) stays byte-identical.
+ * The scaling mode decides which pair is written, matching Excel: fit-to writes
+ * `fitToWidth`/`fitToHeight`, otherwise `scale`.
+ */
+function writePageSetupElement(document: XMLDocument, pageSetup: XlsxPageSetup) {
+  const node = ensureSheetChild(document, "pageSetup");
+  node.setAttribute("orientation", pageSetup.orientation);
+  node.setAttribute("paperSize", String(pageSetup.paperSize));
+  node.setAttribute("pageOrder", pageSetup.pageOrder);
+  if (pageSetup.fitToPage) {
+    node.setAttribute("fitToWidth", String(pageSetup.fitToWidth));
+    node.setAttribute("fitToHeight", String(pageSetup.fitToHeight));
+  } else {
+    node.setAttribute("scale", String(pageSetup.scale));
+  }
+}
+
+/** Writes all six `<pageMargins>` distances; Excel always stores the full set. */
+function writePageMarginsElement(document: XMLDocument, pageMargins: XlsxPageMargins) {
+  const node = ensureSheetChild(document, "pageMargins");
+  for (const key of PAGE_MARGIN_KEYS) {
+    node.setAttribute(key, formatInches(pageMargins[key]));
+  }
+}
+
+/** Writes the Sheet tab print flags Excel keeps on `<printOptions>`. */
+function writePrintOptionsElement(document: XMLDocument, printOptions: XlsxPrintOptions) {
+  const node = ensureSheetChild(document, "printOptions");
+  for (const key of PRINT_OPTION_KEYS) {
+    node.setAttribute(key, printOptions[key] ? "1" : "0");
+  }
+}
+
+/** Workbook child order after `<definedNames>`, per the `CT_Workbook` sequence. */
+const DEFINED_NAMES_FOLLOWERS = [
+  "calcPr",
+  "oleSize",
+  "customWorkbookViews",
+  "pivotCaches",
+  "smartTagPr",
+  "smartTagTypes",
+  "webPublishing",
+  "fileRecoveryPr",
+  "webPublishObjects",
+  "extLst",
+];
+
+/** `<definedNames>` in schema order; created only when a print area is written. */
+function ensureDefinedNamesContainer(document: XMLDocument) {
+  const existing = getLocalElements(document, "definedNames")[0] ?? null;
+  if (existing) return existing;
+  const root = document.documentElement;
+  if (!root) return null;
+  const container = document.createElementNS(SPREADSHEET_NS, "definedNames");
+  const follower = Array.from(root.childNodes).find(
+    (child) => child.nodeType === 1 && DEFINED_NAMES_FOLLOWERS.includes((child as Element).localName),
+  );
+  if (follower) root.insertBefore(container, follower);
+  else root.appendChild(container);
+  return container;
+}
+
+/** Sheet name of a workbook slot, read from `xl/workbook.xml`'s `<sheets>`. */
+function workbookSheetName(document: XMLDocument, workbookSheetIndex: number) {
+  const name = getLocalElements(document, "sheet")[workbookSheetIndex]?.getAttribute("name") ?? "";
+  return name.trim() || null;
+}
+
+/**
+ * Replaces the sheet's `_xlnm.Print_Area` definition (or removes it when the
+ * list is empty) in the source workbook part.
+ *
+ * The definition is sheet-scoped through `localSheetId`, exactly like Excel,
+ * and each range is written as an absolute `$A$1:$D$20` reference so it
+ * survives row/column insertions in Excel.
+ */
+function writePrintArea(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  printAreas: readonly XlsxCellRange[],
+) {
+  const xml = readArchiveText(assets.archive, "xl/workbook.xml");
+  const document = xml ? parseXml(xml) : null;
+  if (!document?.documentElement) return;
+  const sheetName = workbookSheetName(document, workbookSheetIndex);
+  if (!sheetName) return;
+  const matchesSlot = (node: Element) =>
+    (node.getAttribute("name") ?? "").trim().toLowerCase() === "_xlnm.print_area"
+    && Number(node.getAttribute("localSheetId")) === workbookSheetIndex;
+  const existing = getLocalElements(document, "definedName").find(matchesSlot) ?? null;
+  const container = getLocalElements(document, "definedNames")[0] ?? null;
+  if (printAreas.length === 0) {
+    if (!existing) return;
+    existing.parentNode?.removeChild(existing);
+    if (container && getChildElements(container, "definedName").length === 0) {
+      container.parentNode?.removeChild(container);
+    }
+  } else {
+    let target = existing;
+    if (!target) {
+      target = document.createElementNS(SPREADSHEET_NS, "definedName");
+      target.setAttribute("name", "_xlnm.Print_Area");
+      target.setAttribute("localSheetId", String(workbookSheetIndex));
+      ensureDefinedNamesContainer(document)?.appendChild(target);
+    }
+    const prefix = sheetReferencePrefix(sheetName);
+    target.textContent = printAreas
+      .map((range) => `${prefix}!${absoluteRangeReference(range)}`)
+      .join(",");
+  }
+  assets.archive[normalizeArchivePath("xl/workbook.xml")] = strToU8(serializeXml(document));
+}
+
+/**
+ * Writes a worksheet's page set-up, margins, print flags and print area.
+ *
+ * The values already in the worksheet part are the starting point, so a partial
+ * patch never resets fields the caller did not mention. Scaling follows Excel's
+ * rule: `fitToPage` decides whether `fitToWidth`/`fitToHeight` or `scale` drive
+ * the layout, and the other mode's numbers stay in the part so switching back
+ * and forth in the dialog does not lose them.
+ *
+ * The mutation is included in exported XLSX bytes: the save pass copies
+ * `printOptions`, `pageMargins`, `pageSetup`, `sheetPr/pageSetUpPr` and the
+ * `_xlnm.Print_Area` definition into the engine-saved workbook.
+ *
+ * @returns `false` when the worksheet part is unavailable (non-XML load modes).
+ */
+export function setWorkbookPageSetup(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  input: XlsxPageSetupInput,
+): boolean {
+  const sheet = readSheetDocument(assets, workbookSheetIndex);
+  if (!sheet) return false;
+  const { document, sheetPath } = sheet;
+  const resolved = resolvePageSetupInput(parseWorksheetPrintState(document), input);
+  writePageSetupElement(document, resolved.pageSetup);
+  writeFitToPage(document, resolved.pageSetup.fitToPage);
+  writePageMarginsElement(document, resolved.pageMargins);
+  writePrintOptionsElement(document, resolved.printOptions);
+  writeSheetDocument(assets, sheetPath, document);
+  if (resolved.printAreas !== undefined) {
+    writePrintArea(assets, workbookSheetIndex, resolved.printAreas);
+  }
   return true;
 }
 

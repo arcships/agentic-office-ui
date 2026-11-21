@@ -66,6 +66,11 @@
       <div data-testid="xlsx-sparkline-count"><strong>迷你图：</strong>{{ controller?.activeSheet?.sparklines.length ?? 0 }}</div>
       <div data-testid="xlsx-shape-count"><strong>形状：</strong>{{ controller?.shapes.length ?? 0 }}</div>
       <div data-testid="xlsx-form-control-count"><strong>控件：</strong>{{ controller?.formControls.length ?? 0 }}</div>
+      <div
+        data-testid="xlsx-page-setup-status"
+        :data-orientation="controller?.activeSheet?.pageSetup.orientation"
+        :data-paper-size="controller?.activeSheet?.pageSetup.paperSize"
+      ><strong>页面设置：</strong>{{ pageSetupSummary }}</div>
     </div>
 
     <details class="runtime-details" data-testid="xlsx-runtime-details">
@@ -103,7 +108,7 @@ import {
   type XlsxLoadError,
   type XlsxUrlPolicy,
 } from "@arcships/vue-xlsx"
-import type { XlsxViewerController } from "@arcships/xlsx-core"
+import { resolvePaperSize, type XlsxViewerController } from "@arcships/xlsx-core"
 import { readDemoTheme } from "../lib/demo-visual-settings"
 
 const XlsxViewerWrapper = defineComponent({
@@ -217,6 +222,19 @@ const workerModeNote = computed(() => {
   const current = controller.value
   if (!current || current.sourceState !== "ready" || current.isWorkerBacked) return ""
   return "Worker 只用于只读加载；当前为可编辑模式，解析在主线程执行。勾选“只读”后重新加载即可使用 Worker。"
+})
+/** Demo evidence for #171: the authored page setup the viewer would print. */
+const pageSetupSummary = computed(() => {
+  const sheet = controller.value?.activeSheet
+  if (!sheet) return "未打开"
+  const setup = sheet.pageSetup
+  const paper = resolvePaperSize(setup.paperSize).name
+  const orientation = setup.orientation === "landscape" ? "横向" : "纵向"
+  const scaling = setup.fitToPage
+    ? `缩放到 ${setup.fitToWidth}×${setup.fitToHeight} 页`
+    : `缩放 ${setup.scale}%`
+  const area = sheet.printAreas.length > 0 ? `打印区域 ${sheet.printAreas.length} 个` : "整表打印"
+  return `${paper} ${orientation} · ${scaling} · ${area}`
 })
 
 function beginLoad(kind: string, name: string) {

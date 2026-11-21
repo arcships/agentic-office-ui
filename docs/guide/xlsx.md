@@ -340,11 +340,41 @@ const layout = buildWorksheetPrintLayout(controller.activeSheet)
 |---|---|
 | `printLayout` / `printPages` | 活动工作表的扁平页面列表；每页带单元格范围和纸张尺寸 |
 | `getPrintLayout()` | 同 `printLayout`，适合在命令式代码里取一次快照 |
+| `setPageSetup(input)` | 写入方向、纸张、缩放、边距、打印开关与打印区域，一次一条撤销记录 |
 | `setPageBreakPreview(enabled)` | 在网格中显示 Excel 风格的蓝色虚线分页线和页码 |
 | `openPrintPreview()` / `closePrintPreview()` | 打开/关闭分页打印预览；`XlsxPrintPreview` 也可由宿主单独挂载 |
 | `print()` | 打开打印预览并调用 `window.print()`；无工作表或无 `window.print` 时返回 `false` |
 
 `XlsxViewer` 的 `@media print` 只输出预览页面，每页一个区块；纸张方向、页边距、手动分页线、重复标题行/列和合并单元格跨页都由核心分页结果决定。导出 XLSX 时会保留 `pageMargins`、`printOptions`、`pageSetUpPr`、分页线和打印区域定义，重新打开后分页结果一致。
+
+### 页面设置（#171）
+
+`XlsxRibbon` 的 authoring 组新增“页面设置”入口，打开 `XlsxPageSetupDialog`——Excel 页面设置对话框的可写子集（参考规格见 [design/xlsx-page-setup-reference.md](../design/xlsx-page-setup-reference.md)）：
+
+| 字段 | 写回 |
+|---|---|
+| 方向（纵向/横向） | `pageSetup/@orientation` |
+| 纸张（Letter/Legal/Executive/Tabloid/A3/A4/A5/B4/B5，当前值原样保留） | `pageSetup/@paperSize` |
+| 缩放：`缩放比例 10–400%` 或 `调整为 N 页宽 × M 页高`（高填 0 = 自动） | `pageSetup/@scale`、`@fitToWidth`、`@fitToHeight`、`sheetPr/pageSetUpPr/@fitToPage` |
+| 页边距（上/下/左/右/页眉/页脚，英寸） | `pageMargins/@*` |
+| 水平/垂直居中、网格线、行号列标 | `printOptions/@*` |
+| 打印顺序（先向下再向右 / 先向右再向下） | `pageSetup/@pageOrder` |
+| 打印区域（`A1:D20`，逗号分隔多个区域，可“使用当前选区”或清除） | `xl/workbook.xml` 的 `_xlnm.Print_Area`（`localSheetId` 作用域） |
+
+字段在打开时取工作表当前值，`确定` 只写一次工作簿：撤销一次回到打开前，导出的 XLSX 在 Excel 中打开即为同一份页面设置。对话框内的摘要行直接调用核心分页，显示应用后会打印的页数、纸张、方向与实际缩放；只读、受保护工作表或 Worker 只读大文件下表单禁用。不提供页眉页脚、打印质量、黑白/草稿、批注与错误显示等项，原因见参考规格。
+
+宿主也可以直接挂载对话框，或在自定义界面里调用同一个命令：
+
+```ts
+controller.setPageSetup({
+  pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+  pageMargins: { top: 0.75, left: 0.5 },
+  printOptions: { gridLines: true, headings: true },
+  printAreas: [{ start: { row: 0, col: 0 }, end: { row: 19, col: 3 } }],
+})
+```
+
+`setPageSetup` 返回 `false` 表示没有改动（与当前值一致）或工作表不可编辑；`printAreas: []` 清除打印区域定义，省略该字段则保持原样。
 
 图表、地图和 WebGL 是按需入口：
 
@@ -358,7 +388,7 @@ import "@arcships/vue-xlsx/webgl"
 
 ## 作者入口
 
-功能区新增“图表 / 批注 / 超链接 / 表格 / 条件格式 / 数据验证 / 冻结窗格”一组按钮，右键菜单提供同名入口。对话框由 `XlsxViewer`（以及最小化的 `XlsxSheetSurface` 右键菜单）自动渲染，宿主也可以直接挂载 `XlsxAuthoringDialog`：
+功能区新增“图表 / 批注 / 超链接 / 表格 / 条件格式 / 数据验证 / 冻结窗格 / 页面设置”一组按钮，右键菜单提供同名入口。对话框由 `XlsxViewer`（以及最小化的 `XlsxSheetSurface` 右键菜单）自动渲染，宿主也可以直接挂载 `XlsxAuthoringDialog`：
 
 ```vue
 <script setup lang="ts">
@@ -367,7 +397,7 @@ import { XlsxAuthoringDialog, XlsxViewer } from "@arcships/vue-xlsx"
 
 <template>
   <XlsxViewer :controller="controller" />
-  <!-- 或自行控制 dialog：kind = "chart" | "comment" | "hyperlink" | "table" | "conditional" | "validation" -->
+  <!-- 或自行控制 dialog：kind = "chart" | "comment" | "hyperlink" | "table" | "conditional" | "validation" | "pageSetup" -->
   <XlsxAuthoringDialog :controller="controller" kind="comment" @close="close" />
 </template>
 ```

@@ -1139,6 +1139,47 @@ export interface OfficeXlsxMessages {
       useSelection: string
       empty: string
     }
+    pageSetup: {
+      title: string
+      orientation: string
+      orientationPortrait: string
+      orientationLandscape: string
+      paperSize: string
+      scaling: string
+      scaleAdjust: string
+      scaleFit: string
+      scalePercent: string
+      fitToWidth: string
+      /** Label of the `page(s) tall` box; `0` means automatic. */
+      fitToHeight: string
+      fitToHeightHint: string
+      margins: string
+      marginTop: string
+      marginBottom: string
+      marginLeft: string
+      marginRight: string
+      marginHeader: string
+      marginFooter: string
+      centerHorizontally: string
+      centerVertically: string
+      printOptions: string
+      printGridLines: string
+      printHeadings: string
+      pageOrder: string
+      pageOrderDownThenOver: string
+      pageOrderOverThenDown: string
+      printArea: string
+      printAreaPlaceholder: string
+      printAreaUseSelection: string
+      printAreaClear: string
+      printAreaInvalid: string
+      /** Template with `{paper}`, `{orientation}`, `{scale}` and `{count}` placeholders. */
+      summary: string
+      /** Shown when the active sheet cannot be authored. */
+      locked: string
+      apply: string
+      cancel: string
+    }
     context: {
       insertComment: string
       editComment: string
@@ -2604,6 +2645,44 @@ export const officeMessagesEn: OfficeMessages = {
         useSelection: "Use selection",
         empty: "No defined names yet.",
       },
+      pageSetup: {
+        title: "Page setup",
+        orientation: "Orientation",
+        orientationPortrait: "Portrait",
+        orientationLandscape: "Landscape",
+        paperSize: "Paper size",
+        scaling: "Scaling",
+        scaleAdjust: "Adjust to",
+        scaleFit: "Fit to",
+        scalePercent: "% normal size",
+        fitToWidth: "page(s) wide by",
+        fitToHeight: "page(s) tall",
+        fitToHeightHint: "0 prints as many pages as the data needs.",
+        margins: "Margins (inches)",
+        marginTop: "Top",
+        marginBottom: "Bottom",
+        marginLeft: "Left",
+        marginRight: "Right",
+        marginHeader: "Header",
+        marginFooter: "Footer",
+        centerHorizontally: "Center horizontally",
+        centerVertically: "Center vertically",
+        printOptions: "Print",
+        printGridLines: "Gridlines",
+        printHeadings: "Row and column headings",
+        pageOrder: "Page order",
+        pageOrderDownThenOver: "Down, then over",
+        pageOrderOverThenDown: "Over, then down",
+        printArea: "Print area",
+        printAreaPlaceholder: "A1:D20",
+        printAreaUseSelection: "Use selection",
+        printAreaClear: "Clear",
+        printAreaInvalid: "Enter A1 references, for example A1:D20, separated by commas.",
+        summary: "{count} page(s) · {paper} {orientation} · {scale}%",
+        locked: "This sheet cannot be changed, so page setup is read-only.",
+        apply: "OK",
+        cancel: "Cancel",
+      },
       context: {
         insertComment: "Insert comment",
         editComment: "Edit comment",
@@ -3983,6 +4062,44 @@ export const officeMessagesZhCN: OfficeMessages = {
         delete: "删除",
         useSelection: "使用当前选区",
         empty: "尚未定义名称。",
+      },
+      pageSetup: {
+        title: "页面设置",
+        orientation: "方向",
+        orientationPortrait: "纵向",
+        orientationLandscape: "横向",
+        paperSize: "纸张大小",
+        scaling: "缩放",
+        scaleAdjust: "缩放比例",
+        scaleFit: "调整为",
+        scalePercent: "正常尺寸百分比",
+        fitToWidth: "页宽",
+        fitToHeight: "页高",
+        fitToHeightHint: "填 0 表示按数据自动决定页数。",
+        margins: "页边距（英寸）",
+        marginTop: "上",
+        marginBottom: "下",
+        marginLeft: "左",
+        marginRight: "右",
+        marginHeader: "页眉",
+        marginFooter: "页脚",
+        centerHorizontally: "水平居中",
+        centerVertically: "垂直居中",
+        printOptions: "打印",
+        printGridLines: "网格线",
+        printHeadings: "行号和列标",
+        pageOrder: "打印顺序",
+        pageOrderDownThenOver: "先向下，再向右",
+        pageOrderOverThenDown: "先向右，再向下",
+        printArea: "打印区域",
+        printAreaPlaceholder: "A1:D20",
+        printAreaUseSelection: "使用当前选区",
+        printAreaClear: "清除",
+        printAreaInvalid: "请输入 A1 形式区域，例如 A1:D20，多个区域用逗号分隔。",
+        summary: "{count} 页 · {paper} {orientation} · {scale}%",
+        locked: "当前工作表不可编辑，页面设置只读。",
+        apply: "确定",
+        cancel: "取消",
       },
       context: {
         insertComment: "插入批注",

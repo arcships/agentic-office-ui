@@ -423,6 +423,7 @@ test("XlsxRibbon exposes authoring entry points and toggles freeze panes", async
       ["xlsx-ribbon-conditional", "conditional"],
       ["xlsx-ribbon-chart", "chart"],
       ["xlsx-ribbon-validation", "validation"],
+      ["xlsx-ribbon-page-setup", "pageSetup"],
     ]) {
       const button = findByTestId(mounted.root, testId);
       assert.ok(button, `${testId} is rendered`);

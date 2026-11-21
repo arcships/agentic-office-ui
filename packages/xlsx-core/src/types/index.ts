@@ -35,6 +35,8 @@ export type {
   XlsxPageSetup,
   XlsxPrintOptions,
   XlsxPageMargins,
+  XlsxPageSetupInput,
+  XlsxResolvedPageSetupInput,
   XlsxPageBreak,
   XlsxAxisRange,
   XlsxPrintTitles,

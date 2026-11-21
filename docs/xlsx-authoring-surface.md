@@ -112,11 +112,20 @@ saveXlsxBytes()                 # 引擎提供权威单元格数据
 - `toggleFreezePanesAtActiveCell()` 在当前单元格上冻结；再点一次取消；
 - 两个方向都为 0 等价于取消冻结。
 
+### 4.8 页面设置（#171）
+
+- `setPageSetup(input)` 把 `pageSetup`、`pageMargins`、`printOptions` 与可选的打印区域写成一次改动；
+- 缩放由 `pageSetup.fitToPage` 选模式：`true` 写 `fitToWidth`/`fitToHeight` 与 `sheetPr/pageSetUpPr/@fitToPage`，`false` 写 `scale`；`fitTo* = 0` 是 Excel 的“自动页数”，解析器原样保留；
+- 打印区域写入 `xl/workbook.xml` 的 `_xlnm.Print_Area`（`localSheetId` 作用域、`$A$1:$D$20` 绝对引用），`printAreas: []` 删除该定义；
+- 只改传入的字段；未传入的页边距/纸张/DPI 保持工作簿原值，因此对话框打开再确定不会重置未展示的项；
+- 与其它 authoring 命令一样：一条撤销记录、随导出保留、只读/受保护/Worker 只读下返回 `false`。
+
 ## 5. UI
 
-- 功能区分组 `xlsx-ribbon-authoring`：图表、批注、超链接、表格、条件格式、数据验证、冻结开关；
+- 功能区分组 `xlsx-ribbon-authoring`：图表、批注、超链接、表格、条件格式、数据验证、冻结开关、页面设置（文字按钮，打开 `XlsxPageSetupDialog`）；
 - 右键菜单：插入/编辑批注、插入/编辑超链接、插入图表、条件格式、数据验证、创建/删除表格、冻结/取消冻结；
 - `XlsxAuthoringDialog`：一个对话框按 `kind` 渲染各表单；`XlsxViewer` 与最小化的 `XlsxSheetSurface` 都会从右键菜单打开它；宿主也可以自行挂载；外壳自 0.8 起复用共享 `office-dialog` 表面（见 [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md)），表单状态、校验与焦点行为不变；
+- `XlsxPageSetupDialog`（#171）：页面设置的独立对话框，`kind="pageSetup"` 时由 `XlsxAuthoringDialog` 转交；字段取工作表当前值，摘要行调用核心分页显示页数/纸张/缩放，390px 单列不溢出；规格见 [design/xlsx-page-setup-reference.md](design/xlsx-page-setup-reference.md)；
 - 所有文案走 `office-interaction` 消息目录（`xlsx.authoring.*`，en + zh-CN），不硬编码。
 
 ## 6. 限制

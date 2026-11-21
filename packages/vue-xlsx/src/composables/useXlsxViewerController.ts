@@ -1779,6 +1779,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setCellComment: authoringDomain.setCellComment,
     setCellHyperlink: authoringDomain.setCellHyperlink,
     setFreezePanes: authoringDomain.setFreezePanes,
+    setPageSetup: authoringDomain.setPageSetup,
     setNamedRange: structureDomain.setNamedRange,
     setSelectionDataValidation: authoringDomain.setSelectionDataValidation,
     setSelectionNumberFormat: editingDomain.setSelectionNumberFormat,

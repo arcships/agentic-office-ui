@@ -162,8 +162,18 @@ export { default as XlsxAutoFilterMenu } from "./components/XlsxAutoFilterMenu.v
  * Authoring dialog for charts, comments, hyperlinks, tables, conditional
  * formats and data validation. `XlsxViewer` renders it from the ribbon and
  * context menu; hosts that embed `XlsxSheetSurface` can mount it directly.
+ * `kind="pageSetup"` renders `XlsxPageSetupDialog`.
  */
 export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog.vue"
+/**
+ * Page set-up dialog: orientation, paper size, scaling, margins, print flags
+ * and the print area of the active sheet, written as one undoable change.
+ *
+ * `XlsxViewer` opens it from the ribbon's page setup command through
+ * `XlsxAuthoringDialog`; hosts can also mount it on its own with the same
+ * controller instance.
+ */
+export { default as XlsxPageSetupDialog } from "./components/XlsxPageSetupDialog.vue"
 /**
  * Paginated print preview. `XlsxViewer` mounts it from the controller's print
  * state; hosts that embed `XlsxSheetSurface` can mount it directly.

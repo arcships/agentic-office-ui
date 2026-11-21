@@ -182,6 +182,22 @@ test("multiple print areas stay separate in the parsed model", () => {
   ]);
 });
 
+test("fit-to counts of 0 survive parsing as automatic pages", () => {
+  // Excel writes `fitToHeight="0"` when the `tall` box is left blank, which
+  // means "as many pages as the data needs" — not one page.
+  const { archive } = patchPrintMetadata();
+  archive["xl/worksheets/sheet1.xml"] = strToU8(
+    strFromU8(archive["xl/worksheets/sheet1.xml"]).replace(
+      /<pageSetup[^>]*\/>/,
+      '<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>',
+    ),
+  );
+  const state = core.parseWorkbookStructureAssets(zipSync(archive)).sheetStatesByWorkbookSheetIndex[0];
+  assert.equal(state.pageSetup.fitToPage, true);
+  assert.equal(state.pageSetup.fitToWidth, 1);
+  assert.equal(state.pageSetup.fitToHeight, 0);
+});
+
 test("page pagination is computed in core from paper, breaks and print area", () => {
   const layout = core.buildWorksheetPrintLayout(makeSheet());
   assert.equal(layout.paperSize.name, "Letter");

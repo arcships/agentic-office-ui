@@ -112,6 +112,14 @@ function positiveIntegerOr(value: number | null, fallback: number, maximum = 327
   return value != null && value > 0 ? Math.min(maximum, Math.floor(value)) : fallback;
 }
 
+/**
+ * Fit-to page counts allow `0`, which OOXML defines as "as many pages as
+ * needed"; Excel's blank `tall` box round-trips as `fitToHeight="0"`.
+ */
+function nonNegativeIntegerOr(value: number | null, fallback: number, maximum = 32767) {
+  return value != null && value >= 0 ? Math.min(maximum, Math.floor(value)) : fallback;
+}
+
 // ── Worksheet-level parsing ──────────────────────────────────────────────
 
 /** Parsed print fields of a single worksheet part. */
@@ -163,8 +171,8 @@ function parsePrintOptions(document: XMLDocument): XlsxPrintOptions {
 function parsePageSetup(document: XMLDocument): XlsxPageSetup {
   const setup = getLocalElements(document, "pageSetup")[0] ?? null;
   const fitToPagePr = getFirstDescendant(document, "pageSetUpPr");
-  const fitToWidth = positiveIntegerOr(readNumberAttribute(setup, "fitToWidth"), 1);
-  const fitToHeight = positiveIntegerOr(readNumberAttribute(setup, "fitToHeight"), 1);
+  const fitToWidth = nonNegativeIntegerOr(readNumberAttribute(setup, "fitToWidth"), 1);
+  const fitToHeight = nonNegativeIntegerOr(readNumberAttribute(setup, "fitToHeight"), 1);
   return {
     blackAndWhite: readBooleanAttribute(setup, "blackAndWhite") ?? false,
     cellComments: normalizeCellComments(readStringAttribute(setup, "cellComments")),
@@ -399,8 +407,8 @@ function enginePageSetup(worksheet: WorksheetPrintSource | null | undefined): Xl
   const raw = worksheet?.pageSetup && typeof worksheet.pageSetup === "object"
     ? worksheet.pageSetup as Record<string, unknown>
     : {};
-  const fitToWidth = positiveIntegerOr(typeof raw.fitToWidth === "number" ? raw.fitToWidth : null, 1);
-  const fitToHeight = positiveIntegerOr(typeof raw.fitToHeight === "number" ? raw.fitToHeight : null, 1);
+  const fitToWidth = nonNegativeIntegerOr(typeof raw.fitToWidth === "number" ? raw.fitToWidth : null, 1);
+  const fitToHeight = nonNegativeIntegerOr(typeof raw.fitToHeight === "number" ? raw.fitToHeight : null, 1);
   return {
     blackAndWhite: raw.blackAndWhite === true,
     cellComments: normalizeCellComments(raw.cellComments),

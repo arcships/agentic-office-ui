@@ -8,10 +8,12 @@ import {
   insertWorkbookChart,
   loadWorkbookChartAssets,
   normalizeWorkbookTableMetadata,
+  resolvePageSetupInput,
   setWorkbookCellComment,
   setWorkbookCellHyperlink,
   setWorkbookDataValidation,
   setWorkbookFreezePanes,
+  setWorkbookPageSetup,
   updateWorkbookConditionalFormatRule,
   type XlsxCellAddress,
   type XlsxCellComment,
@@ -26,6 +28,10 @@ import {
   type XlsxDataValidation,
   type XlsxDataValidationInput,
   type XlsxFreezePanes,
+  type XlsxPageMargins,
+  type XlsxPageSetup,
+  type XlsxPageSetupInput,
+  type XlsxPrintOptions,
   type XlsxSheetData,
   type XlsxTable,
   type XlsxTableCreateInput
@@ -58,6 +64,55 @@ function sameFreezePanes(left: XlsxFreezePanes | null, right: XlsxFreezePanes | 
     return left === right;
   }
   return left.row === right.row && left.col === right.col;
+}
+
+/** Shallow equality over the modelled keys of one page-setup record. */
+function sameRecord<T extends object>(left: T, right: T, keys: readonly (keyof T)[]) {
+  return keys.every((key) => left[key] === right[key]);
+}
+
+const PAGE_SETUP_KEYS: readonly (keyof XlsxPageSetup)[] = [
+  "paperSize",
+  "orientation",
+  "scale",
+  "fitToWidth",
+  "fitToHeight",
+  "fitToPage",
+  "pageOrder",
+  "firstPageNumber",
+  "useFirstPageNumber",
+  "blackAndWhite",
+  "draft",
+  "cellComments",
+  "errors",
+];
+const PAGE_MARGIN_KEYS: readonly (keyof XlsxPageMargins)[] = [
+  "left",
+  "right",
+  "top",
+  "bottom",
+  "header",
+  "footer",
+];
+const PRINT_OPTION_KEYS: readonly (keyof XlsxPrintOptions)[] = [
+  "gridLines",
+  "headings",
+  "horizontalCentered",
+  "verticalCentered",
+];
+
+function sameRangeList(left: readonly XlsxCellRange[], right: readonly XlsxCellRange[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((range, index) => {
+    const other = right[index];
+    return Boolean(other)
+      && range.start.row === other.start.row
+      && range.start.col === other.start.col
+      && range.end.row === other.end.row
+      && range.end.col === other.end.col;
+  });
 }
 
 /** Turn an editor's list input into the OOXML-style formula string. */
@@ -149,6 +204,45 @@ export function createAuthoringDomain(ctx: XlsxControllerContext) {
       return setFreezePanes(null);
     }
     return setFreezePanes({ row: cell.row, col: cell.col });
+  }
+
+  // ── Page set-up ─────────────────────────────────────────────────────
+  /**
+   * Writes the page setup dialog's patch into the worksheet part.
+   *
+   * `resolvePageSetupInput` normalizes the patch once, so the model fields the
+   * viewer renders and the XML an export carries cannot disagree.
+   */
+  function setPageSetup(input: XlsxPageSetupInput) {
+    if (!canAuthor()) {
+      return false;
+    }
+    const workbookSheetIndex = activeWorkbookSheetIndex();
+    const sheet = ctx.activeSheet.value;
+    const assets = getAssets();
+    if (!sheet || workbookSheetIndex < 0 || !assets?.sheetPathsByWorkbookSheetIndex[workbookSheetIndex]) {
+      return false;
+    }
+    const resolved = resolvePageSetupInput(sheet, input);
+    const printAreas = resolved.printAreas ?? sheet.printAreas;
+    const unchanged = sameRecord(resolved.pageSetup, sheet.pageSetup, PAGE_SETUP_KEYS)
+      && sameRecord(resolved.pageMargins, sheet.pageMargins, PAGE_MARGIN_KEYS)
+      && sameRecord(resolved.printOptions, sheet.printOptions, PRINT_OPTION_KEYS)
+      && sameRangeList(printAreas, sheet.printAreas);
+    if (unchanged) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!setWorkbookPageSetup(assets, workbookSheetIndex, input)) {
+      return false;
+    }
+    patchActiveSheet({
+      pageMargins: resolved.pageMargins,
+      pageSetup: resolved.pageSetup,
+      printAreas,
+      printOptions: resolved.printOptions,
+    });
+    return true;
   }
 
   // ── Comments ───────────────────────────────────────────────────────
@@ -543,6 +637,7 @@ export function createAuthoringDomain(ctx: XlsxControllerContext) {
     setCellComment,
     setCellHyperlink,
     setFreezePanes,
+    setPageSetup,
     setSelectionDataValidation,
     toggleFreezePanesAtActiveCell,
     updateConditionalFormatRule

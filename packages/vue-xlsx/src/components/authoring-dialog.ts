@@ -7,4 +7,6 @@ export type XlsxAuthoringDialogKind =
   | "validation"
   | "pasteSpecial"
   | "numberFormat"
-  | "names";
+  | "names"
+  /** Worksheet page set-up; renders `XlsxPageSetupDialog` instead of a section. */
+  | "pageSetup";

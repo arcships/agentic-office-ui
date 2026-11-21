@@ -424,6 +424,15 @@
             :disabled="controlsDisabled"
             @click="emit('authoring', 'names')"
           >{{ m.xlsx.ribbon.nameManager }}</OfficeButton>
+          <OfficeButton
+            data-testid="xlsx-ribbon-page-setup"
+            class="xlsx-ribbon__action-button"
+            variant="ghost"
+            size="sm"
+            :title="m.xlsx.authoring.pageSetup.title"
+            :disabled="controlsDisabled"
+            @click="emit('authoring', 'pageSetup')"
+          >{{ m.xlsx.authoring.pageSetup.title }}</OfficeButton>
         </OfficeToolbarGroup>
 
         <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
