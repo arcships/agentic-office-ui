@@ -1168,6 +1168,14 @@
   border-radius: var(--office-radius-lg);
 }
 
+/* Virtual anchors only supply coordinates; they must never join layout. */
+.office-popover__anchor {
+  position: fixed;
+  inline-size: 0;
+  block-size: 0;
+  pointer-events: none;
+}
+
 .office-tooltip__content {
   position: relative;
   display: flex;

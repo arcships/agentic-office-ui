@@ -81,8 +81,8 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 | 组件 / 组合式 | 用途 |
 |---|---|
-| `DocxFormFieldDialog` | 传入 `field`、`location` 和 `controller`，保存时调用 `controller.updateFormField()` |
-| `DocxLinkHoverCard` | 传入链接地址与屏幕坐标；`open`/`edit`/`remove` 事件由宿主转给 `controller.setLink()` |
+| `DocxFormFieldDialog` | 传入 `field`、`location` 和 `controller`，保存时调用 `controller.updateFormField()`；内部渲染在共享 `OfficeDialog` 上（焦点陷阱、portal、backdrop、关闭后焦点归还） |
+| `DocxLinkHoverCard` | 传入链接地址与屏幕坐标；`open`/`edit`/`remove` 事件由宿主转给 `controller.setLink()`；内部渲染在共享 `OfficePopover` 上，用零尺寸 `PopoverAnchor` 定位到链接坐标 |
 | `DocxStylePreviewPopover` | 传入段落样式列表和悬停样式 id，配合 `docxStylePreviewCss()` 渲染 |
 | `useDocxNodeReorder(controller)` | 悬停、拖拽、插入位置和 `moveBodyNode()` 提交；纯函数 `resolveDocxReorderInsertionIndex()`、`resolveDocxReorderTarget()` 可用于自定义手柄 |
 

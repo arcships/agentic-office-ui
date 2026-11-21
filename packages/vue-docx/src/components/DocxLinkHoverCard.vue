@@ -1,102 +1,107 @@
 <template>
-  <OfficeCard
-    class="docx-link-card"
-    :class="documentTheme === 'dark' ? 'docx-link-card--dark' : undefined"
-    :data-office-theme="documentTheme"
-    data-office-density="comfortable"
-    role="dialog"
+  <OfficePopover
+    :open="true"
+    side="bottom"
+    align="start"
+    :side-offset="0"
+    :virtual-ref="virtualAnchor"
+    content-test-id="docx-link-card"
+    :content-data="contentData"
     :aria-label="m.docx.linkCard.label"
-    data-testid="docx-link-card"
-    :data-docx-link-card="true"
-    :style="cardStyle"
+    @update:open="onOpenChange"
     @pointerenter="emit('pointerenter')"
     @pointerleave="emit('pointerleave')"
     @keydown.esc.stop.prevent="close()"
   >
-    <template v-if="editing">
-      <label class="docx-link-card__field">
-        <span class="docx-link-card__label">{{ m.docx.linkCard.url }}</span>
-        <input
-          ref="inputEl"
-          v-model="draft"
-          type="text"
-          class="office-input office-input--sm docx-link-card__input"
-          :placeholder="m.docx.linkCard.urlPlaceholder"
-          :aria-label="m.docx.linkCard.url"
-          data-testid="docx-link-card-input"
-          @keydown.enter.stop.prevent="save"
-        />
-      </label>
-      <div class="docx-link-card__actions">
-        <OfficeButton
-          type="button"
-          size="xs"
-          class="docx-link-card__action docx-link-card__action--primary"
-          data-testid="docx-link-card-save"
-          @click="save"
-        >
-          {{ m.docx.linkCard.save }}
-        </OfficeButton>
-        <OfficeButton
-          type="button"
-          variant="outline"
-          size="xs"
-          class="docx-link-card__action"
-          data-testid="docx-link-card-cancel"
-          @click="cancel"
-        >
-          {{ m.docx.linkCard.cancel }}
-        </OfficeButton>
-      </div>
-    </template>
-    <template v-else>
-      <span class="docx-link-card__url" :title="href" data-testid="docx-link-card-url">
-        {{ displayHref }}
-      </span>
-      <div class="docx-link-card__actions">
-        <OfficeButton
-          type="button"
-          variant="outline"
-          size="xs"
-          class="docx-link-card__action"
-          data-testid="docx-link-card-open"
-          :title="m.docx.linkCard.open"
-          @click="emit('open', href)"
-        >
-          {{ m.docx.linkCard.open }}
-        </OfficeButton>
-        <OfficeButton
-          v-if="editable"
-          type="button"
-          variant="outline"
-          size="xs"
-          class="docx-link-card__action"
-          data-testid="docx-link-card-edit"
-          :title="m.docx.linkCard.edit"
-          @click="startEdit"
-        >
-          {{ m.docx.linkCard.edit }}
-        </OfficeButton>
-        <OfficeButton
-          v-if="editable"
-          type="button"
-          variant="ghost"
-          size="xs"
-          class="docx-link-card__action docx-link-card__action--danger"
-          data-testid="docx-link-card-remove"
-          :title="m.docx.linkCard.remove"
-          @click="emit('remove', href)"
-        >
-          {{ m.docx.linkCard.remove }}
-        </OfficeButton>
-      </div>
-    </template>
-  </OfficeCard>
+    <div
+      class="docx-link-card"
+      :class="documentTheme === 'dark' ? 'docx-link-card--dark' : undefined"
+    >
+      <template v-if="editing">
+        <label class="docx-link-card__field">
+          <span class="docx-link-card__label">{{ m.docx.linkCard.url }}</span>
+          <input
+            ref="inputEl"
+            v-model="draft"
+            type="text"
+            class="office-input office-input--sm docx-link-card__input"
+            :placeholder="m.docx.linkCard.urlPlaceholder"
+            :aria-label="m.docx.linkCard.url"
+            data-testid="docx-link-card-input"
+            @keydown.enter.stop.prevent="save"
+          />
+        </label>
+        <div class="docx-link-card__actions">
+          <OfficeButton
+            type="button"
+            size="xs"
+            class="docx-link-card__action docx-link-card__action--primary"
+            data-testid="docx-link-card-save"
+            @click="save"
+          >
+            {{ m.docx.linkCard.save }}
+          </OfficeButton>
+          <OfficeButton
+            type="button"
+            variant="outline"
+            size="xs"
+            class="docx-link-card__action"
+            data-testid="docx-link-card-cancel"
+            @click="cancel"
+          >
+            {{ m.docx.linkCard.cancel }}
+          </OfficeButton>
+        </div>
+      </template>
+      <template v-else>
+        <span class="docx-link-card__url" :title="href" data-testid="docx-link-card-url">
+          {{ displayHref }}
+        </span>
+        <div class="docx-link-card__actions">
+          <OfficeButton
+            type="button"
+            variant="outline"
+            size="xs"
+            class="docx-link-card__action"
+            data-testid="docx-link-card-open"
+            :title="m.docx.linkCard.open"
+            @click="emit('open', href)"
+          >
+            {{ m.docx.linkCard.open }}
+          </OfficeButton>
+          <OfficeButton
+            v-if="editable"
+            type="button"
+            variant="outline"
+            size="xs"
+            class="docx-link-card__action"
+            data-testid="docx-link-card-edit"
+            :title="m.docx.linkCard.edit"
+            @click="startEdit"
+          >
+            {{ m.docx.linkCard.edit }}
+          </OfficeButton>
+          <OfficeButton
+            v-if="editable"
+            type="button"
+            variant="ghost"
+            size="xs"
+            class="docx-link-card__action docx-link-card__action--danger"
+            data-testid="docx-link-card-remove"
+            :title="m.docx.linkCard.remove"
+            @click="emit('remove', href)"
+          >
+            {{ m.docx.linkCard.remove }}
+          </OfficeButton>
+        </div>
+      </template>
+    </div>
+  </OfficePopover>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue"
-import { OfficeButton, OfficeCard } from "@arcships/vue-ui"
+import { OfficeButton, OfficePopover } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
 
 const props = withDefaults(
@@ -132,12 +137,51 @@ const displayHref = computed(() =>
   internal.value ? m.value.docx.linkCard.internal : props.href
 )
 
-const cardStyle = computed(() => ({
-  position: "fixed" as const,
-  left: `${Math.max(0, Math.round(props.x))}px`,
-  top: `${Math.max(0, Math.round(props.y))}px`,
-  zIndex: 70,
+interface LinkCardAnchorRect {
+  bottom: number
+  height: number
+  left: number
+  right: number
+  top: number
+  width: number
+  x: number
+  y: number
+}
+
+/**
+ * Zero-size virtual reference at the hovered link's viewport coordinates.
+ * `OfficePopover` hands it to Reka's `PopoverAnchor`, so Floating UI positions
+ * the surface without a trigger element and without a layout box.
+ */
+const virtualAnchor = computed(() => {
+  const left = Math.max(0, Math.round(props.x))
+  const top = Math.max(0, Math.round(props.y))
+  const rect = (): LinkCardAnchorRect => ({
+    x: left,
+    y: top,
+    width: 0,
+    height: 0,
+    top,
+    right: left,
+    bottom: top,
+    left,
+  })
+  return {
+    getBoundingClientRect: rect,
+    getClientRects: () => [rect()],
+  }
+})
+
+const contentData = computed(() => ({
+  "data-docx-link-card": true,
+  "data-office-theme": props.documentTheme,
+  "data-office-density": "comfortable",
 }))
+
+/** Esc, outside pointer-down and host close all funnel into `close`. */
+function onOpenChange(value: boolean): void {
+  if (!value) close()
+}
 
 watch(
   () => props.href,
@@ -182,17 +226,10 @@ defineExpose({ startEdit, save, cancel, editing })
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 22rem;
-  padding: 8px 10px;
-}
-.docx-link-card :deep(.office-card__content) {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0;
+  min-inline-size: 0;
 }
 .docx-link-card__url {
-  color: #1d4ed8;
+  color: var(--office-info-foreground, #1d4ed8);
   font-size: 12px;
   max-width: 20rem;
   overflow: hidden;
@@ -220,36 +257,31 @@ defineExpose({ startEdit, save, cancel, editing })
   gap: 4px;
 }
 .docx-link-card__label {
-  color: #6b7280;
+  color: var(--office-muted-foreground, #6b7280);
   font-size: 11px;
 }
 .docx-link-card__input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--office-border, #d1d5db);
   border-radius: 4px;
   font: inherit;
   font-size: 12px;
   padding: 3px 6px;
   width: 100%;
 }
-.docx-link-card--dark {
-  background: var(--office-card, #18181b);
-  border-color: var(--office-border, #3f3f46);
-  color: var(--office-card-foreground, #f4f4f5);
-}
 .docx-link-card--dark .docx-link-card__url {
-  color: #93c5fd;
+  color: var(--office-info-foreground, #93c5fd);
 }
 .docx-link-card--dark .docx-link-card__action {
-  background: #27272a;
-  border-color: #3f3f46;
-  color: #e4e4e7;
+  background: var(--office-muted, #27272a);
+  border-color: var(--office-border, #3f3f46);
+  color: var(--office-popover-foreground, #e4e4e7);
 }
 .docx-link-card--dark .docx-link-card__label {
-  color: #a1a1aa;
+  color: var(--office-muted-foreground, #a1a1aa);
 }
 .docx-link-card--dark .docx-link-card__input {
-  background: #09090b;
-  border-color: #3f3f46;
-  color: #f4f4f5;
+  background: var(--office-background, #09090b);
+  border-color: var(--office-border, #3f3f46);
+  color: var(--office-popover-foreground, #f4f4f5);
 }
 </style>

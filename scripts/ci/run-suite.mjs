@@ -344,6 +344,7 @@ command("vue-component-behavior-2", process.execPath, [
       "tests/component/docx-host-render-hooks.test.mjs",
       "tests/component/docx-image-layer-order.test.mjs",
       "tests/component/docx-editor-affordances.test.mjs",
+      "tests/component/docx-overlay-primitives.test.mjs",
       "tests/component/docx-table-floating.test.mjs",
       "tests/component/docx-drawing-objects.test.mjs",
       "tests/component/docx-block-highlights.test.mjs",
