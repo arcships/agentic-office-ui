@@ -16,6 +16,8 @@ Usage:
   python3 scripts/ci/capture-visual-matrix.py --update-baseline
   python3 scripts/ci/capture-visual-matrix.py --check
   python3 scripts/ci/capture-visual-matrix.py --skip-build --base-url http://127.0.0.1:4186
+  python3 scripts/ci/capture-visual-matrix.py --skip-build --evidence-only \
+    --evidence-filter docx-viewer-floating --update-baseline
 
 Pixel diffs are non-blocking by default. Structural assertions are always
 blocking, matching issue #74 / #57. `--fail-on-pixel` exists for the eventual
@@ -67,6 +69,9 @@ DEFAULT_PORT = 4186
 DEFAULT_PIXEL_THRESHOLD = 8
 DEFAULT_MAX_DIFF_RATIO = 0.002
 FIXTURE_DIR = ROOT / "apps" / "demo" / "public" / "samples"
+# The 0.8 corpus (#72) carries the structures the demo samples do not: a real
+# conditional-format workbook and a DOCX with a floating image.
+CORPUS_DIR = ROOT / "test-data" / "corpus"
 PPTP_FIXTURE = FIXTURE_DIR / "deck-structure.pptx"
 
 VIEWPORTS = (
@@ -242,7 +247,34 @@ SNAPSHOT_JS = r"""
       commentCards: cards.length,
       commentMarkers: document.querySelectorAll("[data-docx-comment-marker]").length,
       commentHighlights: document.querySelectorAll("[data-docx-comment-id], [data-docx-comment-ids]").length,
-      floatingImages: document.querySelectorAll("[data-docx-image-layer], [data-testid=\"docx-floating-image\"]").length,
+      floatingImages: document.querySelectorAll("[data-docx-image-layer], [data-testid=\"docx-floating-image\"], [data-docx-image-layout=\"wrapped\"], [data-docx-image-layout=\"absolute\"]").length,
+      // Floating images render either as an absolutely positioned image run
+      // (view mode) or as a transparent drag container in the image layer
+      // (edit mode). Both carry the page-relative box the verdict table reads.
+      floatingImageBoxes: Array.from(document.querySelectorAll(
+        '[data-docx-image-layout="wrapped"], [data-docx-image-layout="absolute"], [data-testid="docx-floating-image"]'
+      )).map((element) => {
+        const style = getComputedStyle(element);
+        const box = element.getBoundingClientRect();
+        return {
+          layout: element.getAttribute("data-docx-image-layout") || null,
+          behind: element.getAttribute("data-image-behind") === "true",
+          rect: [Math.round(box.x), Math.round(box.y), Math.round(box.width), Math.round(box.height)],
+          left: Math.round(Number.parseFloat(style.left) || 0),
+          top: Math.round(Number.parseFloat(style.top) || 0),
+          float: style.cssFloat,
+          marginLeft: Math.round(Number.parseFloat(style.marginLeft) || 0),
+          pointerEvents: style.pointerEvents,
+          zIndex: style.zIndex,
+        };
+      }),
+      imageLayers: Array.from(document.querySelectorAll("[data-docx-image-layer]")).map((element) => ({
+        layer: element.getAttribute("data-docx-image-layer"),
+        zIndex: getComputedStyle(element).zIndex,
+      })),
+      pageSurfaces: Array.from(document.querySelectorAll('[data-docx-page-surface="true"]'))
+        .map((element) => rectOf(element))
+        .slice(0, 4),
       thumbnailSizes: Array.from(document.querySelectorAll('[data-testid="docx-thumbnail-panel"] canvas')).map((canvas) => {
         const r = canvas.getBoundingClientRect();
         return [Math.round(r.width), Math.round(r.height)];
@@ -582,6 +614,43 @@ def sample_pixels(path: Path, rect: list[int]) -> dict[str, Any]:
     }
 
 
+def sample_color_families(path: Path, rect: list[int]) -> dict[str, Any]:
+    """Count channel-dominant pixels inside a crop.
+
+    Conditional formats paint a green data bar / colour scale and a red
+    negative bar in the #72 corpus workbook. Channel dominance is robust to
+    antialiasing and colour-profile rounding, unlike exact hex matching.
+    """
+    image = Image.open(path).convert("RGB")
+    x, y, width, height = rect
+    x = max(0, min(image.width - 1, x))
+    y = max(0, min(image.height - 1, y))
+    width = max(1, min(image.width - x, width))
+    height = max(1, min(image.height - y, height))
+    crop = image.crop((x, y, x + width, y + height))
+    colors = crop.getcolors(maxcolors=4_000_000) or []
+    green = 0
+    red = 0
+    for count, (r, g, b) in colors:
+        if g > r + 8 and g > b + 8:
+            green += count
+        elif r > g + 8 and r > b + 8:
+            red += count
+    return {
+        "rect": [x, y, width, height],
+        "greenPixels": green,
+        "redPixels": red,
+        "totalPixels": width * height,
+    }
+
+
+def _z_index(value: str | int | None) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def assert_case(
     result: CaseResult,
     snapshot: dict[str, Any],
@@ -848,6 +917,46 @@ def prepare_docx_embedded(page: Page) -> None:
     wait_docx_ready(page, file_name="docx-embedded-objects.docx")
 
 
+def prepare_docx_floating(page: Page) -> None:
+    # The corpus fixture is the only committed DOCX with a real wp:anchor
+    # picture: 200x120 px, column-relative (720000 EMU = 75.6 px), wrapSquare,
+    # 12 px wrap distance. It is the fixture #36 was missing.
+    page.locator('[data-testid="docx-file-input"]').set_input_files(
+        str(CORPUS_DIR / "docx-svg-pictures.docx")
+    )
+    wait_docx_ready(page, file_name="docx-svg-pictures.docx")
+    page.locator('img[data-docx-image-layout="wrapped"]').first.scroll_into_view_if_needed()
+    page.wait_for_timeout(700)
+
+
+def prepare_docx_editor_floating_behind(page: Page) -> None:
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="page-status"]')?.dataset.state === 'ready'
+          && document.querySelector('.docx-editor-viewer')""",
+        timeout=60_000,
+    )
+    with page.expect_file_chooser() as chooser:
+        page.locator('[data-testid="editor-import"]').click()
+    chooser.value.set_files(str(CORPUS_DIR / "docx-svg-pictures.docx"))
+    page.wait_for_function(
+        """() => (document.querySelector('[data-testid="loaded-file"]')?.textContent || '')
+            .includes('docx-svg-pictures.docx')
+          && document.querySelector('[data-testid="page-status"]')?.dataset.state === 'ready'""",
+        timeout=60_000,
+    )
+    # Select the wrapped float, then turn it into an absolutely positioned
+    # behind-text image. The column anchor is retained by the command.
+    page.locator('[data-testid="docx-floating-image"][data-image-layout="wrapped"]').first.click()
+    page.locator('[data-testid="docx-image-wrap-behind"]').wait_for(timeout=30_000)
+    page.locator('[data-testid="docx-image-wrap-behind"]').click()
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="docx-floating-image"][data-image-behind="true"]')""",
+        timeout=30_000,
+    )
+    page.locator('[data-testid="docx-floating-image"][data-image-behind="true"]').scroll_into_view_if_needed()
+    page.wait_for_timeout(700)
+
+
 def prepare_docx_editor(page: Page) -> None:
     page.wait_for_function(
         """() => document.querySelector('[data-testid="page-status"]')?.dataset.state === 'ready'
@@ -907,6 +1016,30 @@ def prepare_xlsx_charts(page: Page) -> None:
     wait_xlsx_ready(page, file_name="xlsx-chart-families.xlsx")
     page.locator('[data-testid="xlsx-sheet-tab"][data-sheet-name="Charts"]').click()
     page.wait_for_timeout(1200)
+
+
+def prepare_xlsx_chart_combos(page: Page) -> None:
+    prepare_xlsx_charts(page)
+    # Charts 10/11 sit at rows 147/163; the virtual grid only mounts the
+    # drawings in the visible window, so scroll them into view.
+    page.eval_on_selector(
+        '[data-testid="xlsx-grid"]',
+        "el => { el.scrollTop = 3140; el.dispatchEvent(new Event('scroll')); }",
+    )
+    page.wait_for_function(
+        """() => Array.from(document.querySelectorAll('[data-testid="xlsx-chart-item"] text'))
+            .some((node) => (node.textContent || '').includes('Combo Two Axes'))""",
+        timeout=30_000,
+    )
+    page.wait_for_timeout(900)
+
+
+def prepare_xlsx_conditional_formats(page: Page) -> None:
+    page.locator('[data-testid="xlsx-file-input"]').set_input_files(
+        str(CORPUS_DIR / "xlsx-conditional-formats.xlsx")
+    )
+    wait_xlsx_ready(page, file_name="xlsx-conditional-formats.xlsx")
+    page.wait_for_timeout(900)
 
 
 def prepare_xlsx_merge(page: Page) -> None:
@@ -1018,6 +1151,20 @@ EVIDENCE_SCENARIOS: tuple[EvidenceSpec, ...] = (
         checks=("docx-embedded",),
     ),
     EvidenceSpec(
+        "docx-viewer-floating",
+        "/docx-viewer",
+        prepare_docx_floating,
+        "Column-anchored floating image with square wrap (#36)",
+        checks=("docx-floating",),
+    ),
+    EvidenceSpec(
+        "docx-editor-floating-behind",
+        "/docx-editor",
+        prepare_docx_editor_floating_behind,
+        "Behind-text conversion of a column-anchored float (#36)",
+        checks=("docx-floating-behind",),
+    ),
+    EvidenceSpec(
         "docx-editor-default",
         "/docx-editor",
         prepare_docx_editor,
@@ -1051,6 +1198,20 @@ EVIDENCE_SCENARIOS: tuple[EvidenceSpec, ...] = (
         prepare_xlsx_charts,
         "Chart families, combo axes, tick labels and legends (#67/#70)",
         checks=("xlsx-charts",),
+    ),
+    EvidenceSpec(
+        "xlsx-viewer-chart-combos",
+        "/xlsx-viewer",
+        prepare_xlsx_chart_combos,
+        "One-axis and two-axis combination charts (#67)",
+        checks=("xlsx-chart-combos",),
+    ),
+    EvidenceSpec(
+        "xlsx-viewer-conditional-formats",
+        "/xlsx-viewer",
+        prepare_xlsx_conditional_formats,
+        "Data bars, colour scale and icon set on the #72 corpus workbook (#13)",
+        checks=("xlsx-conditional-formats",),
     ),
     EvidenceSpec(
         "xlsx-viewer-dpr2",
@@ -1190,6 +1351,61 @@ def evidence_assertions(
         )
         result.metrics["floatingImages"] = snapshot["docx"]["floatingImages"]
 
+    if "docx-floating" in spec.checks:
+        docx = snapshot["docx"]
+        boxes = docx.get("floatingImageBoxes") or []
+        pages = docx.get("pageSurfaces") or []
+        result.metrics["floatingImageBoxes"] = boxes
+        result.metrics["pageSurfaces"] = pages
+        result.check(docx["floatingImages"] > 0, f"floating image renders ({docx['floatingImages']})")
+        wrapped = [box for box in boxes if box["layout"] == "wrapped"]
+        result.check(bool(wrapped), f"a wrapped float is in the flow ({len(wrapped)})")
+        if wrapped and pages:
+            box = wrapped[0]
+            offset = box["rect"][0] - pages[0][0]
+            result.metrics["floatingOffsetPx"] = offset
+            result.metrics["floatingColumnOriginPx"] = 96
+            result.check(
+                abs(offset - (96 + box["marginLeft"])) <= 2,
+                f"wrapped float starts at the column origin plus its wrap distance "
+                f"(observed {offset}px, expected {96 + box['marginLeft']}px)",
+            )
+            result.check(
+                box["float"] in {"left", "right"},
+                f"wrapped float keeps a float side ({box['float']})",
+            )
+
+    if "docx-floating-behind" in spec.checks:
+        docx = snapshot["docx"]
+        boxes = docx.get("floatingImageBoxes") or []
+        layers = {layer["layer"]: layer["zIndex"] for layer in docx.get("imageLayers") or []}
+        result.metrics["floatingImageBoxes"] = boxes
+        result.metrics["imageLayers"] = layers
+        behind = [box for box in boxes if box["behind"]]
+        result.check(bool(behind), f"behind-text image is in the behind layer ({len(behind)})")
+        result.check(
+            "behind" in layers and _z_index(layers.get("behind")) < 0,
+            f"behind layer paints under the text (z-index {layers.get('behind')})",
+        )
+        front = [box for box in boxes if not box["behind"] and box.get("layout") is None]
+        result.check(not front, "the converted image leaves the front layer")
+        if behind:
+            box = behind[0]
+            # The page margin is 96px for this fixture, and the anchor is
+            # column-relative. The absolutely positioned container is placed by
+            # DocxImageLayer from `floating.xPx` only; the offset is recorded so
+            # the verdict can compare it with the 96px column origin.
+            result.metrics["behindLeftPx"] = box["left"]
+            result.metrics["expectedColumnLeftPx"] = 96 + box["left"]
+            result.check(
+                box["zIndex"] is not None and _z_index(box["zIndex"]) < 0,
+                f"behind-text container keeps a negative z-index ({box['zIndex']})",
+            )
+            result.check(
+                box.get("pointerEvents") == "none",
+                f"behind-text image does not steal text clicks ({box.get('pointerEvents')})",
+            )
+
     if "docx-editor" in spec.checks:
         result.check(snapshot["body"]["textLength"] > 120, "editor document has text")
         result.check(snapshot["body"]["buttons"] >= 8, f"editor toolbar renders ({snapshot['body']['buttons']} buttons)")
@@ -1233,6 +1449,52 @@ def evidence_assertions(
             any(text.strip() in {"Q1", "Q2", "Q3", "Q4"} for text in texts),
             "chart category ticks render",
         )
+
+    if "xlsx-chart-combos" in spec.checks:
+        grid = snapshot["xlsx"] or {}
+        texts = grid.get("chartTexts") or []
+        result.metrics["chartTexts"] = texts
+        result.metrics["secondaryAxisLabels"] = [
+            text for text in texts if text.strip().lower() == "secondary"
+        ]
+        result.check(
+            grid.get("chartItems", 0) >= 2,
+            f"both combo charts mount ({grid.get('chartItems')} chart items)",
+        )
+        result.check(
+            any("Combo One Axis" in text for text in texts),
+            "the one-axis combo chart renders",
+        )
+        result.check(
+            any("Combo Two Axes" in text for text in texts),
+            "the two-axis combo chart renders",
+        )
+        result.check(
+            any(text.strip() in {"Q1", "Q2", "Q3", "Q4"} for text in texts),
+            "combo category ticks render",
+        )
+
+    if "xlsx-conditional-formats" in spec.checks:
+        grid = snapshot["xlsx"] or {}
+        result.check(grid.get("displayRows", 0) > 0, "conditional-format workbook has rows")
+        canvases = [
+            canvas
+            for canvas in snapshot.get("canvases", [])
+            if canvas["rect"][2] > 200 and canvas["rect"][3] > 100
+        ]
+        result.check(bool(canvases), "the grid body canvas renders")
+        if canvases:
+            body = max(canvases, key=lambda canvas: canvas["rect"][2] * canvas["rect"][3])
+            sample = sample_color_families(screenshot, body["rect"])
+            result.metrics["conditionalFormats"] = sample
+            result.check(
+                sample["greenPixels"] > 500,
+                f"green data bar / colour scale pixels render ({sample['greenPixels']})",
+            )
+            result.check(
+                sample["redPixels"] > 50,
+                f"red negative data bar pixels render ({sample['redPixels']})",
+            )
 
     if "xlsx-dpr2" in spec.checks:
         grid = snapshot["xlsx"] or {}
@@ -1796,6 +2058,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--theme", choices=THEMES, default=None)
     parser.add_argument("--zoom", type=int, choices=ZOOMS, default=None)
     parser.add_argument("--no-evidence", action="store_true")
+    parser.add_argument(
+        "--evidence-only",
+        action="store_true",
+        help="Capture only the EVIDENCE_SCENARIOS, not the route matrix",
+    )
+    parser.add_argument(
+        "--evidence-filter",
+        default=None,
+        help="Comma-separated evidence scenario ids (requires --evidence-only)",
+    )
     parser.add_argument("--pixel-threshold", type=int, default=DEFAULT_PIXEL_THRESHOLD)
     parser.add_argument("--max-diff-ratio", type=float, default=DEFAULT_MAX_DIFF_RATIO)
     parser.add_argument("--fail-on-pixel", action="store_true")
@@ -1833,6 +2105,14 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"unknown --viewport {args.viewport!r}")
     selected_themes = [args.theme] if args.theme else list(THEMES)
     selected_zooms = [args.zoom] if args.zoom is not None else list(ZOOMS)
+    selected_evidence = list(EVIDENCE_SCENARIOS)
+    if args.evidence_filter:
+        if not args.evidence_only:
+            raise SystemExit("--evidence-filter requires --evidence-only")
+        wanted_evidence = {item.strip() for item in args.evidence_filter.split(",") if item.strip()}
+        selected_evidence = [spec for spec in selected_evidence if spec.id in wanted_evidence]
+        if not selected_evidence:
+            raise SystemExit(f"no evidence scenario matched --evidence-filter {args.evidence_filter!r}")
 
     if args.report_only:
         manifest_path = baseline_dir / "manifest.json"
@@ -1922,39 +2202,40 @@ def main(argv: list[str] | None = None) -> int:
             browser_version = browser.version
             results: list[CaseResult] = []
             try:
-                for spec in selected_routes:
-                    for viewport_id, width, height in selected_viewports:
-                        for theme in selected_themes:
-                            for zoom in selected_zooms:
-                                print(
-                                    f"[visual] {spec.id} / {viewport_id} / {theme} / {zoom}%",
-                                    flush=True,
-                                )
-                                result = capture_case(
-                                    browser,
-                                    base_url,
-                                    spec,
-                                    viewport_id,
-                                    width,
-                                    height,
-                                    theme,
-                                    zoom,
-                                    output,
-                                )
-                                if args.update_baseline:
-                                    write_baseline(result, baseline_dir)
-                                elif args.check:
-                                    compare_baseline(
-                                        result,
-                                        baseline_dir,
-                                        output,
-                                        pixel_threshold=args.pixel_threshold,
-                                        max_diff_ratio=args.max_diff_ratio,
+                if not args.evidence_only:
+                    for spec in selected_routes:
+                        for viewport_id, width, height in selected_viewports:
+                            for theme in selected_themes:
+                                for zoom in selected_zooms:
+                                    print(
+                                        f"[visual] {spec.id} / {viewport_id} / {theme} / {zoom}%",
+                                        flush=True,
                                     )
-                                results.append(result)
+                                    result = capture_case(
+                                        browser,
+                                        base_url,
+                                        spec,
+                                        viewport_id,
+                                        width,
+                                        height,
+                                        theme,
+                                        zoom,
+                                        output,
+                                    )
+                                    if args.update_baseline:
+                                        write_baseline(result, baseline_dir)
+                                    elif args.check:
+                                        compare_baseline(
+                                            result,
+                                            baseline_dir,
+                                            output,
+                                            pixel_threshold=args.pixel_threshold,
+                                            max_diff_ratio=args.max_diff_ratio,
+                                        )
+                                    results.append(result)
 
                 if not args.no_evidence:
-                    for spec in EVIDENCE_SCENARIOS:
+                    for spec in selected_evidence:
                         print(f"[visual] evidence {spec.id}", flush=True)
                         result = capture_evidence(browser, base_url, spec, output)
                         if args.update_baseline:
