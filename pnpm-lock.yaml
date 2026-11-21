@@ -103,7 +103,7 @@ importers:
   packages/docx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@chenglou/pretext':
         specifier: ^0.0.8
@@ -153,7 +153,7 @@ importers:
   packages/pptx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       echarts:
         specifier: ^6.0.0
@@ -178,13 +178,13 @@ importers:
   packages/vue-docx:
     dependencies:
       '@arcships/docx-core':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../docx-core
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@arcships/vue-ui':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../vue-ui
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
@@ -212,10 +212,10 @@ importers:
   packages/vue-pdf:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@arcships/vue-ui':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../vue-ui
       '@embedpdf/core':
         specifier: 2.14.4
@@ -288,13 +288,13 @@ importers:
   packages/vue-pptx:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@arcships/pptx-core':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../pptx-core
       '@arcships/vue-ui':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../vue-ui
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
@@ -319,7 +319,7 @@ importers:
   packages/vue-ui:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@hugeicons/core-free-icons':
         specifier: 4.4.0
@@ -356,13 +356,13 @@ importers:
   packages/vue-xlsx:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@arcships/vue-ui':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../vue-ui
       '@arcships/xlsx-core':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../xlsx-core
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
@@ -444,7 +444,7 @@ importers:
   packages/xlsx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.8.0
+        specifier: ^0.8.1
         version: link:../office-interaction
       '@dukelib/sheets-wasm':
         specifier: 0.1.17

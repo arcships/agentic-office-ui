@@ -1,6 +1,6 @@
 {
   "name": "@arcships/xlsx-core",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "license": "Apache-2.0",
   "description": "XLSX workbook model, formulas, charts, images, and instance runtime with Worker/WASM support",
   "keywords": [
@@ -67,7 +67,7 @@
     "copy-wasm": "node scripts/copy-wasm.mjs"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.8.0",
+    "@arcships/office-interaction": "^0.8.1",
     "@dukelib/sheets-wasm": "0.1.17",
     "@xmldom/xmldom": "0.9.10",
     "d3-geo": "^3.1.1",
