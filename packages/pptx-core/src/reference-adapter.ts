@@ -1,4 +1,5 @@
 import type {
+  ChartGeometrySnapshot,
   ManualRegionLocator,
   OfficeDocumentRevision,
   OfficeObjectDescriptor,
@@ -65,6 +66,19 @@ export interface PptxChartSnapshot {
     name?: string;
     points?: readonly string[];
   }[];
+  /**
+   * Optional chart-internal geometry supplied by the host renderer.
+   *
+   * PowerPoint charts are painted by the host's renderer (our adapter uses the
+   * patched `@aiden0z/pptx-renderer` + ECharts), so series/point/legend/axis
+   * rectangles are not derivable from `pptx-core`'s model. A host that can read
+   * them from the renderer attaches a `ChartGeometrySnapshot` here; a Surface can
+   * then hit-test chart internals without reading renderer-private DOM.
+   *
+   * This field is backward compatible: when omitted, chart element references
+   * still work with the series/point label evidence above.
+   */
+  geometry?: ChartGeometrySnapshot;
 }
 
 export interface PptxObjectReferenceOptions {
