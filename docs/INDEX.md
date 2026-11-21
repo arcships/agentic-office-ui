@@ -24,6 +24,7 @@
 | [components/pptx-chrome.md](components/pptx-chrome.md) | PPTX viewer/presenter/sorter 的共享 chrome、sorter/presenter 结构、右键菜单、状态与 390/768/1440 截图证据（#161） |
 | [design/pptx-presenter-reference.md](design/pptx-presenter-reference.md) | PPTX 演讲者视图参考规格：五个产品的区域/尺寸/交互对照、备注与计时规则、`office-reference` 验收与实现计划（#183） |
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
+| [design/xlsx-page-setup-reference.md](design/xlsx-page-setup-reference.md) | XLSX 页面设置参考：Excel 对话框四选项卡、0.8 采用子集、未做项的产品理由与交互验收（#171） |
 | [design/viewer-editor-architecture.md](design/viewer-editor-architecture.md) | PDF/DOCX/XLSX/PPTX/CSV/FileSystem/SchemaBuilder 的上游组件树、包边界、层映射、参考可行性分类与 L1/L2 验收计划（#185） |
 | [testing/ui-parity-ci.md](testing/ui-parity-ci.md) | `ui-parity` / 样式 guard / axe 门禁：job、阈值、基线审批与最终开关（#165） |
 | [testing/ui-parity-routes.md](testing/ui-parity-routes.md) | L2 产品路由 parity：`/pdf-viewer` pilot、region/landmark 定义、R2 reference 构建、差异分类与剩余阻断项（#182） |

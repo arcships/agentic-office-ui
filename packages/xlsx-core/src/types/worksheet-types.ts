@@ -293,7 +293,8 @@ export type XlsxPageOrder = "downThenOver" | "overThenDown";
  * Lengths are in inches, matching OOXML. `scale` is a percentage in the
  * 10–400 range Excel accepts. `fitToPage` mirrors
  * `sheetPr/pageSetUpPr/@fitToPage`; when it is `true`, `fitToWidth` and
- * `fitToHeight` drive the effective scale instead of `scale`.
+ * `fitToHeight` drive the effective scale instead of `scale`. A fit-to count of
+ * `0` means "as many pages as needed" — Excel's blank `tall` box.
  */
 export interface XlsxPageSetup {
   paperSize: number;
@@ -330,6 +331,38 @@ export interface XlsxPageMargins {
   bottom: number;
   header: number;
   footer: number;
+}
+
+/**
+ * Page set-up patch written by the page setup dialog.
+ *
+ * Every record is optional and merged over the worksheet's current values, so a
+ * caller can change orientation without resetting margins it never read.
+ * `printAreas` is applied to `_xlnm.Print_Area` in `xl/workbook.xml`: `null`
+ * clears the definition, `undefined` leaves it untouched.
+ */
+export interface XlsxPageSetupInput {
+  /**
+   * Page tab fields. `fitToPage` selects the scaling mode: `true` writes
+   * `fitToWidth`/`fitToHeight` and sets `sheetPr/pageSetUpPr/@fitToPage`,
+   * `false` returns to `scale`. Omitted attributes are left as they are.
+   */
+  pageSetup?: Partial<XlsxPageSetup>;
+  /** Margins tab distances in inches. */
+  pageMargins?: Partial<XlsxPageMargins>;
+  /** Sheet tab print flags: gridlines, headings, horizontal/vertical centring. */
+  printOptions?: Partial<XlsxPrintOptions>;
+  /** Absolute print areas; each range prints as its own page. */
+  printAreas?: readonly XlsxCellRange[] | null;
+}
+
+/** Effective print records after an {@link XlsxPageSetupInput} is applied. */
+export interface XlsxResolvedPageSetupInput {
+  pageSetup: XlsxPageSetup;
+  pageMargins: XlsxPageMargins;
+  printOptions: XlsxPrintOptions;
+  /** Normalized print areas; `undefined` when the patch left them untouched. */
+  printAreas?: XlsxCellRange[];
 }
 
 /**
@@ -1910,6 +1943,22 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   isPageBreakPreview: boolean;
   /** Enables or disables page-break preview on the active sheet. */
   setPageBreakPreview: (enabled: boolean) => void;
+  /**
+   * Authors the active sheet's page set-up: orientation, paper size, scaling,
+   * margins, print flags and (optionally) the print area.
+   *
+   * The patch is merged over the worksheet's current values, written into the
+   * worksheet part (plus `_xlnm.Print_Area` in `xl/workbook.xml` for
+   * `printAreas`), recorded as one undo entry and included in exported XLSX
+   * bytes. `pageSetup.fitToPage` selects the scaling mode: `true` writes
+   * `fitToWidth`/`fitToHeight`, `false` writes `scale`. Print areas are
+   * zero-based ranges; pass `null` to clear the definition and `undefined` to
+   * leave it untouched.
+   *
+   * @returns `false` when the patch changes nothing, or when the sheet is
+   *   locked, Worker-backed (read-only) or has no authored worksheet part.
+   */
+  setPageSetup: (input: XlsxPageSetupInput) => boolean;
   /** Whether the print-preview surface is open. */
   isPrintPreviewOpen: boolean;
   /**

@@ -65,7 +65,7 @@
 | **PDF viewer** | done（pdfium worker + render runtime，`vue-pdf/src/pdf/`） | done（page/text/region/visual/native/behavior 引用） | done（`PdfViewer`、`PdfSurface`） | done（`pdf-toolbar`、`pdf-sidebar` 0px） | done（`pdf-toolbar`/`pdf-sidebar` blocking） | public-vendored，已收口 | #162 |
 | **PDF editor** | partial（annotation 映射、表单值；无编辑事务） | partial（引用可用，编辑命令缺失） | missing（无 `PdfEditor`） | partial（`PdfEditorEmptyState` → `OfficeEmptyState`） | missing（无 editor surface） | public-vendored，未实现 | #172 + 新 issue |
 | **DOCX viewer/editor** | done（port @6f70b92） | done | done（`DocxViewer`/`DocxEditor`/`DocxDocumentSurface`） | done（`docx-toolbar`/`docx-sidebar` 0px） | partial（DOCX chrome 参考是**裁剪 vendored 副本**，不是原文件） | public-partial（需与 0.15.0 对齐） | #159 |
-| **XLSX viewer/editor** | done（worker + duke-sheets wasm + chart 解析/authoring） | done | done（`XlsxViewer` 含 ribbon/sheet tabs/authoring） | done（4 条 surface 96/96，含 `xlsx-ribbon`） | partial（公式行无上游对照） | public-vendored（chrome + ribbon 格式行）+ product-gap（pivot/page setup） | #160 / #170 / #171 |
+| **XLSX viewer/editor** | done（worker + duke-sheets wasm + chart 解析/authoring） | done | done（`XlsxViewer` 含 ribbon/sheet tabs/authoring） | done（4 条 surface 96/96，含 `xlsx-ribbon`） | partial（公式行无上游对照） | public-vendored（chrome + ribbon 格式行）+ office-reference（page setup）+ product-gap（pivot） | #160 / #170 / #171 |
 | **PPTX viewer** | done（解析 + playback + 对象索引） | done | done（`PptxViewer`/`PptxStage`/sorter） | done（`pptx-toolbar`/`pptx-sorter` 0px） | done（2 条 blocking；presenter pending） | public-vendored（chrome） | #161 |
 | **PPTX presenter** | done（notes 自 OOXML 读取） | done（timer/next） | done（`PptxPresenterPanel`） | done（Extend primitives 重组） | **missing**（上游无布局，private 包也无） | **office-reference** | #183 |
 | **PPTX chart internals** | partial（`getObjectChart` provider + snapshot） | missing（Surface 未接入） | missing | — | missing | **provider-dependent** | #184 / #176 |
@@ -92,7 +92,7 @@
 | PDF editor 外壳与面板 | public-vendored | **实现** | 上游 8 个文件全公开、EmbedPDF 插件全 Apache-2.0；引用/表单/签名是 PDF 的核心编辑价值 | #172（先决策 Surface toolbar）→ 新 issue |
 | PDF annotation/form/stamp/redaction/export | public-vendored | **实现（分期）** | 先注释 + 表单（读/写），再做 stamp/redaction/export | 新 issue |
 | DOCX chrome 与 0.15.0 对齐 | public-partial | **调查 → 实现** | 我们的 port 基线 `6f70b92` 在本地浅克隆里不可解析；需与 0.15.0 逐文件 diff | #159 follow-up |
-| XLSX page setup dialog | product-gap | **调查（#171 A/B）** | 上游 `xlsx-editor.tsx` 没有独立 dialog；只有 `XlsxPrintPreview` 读 pageSetup | #171 |
+| XLSX page setup dialog | office-reference | **实现（#171）** | 上游 `xlsx-editor.tsx` 没有独立 dialog，因此参考 Excel 页面设置（四选项卡的可写子集）；`XlsxPageSetupDialog` + `setPageSetup` + `_xlnm.Print_Area` | #171 |
 | XLSX pivot 控件 | product-gap | **不计划（0.8/0.9）** | 上游 pivot 是 2,034+503 行专用 UI，且需要 pivot 编辑能力；无宿主消费方 | #160 文档已声明 |
 | PPTX presenter | office-reference | **调查 → 实现** | 公开层与 0.5.0 包内都没有 presenter；必须由 Office 产品规格定义（#183） | #183 |
 | PPTX chart internals | provider-dependent | **定义 provider → 接入** | 几何只在 renderer 内产生；`pptx-core` 已有 `PptxChartSnapshot` 与 `getObjectChart` 钩子 | #184 / #176 |
@@ -294,9 +294,9 @@
 
 | 层 | 覆盖 | 缺 |
 |---|---|---|
-| core | 70 文件 / 35,812 行：worker、charts 解析/导出/插入、authoring（merge/filter/structure/visibility/number format）、print、images/form controls、pivot 元数据、引用 | pivot 计算/编辑；page setup 写回 |
+| core | 70 文件 / 35,812 行：worker、charts 解析/导出/插入、authoring（merge/filter/structure/visibility/number format/page setup）、print、images/form controls、pivot 元数据、引用 | pivot 计算/编辑；print titles 写回 |
 | interaction | 单元格/区域/对象引用、对象索引 | 表格行独立对象、z 序候选（#176） |
-| vue | `XlsxViewer` 1,109 行 + `XlsxRibbon`/`XlsxSheetTabs`/`XlsxToolbar`/`XlsxStatusBar`/`XlsxAuthoringDialog`/`XlsxPrintPreview` | 公式行无上游像素对照；page setup dialog |
+| vue | `XlsxViewer` 1,109 行 + `XlsxRibbon`/`XlsxSheetTabs`/`XlsxToolbar`/`XlsxStatusBar`/`XlsxAuthoringDialog`/`XlsxPageSetupDialog`/`XlsxPrintPreview` | 公式行无上游像素对照 |
 | ui | `xlsx-toolbar` 32/32、`xlsx-sheet-tabs` 24/24、`xlsx-status-bar` 8/8、`xlsx-ribbon` 32/32 | — |
 
 ### 6.4 参考可行性
@@ -306,13 +306,13 @@
 | toolbar / sheet tabs / status | `public-vendored` **done** | `tools/extend-reference/src/vendor/extend/xlsx-*.tsx`；64/64 pass | 无 |
 | ribbon（格式行） | `public-vendored` **done（#170）** | `tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`：`EditorToolbar` 格式行的静态 resting 子集（私有 `useXlsxViewer*` hook → props，弹层不渲染）；`xlsx-ribbon` 32/32 pass、0 AA | 生产 ribbon 的 clipboard/structure/authoring cluster 由组件测试与 `xlsx-chrome` 截图覆盖（上游无对应控件） |
 | 公式行 | `product-gap` | `xlsx-editor.tsx:1355` 起的公式行在公开文件内，但 `Group`/编辑态依赖私有 hook，无独立静息态 | 后续 issue；当前由组件测试覆盖 |
-| authoring dialogs | `public-vendored` **done**（除 page setup） | `XlsxAuthoringDialog.vue` + 16 条组件测试 | page setup（#171） |
+| authoring dialogs | `public-vendored` **done** | `XlsxAuthoringDialog.vue` + 16 条组件测试；page setup 为 office-reference（`XlsxPageSetupDialog.vue`，8 条组件测试） | 无 |
 | pivot | `product-gap` | `xlsx-pivot-controls.tsx` 2,034 行；私有 pivot hooks | 0.8/0.9 不做（已有产品决策） |
 | chart internals 几何 | `provider-dependent` | 私有 `chart-renderer.tsx`；我们 SVG 移植已有 axis/labels/legend | 精确 Office 布局规则（#184） |
 
 ### 6.5 实现方案
 
-- **page setup（#171）**：先做 A/B 决策。若做：`XlsxPageSetupDialog.vue` = `OfficeDialog` + `xlsx-core/print/page-setup.ts` 读写 + 撤销；L1 `xlsx-page-setup`（参考为 `xlsx-editor.tsx` 无独立 dialog → **office-reference**，用 Excel 页面设置对话框截图）。
+- **page setup（#171，已实现）**：`XlsxPageSetupDialog.vue` = `OfficeDialog` + `xlsx-core/print/page-setup.ts` 读写 + 撤销 + `_xlnm.Print_Area`；参考规格写在 [xlsx-page-setup-reference.md](xlsx-page-setup-reference.md)（office-reference：Excel 页面设置对话框，不声称上游 parity）。未做项（页眉页脚、打印质量、黑白/草稿、批注/错误、print titles）在同一文档列明产品理由。
 - **ribbon 对照（已完成，#170）**：把 `EditorToolbar` 的格式行 vendor 成静态 resting 子集
   （`tools/extend-reference/src/vendor/extend/xlsx-ribbon.tsx`），用 production primitives
   实现 Vue 对照页（`tools/vue-reference/src/surfaces/XlsxRibbonSurface.vue`），4 viewport ×
@@ -680,5 +680,5 @@
 - **#176**：PPTX chart internals 行改 `provider-dependent`；PDF 附件/OCG/签名/权限保持 `provider-dependent`（视觉识别器需 provider）；DOCX 页眉/脚注字段与嵌套表格为 `product-gap`（可在 #159 follow-up 实现）。
 - **#178**：CSV 的现状不是 `not-used`，是 `product-gap`；ADR 在 A/B/C 中选一个，B 需要新增 `csv-viewer` L1 + `/csv` L2。
 - **#179**：FileSystem/SchemaBuilder 的“私有依赖”理由不成立（Apache-2.0）。若不做，写成 “无宿主消费方 + 文件模型/schema 契约缺失”；若做，按 §9.5/§10.5 拆 issue。
-- **#171**：上游没有独立 page setup dialog；若做，参考是 office-reference（Excel 页面设置），不是上游像素。
+- **#171**（已实现）：上游没有独立 page setup dialog，所以参考是 office-reference（Excel 页面设置），不是上游像素；规格与未做项见 [xlsx-page-setup-reference.md](xlsx-page-setup-reference.md)。
 - **#172**：PDF editor 的 toolbar 在 `pdf-editor.tsx` 内是公开的；`PdfSurface` 是否带 toolbar 与本 issue 的 A/B 决策应同时定，避免出现“editor 有 toolbar、Surface 没有”的双标准。

@@ -128,6 +128,13 @@ XLSX 的 `isDark` 是 prop，不是全局主题，所以每个装配点自己提
 - 旧的手写 `Teleport`/backdrop/header/close 按钮已删除；面板宽度/最大高度仍由
   `.xlsx-authoring.office-dialog__content` 收紧到 520px / 82vh。
 
+**#171 补充**：页面设置没有做成上面的“一个 `kind` 一个 section”，而是独立组件
+`XlsxPageSetupDialog.vue`（同样渲染 `<OfficeDialog :open="true">`，复用同一个
+`.xlsx-authoring` 字段样式与宽度约束），因为它的字段是工作表级打印状态而不是选区对象。
+`XlsxAuthoringDialog` 在 `kind="pageSetup"` 时直接转交该组件，所以 `XlsxViewer` /
+`XlsxSheetSurface` 的挂载点与焦点归还逻辑都没有重复；`content-test-id` 为
+`xlsx-page-setup-dialog`，关闭按钮为 `xlsx-page-setup-close`。
+
 ### 3.3 测试怎么迁的（不遮罩、不退自定义）
 
 最小 host renderer 没有真实 DOM，Reka 在它与 `document` 之间无法工作。因此：

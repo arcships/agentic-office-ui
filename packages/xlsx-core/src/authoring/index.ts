@@ -13,6 +13,8 @@ export {
   setWorkbookCellHyperlink,
   setWorkbookDataValidation,
   setWorkbookFreezePanes,
+  setWorkbookPageSetup,
+  resolvePageSetupInput,
   updateWorkbookConditionalFormatRule,
   updateWorkbookTableRange,
 } from "./sheet-authoring";
@@ -23,6 +25,10 @@ export type {
   XlsxCellHyperlinkInput,
   XlsxTableInsertInput,
 } from "./sheet-authoring";
+export type {
+  XlsxPageSetupInput,
+  XlsxResolvedPageSetupInput,
+} from "../types";
 export {
   XLSX_MAX_COLUMNS,
   XLSX_MAX_ROWS,

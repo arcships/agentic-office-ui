@@ -1,5 +1,15 @@
 <template>
-  <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'">
+  <!--
+    Page set-up owns a dedicated dialog instead of a section inside the shared
+    authoring shell: it edits worksheet-level print state, not a cell range.
+  -->
+  <XlsxPageSetupDialog
+    v-if="kind === 'pageSetup'"
+    :controller="controller"
+    :is-dark="isDark"
+    @close="emit('close')"
+  />
+  <OfficeThemeProvider v-else :theme="isDark ? 'dark' : 'light'">
     <OfficeDialog
       :open="true"
       :title="dialogTitle"
@@ -398,6 +408,7 @@ import { OfficeDialog, OfficeThemeProvider } from "@arcships/vue-ui";
 import { useXlsxMessages } from "../i18n";
 import XlsxNameManagerSection from "./XlsxNameManagerSection.vue";
 import XlsxNumberFormatSection from "./XlsxNumberFormatSection.vue";
+import XlsxPageSetupDialog from "./XlsxPageSetupDialog.vue";
 import XlsxPasteSpecialSection from "./XlsxPasteSpecialSection.vue";
 import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 

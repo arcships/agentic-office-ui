@@ -4,6 +4,11 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [Unreleased]
 
+### XLSX page setup authoring (#171)
+- New `XlsxPageSetupDialog` (public `@arcships/vue-xlsx` export) opens from the ribbon's authoring group through the existing `XlsxAuthoringDialog` (`kind="pageSetup"`) on the shared `OfficeDialog`: orientation, paper size, `Adjust to %` / `Fit to N × M pages`, margins, centering, printed gridlines/headings, page order and print area. Fields open with the worksheet's current values, and the summary line shows the real page count, paper and effective scale from core pagination.
+- `XlsxViewerController.setPageSetup(input)` writes the patch in one undo step: `pageSetup`, `pageMargins`, `printOptions`, `sheetPr/pageSetUpPr` and the sheet-scoped `_xlnm.Print_Area` definition, so exports keep the layout. Core adds `setWorkbookPageSetup()` / `resolvePageSetupInput()` and the `XlsxPageSetupInput` / `XlsxResolvedPageSetupInput` types; `0` fit-to counts now round-trip as Excel's automatic height.
+- Reference spec (Excel dialog survey, adopted subset, explicitly out-of-scope items): `docs/design/xlsx-page-setup-reference.md`.
+
 ### Accessibility (#169)
 - `OfficeButton`/`OfficeIconButton`: loading keeps a discernible name (`loadingLabel`, then visible text, then the localized loading label) via `aria-label` and stays focusable with `aria-disabled`; activation is suppressed internally. Added `loadingLabel` as an optional prop.
 - Destructive fill: new `--office-destructive-contrast` / `--office-destructive-contrast-foreground` tokens use red-600 + white (4.83:1, WCAG AA) for filled destructive Button/Badge; `--office-destructive` keeps the upstream red-500 for borders and text. The upstream reference stays on red-500; the bounded `expectedDiffs` waiver (`waived` in the parity report) records the pixel delta and the approved button baseline.
