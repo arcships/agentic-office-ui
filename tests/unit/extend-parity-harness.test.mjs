@@ -75,6 +75,7 @@ test("manifest declares an 8-state capable surface set with stable ids", () => {
       "xlsx-toolbar",
       "xlsx-sheet-tabs",
       "xlsx-status-bar",
+      "xlsx-ribbon",
     ],
   );
   assert.equal(new Set(ids).size, ids.length, "surface ids must be unique");
