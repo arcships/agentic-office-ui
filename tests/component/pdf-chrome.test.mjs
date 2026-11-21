@@ -200,21 +200,52 @@ test("PdfViewer print command rasterizes every page through the toolbar", async 
   }
 });
 
-test("PdfViewer sidebar is the shared document sidebar and keeps the thumbnail strip", async (t) => {
+test("PdfViewer starts with the upstream closed sidebar and opens it from the toolbar", async (t) => {
   stubObjectUrls(t);
   const fake = createRuntime();
   const mounted = await mount(PdfViewer, { source: PDF_SOURCE, runtime: fake.runtime });
   try {
     await waitFor(() => allByTestId(mounted.root, "pdf-thumbnail-image").length === 3, "thumbnails");
+    const closed = findByTestId(mounted.root, "pdf-thumbnails-sidebar");
+    assert.ok(closed, "viewer thumbnail sidebar");
+    assert.equal(
+      closed.props["data-sidebar-open"],
+      "false",
+      "the upstream viewer defaults to a closed thumbnails sidebar",
+    );
+
+    findByTestId(mounted.root, "pdf-sidebar-toggle").props.onClick();
+    await waitFor(
+      () => findByTestId(mounted.root, "pdf-thumbnails-sidebar")?.props["data-sidebar-open"] === "true",
+      "toolbar toggle opens the sidebar",
+    );
     const sidebar = findByTestId(mounted.root, "pdf-thumbnails-sidebar");
-    assert.ok(sidebar, "viewer thumbnail sidebar");
     assert.ok(classNames(sidebar).includes("office-document-sidebar"));
     assert.equal(sidebar.props["data-sidebar-mode"], "inline");
-    assert.equal(sidebar.props["data-sidebar-open"], "true");
     assert.match(sidebar.props.style["--office-ui-sidebar-width"], /160/);
     assert.ok(
       findByTestId(mounted.root, "pdf-thumbnails"),
       "the existing thumbnail strip stays inside the shared sidebar",
+    );
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("PdfViewer omits the optional status bar unless the host opts in", async (t) => {
+  stubObjectUrls(t);
+  const fake = createRuntime();
+  const mounted = await mount(PdfViewer, { source: PDF_SOURCE, runtime: fake.runtime });
+  try {
+    await waitFor(
+      () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready",
+      "rendered PDF page",
+    );
+    assert.equal(
+      findByTestId(mounted.root, "pdf-status-bar"),
+      undefined,
+      "the upstream viewer has no status bar; hosts opt in with showStatusBar",
     );
     assert.deepEqual(mounted.warnings, []);
   } finally {

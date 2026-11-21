@@ -47,6 +47,7 @@ const ALLOWED_DIFFERENCE_CATEGORIES = new Set([
   "product-component",
   "demo-scaffolding",
   "absent-upstream",
+  "environment",
 ]);
 
 test("route matrix declares the pilot with a pinned upstream commit", () => {
@@ -110,18 +111,27 @@ test("the capture state matches the URLs the harness opens", () => {
         `${route.id}: both URLs must request zoom=${state.zoom}`,
       );
     }
-    if (state.statusBar === false) {
+    if (state.locale !== undefined) {
       assert.ok(
-        route.subject.url.includes("statusbar=off"),
-        `${route.id}: a capture without the optional status bar must pass statusbar=off`,
+        route.subject.url.includes(`locale=${state.locale}`),
+        `${route.id}: the subject URL must request the reference locale`,
+      );
+    }
+    if (state.statusBar === false) {
+      const hiddenByDefault = route.subject?.defaults?.statusBar === "hidden";
+      assert.ok(
+        hiddenByDefault || route.subject.url.includes("statusbar=off"),
+        `${route.id}: a capture without the optional status bar must hide it by default or pass statusbar=off`,
       );
     }
     if (state.sidebar === "closed") {
+      const closedByDefault = route.subject?.defaults?.sidebar === "closed";
+      const prepareClick = (route.subject.prepare || []).some(
+        (action) => action.action === "click" && action.selector,
+      );
       assert.ok(
-        (route.subject.prepare || []).some(
-          (action) => action.action === "click" && action.selector,
-        ),
-        `${route.id}: closing the sidebar needs an explicit prepare click`,
+        closedByDefault || prepareClick,
+        `${route.id}: a closed sidebar must be the product default or need an explicit prepare click`,
       );
     }
     const docName = new URL(route.reference.url, "https://example.invalid")
@@ -131,6 +141,37 @@ test("the capture state matches the URLs the harness opens", () => {
     assert.ok(
       docName && routes.fixtures[route.fixture].path.endsWith(docName),
       `${route.id}: the doc served to the reference must be the pinned fixture`,
+    );
+  }
+});
+
+test("blocking routes only gate checks the harness can reproduce", () => {
+  for (const route of routes.routes.filter((entry) => entry.gateStatus === "blocking")) {
+    assert.ok(route.gate, `${route.id}: a blocking route needs an explicit gate contract`);
+    assert.equal(route.gate.chromePixels, true, `${route.id}: chrome-only pixels must block`);
+    assert.equal(route.gate.geometry, true, `${route.id}: landmark geometry must block`);
+    assert.equal(route.gate.consoleErrors, true, `${route.id}: console errors must block`);
+    if (route.gate.fullPagePixels === false) {
+      assert.match(
+        route.gate.reason || "",
+        /renderer|environment/i,
+        `${route.id}: a disabled full-page pixel gate needs a renderer/environment reason`,
+      );
+      assert.ok(
+        (route.differences || []).some(
+          (difference) =>
+            difference.category === "environment" && difference.status === "accepted",
+        ),
+        `${route.id}: the environment delta must be classified`,
+      );
+    }
+    const openBlocking = (route.differences || []).filter(
+      (difference) => difference.blocking && difference.status === "open",
+    );
+    assert.deepEqual(
+      openBlocking.map((difference) => difference.id),
+      [],
+      `${route.id}: a blocking route cannot keep open blocking differences`,
     );
   }
 });
@@ -191,10 +232,15 @@ test("the demo route pins the upstream region height and reads capture state", (
   assert.match(page, /:show-status-bar="showStatusBar"/);
 
   const capture = read("apps/demo/src/lib/route-capture.ts");
-  for (const parameter of ["sample", "zoom", "statusbar"]) {
+  for (const parameter of ["sample", "zoom", "locale", "statusbar"]) {
     assert.ok(capture.includes(parameter), `route capture must read ?${parameter}=`);
   }
-  assert.match(capture, /statusBar:\s*true/, "the default state must stay unchanged");
+  assert.match(capture, /statusBar:\s*false/, "the status bar must stay off by default");
+  assert.match(
+    capture,
+    /statusBar:\s*params\.get\("statusbar"\)\s*===\s*"on"/,
+    "the status bar must be a host opt-in (`?statusbar=on`)",
+  );
 });
 
 test("the reference app renders the pinned upstream wrapper through a route entry", () => {

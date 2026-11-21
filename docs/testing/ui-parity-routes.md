@@ -1,6 +1,6 @@
-# L2 产品路由 parity：demo 路由 vs 上游参考路由（#182）
+# L2 产品路由 parity：demo 路由 vs 上游参考路由（#182 / #199）
 
-> 批次：0.8.1 / issue [#182](https://github.com/arcships/agentic-office-ui/issues/182)。
+> 批次：0.8.1 / issue [#182](https://github.com/arcships/agentic-office-ui/issues/182)（pilot）、[#199](https://github.com/arcships/agentic-office-ui/issues/199)（六项产品差异修复，PDF 路由转 blocking）。
 > 上游固定基准：[`extend-hq/ui@70fe70c6`](https://github.com/extend-hq/ui/tree/70fe70c6f1e1eee53954c6923f3d9f583557a57e)（MIT）。
 > 架构背景见 [design/viewer-editor-architecture.md](../design/viewer-editor-architecture.md) §11.2 与附录 C。
 
@@ -22,7 +22,7 @@ L2 因此不再由 harness 拼装组件，而是**在同一状态下渲染两个
 
 | route | reference route / 文件 | subject | 状态 | 归属 |
 |---|---|---|---|---|
-| `/pdf-viewer` | `/docs/components/pdf-viewer`，`apps/v4/components/pdf-viewer-docs.tsx:207` → `pdf-viewer-preview-client.tsx` | `apps/demo/src/pages/PdfViewerPage.vue` | **pilot，report-only**（R2 已跑通，8 个 case） | #182 |
+| `/pdf-viewer` | `/docs/components/pdf-viewer`，`apps/v4/components/pdf-viewer-docs.tsx:207` → `pdf-viewer-preview-client.tsx` | `apps/demo/src/pages/PdfViewerPage.vue` | **blocking**（#199；8 个 case，chrome + landmarks + console 阻断，整页位图仅诊断） | #182 / #199 |
 | `/docx-viewer` | `/docs/components/docx-viewer`，`docx-viewer-docs.tsx:42` | `DocxViewerPage.vue` | 待建：R2 需要 `@extend-ai/react-docx@0.15.0`（MIT、公开） | #159 |
 | `/xlsx-viewer` | `/docs/components/xlsx-viewer`，`xlsx-viewer-docs.tsx:40` | `XlsxViewerPage.vue` | 待建：R2 需要 `@extend-ai/react-xlsx@0.23.0`（MIT、公开） | #160 |
 | `/pptx-viewer` | `/docs/components/pptx-viewer`，`pptx-viewer-demo.tsx:33` | `PptxViewerPage.vue` | 待建：R2 需要 `@extend-ai/react-pptx@0.5.0`（MIT、公开） | #161 |
@@ -38,17 +38,19 @@ L2 因此不再由 harness 拼装组件，而是**在同一状态下渲染两个
 | 项 | reference | subject |
 |---|---|---|
 | app | `tools/extend-reference/dist`（`route.html`） | `apps/demo/dist`（`#/pdf-viewer`） |
-| URL | `/route.html?route=pdf-viewer&theme={theme}&zoom=1&doc=/fixtures/sample.pdf` | `/?theme={theme}&sample=sample.pdf&zoom=1&statusbar=off#/pdf-viewer` |
+| URL | `/route.html?route=pdf-viewer&theme={theme}&zoom=1&doc=/fixtures/sample.pdf` | `/?theme={theme}&sample=sample.pdf&zoom=1&locale=en#/pdf-viewer` |
 | region selector | `[data-slot="pdf-viewer"]` | `[data-testid="pdf-viewer"]` |
 | region 高度 | `560px`（`className="h-[560px]"`，`pdf-viewer-preview-client.tsx:18`） | `560px`（`.viewer-container :deep(.pdf-viewer-region)`；原为 `80vh`） |
 | demo 区域标记 | — | `.viewer-container[data-route-region="viewer"][data-testid="pdf-viewer-region"]` |
 | 宽度来源 | 复刻 demo 页面盒：`padding 24px` + `max-width 1200px` + 1px 外框 | `.page` 的 `padding 24px` + `max-width 1200px` + `.viewer-container` 1px 外框 |
 | ready 信号 | `[data-pdf-viewer-page="1"] img[src^="blob:"]` 且 `naturalWidth > 0` | `[data-testid="pdf-status"][data-state="ready"]` 且存在 `[data-testid="pdf-page-render"]` |
+| host 字体 | `--font-sans` = `"Geist Variable"`（`@fontsource-variable/geist`） | 仅 product region 加载同一份 `@fontsource-variable/geist`；页面其余部分仍是 demo 字体 |
+| 相位 | region 起点 25px（整数） | 捕获前隐藏 nav/页面脚手架，region 回到 25px；若仍有分数余数，补 page padding 到整数 CSS 像素 |
 | fixture | `/fixtures/sample.pdf`（harness 从 `apps/demo/public/samples/sample.pdf` 提供） | `/samples/sample.pdf`（demo 自身静态文件） |
 
 **fixture 同一性**：两侧响应在运行前都会被抓取并计算 sha256，必须同时等于 `routes.json` 里钉住的 `76e533d3…`。任一侧字节不同，整个矩阵记为不可信并以非零退出。
 
-**几何测量**：harness 以 2x DPR 截取**整页**，再按 region 的文档坐标裁成整数设备像素，因此 region 落在半 CSS 像素上（demo 页 viewer 上方有一个 0.5px 行盒）也不会造成两侧半像素相位差。region 的文档坐标、地标 box 与样式都会写进报告。
+**几何测量**：harness 以 2x DPR 截取**整页**，再按 region 的文档坐标裁成整数设备像素。demo 页文本在不同宽度下可能把 region 留在半 CSS 像素上；捕获前的 prepare 会隐藏脚手架并对齐整数 CSS 像素（§5），整页裁剪则保证两侧设备像素相位一致。region 的文档坐标、地标 box 与样式都会写进报告。
 
 **对比的地标**（`routes.json` → `reference.landmarks` / `subject.landmarks`）：
 
@@ -68,6 +70,7 @@ L2 因此不再由 harness 拼装组件，而是**在同一状态下渲染两个
 |---|---|---|---|
 | reference | `[data-slot="code"]` | demo-scaffolding | docs 页的用法代码块 |
 | reference | `[data-slot="component-preview"]` | demo-scaffolding | docs 预览卡片；只复刻其盒模型以保证两侧宽度一致 |
+| subject | `.nav` | demo-scaffolding | 全局 demo 导航；捕获前隐藏，使 product region 位于与 reference 相同的 `24px + 1px` host 壳内 |
 | subject | `[data-testid="pdf-viewer-page"] > h2/.desc/.controls/.policy-panel/.status-grid/.diagnostics` | demo-scaffolding | 页面标题、样例选择、运行时策略面板、状态网格、诊断列表 |
 | subject | `[data-route-region="viewer"]` | demo-scaffolding | demo 的 1px 外框；只复刻盒模型 |
 
@@ -86,61 +89,63 @@ R2 的两个刻意偏离（都记录在 `tools/extend-reference/src/vendor/NOTIC
 
 已知的环境差异（不是产品差异，报告里单列）：
 
-- 上游 reference 跑 EmbedPDF **2.15.0**，产品当前 pin **2.14.4**（`packages/vue-pdf/package.json`）。页面栅格的抗锯齿/缩放可能因此不同，所以整页像素差不能直接归因于我们的 chrome。
-- reference 是 React 19 + Tailwind v4，subject 是 Vue 3 + 手写 CSS；字体栈都是 Geist（reference 通过 `@fontsource-variable/geist`，demo 用同一份 CSS）。
+- 上游 reference 跑 EmbedPDF **2.15.0**，产品当前 pin **2.14.4**（`packages/vue-pdf/package.json`）。页面栅格的抗锯齿/缩放可能因此不同，所以整页像素差不能直接归因于我们的 chrome；#199 因此让 blocking gate 只覆盖 chrome + landmarks + console，整页像素保留为诊断。
+- reference 是 React 19 + Tailwind v4，subject 是 Vue 3 + 手写 CSS。两份 reference/subject 的 product region 都加载 `@fontsource-variable/geist`；demo 只在 PDF 页面的 viewer 容器上应用该字体，不重设整个 demo。
 
 ## 5. 状态合同
 
-`pnpm dev` 的默认状态**不因本 issue 改变**：查询参数只在 harness 传入时生效。
+`pnpm dev` 的默认状态（不改查询参数）自 #199 起与上游 viewer 的默认 chrome 一致：侧栏关闭、状态栏不渲染、页面不反色。查询参数只在 harness 传入时生效。
 
 | 参数（demo） | 值 | 作用 |
 |---|---|---|
 | `theme` | `light` / `dark` | 已有：`readDemoTheme()` 写 `documentElement.dataset.theme` |
-| `sample` | `/samples/` 下的文件名 | 新增：初始 fixture（非法值回退到页面默认） |
-| `zoom` | `0.5`–`2` | 新增：初始缩放，越界夹取 |
-| `statusbar` | `off` | 新增：关闭可选状态栏（上游没有该条） |
+| `sample` | `/samples/` 下的文件名 | 初始 fixture（非法值回退到页面默认） |
+| `zoom` | `0.5`–`2` | 初始缩放，越界夹取；路由固定 `zoom=1`（上游 docs demo 默认 `0.5`） |
+| `locale` | `en` / `zh-CN` | 路由传 `en`，与 reference 的英文 copy 一致；页面默认 `zh-CN` |
+| `statusbar` | `on` | 可选状态栏改为 host opt-in；默认不渲染，与上游 viewer 一致 |
 
-为什么需要这些开关：上游 docs demo 的默认状态是 `defaultZoom=0.5`、侧栏关闭、无状态栏；我们的 demo 默认 `zoom=1`、侧栏打开、状态栏打开。要比较**同一个产品状态**，捕获状态必须显式（`zoom=1` + 侧栏关闭 + 状态栏关闭），而默认差异本身作为“产品差异”记录在 §6，不被静默吞掉。侧栏没有公开 prop，harness 用 `prepare` 点击 `[data-testid="pdf-sidebar-toggle"]` 关闭。
+**捕获前处理**（`routes.json` → `subject.prepare`，都是 demo scaffolding，不改变产品）：
+
+1. 隐藏 `.nav` 和 `[data-testid="pdf-viewer-page"]` 中除 `.viewer-container` 外的所有直接子元素。demo 页面很长，产品 region 原本落在 844px 视口之外；Chromium 全页截图对视口外内容的 SVG 抗锯齿相位不同，会把 chrome 差伪造成 0.017%。隐藏脚手架后 region 回到 `24px page padding + 1px frame`（viewer top = 25px），与 reference 的 host 完全一致。
+2. 若 region 在某个 viewport 仍落在半 CSS 像素上，给 page 的 top padding 补上 `1 - fraction`，使产品区域从整数 CSS 像素开始。
+
+侧栏没有公开 prop；`PdfViewer` 内部的 `showThumbnails` 默认 `false`，因此不需要再点击 toggle。
 
 ## 6. 差异分类与当前结论
 
-分类规则（只有 `product-component` 阻断；`demo-scaffolding` 必须显式排除；`absent-upstream` 不得伪造对照）：
+分类规则（只有 `product-component` 阻断；`demo-scaffolding` 必须显式排除；`absent-upstream` 不得伪造对照；`environment` 是已接受的渲染器/宿主差异，不阻断）：
 
 | id | 类别 | 阻断 | 状态 | 证据 |
 |---|---|---|---|---|
-| `sidebar-default-open` | product-component | 是 | open | `packages/vue-pdf/src/components/PdfViewer.vue:120` `showThumbnails = ref(true)`；上游 `pdf-viewer.tsx:2280` `useState(false)` |
-| `optional-status-bar` | product-component | 是 | open | `PdfViewer.vue:1952` 有 `[data-testid="pdf-status-bar"]`，上游 viewer 无状态栏 |
-| `canvas-background` | product-component | 是 | open | `PdfViewer.vue:2008` `--pdf-canvas-bg: #e5e7eb`；上游画布 `bg-muted/30`（light ≈ `#fcfcfc`，dark ≈ `#0d0d0d`） |
-| `dark-page-inversion` | product-component | 是 | open | `PdfViewer.vue:2024` `--pdf-page-filter: invert(1) hue-rotate(180deg)`；上游暗色不反转页面 |
-| `page-raster-softening` | product-component | 是 | open | 上游页面 `<img>` 带 `blur-[0.35px]`；我们的 `.pdf-page-image` 不带 |
-| `mobile-canvas-padding` | product-component | 是 | open | 768/390 视口下我们的 `.pdf-frame-wrap` padding 12px，上游恒为 24px；page1 地标偏移 -12px |
-| `page-raster-size-rounding` | product-component | 否 | open | page1 尺寸 595.27×841.88 vs 595×841.28（zoom=1 亚像素取整），在 1px 地标容差内 |
+| `sidebar-default-open` | product-component | 是 | fixed | `PdfViewer.vue:121` `showThumbnails = ref(false)` 对齐上游 `pdf-viewer.tsx:2281` |
+| `optional-status-bar` | product-component | 是 | fixed | `PdfViewer.vue:93` 默认 `false`；demo `route-capture.ts:44` 改为 `?statusbar=on` opt-in |
+| `canvas-background` | product-component | 是 | fixed | `PdfViewer.vue:2013` `color-mix(in oklab, var(--office-muted) 30%, transparent)` 覆盖上游 `bg-muted/30`；实测 `#fcfcfc` / `#0d0d0d` |
+| `dark-page-inversion` | product-component | 是 | fixed | `PdfViewer.vue:2037` 暗色默认只保留 softening；inversion 只能由 `--pdf-dark-page-filter` opt-in |
+| `page-raster-softening` | product-component | 是 | fixed | `PdfViewer.vue:2021,2089` `blur(0.35px)`（上游 `pdf-viewer.tsx:2645`） |
+| `mobile-canvas-padding` | product-component | 是 | fixed | `PdfViewer.vue:2129` 不再覆盖 `.pdf-frame-wrap` 的 24px padding |
+| `page-raster-size-rounding` | product-component | 否 | open | page1 尺寸 595.266×841.875 vs 595×841.281；在 1px 地标容差内 |
+| `page-raster-renderer-version` | environment | 否 | accepted | `@embedpdf/*` 2.14.4 vs reference 2.15.0；整页栅格（hinting/tiling/取整）不可直接归因于产品 |
 
-Pilot 的定量结果（`output/ui-parity-routes/routes-matrix.json`，2x DPR）：
+**阻断合同**（`routes.json` → `gate`）：`fullPagePixels: false`、`chromePixels/geometry/consoleErrors: true`。即 PDF 路由阻断 chrome-only 像素、landmarks 和 console 错误；整页像素仍写入 `report.json` / 热图作为诊断，但不阻断，因为在不同 EmbedPDF 版本下它不是稳定合同。
 
-| viewport | theme | 整页像素差 | chrome 像素差 | 最差地标几何差 |
-|---|---|---|---|---|
-| 1440x900 | light | 56.484% | 92.063% | 1.73px |
-| 1440x900 | dark | 92.388% | 92.436% | 1.73px |
-| 1280x720 | light | 56.484% | 92.063% | 1.73px |
-| 1280x720 | dark | 92.388% | 92.436% | 1.73px |
-| 768x1024 | light | 43.319% | 92.050% | 13.00px |
-| 768x1024 | dark | 91.287% | 92.647% | 13.00px |
-| 390x844 | light | 38.586% | 79.567% | 13.00px |
-| 390x844 | dark | 78.993% | 81.076% | 13.00px |
+#199 后的定量结果（`output/ui-parity-routes/routes-matrix.json`，2x DPR）：
 
-读法与已证明/未证明的边界：
+| viewport | theme | status | 整页像素差（诊断） | chrome 像素差 | 最差地标几何差 |
+|---|---|---|---|---|---|
+| 1440x900 | light | pass-with-diagnostic | 13.584% | **0.000%** | 1.73px |
+| 1440x900 | dark | pass-with-diagnostic | 15.205% | **0.000%** | 1.73px |
+| 390x844 | light | pass-with-diagnostic | 23.478% | **0.000%** | 1.73px |
+| 390x844 | dark | pass-with-diagnostic | 26.017% | **0.000%** | 1.73px |
 
-- **已证明（0 像素）**：`root` / `toolbar` / `viewport` 三个地标在 8 个 case 里 Δ=0，说明区域尺寸、toolbar 高度（含 390 下的 125px 换行高度）、滚动容器高度与上游完全一致；harness 自检（reference 对 reference）0.000% 差异，说明截图/裁剪/相位对齐可重复。
-- **chrome 差 92% 的主因是画布背景**：报告 `chrome.dominantColors` 显示 light 下 reference `#fcfcfc` 占 91.4%、subject `#e5e7eb` 占 91.3%；dark 下 `#0d0d0d` 91.4% vs `#020617` 91.3%。这不是测量误差，而是上表第 3 条产品差异。
-- **整页差的主因是页面栅格**：上游对页面位图做 0.35px 模糊、我们不做；dark 下我们还整体反色。这两条决定暗色永远不可能达标。
-- **未证明**：没有一条路由达到“几何 0px、像素 ≤0.1%”的验收线；因此 `gateStatus` 保持 `report-only`。要转 blocking，先按 §8 修完阻断项。
+`root` / `toolbar` / `viewport` 在四个 case 里 Δ=0（0px）；`page1` / `page1Raster` 在 1px / 2px 容差内，最差 1.73px。chrome-only 截图的每个像素与 reference 完全一致（0 diff），因此 chrome gate 可以阻断；整页差全部来自 page raster（embedPDF 版本 + 页面尺寸亚像素取整），已在 `differences` 中分类为 `environment` / 非阻断 `product-component`。
+
+**为什么整页像素不阻断**：在 1440 下整页差 13.6% 主要来自 page raster 的 text hinting 与 0.27×0.59px 的页面尺寸取整；这不是 canvas、toolbar、padding 或反色差异（这些已 0 像素）。要阻断整页，需要把产品 EmbedPDF 升到 2.15.0 并重新钉页面尺寸，属于单独的依赖 issue。
 
 ## 7. 运行与产物
 
 ```bash
-pnpm install                                   # 新增 @embedpdf/*@2.15.0 等公开依赖
-pnpm ui:parity:routes                          # 构建 reference + demo，跑完整矩阵（report-only）
+pnpm install                                   # @embedpdf/*@2.15.0、@fontsource-variable/geist 等公开依赖
+pnpm ui:parity:routes                          # 构建 reference + demo，跑完整矩阵（PDF 路由 blocking）
 pnpm ui:parity:routes -- --only pdf-viewer --viewports 1440x900 --themes light
 pnpm ui:parity:routes -- --self-check --only pdf-viewer --viewports 1440x900 --themes light
 pnpm ui:parity:routes -- --gate-mode ready      # 只让 gateStatus=blocking 的路由阻断
@@ -166,27 +171,27 @@ cases/<route>/<viewport>/<theme>/
   reference-chrome.png subject-chrome.png diff-chrome.png heatmap-chrome.png
 ```
 
-退出码：默认 `--gate-mode off`（report-only）恒为 0，但报告会写 `status: fail`；`ready` 只让 `gateStatus: blocking` 的路由失败；`all` 任何路由失败都失败。fixture 字节不一致直接非零退出，因为此时矩阵不可信。
+退出码：默认 `--gate-mode off`（report-only）恒为 0，但报告会写 `status: fail`；`ready` 只让 `gateStatus: blocking` 的路由失败（当前仅 `/pdf-viewer`）；`all` 任何路由失败都失败。fixture 字节不一致直接非零退出，因为此时矩阵不可信。`pass-with-diagnostic` 表示被 gate 的检查全部通过，但有一项未 gate 的诊断检查（PDF 的整页像素）失败。
 
-本 issue 的 pilot 证据（1x 缩略图 + 生成矩阵）已提交在
-[`docs/assets/182-route-parity/`](../assets/182-route-parity/)：`1440x900` light/dark
-的 reference/subject/diff/heatmap、`1440x900/light` 的 chrome-only 三张，以及
-`390x844/light` 的 reference/subject/diff，配 `SUMMARY.md` 与
+本 issue 的 pilot 证据（1x 缩略图 + 生成矩阵）在
+[`docs/assets/182-route-parity/`](../assets/182-route-parity/)；#199 修复后的证据在
+[`docs/assets/199-route-parity/`](../assets/199-route-parity/)：1440x900 与 390x844 的
+light/dark reference/subject/diff/heatmap 和 chrome-only 三张，配 `SUMMARY.md` 与
 `routes-matrix.json`。需要 2x 原图时重跑上面的命令。
 
 `tools/parity-fixtures/routes.json` 是唯一配置源：
 
 - `apps.{reference,subject}`：两个构建目录与 fixture 前缀；
 - `fixtures`：path + sha256 + bytes；
-- `routes[]`：URL 模板、ready 选择器、prepare 动作、region/landmark 选择器、chrome mask、排除项、分类差异、地标容差；
+- `routes[]`：URL 模板、ready 选择器、prepare 动作、region/landmark 选择器、chrome mask、排除项、分类差异、`gate` 阻断合同、地标容差；
 - `viewports` / `themes` / `thresholds`：与 L1 同义（几何 0px、像素 0.1%、channel delta 2、热区 Top-N）。
 
 ## 8. 后续路由与阻断项
 
-1. **先修 proxy 级产品差异，再谈 blocking**（建议顺序）：画布背景 token → 页面栅格 softening → 暗色不反转页面 → 侧栏默认值 → 状态栏归属（保留但默认关闭，或从 viewer 移除）→ 移动端画布 padding。每修一项重跑 `pnpm ui:parity:routes`，把对应 `differences[].status` 从 `open` 改为 `fixed`。
+1. **PDF 路由已 blocking**（#199）：六个 `product-component` 差异全部 fixed；chrome-only 在 1440/390 × light/dark 均为 0 像素，landmarks 在 0/1/2px 容差内。整页像素保留为诊断，原因见 §6。
 2. **DOCX/XLSX/PPTX 复用同一 harness**：只需在 `tools/extend-reference/src/upstream/` 增加对应公开文件、在 `src/routes/` 加一个 route 组件、在 `routes.json` 加一条 route 记录。R2 的主要成本是安装公开 MIT runtime（分别约 67k/…/… 行）与构建内存，不是 harness 改造。三条路由的 region 高度、选择器与状态可以从 §3 的模板直接推导。
 3. **无对应页面的能力**（PDF editor、CSV、FileSystem、SchemaBuilder、PPTX presenter）不在 L2 做像素对照，按 `office-reference` 或 `product-gap` 处理（见架构审计 §1.2）。
-4. **CI**：`.github/workflows/ui-parity.yml` 已加 `ui-parity-routes` job（PR / nightly / dispatch），以 `--gate-mode off` 产出 `output/ui-parity-routes/` artifact；等到 `/pdf-viewer` 的阻断项清零，再把 `routes.json` 的 `gateStatus` 改为 `blocking`，并把命令改成 `--gate-mode ready`。
+4. **CI**：`.github/workflows/ui-parity.yml` 的 `ui-parity-routes` job（PR / nightly / dispatch）现在以 `--gate-mode ready` 运行：`/pdf-viewer` 的 chrome/geometry/console 回归会阻断，其余路由仍 report-only；artifact `output/ui-parity-routes/` 保留 30 天。
 
 ## 附录：证据清单
 
@@ -196,7 +201,7 @@ cases/<route>/<viewport>/<theme>/
 | reference app 构建 | `pnpm --filter @aou/extend-reference build`；`dist/route.html` + `route-*.js` + `worker-engine-*.js` |
 | 上游 wrapper 原样性 | `tools/extend-reference/src/upstream/**` 与 `apps/v4/**` 逐文件 diff（仅来源头） |
 | fixture 字节 | `routes.json` → `fixtures.sample-pdf.sha256`，运行时双侧抓取校验 |
-| 截图/差异 | `output/ui-parity-routes/cases/**`；已提交的 1x 证据在 `docs/assets/182-route-parity/` |
+| 截图/差异 | `output/ui-parity-routes/cases/**`；已提交的 1x 证据在 `docs/assets/182-route-parity/`（pilot）与 `docs/assets/199-route-parity/`（修复后） |
 | 矩阵与分类 | `output/ui-parity-routes/routes-matrix.json` |
 | 自检确定性 | `pnpm ui:parity:routes -- --self-check` → 0.000% |
 | attribution | `node scripts/ci/verify-attribution.mjs`（87 个 adapted/copied 文件） |

@@ -36,13 +36,15 @@ import "@arcships/vue-pdf/style.css"
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
 | `showPrint` | `boolean` | `true` | 打印按钮（#162 新增） |
-| `showStatusBar` | `boolean` | `false` | 可见 `OfficeStatusBar`（#162 新增） |
+| `showStatusBar` | `boolean` | `false` | 可选 `OfficeStatusBar`（#162 新增；上游 viewer 没有该条，#199 起 demo/路由默认不渲染） |
 | `minHeight` | `string \| number` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
-| `isDark` | `boolean` | `false` | 深色外壳与页面背景；页面位图默认反色，可用 `--pdf-dark-page-filter: none` 关闭 |
+| `isDark` | `boolean` | `false` | 深色外壳；页面位图保持原色并沿用 0.35px softening（#199）；`--pdf-dark-page-filter` 可 opt-in 额外滤镜 |
 | `showOutline` | `boolean` | `true` | `PdfSurface` 在文档带书签时显示大纲面板；无书签时不显示 |
-| `showThumbnails` | `boolean` | `true` | `PdfSurface` 显示共享的页面缩略图栏（`PdfViewer` 同样默认显示） |
+| `showThumbnails` | `boolean` | `true` | `PdfSurface` 显示共享的页面缩略图栏；`PdfViewer` 内置侧栏默认关闭，由工具栏 toggle 打开（#199） |
 
 `PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图、大纲面板和可见状态栏会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
+
+路由对齐（#199）：`PdfViewer` 的画布使用上游 `bg-muted/30` 的等价 surface（light `#fcfcfc` / dark `#0d0d0d`），页面位图带 `blur(0.35px)`、暗色不反色，滚动内容在窄容器下也保持 24px 内边距；缩略图侧栏默认关闭，可见状态栏是 host opt-in。以上都只改变默认表现，未新增/移除公共 props。
 
 自 0.8（issue #162）起，`PdfViewer` 的默认 toolbar 行按 Extend `PDFViewerToolbar` 逐像素复刻（sidebar、Page/页码/of N、rotate、zoom、search、`⋯`）；layout、首/末页、上/下一页、文件名、下载和打印命令收进 `⋯` actions 菜单，原 test id 和事件不变。缩略图/大纲侧栏使用 `DocumentViewerSidebar`（160px，窄容器为 overlay），状态使用 `OfficeEmptyState`/`OfficeLoadingState`/`OfficeErrorState`，可见状态栏为 `OfficeStatusBar`；文本选择浮层、链接 hover card、批注对话框和表单字段 tooltip 使用共享 Popover/Tooltip/Dialog。`PdfSurface` 额外提供 `showStatusBar`、`showAnnotationDialog`（均默认 `false`）。完整映射、尺寸合同、actions 菜单和 Extend 像素对照见 [PDF chrome](pdf-chrome.md)。
 
@@ -66,7 +68,7 @@ import "@arcships/vue-pdf/style.css"
 
 大纲支持完整的树键盘操作：`↓`/`↑` 在可见条目间移动，`→` 展开或进入第一个子条目，`←` 收起或回到父条目，`Home`/`End` 跳到首/末条目，`Enter`/`Space` 激活。鼠标点击标题同时展开并跳转，点击折叠标记只展开/收起。
 
-缩略图栏由 `PdfViewer` 与 `PdfSurface` 共享同一个 `PdfThumbnailStrip` 和 `usePdfThumbnails()` 渲染管线：最多两个并发缩略图、AbortSignal 取消、换文档时释放全部 object URL。两个组件默认都显示缩略图，`PdfSurface` 随当前可见页高亮（`data-testid="pdf-surface-thumbnails"`、`pdf-surface-thumbnail`），可用 `showThumbnails="false"` 关闭。两个组件的缩略图都使用页标签文字，点击缩略图会跳到对应页。
+缩略图栏由 `PdfViewer` 与 `PdfSurface` 共享同一个 `PdfThumbnailStrip` 和 `usePdfThumbnails()` 渲染管线：最多两个并发缩略图、AbortSignal 取消、换文档时释放全部 object URL。`PdfSurface` 默认显示缩略图栏，随当前可见页高亮（`data-testid="pdf-surface-thumbnails"`、`pdf-surface-thumbnail`），可用 `showThumbnails="false"` 关闭；`PdfViewer` 的内置缩略图侧栏默认关闭（与上游 `useState(false)` 一致，见 #199），点击工具栏 sidebar toggle 打开。两个组件的缩略图都使用页标签文字，点击缩略图会跳到对应页。
 
 ### 拖放导入
 

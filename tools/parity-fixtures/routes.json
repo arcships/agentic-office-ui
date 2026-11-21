@@ -67,7 +67,7 @@
     {
       "id": "pdf-viewer",
       "title": "/pdf-viewer vs /docs/components/pdf-viewer",
-      "gateStatus": "report-only",
+      "gateStatus": "blocking",
       "ownerIssue": 182,
       "referenceRoute": "/docs/components/pdf-viewer",
       "referenceSource": "apps/v4/components/pdf-viewer-docs.tsx:207 (PdfViewerDemo) -> pdf-viewer-preview-client.tsx",
@@ -78,7 +78,15 @@
         "zoom": 1,
         "sidebar": "closed",
         "statusBar": false,
-        "note": "Both sides load the same bytes at 100% zoom with the thumbnails sidebar closed and no optional status bar; the upstream docs demo defaults to zoom 0.5 and a closed sidebar."
+        "locale": "en",
+        "note": "Both sides use the upstream default chrome: the thumbnails sidebar is closed, there is no optional status bar, and the viewer copy is English. Zoom is pinned to 1 on both sides; the upstream docs demo defaults to 0.5."
+      },
+      "gate": {
+        "fullPagePixels": false,
+        "chromePixels": true,
+        "geometry": true,
+        "consoleErrors": true,
+        "reason": "The page bitmap is produced by the product's pinned EmbedPDF 2.14.4 while the reference runs 2.15.0, so its rasterisation is an environment difference (differences.page-raster-renderer-version). The blocking gate covers the product shell (chrome-only pixels), the geometry landmarks and console errors; full-page pixels stay in the report as a diagnostic. See docs/testing/ui-parity-routes.md sections 6 and 8."
       },
       "reference": {
         "url": "/route.html?route=pdf-viewer&theme={theme}&zoom=1&doc=/fixtures/sample.pdf",
@@ -102,7 +110,7 @@
         }
       },
       "subject": {
-        "url": "/?theme={theme}&sample=sample.pdf&zoom=1&statusbar=off#/pdf-viewer",
+        "url": "/?theme={theme}&sample=sample.pdf&zoom=1&locale=en#/pdf-viewer",
         "ready": [
           "[data-testid=\"pdf-status\"][data-state=\"ready\"]",
           "[data-testid=\"pdf-page-render\"]"
@@ -110,11 +118,23 @@
         "readyFunction": "() => document.querySelector('[data-testid=\"pdf-status\"]')?.dataset.state === 'ready' && document.querySelectorAll('[data-testid=\"pdf-page-render\"]').length > 0",
         "prepare": [
           {
-            "action": "click",
-            "selector": "[data-testid=\"pdf-sidebar-toggle\"]",
-            "reason": "The upstream viewer defaults to a closed thumbnails sidebar; the product defaults to open (product difference recorded below)."
+            "action": "evaluate",
+            "reason": "The demo nav and page scaffolding are excluded from the product region. Hide them before capture so the region sits in the same 24px + 1px host shell as the reference route (viewer top 25px, inside the viewport) instead of far below the demo controls, where Chromium rasterises offscreen content with a different SVG antialiasing phase.",
+            "script": "() => { const nav = document.querySelector('.nav'); if (nav) nav.style.display = 'none'; const page = document.querySelector('[data-testid=\"pdf-viewer-page\"]'); if (!page) return; for (const child of [...page.children]) { if (!child.classList.contains('viewer-container')) child.style.display = 'none'; } }",
+            "settleMs": 120
+          },
+          {
+            "action": "evaluate",
+            "reason": "The demo page's text metrics can leave the viewer on a fractional CSS pixel at some widths. Add the remainder to the page's top padding so the product region starts on an integer CSS pixel. This is capture scaffolding, not a product change.",
+            "script": "() => { const region = document.querySelector('[data-testid=\"pdf-viewer\"]'); const page = document.querySelector('[data-testid=\"pdf-viewer-page\"]'); if (!region || !page) return; const top = region.getBoundingClientRect().top; const fraction = top - Math.floor(top); if (fraction > 0.001) { const padding = Number.parseFloat(getComputedStyle(page).paddingTop) || 0; page.style.paddingTop = `${padding + 1 - fraction}px`; } }",
+            "settleMs": 120
           }
         ],
+        "defaults": {
+          "sidebar": "closed",
+          "statusBar": "hidden",
+          "source": "packages/vue-pdf/src/components/PdfViewer.vue:121 `showThumbnails = ref(false)` matches upstream pdf-viewer.tsx:2281 `useState(false)`; apps/demo/src/lib/route-capture.ts:44 keeps the opt-in status bar off unless `?statusbar=on` is passed. No prepare click is needed."
+        },
         "regionSelector": "[data-testid=\"pdf-viewer\"]",
         "regionMarker": "[data-route-region=\"viewer\"]",
         "landmarks": {
@@ -168,6 +188,12 @@
         },
         {
           "scope": "subject",
+          "selector": ".nav",
+          "category": "demo-scaffolding",
+          "reason": "Global demo navigation above the page. The capture hides it so the product region sits in the reference host shell (24px page padding + 1px frame) instead of below a sticky nav; it is never part of the region."
+        },
+        {
+          "scope": "subject",
           "selector": "[data-route-region=\"viewer\"]",
           "category": "demo-scaffolding",
           "reason": "Demo frame (1px border, radius, overflow) that wraps the viewer; only its box metrics are reproduced on the reference side."
@@ -178,49 +204,49 @@
           "id": "sidebar-default-open",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:120 `showThumbnails = ref(true)`; upstream apps/v4/components/extend/pdf-viewer.tsx:2280 `useState(false)`.",
-          "impact": "The shipped route shows a 160px thumbnail sidebar the reference does not have; the capture clicks the toggle so the remaining chrome is comparable."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:121 `showThumbnails = ref(false)` now matches upstream apps/v4/components/extend/pdf-viewer.tsx:2281 `useState(false)`.",
+          "impact": "The shipped route starts without the 160px thumbnail sidebar; the toolbar toggle still opens and closes it."
         },
         {
           "id": "optional-status-bar",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:1952 renders `[data-testid=\"pdf-status-bar\"]` when `show-status-bar` is set; the upstream viewer has no status bar.",
-          "impact": "The demo page turns it on, so the demo route is ~28px shorter in the page viewport than upstream. The capture state sets `show-status-bar=false`."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:93 keeps `showStatusBar: false`; apps/demo/src/lib/route-capture.ts:44 now makes the demo status bar opt-in (`?statusbar=on`) instead of on by default.",
+          "impact": "The default route no longer renders `pdf-status-bar`, matching the upstream viewer. Hosts can still opt in through the existing `showStatusBar` prop."
         },
         {
           "id": "canvas-background",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2008 `--pdf-canvas-bg: #e5e7eb`; upstream paints the page area with `bg-muted/30` (apps/v4/components/extend/pdf-viewer.tsx:579).",
-          "impact": "The whole page canvas is visibly darker than the reference in light mode (and darker still in dark mode); this is the largest source of chrome-only pixel diff."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2013 paints `color-mix(in oklab, var(--office-muted) 30%, var(--office-background))`, the `bg-muted/30` equivalent from upstream apps/v4/components/extend/pdf-viewer.tsx:580; rendered light #fcfcfc, dark #0d0d0d.",
+          "impact": "The page canvas now uses the same muted-over-background surface as the reference in both themes."
         },
         {
           "id": "dark-page-inversion",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2024 `--pdf-page-filter: invert(1) hue-rotate(180deg)`; the upstream viewer renders page rasters unmodified in dark mode.",
-          "impact": "Dark-mode page content is inverted on our side, so the dark route can never match the reference pixels."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2037 defaults the dark page filter to the same 0.35px softening as light mode; only an explicit `--pdf-dark-page-filter` opt-in can add a transform.",
+          "impact": "Dark-mode page content keeps its original colours, like the upstream viewer."
         },
         {
           "id": "page-raster-softening",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "apps/v4/components/extend/pdf-viewer.tsx:2644 applies `blur-[0.35px]` to the page raster `<img>`; packages/vue-pdf/src/components/PdfViewer.vue:2080 `.pdf-page-image` renders unblurred.",
-          "impact": "Every glyph edge differs by a few channel levels, which pushes diff pixels far above the 0.1% budget even when geometry matches."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2021,2089 applies `--pdf-page-softening: blur(0.35px)` to `.pdf-page-image`, matching upstream apps/v4/components/extend/pdf-viewer.tsx:2645 `blur-[0.35px]`.",
+          "impact": "Page glyph edges soften like the reference; CSS filters do not change the image box, so the page geometry landmarks are unchanged."
         },
         {
           "id": "mobile-canvas-padding",
           "category": "product-component",
           "blocking": true,
-          "status": "open",
-          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2122 `@container pdf-viewer (max-width: 760px) { .pdf-frame-wrap { padding: 12px } }`; upstream `pdf-viewer.tsx` scroll content keeps `padding: 24px` at every width.",
-          "impact": "At 768 and 390 the page frame starts 12px up/left of the reference (landmark page1 Δ -12px), which also changes how much of page 1 is visible."
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2129 keeps only `.pdf-body { flex-direction: column }` at container width <= 760px; `.pdf-frame-wrap` keeps its 24px padding at every width, matching upstream `PAGE_GAP = 24` (pdf-viewer.tsx:172,2924).",
+          "impact": "The page frame no longer shifts by 12px at 768/390; the page1 landmark delta is inside its 1px tolerance."
         },
         {
           "id": "page-raster-size-rounding",
@@ -229,11 +255,19 @@
           "status": "open",
           "evidence": "Reference page frame is 595.266 x 841.875 CSS px, ours 595 x 841.281 (capture report `geometry.landmarks.page1`).",
           "impact": "Sub-pixel rounding of the zoom-1 page size; contributes to raster diff but stays under the 1px landmark budget."
+        },
+        {
+          "id": "page-raster-renderer-version",
+          "category": "environment",
+          "blocking": false,
+          "status": "accepted",
+          "evidence": "packages/vue-pdf/package.json pins `@embedpdf/*@2.14.4`; the reference app uses `@embedpdf/*@2.15.0` (tools/extend-reference/package.json).",
+          "impact": "The page bitmap rasterisation (text hinting, tiling, page-size rounding) can differ even when both sides paint the same PDF bytes. This is why the blocking route gate covers chrome-only pixels plus geometry, and keeps full-page pixels as a diagnostic."
         }
       ],
       "notes": [
         "Pilot route for #182: proves an upstream pinned wrapper can be rendered verbatim (R2) and compared region-to-region.",
-        "gateStatus is `report-only` until the product differences above are fixed or accepted by a product decision."
+        "#199 fixed the six classified product deltas and flipped gateStatus to `blocking`: chrome-only pixels, landmarks and console errors gate; full-page raster pixels stay diagnostic because the renderer version differs."
       ]
     }
   ]

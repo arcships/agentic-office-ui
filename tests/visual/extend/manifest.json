@@ -286,7 +286,7 @@
       "files": 32
     }
   },
-  "treeSha256": "c95ccf8e1beaaa597b327d4aa1ce933ea37935387d0708a4b86339c0a72a5cf0",
+  "treeSha256": "f8142d0b6627a5e8c4bef35f48e3cee60902c64fc311f0ab9720f283e191bc69",
   "files": [
     {
       "path": "bounding-box-citations/default/dark-1280x720.png",
@@ -7512,8 +7512,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12626,
-      "sha256": "e8042f22cedfe59beb3e676c3b7d2d6c68a71d9dccde60f2a4b1b7fcbef7e3ba"
+      "bytes": 12745,
+      "sha256": "6b1b9f201cc0cab2ddccdb164719a23ab149db5455c6f9d334d47d332ebb3a0e"
     },
     {
       "path": "pdf-toolbar/active/dark-1440x900.png",
@@ -7523,8 +7523,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12626,
-      "sha256": "e8042f22cedfe59beb3e676c3b7d2d6c68a71d9dccde60f2a4b1b7fcbef7e3ba"
+      "bytes": 12745,
+      "sha256": "6b1b9f201cc0cab2ddccdb164719a23ab149db5455c6f9d334d47d332ebb3a0e"
     },
     {
       "path": "pdf-toolbar/active/dark-390x844.png",
@@ -7534,8 +7534,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 12917,
-      "sha256": "6628d53248b0d818e948da0444bc8e1eb6a644c235fbf603dfa67d371387c418"
+      "bytes": 13004,
+      "sha256": "2af1178b5dcfa754cb85dc9903e8c45b34040ccf59e488efbd15b4ca42b259e9"
     },
     {
       "path": "pdf-toolbar/active/dark-768x1024.png",
@@ -7545,8 +7545,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 12031,
-      "sha256": "7fb37d012cd32abebc10f1cbb8f8e508de82e91495558921eef24c3653f73700"
+      "bytes": 12142,
+      "sha256": "52d67b984c0b1c6ea29e575911fe61fdfbf05f070915ea09594604ffa7b2d556"
     },
     {
       "path": "pdf-toolbar/active/light-1280x720.png",
@@ -7556,8 +7556,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12639,
-      "sha256": "bee6b27e90a426eb32eddc2ef02cd8789edd0929a3724ba8fe717676cb538d59"
+      "bytes": 12783,
+      "sha256": "338a5c0664cd0b669bcf0c09f4c055ba9f5cc0455f7b0f7ebd2b271900b50a1d"
     },
     {
       "path": "pdf-toolbar/active/light-1440x900.png",
@@ -7567,8 +7567,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12639,
-      "sha256": "bee6b27e90a426eb32eddc2ef02cd8789edd0929a3724ba8fe717676cb538d59"
+      "bytes": 12783,
+      "sha256": "338a5c0664cd0b669bcf0c09f4c055ba9f5cc0455f7b0f7ebd2b271900b50a1d"
     },
     {
       "path": "pdf-toolbar/active/light-390x844.png",
@@ -7578,8 +7578,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 12781,
-      "sha256": "ba47162bb4b3719e60be125f5ecf5495d9a8fa1d8e3319ddb71665b16eb61dc5"
+      "bytes": 12857,
+      "sha256": "e527485a0af98cb492c27666329f7c772de37c14096c4dc9d87b66ebbef21b84"
     },
     {
       "path": "pdf-toolbar/active/light-768x1024.png",
@@ -7589,8 +7589,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 12067,
-      "sha256": "2a1341afeea4b4b2ddf3bc7f4631ebdda504ca03c15e87d999cf430904b24ae0"
+      "bytes": 12191,
+      "sha256": "0d948e2551b094f0ac09ae869dbadff3a459760d28339a784e1ef51cf94c599e"
     },
     {
       "path": "pdf-toolbar/default/dark-1280x720.png",
@@ -7600,8 +7600,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12152,
-      "sha256": "d3b6342bb8ebf0bbdbdb412017fd0be05e050323585805ff123871dc4a1416f3"
+      "bytes": 12277,
+      "sha256": "111c306bea9eb93c6d9c07921c1285a3cefc93faee905ceb7b4a9cb49d44f01f"
     },
     {
       "path": "pdf-toolbar/default/dark-1440x900.png",
@@ -7611,8 +7611,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12152,
-      "sha256": "d3b6342bb8ebf0bbdbdb412017fd0be05e050323585805ff123871dc4a1416f3"
+      "bytes": 12277,
+      "sha256": "111c306bea9eb93c6d9c07921c1285a3cefc93faee905ceb7b4a9cb49d44f01f"
     },
     {
       "path": "pdf-toolbar/default/dark-390x844.png",
@@ -7622,8 +7622,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 12597,
-      "sha256": "6edc0fc0377baddae109f907803e4fcbd81201a29ae2961c2876674bb33014a1"
+      "bytes": 12682,
+      "sha256": "443386e82c4299eef27b2822e8e988309a681f33943c4908f7d0cfbe085badda"
     },
     {
       "path": "pdf-toolbar/default/dark-768x1024.png",
@@ -7633,8 +7633,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 11572,
-      "sha256": "0066cdf51adb6ac063bfe0c2cf3d91dd869af30d22077a392bf0423d226f70b8"
+      "bytes": 11682,
+      "sha256": "94628d331da58e58f9941207bb94fc0d1d4b0c5c820890acf4429f124f6c3058"
     },
     {
       "path": "pdf-toolbar/default/light-1280x720.png",
@@ -7644,8 +7644,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12213,
-      "sha256": "b28f6f904bcf1de8082fc01d976bb8fa32def35f4581069e7c5a35e10e32c0ab"
+      "bytes": 12356,
+      "sha256": "cf4a4fe8a51bd7d5a85db24909709c3bd746452c7b045d43f725fcfaa9a989a6"
     },
     {
       "path": "pdf-toolbar/default/light-1440x900.png",
@@ -7655,8 +7655,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12213,
-      "sha256": "b28f6f904bcf1de8082fc01d976bb8fa32def35f4581069e7c5a35e10e32c0ab"
+      "bytes": 12356,
+      "sha256": "cf4a4fe8a51bd7d5a85db24909709c3bd746452c7b045d43f725fcfaa9a989a6"
     },
     {
       "path": "pdf-toolbar/default/light-390x844.png",
@@ -7666,8 +7666,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 12452,
-      "sha256": "f507f8fa0fa994241342e108da7b2e9d80d4a46750f9af6c502f05126ff9629e"
+      "bytes": 12527,
+      "sha256": "7398bd0c9e1c9298f13a357dfc55133294d17be0b3bbf44ec34d7ccabe718d99"
     },
     {
       "path": "pdf-toolbar/default/light-768x1024.png",
@@ -7677,8 +7677,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 11632,
-      "sha256": "918d04d1648b4f278b6027a883c4c7e0ddfac83c96040e2e3e607a8918ee2a52"
+      "bytes": 11752,
+      "sha256": "5f23b096f1eb2f1aa3b5b65d0af4c09a28ebb792bbcd31275a0bd4663dd238e2"
     },
     {
       "path": "pdf-toolbar/disabled/dark-1280x720.png",
@@ -7688,8 +7688,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 10619,
-      "sha256": "515abbf13f6016017ad0d0233cdcb7e548d3c5f63ff0d384ee37d0d872941732"
+      "bytes": 10733,
+      "sha256": "c89c41d5e13b310d4a62285616d62d1a1fa4a4d650bba650ccf762575cfdc7ab"
     },
     {
       "path": "pdf-toolbar/disabled/dark-1440x900.png",
@@ -7699,8 +7699,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 10619,
-      "sha256": "515abbf13f6016017ad0d0233cdcb7e548d3c5f63ff0d384ee37d0d872941732"
+      "bytes": 10733,
+      "sha256": "c89c41d5e13b310d4a62285616d62d1a1fa4a4d650bba650ccf762575cfdc7ab"
     },
     {
       "path": "pdf-toolbar/disabled/dark-390x844.png",
@@ -7710,8 +7710,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 11001,
-      "sha256": "3e106478a50e1928a3f467ee64a84bee4184cddf931866c0dd526b9982e29b72"
+      "bytes": 11075,
+      "sha256": "3c5034cae3918f469fef05922dbf3589aae31af412a85756c2bebe37e7f0a509"
     },
     {
       "path": "pdf-toolbar/disabled/dark-768x1024.png",
@@ -7721,8 +7721,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 10079,
-      "sha256": "b72eeeba2df7060f9c7d5163a60f2b19fb481cb3811cc4b9c927e9cd8e8ff16d"
+      "bytes": 10183,
+      "sha256": "b82712aab848e0d656affa052cf2e0a2df6ea2e955293dada4cba01667688b21"
     },
     {
       "path": "pdf-toolbar/disabled/light-1280x720.png",
@@ -7732,8 +7732,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 10607,
-      "sha256": "788105698c0653397d9142ce90bd899a6d24a4f59c38a136f4597e0e300324f9"
+      "bytes": 10742,
+      "sha256": "c3199c7c1bed29d7d9cd1416f1bba9a8a53b007da4724e751e9e020d72af583e"
     },
     {
       "path": "pdf-toolbar/disabled/light-1440x900.png",
@@ -7743,8 +7743,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 10607,
-      "sha256": "788105698c0653397d9142ce90bd899a6d24a4f59c38a136f4597e0e300324f9"
+      "bytes": 10742,
+      "sha256": "c3199c7c1bed29d7d9cd1416f1bba9a8a53b007da4724e751e9e020d72af583e"
     },
     {
       "path": "pdf-toolbar/disabled/light-390x844.png",
@@ -7754,8 +7754,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 10772,
-      "sha256": "e01efa2185872085edd8adfabde9fa8dd9778e0da264546d2ffaaaa2933f5557"
+      "bytes": 10831,
+      "sha256": "4ddb2fd004d143a3518e1cd6e77918f8549e7ff14a55089956ba3c8ada89c68b"
     },
     {
       "path": "pdf-toolbar/disabled/light-768x1024.png",
@@ -7765,8 +7765,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 10061,
-      "sha256": "b7e3a2838192c494778d38ebcc28a7ba59a247246679c0eab9548c6096035343"
+      "bytes": 10193,
+      "sha256": "13faddd2691209d5e7d17ea98f702a4e540fb3e0d5ae5c174ba48fb48df328bc"
     },
     {
       "path": "pdf-toolbar/focus/dark-1280x720.png",
@@ -7776,8 +7776,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 14304,
-      "sha256": "aa1cc4dc7124a35c3f4cb16f3372bcf3459a22ebebbd09e88d624a5366304038"
+      "bytes": 14432,
+      "sha256": "1902f67b83e0013200475d88321dcd79c1bb12c3aad3ab88f5123e4a5119cbef"
     },
     {
       "path": "pdf-toolbar/focus/dark-1440x900.png",
@@ -7787,8 +7787,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 14304,
-      "sha256": "aa1cc4dc7124a35c3f4cb16f3372bcf3459a22ebebbd09e88d624a5366304038"
+      "bytes": 14432,
+      "sha256": "1902f67b83e0013200475d88321dcd79c1bb12c3aad3ab88f5123e4a5119cbef"
     },
     {
       "path": "pdf-toolbar/focus/dark-390x844.png",
@@ -7798,8 +7798,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 14696,
-      "sha256": "1c962c82b0535fc733a22dae40024b9690d16e0ff1f4badbefac8c139640dfa1"
+      "bytes": 14781,
+      "sha256": "67a5b9ac8bcecb2d8524642b26cf60547eb22382e7df069182131f3e9d1c4a07"
     },
     {
       "path": "pdf-toolbar/focus/dark-768x1024.png",
@@ -7809,8 +7809,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 13681,
-      "sha256": "f611c6e87d6855232386819b93272b754d649d87a6d17afd90a9cd38ea9c1166"
+      "bytes": 13795,
+      "sha256": "5d6f32556485e993af7d8f06557712038fbfe5c13375983c0a424d3d0122ea98"
     },
     {
       "path": "pdf-toolbar/focus/light-1280x720.png",
@@ -7820,8 +7820,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 14196,
-      "sha256": "a06f77e98c06b61cd4ba124fe5f5fd6aaa454c824ab64b004a653aa1543a89cc"
+      "bytes": 14343,
+      "sha256": "922ddeb8aeecb1955cdb8d5379f2bbc7513920a004bedb739af232c39c511074"
     },
     {
       "path": "pdf-toolbar/focus/light-1440x900.png",
@@ -7831,8 +7831,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 14196,
-      "sha256": "a06f77e98c06b61cd4ba124fe5f5fd6aaa454c824ab64b004a653aa1543a89cc"
+      "bytes": 14343,
+      "sha256": "922ddeb8aeecb1955cdb8d5379f2bbc7513920a004bedb739af232c39c511074"
     },
     {
       "path": "pdf-toolbar/focus/light-390x844.png",
@@ -7842,8 +7842,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 14446,
-      "sha256": "d28eac39b3e923cd084d4e5f4863faa9641a267022c7ee6b037e3940c1b55510"
+      "bytes": 14516,
+      "sha256": "01fcf65d928d645c50572d471eb835c33136f26f0bfac4433d56af3e2855fced"
     },
     {
       "path": "pdf-toolbar/focus/light-768x1024.png",
@@ -7853,8 +7853,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 13597,
-      "sha256": "185a333d3493b4cd0a2699402bc7b47eed5ea4b48db497a4c4be51f3164e1101"
+      "bytes": 13725,
+      "sha256": "3eed492bdf08498e47ce1f4a3fb1d8d3a258078f7a23c2cb483d55f9b916cbeb"
     },
     {
       "path": "pdf-toolbar/hover/dark-1280x720.png",
@@ -7864,8 +7864,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12626,
-      "sha256": "e8042f22cedfe59beb3e676c3b7d2d6c68a71d9dccde60f2a4b1b7fcbef7e3ba"
+      "bytes": 12745,
+      "sha256": "6b1b9f201cc0cab2ddccdb164719a23ab149db5455c6f9d334d47d332ebb3a0e"
     },
     {
       "path": "pdf-toolbar/hover/dark-1440x900.png",
@@ -7875,8 +7875,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12626,
-      "sha256": "e8042f22cedfe59beb3e676c3b7d2d6c68a71d9dccde60f2a4b1b7fcbef7e3ba"
+      "bytes": 12745,
+      "sha256": "6b1b9f201cc0cab2ddccdb164719a23ab149db5455c6f9d334d47d332ebb3a0e"
     },
     {
       "path": "pdf-toolbar/hover/dark-390x844.png",
@@ -7886,8 +7886,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 13059,
-      "sha256": "be3c637a4eb7e0d99a542eafdaf49de0cd8b1d3b3d9566421a7d9151386ffb3f"
+      "bytes": 13149,
+      "sha256": "74480b0447ba63215d38408ed18fac2dde9f611c81ab76653fb288a88ed8ec89"
     },
     {
       "path": "pdf-toolbar/hover/dark-768x1024.png",
@@ -7897,8 +7897,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 12031,
-      "sha256": "7fb37d012cd32abebc10f1cbb8f8e508de82e91495558921eef24c3653f73700"
+      "bytes": 12142,
+      "sha256": "52d67b984c0b1c6ea29e575911fe61fdfbf05f070915ea09594604ffa7b2d556"
     },
     {
       "path": "pdf-toolbar/hover/light-1280x720.png",
@@ -7908,8 +7908,8 @@
       "viewport": "1280x720",
       "width": 1920,
       "height": 144,
-      "bytes": 12639,
-      "sha256": "bee6b27e90a426eb32eddc2ef02cd8789edd0929a3724ba8fe717676cb538d59"
+      "bytes": 12783,
+      "sha256": "338a5c0664cd0b669bcf0c09f4c055ba9f5cc0455f7b0f7ebd2b271900b50a1d"
     },
     {
       "path": "pdf-toolbar/hover/light-1440x900.png",
@@ -7919,8 +7919,8 @@
       "viewport": "1440x900",
       "width": 1920,
       "height": 144,
-      "bytes": 12639,
-      "sha256": "bee6b27e90a426eb32eddc2ef02cd8789edd0929a3724ba8fe717676cb538d59"
+      "bytes": 12783,
+      "sha256": "338a5c0664cd0b669bcf0c09f4c055ba9f5cc0455f7b0f7ebd2b271900b50a1d"
     },
     {
       "path": "pdf-toolbar/hover/light-390x844.png",
@@ -7930,8 +7930,8 @@
       "viewport": "390x844",
       "width": 684,
       "height": 298,
-      "bytes": 12930,
-      "sha256": "725ab5190f08b391ebec92029ad064fd67819f2c1c1bea035bd28c6547bea36f"
+      "bytes": 13005,
+      "sha256": "4a923773e82266020316de4a51d3b20104e1f6710de9b88f7aea3d8fbf1464a5"
     },
     {
       "path": "pdf-toolbar/hover/light-768x1024.png",
@@ -7941,8 +7941,8 @@
       "viewport": "768x1024",
       "width": 1440,
       "height": 144,
-      "bytes": 12067,
-      "sha256": "2a1341afeea4b4b2ddf3bc7f4631ebdda504ca03c15e87d999cf430904b24ae0"
+      "bytes": 12191,
+      "sha256": "0d948e2551b094f0ac09ae869dbadff3a459760d28339a784e1ef51cf94c599e"
     },
     {
       "path": "pptx-sorter/default/dark-1280x720.png",
@@ -10253,6 +10253,18 @@
       "updated": 0,
       "removed": 0,
       "gitHead": "ba137a853cd08c6e8b16895d0c0f635f75278779"
+    },
+    {
+      "date": "2026-11-21",
+      "reviewer": "eric8810",
+      "issue": "#199",
+      "reason": "PDF toolbar zoom chevron now uses the pinned upstream Hugeicons glyph (ChevronDownIcon), matching the reference route",
+      "treeSha256": "f8142d0b6627a5e8c4bef35f48e3cee60902c64fc311f0ab9720f283e191bc69",
+      "files": 896,
+      "added": 0,
+      "updated": 40,
+      "removed": 0,
+      "gitHead": "c52e74ae3ab7ff92462f7d6eaac5087a434a42bb"
     }
   ]
 }

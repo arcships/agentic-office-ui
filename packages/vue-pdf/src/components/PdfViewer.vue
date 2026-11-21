@@ -117,7 +117,8 @@ const rotation = ref<PdfRotation>(0)
 /** Pixel ratio the current page bitmap was rendered at; re-renders on display change. */
 const renderDpr = ref(currentRenderDpr())
 const activePage = ref(1)
-const showThumbnails = ref(true)
+/** Upstream `PDFViewer` starts with the thumbnail sidebar closed (`useState(false)`). */
+const showThumbnails = ref(false)
 const searchDraft = ref("")
 const viewerRef = ref<HTMLElement | null>(null)
 const frameRef = ref<HTMLElement | null>(null)
@@ -2000,32 +2001,40 @@ defineExpose({
 
 <style scoped>
 .pdf-viewer {
-  --pdf-bg: #fff;
+  --pdf-bg: var(--office-background);
   --pdf-fg: #111;
   --pdf-border: #e5e5e5;
   --pdf-control-bg: #fff;
   --pdf-control-border: #d4d4d4;
-  --pdf-canvas-bg: #e5e7eb;
+  /* Upstream paints the page area with `bg-muted/30` over the app background
+     (`--background`). Keep the tint translucent so it composites over the
+     viewer shell exactly like the reference; the rendered surfaces are
+     #fcfcfc (light) and #0d0d0d (dark). */
+  --pdf-canvas-bg: color-mix(in oklab, var(--office-muted) 30%, transparent);
   --pdf-panel-bg: #fafafa;
   --pdf-muted: #737373;
   --pdf-link: #1d4ed8;
+  --pdf-page-bg: #fff;
   --pdf-page-shadow: 0 3px 14px rgb(0 0 0 / 20%);
-  --pdf-page-filter: none;
+  /* Upstream softens the page raster with `blur-[0.35px]`; a filter does not
+     change the image box, so the page geometry contract stays intact. */
+  --pdf-page-softening: blur(0.35px);
+  --pdf-page-filter: var(--pdf-page-softening);
   container: pdf-viewer / inline-size;
   display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--pdf-bg); color: var(--pdf-fg);
 }
 .pdf-viewer--dark {
-  --pdf-bg: #0f172a;
   --pdf-fg: #e5e7eb;
   --pdf-border: #334155;
   --pdf-control-bg: #1e293b;
   --pdf-control-border: #475569;
-  --pdf-canvas-bg: #020617;
   --pdf-panel-bg: #111827;
   --pdf-muted: #94a3b8;
   --pdf-link: #93c5fd;
   --pdf-page-shadow: 0 3px 14px rgb(0 0 0 / 60%);
-  --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
+  /* Upstream does not invert page content in dark mode (#199). The legacy
+     `--pdf-dark-page-filter` hook still lets a host opt into a filter. */
+  --pdf-page-filter: var(--pdf-dark-page-filter, var(--pdf-page-softening));
 }
 /* Keyboard focus lands on the viewer root; keep a visible ring around it. */
 .pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
@@ -2056,7 +2065,7 @@ defineExpose({
   justify-content: center;
   overflow: hidden;
   box-shadow: var(--pdf-page-shadow);
-  background: var(--pdf-canvas-bg);
+  background: var(--pdf-page-bg);
   color: var(--pdf-muted);
   font-size: 12px;
 }
@@ -2077,7 +2086,7 @@ defineExpose({
 .pdf-viewer__text-glyph--unmapped { user-select: none; }
 .pdf-viewer__selection-layer { inset: 0; position: absolute; cursor: text; touch-action: pan-x pan-y; z-index: 2; }
 .pdf-viewer__selection-rect { background: rgba(37, 99, 235, .34); box-sizing: border-box; position: absolute; }
-.pdf-page-image { display: block; max-width: none; height: auto; border: 0; background: var(--pdf-control-bg); box-shadow: var(--pdf-page-shadow); filter: var(--pdf-page-filter); }
+.pdf-page-image { display: block; max-width: none; height: auto; border: 0; background: var(--pdf-page-bg); box-shadow: var(--pdf-page-shadow); filter: var(--pdf-page-filter); }
 .page-loading { position: absolute; z-index: 2; top: 12px; left: 50%; transform: translateX(-50%); border: 1px solid var(--pdf-control-border); border-radius: 999px; background: var(--pdf-control-bg); color: var(--pdf-link); padding: 5px 12px; font-size: 12px; white-space: nowrap; }
 .page-error { min-height: 0; min-width: min(300px, 100%); border-radius: 8px; background: var(--pdf-control-bg); padding: 24px; box-shadow: 0 2px 8px rgb(0 0 0 / 12%); }
 .pdf-search-context { position: sticky; top: 0; z-index: 3; width: fit-content; max-width: min(720px, 90%); margin: 0 auto 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--pdf-control-border); border-radius: 8px; background: var(--pdf-control-bg); color: var(--pdf-fg); font-size: 12px; padding: 6px 10px; }
@@ -2119,7 +2128,7 @@ defineExpose({
 .pdf-print-pages { display: none; }
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
-  .pdf-frame-wrap { padding: 12px; }
+  /* Upstream keeps the 24px scroll content padding at every width (#199). */
 }
 
 @media print {

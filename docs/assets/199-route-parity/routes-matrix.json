@@ -1,0 +1,3306 @@
+{
+  "schemaVersion": 1,
+  "harness": "extend-ui-route-parity",
+  "referenceCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+  "referenceUrl": "https://github.com/extend-hq/ui",
+  "deviceScaleFactor": 2,
+  "generatedAt": "2026-11-21T08:57:52Z",
+  "selfCheck": false,
+  "gateMode": "off",
+  "thresholds": {
+    "geometryTolerancePx": 0,
+    "maxChannelDelta": 2,
+    "maxDiffPixelRatio": 0.001,
+    "maxContiguousDiffPx": 4,
+    "heatmapAmplification": 16,
+    "topDiffRegions": 5
+  },
+  "fixtures": [
+    {
+      "id": "sample-pdf",
+      "path": "apps/demo/public/samples/sample.pdf",
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253",
+      "bytes": 4652
+    }
+  ],
+  "viewports": [
+    {
+      "id": "1440x900",
+      "label": "desktop",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "390x844",
+      "label": "mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "routes": [
+    {
+      "id": "pdf-viewer",
+      "title": "/pdf-viewer vs /docs/components/pdf-viewer",
+      "gateStatus": "blocking",
+      "blocking": true,
+      "gate": {
+        "fullPagePixels": false,
+        "chromePixels": true,
+        "geometry": true,
+        "consoleErrors": true
+      },
+      "status": "pass",
+      "caseCount": 4,
+      "failedCases": [],
+      "diagnosticCases": [
+        "1440x900/light: pixels",
+        "1440x900/dark: pixels",
+        "390x844/light: pixels",
+        "390x844/dark: pixels"
+      ],
+      "worstDiffRatio": 0.260167,
+      "worstChromeDiffRatio": 0.0,
+      "worstGeometryDeltaPx": 1.734,
+      "region": {
+        "heightPx": 560,
+        "heightSource": "apps/v4/components/pdf-viewer-preview-client.tsx:18 (className=\"h-[560px]\")",
+        "widthRule": "100% of the page content box: 24px page padding + 1200px max width + 1px region frame, reproduced identically on both sides",
+        "hostShell": {
+          "paddingPx": 24,
+          "maxWidthPx": 1200,
+          "frameBorderPx": 1
+        }
+      },
+      "referenceRoute": "/docs/components/pdf-viewer",
+      "subjectRoute": "#/pdf-viewer",
+      "exclusions": [
+        {
+          "scope": "reference",
+          "selector": "[data-slot=\"code\"]",
+          "category": "demo-scaffolding",
+          "reason": "The docs page renders a usage code block under the preview; the product region ends at [data-slot=\"pdf-viewer\"]."
+        },
+        {
+          "scope": "reference",
+          "selector": "[data-slot=\"component-preview\"]",
+          "category": "demo-scaffolding",
+          "reason": "Docs preview card (rounded border, page margins) wraps the product component; the harness reproduces only its box metrics so both regions receive the same width."
+        },
+        {
+          "scope": "subject",
+          "selector": "[data-testid=\"pdf-viewer-page\"] > h2, [data-testid=\"pdf-viewer-page\"] > .desc, [data-testid=\"pdf-viewer-page\"] > .controls, [data-testid=\"pdf-viewer-page\"] > .policy-panel, [data-testid=\"pdf-viewer-page\"] > .status-grid, [data-testid=\"pdf-viewer-page\"] > .diagnostics",
+          "category": "demo-scaffolding",
+          "reason": "Demo-only page header, sample selector, runtime-policy panel, status grid and diagnostics list; the upstream docs page has none of them."
+        },
+        {
+          "scope": "subject",
+          "selector": ".nav",
+          "category": "demo-scaffolding",
+          "reason": "Global demo navigation above the page. The capture hides it so the product region sits in the reference host shell (24px page padding + 1px frame) instead of below a sticky nav; it is never part of the region."
+        },
+        {
+          "scope": "subject",
+          "selector": "[data-route-region=\"viewer\"]",
+          "category": "demo-scaffolding",
+          "reason": "Demo frame (1px border, radius, overflow) that wraps the viewer; only its box metrics are reproduced on the reference side."
+        }
+      ],
+      "differences": [
+        {
+          "id": "sidebar-default-open",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:121 `showThumbnails = ref(false)` now matches upstream apps/v4/components/extend/pdf-viewer.tsx:2281 `useState(false)`.",
+          "impact": "The shipped route starts without the 160px thumbnail sidebar; the toolbar toggle still opens and closes it."
+        },
+        {
+          "id": "optional-status-bar",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:93 keeps `showStatusBar: false`; apps/demo/src/lib/route-capture.ts:44 now makes the demo status bar opt-in (`?statusbar=on`) instead of on by default.",
+          "impact": "The default route no longer renders `pdf-status-bar`, matching the upstream viewer. Hosts can still opt in through the existing `showStatusBar` prop."
+        },
+        {
+          "id": "canvas-background",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2013 paints `color-mix(in oklab, var(--office-muted) 30%, var(--office-background))`, the `bg-muted/30` equivalent from upstream apps/v4/components/extend/pdf-viewer.tsx:580; rendered light #fcfcfc, dark #0d0d0d.",
+          "impact": "The page canvas now uses the same muted-over-background surface as the reference in both themes."
+        },
+        {
+          "id": "dark-page-inversion",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2037 defaults the dark page filter to the same 0.35px softening as light mode; only an explicit `--pdf-dark-page-filter` opt-in can add a transform.",
+          "impact": "Dark-mode page content keeps its original colours, like the upstream viewer."
+        },
+        {
+          "id": "page-raster-softening",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2021,2089 applies `--pdf-page-softening: blur(0.35px)` to `.pdf-page-image`, matching upstream apps/v4/components/extend/pdf-viewer.tsx:2645 `blur-[0.35px]`.",
+          "impact": "Page glyph edges soften like the reference; CSS filters do not change the image box, so the page geometry landmarks are unchanged."
+        },
+        {
+          "id": "mobile-canvas-padding",
+          "category": "product-component",
+          "blocking": true,
+          "status": "fixed",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2129 keeps only `.pdf-body { flex-direction: column }` at container width <= 760px; `.pdf-frame-wrap` keeps its 24px padding at every width, matching upstream `PAGE_GAP = 24` (pdf-viewer.tsx:172,2924).",
+          "impact": "The page frame no longer shifts by 12px at 768/390; the page1 landmark delta is inside its 1px tolerance."
+        },
+        {
+          "id": "page-raster-size-rounding",
+          "category": "product-component",
+          "blocking": false,
+          "status": "open",
+          "evidence": "Reference page frame is 595.266 x 841.875 CSS px, ours 595 x 841.281 (capture report `geometry.landmarks.page1`).",
+          "impact": "Sub-pixel rounding of the zoom-1 page size; contributes to raster diff but stays under the 1px landmark budget."
+        },
+        {
+          "id": "page-raster-renderer-version",
+          "category": "environment",
+          "blocking": false,
+          "status": "accepted",
+          "evidence": "packages/vue-pdf/package.json pins `@embedpdf/*@2.14.4`; the reference app uses `@embedpdf/*@2.15.0` (tools/extend-reference/package.json).",
+          "impact": "The page bitmap rasterisation (text hinting, tiling, page-size rounding) can differ even when both sides paint the same PDF bytes. This is why the blocking route gate covers chrome-only pixels plus geometry, and keeps full-page pixels as a diagnostic."
+        }
+      ],
+      "cases": [
+        {
+          "route": "pdf-viewer",
+          "viewport": "1440x900",
+          "theme": "light",
+          "status": "pass-with-diagnostic",
+          "errors": [],
+          "reference": {
+            "region": {
+              "document": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewport": {
+                "width": 1440,
+                "height": 900
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-slot=\"pdf-viewer\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-slot=\"pdf-viewer\"] > div:first-child",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-slot=\"scroll-area-viewport\"]",
+                "box": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 48
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"]",
+                "box": {
+                  "x": 422.359,
+                  "y": 97,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "offset": {
+                  "x": 277.359,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img",
+                "box": {
+                  "x": 423.359,
+                  "y": 98,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "offset": {
+                  "x": 278.359,
+                  "y": 73
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/1440x900/light/reference.png"
+          },
+          "subject": {
+            "region": {
+              "document": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewport": {
+                "width": 1440,
+                "height": 900
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-testid=\"pdf-viewer\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-testid=\"pdf-toolbar\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.269 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-testid=\"pdf-viewer\"] .pdf-frame-wrap",
+                "box": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 48
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-testid=\"pdf-page-render\"]",
+                "box": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 277.5,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-testid=\"pdf-page-image\"]",
+                "box": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 277.5,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/1440x900/light/subject.png"
+          },
+          "geometry": {
+            "status": "pass",
+            "worstDeltaPx": 1.734,
+            "failures": [],
+            "landmarks": [
+              {
+                "landmark": "root",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "toolbar",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.269 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "viewport",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1",
+                "status": "pass",
+                "tolerancePx": 1,
+                "deltaOffset": {
+                  "x": 0.141,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": -0.266,
+                  "height": -0.594
+                },
+                "reference": {
+                  "x": 422.359,
+                  "y": 97,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "subject": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1Raster",
+                "status": "pass",
+                "tolerancePx": 2,
+                "deltaOffset": {
+                  "x": -0.859,
+                  "y": -1
+                },
+                "deltaSize": {
+                  "width": 1.734,
+                  "height": 1.406
+                },
+                "reference": {
+                  "x": 423.359,
+                  "y": 98,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "subject": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            ]
+          },
+          "pixels": {
+            "status": "fail",
+            "reasons": [
+              "max channel delta 255 > 2",
+              "diff ratio 0.13583 > 0.001",
+              "contiguous diff run 8px (3x3 block: True) exceeds the 2x2 anti-aliasing allowance"
+            ],
+            "diffPixels": 349910,
+            "diffRatio": 0.135835,
+            "maxChannelDelta": 255,
+            "maxContiguousRunPx": 8,
+            "has3x3Block": true,
+            "regions": [
+              {
+                "x": 528,
+                "y": 112,
+                "width": 1264,
+                "height": 1008,
+                "diffPixels": 348958,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 656,
+                "y": 544,
+                "width": 992,
+                "height": 576,
+                "diffPixels": 204402,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 656,
+                "y": 336,
+                "width": 896,
+                "height": 192,
+                "diffPixels": 38256,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 672,
+                "y": 256,
+                "width": 960,
+                "height": 64,
+                "diffPixels": 18522,
+                "maxChannelDelta": 255
+              }
+            ],
+            "regionGridPx": 16,
+            "width": 2300,
+            "height": 1120,
+            "screenshot": "cases/pdf-viewer/1440x900/light/diff.png",
+            "heatmap": "cases/pdf-viewer/1440x900/light/heatmap.png",
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/1440x900/light",
+            "bands": {
+              "splitDevicePx": 96,
+              "aboveSplitRatio": 0.0,
+              "belowSplitRatio": 0.13521
+            },
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 46.38
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 44.73
+                },
+                {
+                  "rgb": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "hex": "#000000",
+                  "share": 0.54
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 43.89
+                },
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 43.21
+                },
+                {
+                  "rgb": [
+                    251,
+                    251,
+                    251
+                  ],
+                  "hex": "#fbfbfb",
+                  "share": 0.61
+                }
+              ]
+            }
+          },
+          "chrome": {
+            "status": "pass",
+            "reasons": [],
+            "diffPixels": 0,
+            "diffRatio": 0.0,
+            "maxChannelDelta": 0,
+            "maxContiguousRunPx": 0,
+            "has3x3Block": false,
+            "regions": [],
+            "regionGridPx": 16,
+            "width": 2300,
+            "height": 1120,
+            "screenshot": null,
+            "heatmap": null,
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/1440x900/light",
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 91.43
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 8.14
+                },
+                {
+                  "rgb": [
+                    235,
+                    235,
+                    235
+                  ],
+                  "hex": "#ebebeb",
+                  "share": 0.19
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 91.43
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 8.14
+                },
+                {
+                  "rgb": [
+                    235,
+                    235,
+                    235
+                  ],
+                  "hex": "#ebebeb",
+                  "share": 0.19
+                }
+              ]
+            }
+          },
+          "gate": {
+            "fullPagePixels": false,
+            "chromePixels": true,
+            "geometry": true,
+            "consoleErrors": true
+          },
+          "failures": [],
+          "diagnosticFailures": [
+            "pixels"
+          ]
+        },
+        {
+          "route": "pdf-viewer",
+          "viewport": "1440x900",
+          "theme": "dark",
+          "status": "pass-with-diagnostic",
+          "errors": [],
+          "reference": {
+            "region": {
+              "document": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewport": {
+                "width": 1440,
+                "height": 900
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-slot=\"pdf-viewer\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-slot=\"pdf-viewer\"] > div:first-child",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-slot=\"scroll-area-viewport\"]",
+                "box": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 48
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"]",
+                "box": {
+                  "x": 422.359,
+                  "y": 97,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "offset": {
+                  "x": 277.359,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img",
+                "box": {
+                  "x": 423.359,
+                  "y": 98,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "offset": {
+                  "x": 278.359,
+                  "y": 73
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/1440x900/dark/reference.png"
+          },
+          "subject": {
+            "region": {
+              "document": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 145,
+                "y": 25,
+                "width": 1150,
+                "height": 560
+              },
+              "viewport": {
+                "width": 1440,
+                "height": 900
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-testid=\"pdf-viewer\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-testid=\"pdf-toolbar\"]",
+                "box": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.97 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-testid=\"pdf-viewer\"] .pdf-frame-wrap",
+                "box": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 48
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-testid=\"pdf-page-render\"]",
+                "box": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 277.5,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-testid=\"pdf-page-image\"]",
+                "box": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 277.5,
+                  "y": 72
+                },
+                "style": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/1440x900/dark/subject.png"
+          },
+          "geometry": {
+            "status": "pass",
+            "worstDeltaPx": 1.734,
+            "failures": [],
+            "landmarks": [
+              {
+                "landmark": "root",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 560
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "toolbar",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 25,
+                  "width": 1150,
+                  "height": 48
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.97 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "viewport",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "subject": {
+                  "x": 145,
+                  "y": 73,
+                  "width": 1150,
+                  "height": 512
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1",
+                "status": "pass",
+                "tolerancePx": 1,
+                "deltaOffset": {
+                  "x": 0.141,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": -0.266,
+                  "height": -0.594
+                },
+                "reference": {
+                  "x": 422.359,
+                  "y": 97,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "subject": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1Raster",
+                "status": "pass",
+                "tolerancePx": 2,
+                "deltaOffset": {
+                  "x": -0.859,
+                  "y": -1
+                },
+                "deltaSize": {
+                  "width": 1.734,
+                  "height": 1.406
+                },
+                "reference": {
+                  "x": 423.359,
+                  "y": 98,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "subject": {
+                  "x": 422.5,
+                  "y": 97,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            ]
+          },
+          "pixels": {
+            "status": "fail",
+            "reasons": [
+              "max channel delta 255 > 2",
+              "diff ratio 0.15205 > 0.001",
+              "contiguous diff run 8px (3x3 block: True) exceeds the 2x2 anti-aliasing allowance"
+            ],
+            "diffPixels": 391672,
+            "diffRatio": 0.152047,
+            "maxChannelDelta": 255,
+            "maxContiguousRunPx": 8,
+            "has3x3Block": true,
+            "regions": [
+              {
+                "x": 512,
+                "y": 96,
+                "width": 1280,
+                "height": 1024,
+                "diffPixels": 391672,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 656,
+                "y": 544,
+                "width": 992,
+                "height": 576,
+                "diffPixels": 204402,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 656,
+                "y": 336,
+                "width": 896,
+                "height": 192,
+                "diffPixels": 38256,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 672,
+                "y": 256,
+                "width": 960,
+                "height": 64,
+                "diffPixels": 18522,
+                "maxChannelDelta": 255
+              }
+            ],
+            "regionGridPx": 16,
+            "width": 2300,
+            "height": 1120,
+            "screenshot": "cases/pdf-viewer/1440x900/dark/diff.png",
+            "heatmap": "cases/pdf-viewer/1440x900/dark/heatmap.png",
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/1440x900/dark",
+            "bands": {
+              "splitDevicePx": 96,
+              "aboveSplitRatio": 0.0,
+              "belowSplitRatio": 0.116778
+            },
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 46.26
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 36.59
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 7.8
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 41.46
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 35.74
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 8.42
+                }
+              ]
+            }
+          },
+          "chrome": {
+            "status": "pass",
+            "reasons": [],
+            "diffPixels": 0,
+            "diffRatio": 0.0,
+            "maxChannelDelta": 0,
+            "maxContiguousRunPx": 0,
+            "has3x3Block": false,
+            "regions": [],
+            "regionGridPx": 16,
+            "width": 2300,
+            "height": 1120,
+            "screenshot": null,
+            "heatmap": null,
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/1440x900/dark",
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 91.42
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 7.77
+                },
+                {
+                  "rgb": [
+                    16,
+                    16,
+                    16
+                  ],
+                  "hex": "#101010",
+                  "share": 0.37
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 91.42
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 7.77
+                },
+                {
+                  "rgb": [
+                    16,
+                    16,
+                    16
+                  ],
+                  "hex": "#101010",
+                  "share": 0.37
+                }
+              ]
+            }
+          },
+          "gate": {
+            "fullPagePixels": false,
+            "chromePixels": true,
+            "geometry": true,
+            "consoleErrors": true
+          },
+          "failures": [],
+          "diagnosticFailures": [
+            "pixels"
+          ]
+        },
+        {
+          "route": "pdf-viewer",
+          "viewport": "390x844",
+          "theme": "light",
+          "status": "pass-with-diagnostic",
+          "errors": [],
+          "reference": {
+            "region": {
+              "document": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewport": {
+                "width": 390,
+                "height": 844
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-slot=\"pdf-viewer\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-slot=\"pdf-viewer\"] > div:first-child",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-slot=\"scroll-area-viewport\"]",
+                "box": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 125
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img",
+                "box": {
+                  "x": 50,
+                  "y": 175,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "offset": {
+                  "x": 25,
+                  "y": 150
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/390x844/light/reference.png"
+          },
+          "subject": {
+            "region": {
+              "document": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewport": {
+                "width": 390,
+                "height": 844
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-testid=\"pdf-viewer\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-testid=\"pdf-toolbar\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.269 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-testid=\"pdf-viewer\"] .pdf-frame-wrap",
+                "box": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 125
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-testid=\"pdf-page-render\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-testid=\"pdf-page-image\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/390x844/light/subject.png"
+          },
+          "geometry": {
+            "status": "pass",
+            "worstDeltaPx": 1.734,
+            "failures": [],
+            "landmarks": [
+              {
+                "landmark": "root",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "toolbar",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(1 0 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.269 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "viewport",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1",
+                "status": "pass",
+                "tolerancePx": 1,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": -0.266,
+                  "height": -0.594
+                },
+                "reference": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "subject": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1Raster",
+                "status": "pass",
+                "tolerancePx": 2,
+                "deltaOffset": {
+                  "x": -1,
+                  "y": -1
+                },
+                "deltaSize": {
+                  "width": 1.734,
+                  "height": 1.406
+                },
+                "reference": {
+                  "x": 50,
+                  "y": 175,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "subject": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.269 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0 0 0 / 0.08)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(17, 17, 17)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(17, 17, 17)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            ]
+          },
+          "pixels": {
+            "status": "fail",
+            "reasons": [
+              "max channel delta 255 > 2",
+              "diff ratio 0.23478 > 0.001",
+              "contiguous diff run 8px (3x3 block: True) exceeds the 2x2 anti-aliasing allowance"
+            ],
+            "diffPixels": 178806,
+            "diffRatio": 0.234777,
+            "maxChannelDelta": 255,
+            "maxContiguousRunPx": 8,
+            "has3x3Block": true,
+            "regions": [
+              {
+                "x": 16,
+                "y": 272,
+                "width": 664,
+                "height": 848,
+                "diffPixels": 178806,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 704,
+                "width": 520,
+                "height": 416,
+                "diffPixels": 93015,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 496,
+                "width": 520,
+                "height": 192,
+                "diffPixels": 34344,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 400,
+                "width": 520,
+                "height": 64,
+                "diffPixels": 9957,
+                "maxChannelDelta": 255
+              }
+            ],
+            "regionGridPx": 16,
+            "width": 680,
+            "height": 1120,
+            "screenshot": "cases/pdf-viewer/390x844/light/diff.png",
+            "heatmap": "cases/pdf-viewer/390x844/light/heatmap.png",
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/390x844/light",
+            "bands": {
+              "splitDevicePx": 250,
+              "aboveSplitRatio": 0.0,
+              "belowSplitRatio": 0.275859
+            },
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 72.8
+                },
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 7.23
+                },
+                {
+                  "rgb": [
+                    28,
+                    58,
+                    94
+                  ],
+                  "hex": "#1c3a5e",
+                  "share": 1.66
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 71.46
+                },
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 2.51
+                },
+                {
+                  "rgb": [
+                    28,
+                    58,
+                    94
+                  ],
+                  "hex": "#1c3a5e",
+                  "share": 1.59
+                }
+              ]
+            }
+          },
+          "chrome": {
+            "status": "pass",
+            "reasons": [],
+            "diffPixels": 0,
+            "diffRatio": 0.0,
+            "maxChannelDelta": 0,
+            "maxContiguousRunPx": 0,
+            "has3x3Block": false,
+            "regions": [],
+            "regionGridPx": 16,
+            "width": 680,
+            "height": 1120,
+            "screenshot": null,
+            "heatmap": null,
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/390x844/light",
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 75.25
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 21.26
+                },
+                {
+                  "rgb": [
+                    251,
+                    251,
+                    251
+                  ],
+                  "hex": "#fbfbfb",
+                  "share": 0.69
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    252,
+                    252,
+                    252
+                  ],
+                  "hex": "#fcfcfc",
+                  "share": 75.25
+                },
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 21.26
+                },
+                {
+                  "rgb": [
+                    251,
+                    251,
+                    251
+                  ],
+                  "hex": "#fbfbfb",
+                  "share": 0.69
+                }
+              ]
+            }
+          },
+          "gate": {
+            "fullPagePixels": false,
+            "chromePixels": true,
+            "geometry": true,
+            "consoleErrors": true
+          },
+          "failures": [],
+          "diagnosticFailures": [
+            "pixels"
+          ]
+        },
+        {
+          "route": "pdf-viewer",
+          "viewport": "390x844",
+          "theme": "dark",
+          "status": "pass-with-diagnostic",
+          "errors": [],
+          "reference": {
+            "region": {
+              "document": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewport": {
+                "width": 390,
+                "height": 844
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-slot=\"pdf-viewer\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-slot=\"pdf-viewer\"] > div:first-child",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-slot=\"scroll-area-viewport\"]",
+                "box": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 125
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img",
+                "box": {
+                  "x": 50,
+                  "y": 175,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "offset": {
+                  "x": 25,
+                  "y": 150
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/390x844/dark/reference.png"
+          },
+          "subject": {
+            "region": {
+              "document": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewportBox": {
+                "x": 25,
+                "y": 25,
+                "width": 340,
+                "height": 560
+              },
+              "viewport": {
+                "width": 390,
+                "height": 844
+              }
+            },
+            "landmarks": {
+              "root": {
+                "selector": "[data-testid=\"pdf-viewer\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "toolbar": {
+                "selector": "[data-testid=\"pdf-toolbar\"]",
+                "box": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "style": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.97 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "viewport": {
+                "selector": "[data-testid=\"pdf-viewer\"] .pdf-frame-wrap",
+                "box": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "offset": {
+                  "x": 0,
+                  "y": 125
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1": {
+                "selector": "[data-testid=\"pdf-page-render\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              "page1Raster": {
+                "selector": "[data-testid=\"pdf-page-image\"]",
+                "box": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "offset": {
+                  "x": 24,
+                  "y": 149
+                },
+                "style": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            },
+            "screenshot": "cases/pdf-viewer/390x844/dark/subject.png"
+          },
+          "geometry": {
+            "status": "pass",
+            "worstDeltaPx": 1.734,
+            "failures": [],
+            "landmarks": [
+              {
+                "landmark": "root",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 560
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "toolbar",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 25,
+                  "width": 340,
+                  "height": 125
+                },
+                "referenceStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "oklch(0.145 0 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "8px",
+                  "paddingRight": "12px",
+                  "paddingBottom": "8px",
+                  "paddingLeft": "12px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklch(0.97 0 0)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "viewport",
+                "status": "pass",
+                "tolerancePx": 0,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": 0,
+                  "height": 0
+                },
+                "reference": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "subject": {
+                  "x": 25,
+                  "y": 150,
+                  "width": 340,
+                  "height": 435
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "24px",
+                  "paddingRight": "24px",
+                  "paddingBottom": "24px",
+                  "paddingLeft": "24px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1",
+                "status": "pass",
+                "tolerancePx": 1,
+                "deltaOffset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "deltaSize": {
+                  "width": -0.266,
+                  "height": -0.594
+                },
+                "reference": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595.266,
+                  "height": 841.875
+                },
+                "subject": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "1px",
+                  "borderTopColor": "rgba(0, 0, 0, 0)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              },
+              {
+                "landmark": "page1Raster",
+                "status": "pass",
+                "tolerancePx": 2,
+                "deltaOffset": {
+                  "x": -1,
+                  "y": -1
+                },
+                "deltaSize": {
+                  "width": 1.734,
+                  "height": 1.406
+                },
+                "reference": {
+                  "x": 50,
+                  "y": 175,
+                  "width": 593.266,
+                  "height": 839.875
+                },
+                "subject": {
+                  "x": 49,
+                  "y": 174,
+                  "width": 595,
+                  "height": 841.281
+                },
+                "referenceStyle": {
+                  "backgroundColor": "rgba(0, 0, 0, 0)",
+                  "color": "oklch(0.97 0 0)",
+                  "fontSize": "16px",
+                  "lineHeight": "24px",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "oklab(0.999994 0.0000455678 0.0000200868 / 0.06)",
+                  "borderTopLeftRadius": "0px"
+                },
+                "subjectStyle": {
+                  "backgroundColor": "rgb(255, 255, 255)",
+                  "color": "rgb(229, 231, 235)",
+                  "fontSize": "16px",
+                  "lineHeight": "normal",
+                  "paddingTop": "0px",
+                  "paddingRight": "0px",
+                  "paddingBottom": "0px",
+                  "paddingLeft": "0px",
+                  "borderTopWidth": "0px",
+                  "borderTopColor": "rgb(229, 231, 235)",
+                  "borderTopLeftRadius": "0px"
+                }
+              }
+            ]
+          },
+          "pixels": {
+            "status": "fail",
+            "reasons": [
+              "max channel delta 255 > 2",
+              "diff ratio 0.26017 > 0.001",
+              "contiguous diff run 8px (3x3 block: True) exceeds the 2x2 anti-aliasing allowance"
+            ],
+            "diffPixels": 198143,
+            "diffRatio": 0.260167,
+            "maxChannelDelta": 255,
+            "maxContiguousRunPx": 8,
+            "has3x3Block": true,
+            "regions": [
+              {
+                "x": 0,
+                "y": 256,
+                "width": 680,
+                "height": 864,
+                "diffPixels": 198143,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 704,
+                "width": 520,
+                "height": 416,
+                "diffPixels": 93015,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 496,
+                "width": 520,
+                "height": 192,
+                "diffPixels": 34344,
+                "maxChannelDelta": 255
+              },
+              {
+                "x": 160,
+                "y": 400,
+                "width": 520,
+                "height": 64,
+                "diffPixels": 9957,
+                "maxChannelDelta": 255
+              }
+            ],
+            "regionGridPx": 16,
+            "width": 680,
+            "height": 1120,
+            "screenshot": "cases/pdf-viewer/390x844/dark/diff.png",
+            "heatmap": "cases/pdf-viewer/390x844/dark/heatmap.png",
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/390x844/dark",
+            "bands": {
+              "splitDevicePx": 250,
+              "aboveSplitRatio": 0.0,
+              "belowSplitRatio": 0.242488
+            },
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 51.54
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 19.86
+                },
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 7.03
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    255,
+                    255,
+                    255
+                  ],
+                  "hex": "#ffffff",
+                  "share": 50.2
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 20.81
+                },
+                {
+                  "rgb": [
+                    12,
+                    12,
+                    12
+                  ],
+                  "hex": "#0c0c0c",
+                  "share": 3.91
+                }
+              ]
+            }
+          },
+          "chrome": {
+            "status": "pass",
+            "reasons": [],
+            "diffPixels": 0,
+            "diffRatio": 0.0,
+            "maxChannelDelta": 0,
+            "maxContiguousRunPx": 0,
+            "has3x3Block": false,
+            "regions": [],
+            "regionGridPx": 16,
+            "width": 680,
+            "height": 1120,
+            "screenshot": null,
+            "heatmap": null,
+            "compare": null,
+            "caseDir": "cases/pdf-viewer/390x844/dark",
+            "dominantColors": {
+              "reference": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 75.21
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 19.83
+                },
+                {
+                  "rgb": [
+                    12,
+                    12,
+                    12
+                  ],
+                  "hex": "#0c0c0c",
+                  "share": 2.45
+                }
+              ],
+              "subject": [
+                {
+                  "rgb": [
+                    13,
+                    13,
+                    13
+                  ],
+                  "hex": "#0d0d0d",
+                  "share": 75.21
+                },
+                {
+                  "rgb": [
+                    10,
+                    10,
+                    10
+                  ],
+                  "hex": "#0a0a0a",
+                  "share": 19.83
+                },
+                {
+                  "rgb": [
+                    12,
+                    12,
+                    12
+                  ],
+                  "hex": "#0c0c0c",
+                  "share": 2.45
+                }
+              ]
+            }
+          },
+          "gate": {
+            "fullPagePixels": false,
+            "chromePixels": true,
+            "geometry": true,
+            "consoleErrors": true
+          },
+          "failures": [],
+          "diagnosticFailures": [
+            "pixels"
+          ]
+        }
+      ]
+    }
+  ]
+}
