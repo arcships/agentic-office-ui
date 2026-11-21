@@ -199,6 +199,12 @@ function altFor(page: number): string {
   box-sizing: border-box;
   outline: none;
 }
+/* Keyboard focus lands on the listbox; paint an inset token ring so the
+   scroll container's overflow does not clip it. */
+.pdf-thumbnails__viewport:focus-visible {
+  outline: var(--office-ring-width) solid var(--office-ring);
+  outline-offset: calc(-1 * var(--office-ring-width));
+}
 .pdf-thumbnails__list {
   position: relative;
 }

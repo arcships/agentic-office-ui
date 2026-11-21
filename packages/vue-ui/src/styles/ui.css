@@ -315,19 +315,20 @@
 }
 
 .office-button--destructive {
-  --office-ui-button-fg: white;
-  border-color: var(--office-destructive);
-  background: var(--office-destructive);
-  color: white;
+  --office-ui-button-fg: var(--office-destructive-contrast-foreground);
+  border-color: var(--office-destructive-contrast);
+  background: var(--office-destructive-contrast);
+  color: var(--office-destructive-contrast-foreground);
   --office-ui-button-shadow:
-    0 1px 2px 0 color-mix(in oklab, var(--office-destructive) 24%, transparent),
+    0 1px 2px 0 color-mix(in oklab, var(--office-destructive-contrast) 24%, transparent),
     inset 0 1px 0 color-mix(in oklab, white 16%, transparent);
   --office-ui-button-active-shadow: inset 0 1px 0
     color-mix(in oklab, black 8%, transparent);
 }
 .office-button--destructive:hover:not(:disabled),
 .office-button--destructive:active:not(:disabled) {
-  background: color-mix(in oklab, var(--office-destructive) 90%, transparent);
+  /* Darken instead of mixing towards the page so hover keeps AA contrast. */
+  background: color-mix(in oklab, var(--office-destructive-contrast) 88%, black);
 }
 
 .office-button--link {
@@ -454,8 +455,8 @@
   color: var(--office-foreground);
 }
 .office-badge--destructive {
-  background: var(--office-destructive);
-  color: var(--office-primary-foreground);
+  background: var(--office-destructive-contrast);
+  color: var(--office-destructive-contrast-foreground);
 }
 .office-badge--link {
   background: transparent;

@@ -70,8 +70,12 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 | 其他 | 任一条件不满足 → `fail` | 保留双方截图、diff、热力图 |
 | 尺寸不一致 | 直接 `fail`（`sizeMismatch`） | 额外对左上公共区域做 diff，仅作诊断，不改变结论 |
 | 参考/对照页 JS 报错 | `error` | 404 favicon 已过滤 |
+| Expected diff | `waived` | 产品有意偏离上游时，manifest `expectedDiffs` 精确匹配 case，且实际像素差异 ≤ `maxDiffPixelRatio`；几何/尺寸/报错/基线失败不豁免 |
 
 阈值来自 `tools/parity-fixtures/manifest.json` 的 `thresholds`，不要在脚本里硬编码另一套。
+`expectedDiffs` 条目必须有 surface、state、themes、viewports、`maxDiffPixelRatio`、issue、reason 和
+evidence；命中时 case 仍保留 reference/subject/diff 截图，并在报告顶部与 `SUMMARY.md` 的
+`Expected diffs (waived)` 表里列出实际 ratio；未命中的声明会显示为 unused，避免豁免过期后继续“隐身”。
 
 > 说明：当前实现把「文本抗锯齿容忍」统一应用于所有差异像素，因为 harness 还没有文本区域 mask；任何超过
 > `2/255` 的差异都会 fail。更细的文本/非文本分区判定留给 #165。
@@ -84,7 +88,7 @@ Python 解释器由 `scripts/ci/run-python.mjs` 解析（与其他浏览器套�
 
 | Surface | 已定义状态 | Vue 对照 |
 |---|---|---|
-| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ✅ `OfficeButton.vue`（112/112 pass） |
+| `button` | default、hover、focus、active、disabled、loading + outline/secondary/ghost/destructive/link/size-sm/size-lg/icon-sm | ✅ `OfficeButton.vue`（104 pass + 8 `waived`，0 fail） |
 | `input` | default、focus、disabled、invalid、size-sm | ✅ `OfficeInput.vue`（40/40 pass，#157b 已消掉 52px 残差） |
 | `select` | default、focus、disabled、placeholder | ✅ `OfficeSelect.vue` |
 | `dialog` | open（header/空 panel/footer/close） | ✅ `OfficeDialog.vue` |

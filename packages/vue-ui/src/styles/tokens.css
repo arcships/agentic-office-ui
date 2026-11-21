@@ -107,6 +107,11 @@
   --office-accent-foreground: oklch(26.9% 0 0);
   --office-destructive: oklch(63.7% 0.237 25.331);
   --office-destructive-foreground: oklch(50.5% 0.213 27.518);
+  /* WCAG AA filled destructive surface (#169): white on red-600 = 4.83:1.
+   * The upstream `--office-destructive` fill (red-500) is only 3.81:1 with
+   * white text, so filled actions and badges use this accessible pair. */
+  --office-destructive-contrast: oklch(57.7% 0.245 27.325);
+  --office-destructive-contrast-foreground: white;
 
   --office-border: color-mix(in oklab, black 8%, transparent);
   --office-input: color-mix(in oklab, black 10%, transparent);

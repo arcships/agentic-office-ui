@@ -25,6 +25,8 @@ export interface OfficeIconButtonProps {
   active?: boolean
   disabled?: boolean
   loading?: boolean
+  /** Accessible name while loading. Defaults to `label`. */
+  loadingLabel?: string
   asChild?: boolean
   class?: string
 }
@@ -37,12 +39,17 @@ const props = withDefaults(defineProps<OfficeIconButtonProps>(), {
   active: false,
   disabled: false,
   loading: false,
+  loadingLabel: undefined,
   asChild: false,
   class: "",
 })
 
 const classes = computed(() =>
   officeClass("office-icon-button", props.class),
+)
+
+const accessibleLabel = computed(() =>
+  props.loading ? props.loadingLabel ?? props.label : props.label,
 )
 </script>
 
@@ -53,9 +60,10 @@ const classes = computed(() =>
     :size="props.size"
     :disabled="props.disabled"
     :loading="props.loading"
+    :loading-label="props.loadingLabel"
     :as-child="props.asChild"
     :data-active="props.active ? 'true' : undefined"
-    :aria-label="props.label"
+    :aria-label="accessibleLabel"
     :aria-pressed="props.active ? true : undefined"
     :title="props.title ?? props.label"
     data-slot="icon-button"

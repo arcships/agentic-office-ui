@@ -60,6 +60,82 @@ test("parity thresholds stay at geometry 0px, pixels <=0.1%, top-N regions", () 
   assert.equal(manifest.gate.finalMode, "all");
 });
 
+test("expected diffs are narrow, owned and documented", () => {
+  const expectedDiffs = manifest.expectedDiffs ?? [];
+  assert.ok(Array.isArray(expectedDiffs));
+  const ids = new Set();
+  const scopes = new Set();
+  for (const entry of expectedDiffs) {
+    assert.match(entry.id, /^[a-z0-9-]+$/);
+    assert.ok(!ids.has(entry.id), `duplicate expected diff id ${entry.id}`);
+    ids.add(entry.id);
+
+    const surface = manifest.surfaces.find((candidate) => candidate.id === entry.surface);
+    assert.ok(surface, `${entry.id} references a missing surface`);
+    assert.ok(
+      surface.states.some((state) => state.id === entry.state),
+      `${entry.id} references a missing state`,
+    );
+    assert.ok(Array.isArray(entry.themes) && entry.themes.length > 0);
+    for (const theme of entry.themes) {
+      assert.ok(manifest.themes.includes(theme), `${entry.id} unknown theme ${theme}`);
+    }
+    assert.ok(Array.isArray(entry.viewports) && entry.viewports.length > 0);
+    for (const viewport of entry.viewports) {
+      assert.ok(
+        manifest.viewports.some((candidate) => candidate.id === viewport),
+        `${entry.id} unknown viewport ${viewport}`,
+      );
+      for (const theme of entry.themes) {
+        const scope = `${entry.surface}/${entry.state}/${theme}/${viewport}`;
+        assert.ok(!scopes.has(scope), `overlapping expected diff scope ${scope}`);
+        scopes.add(scope);
+      }
+    }
+    assert.ok(
+      Number.isFinite(entry.maxDiffPixelRatio)
+        && entry.maxDiffPixelRatio > 0
+        && entry.maxDiffPixelRatio <= 0.52,
+      `${entry.id} needs a bounded maxDiffPixelRatio`,
+    );
+    assert.match(entry.issue, /^#\d+$/);
+    assert.ok(entry.reason.length >= 40, `${entry.id} needs an explanatory reason`);
+    assert.ok(entry.evidence, `${entry.id} needs evidence`);
+    if (!/^https?:/u.test(entry.evidence)) {
+      assert.ok(existsSync(path.join(rootPath, entry.evidence)), `${entry.id} evidence exists`);
+    }
+  }
+
+  // #169 is recorded as a bounded waiver; the reference renderer must stay
+  // upstream, otherwise the gate would hide the real delta.
+  assert.ok(
+    expectedDiffs.some(
+      (entry) => entry.surface === "button" && entry.state === "destructive" && entry.issue === "#169",
+    ),
+    "the #169 destructive divergence is declared",
+  );
+  assert.doesNotMatch(
+    read("tools/extend-reference/src/surfaces/ButtonSurface.tsx"),
+    /--destructive/u,
+    "the reference button must not override the upstream destructive token",
+  );
+  // Pin both sides of the declared delta: the subject uses the accessible
+  // red-600 pair, the vendored reference keeps upstream red-500.
+  assert.match(
+    read("packages/vue-ui/src/styles/tokens.css"),
+    /--office-destructive-contrast:\s*oklch\(57\.7% 0\.245 27\.325\)/u,
+  );
+  assert.match(
+    read("packages/vue-ui/src/styles/ui.css"),
+    /\.office-button--destructive\s*\{[^}]*background:\s*var\(--office-destructive-contrast\)/u,
+  );
+  assert.match(
+    read("tools/extend-reference/src/styles/extend-globals.css"),
+    /--destructive:\s*var\(--color-red-500\)/u,
+    "the reference must keep the upstream red-500 destructive fill",
+  );
+});
+
 test("manifest marks every surface core/blocking with an owner for pending ones", () => {
   const core = manifest.surfaces.filter((surface) => surface.core).map((surface) => surface.id);
   assert.deepEqual(core, manifest.coreSubset.surfaces);

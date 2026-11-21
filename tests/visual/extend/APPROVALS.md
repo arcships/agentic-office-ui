@@ -12,6 +12,7 @@ fails when the committed tree is not covered by the most recent record.
 | 2026-11-20 | dim-agent | #165 | Merge #158b document-sidebar and four office-state surfaces into the final gate; 104/104 full-matrix parity on the merged 0.8 tree, so commit the 52 subject baselines at 1440x900 and 390x844, light and dark. | 432 | `87c5b815a240` |
 | 2026-11-20 | dim-agent | #165 | pin grayscale font rasterization so CI and local baselines match | 432 | `58d6dda6fc1a` |
 | 2026-11-20 | dim-agent | #165 | pin grayscale LCD text only; keep native font hinting metrics | 432 | `64ac2a03e7c0` |
+| 2026-11-21 | dim-agent | #169 | destructive filled button now uses the WCAG AA --office-destructive-contrast pair (red-600 + white, 4.83:1) instead of upstream red-500 (3.81:1); loading state keeps the same spinner/label pixels while adopting aria-disabled semantics (#169) | 432 | `4345df0638ca` |
 
 `pnpm ui:baseline capture --only <surface> --approve --reviewer <handle>`
 `--issue <#nnn> --reason <why>` is the only supported way to add a row.

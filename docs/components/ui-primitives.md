@@ -50,11 +50,11 @@ const theme = ref<"light" | "dark" | "system">("system")
 | `variant` | `default` / `secondary` / `ghost` / `outline` / `destructive` / `link`。Button、IconButton、Badge、Toggle 支持；菜单项另有 `default` / `destructive`。 |
 | `size` | 文本控件：`xs` / `sm` / `default` / `lg`；Button 另有 `icon` / `icon-sm` / `icon-lg`。 |
 | `disabled` | 原生 `disabled` 与 `aria-disabled`；Reka 根组件使用 `data-disabled`。 |
-| `loading` | Button/IconButton 居中显示 `OfficeSpinner`，保留宽度，写 `data-loading="true"`、`aria-busy="true"` 并禁用激活。 |
+| `loading` | Button/IconButton 居中显示 `OfficeSpinner`，保留宽度，写 `data-loading="true"`、`aria-busy="true"`，用 `aria-disabled="true"` 保持可聚焦并阻止激活。loading 时的可访问名取 `loadingLabel`，否则取可见 slot 文本，最后回退到本地化 “Loading”。 |
 | `data-slot` | 每个可渲染部分都有稳定的 `data-slot`，用于样式钩子和测试，不依赖 `data-v-*` 哈希。 |
 | `asChild` | Button、IconButton、Badge、Separator、Skeleton、Toggle 支持 slot 形式；Dialog/Sheet/Menu/Popover/Tooltip 的 `trigger`/默认 slot 本身就是 asChild。 |
 
-`asChild` 只接受**单个**根元素。`OfficeButton` 在 `asChild` 模式不会插入 loading spinner（spinner 会破坏单根约束），但仍会写 `data-loading` 和 `aria-busy`；需要 spinner 时使用非 asChild 形式。
+`asChild` 只接受**单个**根元素。`OfficeButton` 在 `asChild` 模式不会插入 loading spinner（spinner 会破坏单根约束），但仍会写 `data-loading`、`aria-busy`、`aria-disabled` 和 loading 可访问名；需要 spinner 时使用非 asChild 形式。
 
 ### 2.1 尺寸与触控
 
@@ -74,7 +74,7 @@ const theme = ref<"light" | "dark" | "system">("system")
 ### 3.1 Button / IconButton
 
 ```vue
-<OfficeButton variant="default" size="sm" :loading="saving" @click="save">
+<OfficeButton variant="default" size="sm" :loading="saving" loading-label="正在保存" @click="save">
   保存
 </OfficeButton>
 
@@ -87,11 +87,17 @@ const theme = ref<"light" | "dark" | "system">("system")
 | `variant` | `OfficeVariant` | `default` |
 | `size` | `OfficeButtonSize` | `default` |
 | `disabled` / `loading` | `boolean` | `false` |
+| `loadingLabel` | `string` | 可见 slot 文本，否则本地化 “Loading” |
 | `asChild` | `boolean` | `false` |
 | `type` | `button` / `submit` / `reset` | `button` |
 
-`OfficeIconButton` 额外要求 `label`（可访问名称），并支持 `icon`、`title`、`active`；`active`
+`OfficeIconButton` 额外要求 `label`（可访问名称），并支持 `icon`、`title`、`active`、`loadingLabel`；`active`
 输出 `data-active="true"` 与 `aria-pressed="true"`。
+
+`variant="destructive"` 的实心 Button/Badge 使用 `--office-destructive-contrast` 与
+`--office-destructive-contrast-foreground`（light/dark 均为 red-600 + white，白字对比度 4.83:1），
+`--office-destructive` 继续保留上游 red-500 供描边、文本和低强度强调使用。这是 #169 为 WCAG AA
+做的有意视觉偏离；宿主可覆盖这对 token 恢复品牌色，但必须自行保证 4.5:1。
 
 ### 3.2 Input / Textarea
 
@@ -335,7 +341,7 @@ Tailwind、variant/size 完整性和 bundle 预算。
 | Portal | Dialog、Sheet、Select、Menu、Popover、Tooltip、Toast 均 portal 到 `body` |
 | 碰撞 | Reka/Floating UI 负责 flip/shift；`side`、`align`、`sideOffset` 可配置 |
 | 禁用 | 原生 `disabled`（表单/按钮）或 `data-disabled`（Reka 项）；`pointer-events: none` + `opacity` |
-| 加载 | `loading` 保留标签宽度、显示 spinner、写 `aria-busy` 并阻止重复提交 |
+| 加载 | `loading` 保留标签宽度、显示 spinner、写 `aria-busy` 与 loading 可访问名；`aria-disabled` 保留 Tab 焦点并阻止重复提交 |
 | 触控 | `(pointer: coarse)` 下 44px 命中区；Dialog 在窄屏底部吸附 |
 | 本地化 | 关闭、加载、通知、对话框等通用标签来自共享目录的 `vueUi.primitives`，默认英文、`zh-CN` 返回中文，宿主可用 `messages` 覆盖；业务文案由宿主传入 |
 
