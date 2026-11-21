@@ -1,0 +1,29 @@
+/*
+ * Route (L2) harness shell.
+ *
+ * The host page box is deliberately identical to the demo route page
+ * (`apps/demo/src/pages/PdfViewerPage.vue` `.page` + `.viewer-container`):
+ * 24px padding, 1200px max width, 1px frame border. The frame is demo/page
+ * scaffolding on both sides and is excluded from the measured region, but its
+ * metrics still decide the width the product region receives, so they must
+ * match. See `docs/testing/ui-parity-routes.md`.
+ */
+.route-shell {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.route-shell > [data-slot="component-preview"] {
+  border-radius: var(--radius);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}

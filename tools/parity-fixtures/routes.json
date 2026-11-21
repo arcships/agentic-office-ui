@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "harness": "extend-ui-route-parity",
+  "referenceCommit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+  "referenceUrl": "https://github.com/extend-hq/ui",
+  "deviceScaleFactor": 2,
+  "viewports": [
+    {
+      "id": "1440x900",
+      "label": "desktop",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "id": "390x844",
+      "label": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "1280x720",
+      "label": "laptop",
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "id": "768x1024",
+      "label": "tablet",
+      "width": 768,
+      "height": 1024
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "thresholds": {
+    "geometryTolerancePx": 0,
+    "maxChannelDelta": 2,
+    "maxDiffPixelRatio": 0.001,
+    "maxContiguousDiffPx": 4,
+    "heatmapAmplification": 16,
+    "topDiffRegions": 5
+  },
+  "apps": {
+    "reference": {
+      "name": "@aou/extend-reference",
+      "dist": "tools/extend-reference/dist",
+      "fixturePrefix": "/fixtures/"
+    },
+    "subject": {
+      "name": "demo",
+      "dist": "apps/demo/dist",
+      "fixturePrefix": "/samples/"
+    }
+  },
+  "fixtures": {
+    "sample-pdf": {
+      "path": "apps/demo/public/samples/sample.pdf",
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253",
+      "bytes": 4652,
+      "title": "demo sample.pdf (4 pages, text)",
+      "source": "apps/demo/public/samples/sample.pdf (same bytes on both sides)"
+    }
+  },
+  "routes": [
+    {
+      "id": "pdf-viewer",
+      "title": "/pdf-viewer vs /docs/components/pdf-viewer",
+      "gateStatus": "report-only",
+      "ownerIssue": 182,
+      "referenceRoute": "/docs/components/pdf-viewer",
+      "referenceSource": "apps/v4/components/pdf-viewer-docs.tsx:207 (PdfViewerDemo) -> pdf-viewer-preview-client.tsx",
+      "subjectRoute": "#/pdf-viewer",
+      "subjectSource": "apps/demo/src/pages/PdfViewerPage.vue",
+      "fixture": "sample-pdf",
+      "state": {
+        "zoom": 1,
+        "sidebar": "closed",
+        "statusBar": false,
+        "note": "Both sides load the same bytes at 100% zoom with the thumbnails sidebar closed and no optional status bar; the upstream docs demo defaults to zoom 0.5 and a closed sidebar."
+      },
+      "reference": {
+        "url": "/route.html?route=pdf-viewer&theme={theme}&zoom=1&doc=/fixtures/sample.pdf",
+        "ready": [
+          "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img[src^=\"blob:\"]"
+        ],
+        "readyFunction": "() => { const img = document.querySelector('[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img'); return !!img && img.complete && img.naturalWidth > 0; }",
+        "prepare": [],
+        "regionSelector": "[data-slot=\"pdf-viewer\"]",
+        "landmarks": {
+          "root": "[data-slot=\"pdf-viewer\"]",
+          "toolbar": "[data-slot=\"pdf-viewer\"] > div:first-child",
+          "viewport": "[data-slot=\"pdf-viewer\"] [data-slot=\"scroll-area-viewport\"]",
+          "page1": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"]",
+          "page1Raster": "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page=\"1\"] img"
+        },
+        "masks": {
+          "chrome": [
+            "[data-slot=\"pdf-viewer\"] [data-pdf-viewer-page]"
+          ]
+        }
+      },
+      "subject": {
+        "url": "/?theme={theme}&sample=sample.pdf&zoom=1&statusbar=off#/pdf-viewer",
+        "ready": [
+          "[data-testid=\"pdf-status\"][data-state=\"ready\"]",
+          "[data-testid=\"pdf-page-render\"]"
+        ],
+        "readyFunction": "() => document.querySelector('[data-testid=\"pdf-status\"]')?.dataset.state === 'ready' && document.querySelectorAll('[data-testid=\"pdf-page-render\"]').length > 0",
+        "prepare": [
+          {
+            "action": "click",
+            "selector": "[data-testid=\"pdf-sidebar-toggle\"]",
+            "reason": "The upstream viewer defaults to a closed thumbnails sidebar; the product defaults to open (product difference recorded below)."
+          }
+        ],
+        "regionSelector": "[data-testid=\"pdf-viewer\"]",
+        "regionMarker": "[data-route-region=\"viewer\"]",
+        "landmarks": {
+          "root": "[data-testid=\"pdf-viewer\"]",
+          "toolbar": "[data-testid=\"pdf-toolbar\"]",
+          "viewport": "[data-testid=\"pdf-viewer\"] .pdf-frame-wrap",
+          "page1": "[data-testid=\"pdf-page-render\"]",
+          "page1Raster": "[data-testid=\"pdf-page-image\"]"
+        },
+        "masks": {
+          "chrome": [
+            "[data-testid=\"pdf-page\"]"
+          ]
+        }
+      },
+      "region": {
+        "heightPx": 560,
+        "heightSource": "apps/v4/components/pdf-viewer-preview-client.tsx:18 (className=\"h-[560px]\")",
+        "widthRule": "100% of the page content box: 24px page padding + 1200px max width + 1px region frame, reproduced identically on both sides",
+        "hostShell": {
+          "paddingPx": 24,
+          "maxWidthPx": 1200,
+          "frameBorderPx": 1
+        }
+      },
+      "landmarkTolerance": {
+        "root": 0,
+        "toolbar": 0,
+        "viewport": 0,
+        "page1": 1,
+        "page1Raster": 2
+      },
+      "exclusions": [
+        {
+          "scope": "reference",
+          "selector": "[data-slot=\"code\"]",
+          "category": "demo-scaffolding",
+          "reason": "The docs page renders a usage code block under the preview; the product region ends at [data-slot=\"pdf-viewer\"]."
+        },
+        {
+          "scope": "reference",
+          "selector": "[data-slot=\"component-preview\"]",
+          "category": "demo-scaffolding",
+          "reason": "Docs preview card (rounded border, page margins) wraps the product component; the harness reproduces only its box metrics so both regions receive the same width."
+        },
+        {
+          "scope": "subject",
+          "selector": "[data-testid=\"pdf-viewer-page\"] > h2, [data-testid=\"pdf-viewer-page\"] > .desc, [data-testid=\"pdf-viewer-page\"] > .controls, [data-testid=\"pdf-viewer-page\"] > .policy-panel, [data-testid=\"pdf-viewer-page\"] > .status-grid, [data-testid=\"pdf-viewer-page\"] > .diagnostics",
+          "category": "demo-scaffolding",
+          "reason": "Demo-only page header, sample selector, runtime-policy panel, status grid and diagnostics list; the upstream docs page has none of them."
+        },
+        {
+          "scope": "subject",
+          "selector": "[data-route-region=\"viewer\"]",
+          "category": "demo-scaffolding",
+          "reason": "Demo frame (1px border, radius, overflow) that wraps the viewer; only its box metrics are reproduced on the reference side."
+        }
+      ],
+      "differences": [
+        {
+          "id": "sidebar-default-open",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:120 `showThumbnails = ref(true)`; upstream apps/v4/components/extend/pdf-viewer.tsx:2280 `useState(false)`.",
+          "impact": "The shipped route shows a 160px thumbnail sidebar the reference does not have; the capture clicks the toggle so the remaining chrome is comparable."
+        },
+        {
+          "id": "optional-status-bar",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:1952 renders `[data-testid=\"pdf-status-bar\"]` when `show-status-bar` is set; the upstream viewer has no status bar.",
+          "impact": "The demo page turns it on, so the demo route is ~28px shorter in the page viewport than upstream. The capture state sets `show-status-bar=false`."
+        },
+        {
+          "id": "canvas-background",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2008 `--pdf-canvas-bg: #e5e7eb`; upstream paints the page area with `bg-muted/30` (apps/v4/components/extend/pdf-viewer.tsx:579).",
+          "impact": "The whole page canvas is visibly darker than the reference in light mode (and darker still in dark mode); this is the largest source of chrome-only pixel diff."
+        },
+        {
+          "id": "dark-page-inversion",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2024 `--pdf-page-filter: invert(1) hue-rotate(180deg)`; the upstream viewer renders page rasters unmodified in dark mode.",
+          "impact": "Dark-mode page content is inverted on our side, so the dark route can never match the reference pixels."
+        },
+        {
+          "id": "page-raster-softening",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "apps/v4/components/extend/pdf-viewer.tsx:2644 applies `blur-[0.35px]` to the page raster `<img>`; packages/vue-pdf/src/components/PdfViewer.vue:2080 `.pdf-page-image` renders unblurred.",
+          "impact": "Every glyph edge differs by a few channel levels, which pushes diff pixels far above the 0.1% budget even when geometry matches."
+        },
+        {
+          "id": "mobile-canvas-padding",
+          "category": "product-component",
+          "blocking": true,
+          "status": "open",
+          "evidence": "packages/vue-pdf/src/components/PdfViewer.vue:2122 `@container pdf-viewer (max-width: 760px) { .pdf-frame-wrap { padding: 12px } }`; upstream `pdf-viewer.tsx` scroll content keeps `padding: 24px` at every width.",
+          "impact": "At 768 and 390 the page frame starts 12px up/left of the reference (landmark page1 Δ -12px), which also changes how much of page 1 is visible."
+        },
+        {
+          "id": "page-raster-size-rounding",
+          "category": "product-component",
+          "blocking": false,
+          "status": "open",
+          "evidence": "Reference page frame is 595.266 x 841.875 CSS px, ours 595 x 841.281 (capture report `geometry.landmarks.page1`).",
+          "impact": "Sub-pixel rounding of the zoom-1 page size; contributes to raster diff but stays under the 1px landmark budget."
+        }
+      ],
+      "notes": [
+        "Pilot route for #182: proves an upstream pinned wrapper can be rendered verbatim (R2) and compared region-to-region.",
+        "gateStatus is `report-only` until the product differences above are fixed or accepted by a product decision."
+      ]
+    }
+  ]
+}

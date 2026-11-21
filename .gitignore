@@ -42,3 +42,5 @@ output/
 # Dev-only WASM copies prepared by apps/demo/vite.config.ts
 packages/xlsx-core/src/assets/duke_sheets_wasm_bg.wasm
 packages/vue-pdf/src/pdf/pdfium.wasm
+# Route reference wasm copy prepared by tools/extend-reference/scripts/copy-pdfium.mjs
+tools/extend-reference/public/pdfium.wasm
