@@ -190,7 +190,7 @@ light/dark reference/subject/diff/heatmap 和 chrome-only 三张，配 `SUMMARY.
 
 1. **PDF 路由已 blocking**（#199）：六个 `product-component` 差异全部 fixed；chrome-only 在 1440/390 × light/dark 均为 0 像素，landmarks 在 0/1/2px 容差内。整页像素保留为诊断，原因见 §6。
 2. **DOCX/XLSX/PPTX 复用同一 harness**：只需在 `tools/extend-reference/src/upstream/` 增加对应公开文件、在 `src/routes/` 加一个 route 组件、在 `routes.json` 加一条 route 记录。R2 的主要成本是安装公开 MIT runtime（分别约 67k/…/… 行）与构建内存，不是 harness 改造。三条路由的 region 高度、选择器与状态可以从 §3 的模板直接推导。
-3. **无上游像素对照的能力**（PDF editor、CSV、FileSystem、SchemaBuilder、PPTX presenter）不在 L2 做像素对照：PDF editor/PPTX presenter 按 `office-reference`，CSV 已实现独立 `CsvViewer` 与 `/csv-viewer` 产品演示但 Glide canvas 与 DOM table 不可像素比较（#178 ADR），FileSystem/SchemaBuilder 仍待 #179 决策。
+3. **无上游像素对照的能力**（PDF editor、CSV、FileSystem、SchemaBuilder、PPTX presenter）不在 L2 做像素对照：PDF editor/PPTX presenter 按 `office-reference`，CSV 已实现独立 `CsvViewer` 与 `/csv-viewer` 产品演示但 Glide canvas 与 DOM table 不可像素比较（#178 ADR）。FileSystem / SchemaBuilder 已由 #179 实现为可用组件，但上游视觉依赖 `@pierre/trees` / `@pierre/diffs` 的渲染管线，本仓库不引入，因此同样不建 L1/L2 surface；差异登记在 [components/file-system.md](../components/file-system.md) 与 [components/schema-builder.md](../components/schema-builder.md)。
 4. **CI**：`.github/workflows/ui-parity.yml` 的 `ui-parity-routes` job（PR / nightly / dispatch）现在以 `--gate-mode ready` 运行：`/pdf-viewer` 的 chrome/geometry/console 回归会阻断，其余路由仍 report-only；artifact `output/ui-parity-routes/` 保留 30 天。
 
 ## 附录：证据清单

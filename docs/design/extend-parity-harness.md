@@ -197,8 +197,11 @@ viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
   新增的 state surface：对照分别是 `PdfEditorEmptyState`、viewer error card、`ViewerLoadingSurface`
   与上游 footer 类名组合，共 64/64 `pass`（0 px、几何 0 px）；已补基线并切 `blocking`。
 - `bounding-box-citations` / `layout-blocks` / `e-signature` / `document-splits` 已由 #164 完成：
-  232/232 case、0px、0 AA；四条 surface 已补基线并切 `blocking`。FileSystem / SchemaBuilder 按
-  [components/document-blocks.md](../components/document-blocks.md) 记录为延期，不建 surface。
+  232/232 case、0px、0 AA；四条 surface 已补基线并切 `blocking`。FileSystem / SchemaBuilder 由 #179
+  实现为可用组件，但上游视觉依赖 `@pierre/trees` / `@pierre/diffs` 的私有渲染管线，本仓库不引入，
+  因此**不建 parity surface**；差异逐条登记在
+  [components/file-system.md](../components/file-system.md#7-与上游的差异明确登记) 与
+  [components/schema-builder.md](../components/schema-builder.md#7-与上游的差异明确登记)。
 - **#174（2026-11-21）**：提交基线从 2 个 viewport 扩到全部 4 个（1440×900 / 1280×720 /
   768×1024 / 390×844 × light + dark）：432 → **864 张**（+7.0 MiB，共 14.0 MiB），一轮
   `pnpm ui:baseline capture` 写入 864 张、原有 432 张字节级不变（0 updated），本地 566 s。
@@ -244,6 +247,9 @@ viewport；缺基线或漂移都会在 `--gate-mode all` 下阻断。
   `blocking`；presenter 无上游布局，保持 `unreachable`）。
 - #162：PDF toolbar/sidebar（已合入，40/40 + 24/24 像素 0）。
 - #163：FileUpload / FileThumbnail 已收敛；DocumentViewerSidebar 的组件与 demo 由 #158 负责。
-- #164：document blocks（已合入，232/232 像素 0；FileSystem/SchemaBuilder 延期）。
+- #164：document blocks（已合入，232/232 像素 0）。
+- #179：FileSystem / SchemaBuilder（已实现，无 parity surface；上游渲染管线不同，差异登记在
+  [components/file-system.md](../components/file-system.md) 与
+  [components/schema-builder.md](../components/schema-builder.md)）。
 - #165：gate、基线、stylelint/axe、文档——25 个可渲染 surface 已全部 `blocking`，
   `prMode`/workflow 已切到 `all`（见 [testing/ui-parity-ci.md §5](../testing/ui-parity-ci.md)）。

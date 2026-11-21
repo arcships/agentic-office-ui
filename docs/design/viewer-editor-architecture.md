@@ -474,6 +474,10 @@
 
 ### 9.5 实现方案（#179 决策）
 
+- **#179 决策（0.8.1）：实现最小可用面。** `FileSystem.vue` + `file-system.ts` 已合入：显式嵌套树、
+  面包屑、前进/后退、列表/网格、`FileThumbnail` 缩略图、选择/打开/删除事件、空/加载/错误、键盘与只读；
+  不引入 `@pierre/trees`。排序/筛选/搜索、columns/gallery、拖放、内嵌四 viewer 预览与
+  `DocumentPreviewCard` 仍未移植，逐条登记在 [`../components/file-system.md`](../components/file-system.md)。
 - **不做的产品理由（若选不做）**：0.8/0.9 没有文件浏览宿主；`FileUpload` + `FileThumbnail` 已覆盖上传与缩略图；引入文件树要同时定义文件模型、权限/URL 解析、四个 viewer 的预览集成，属于新产品面而非 viewer 对齐。
 - **若做**：拆 `file-system-core`（index/排序/筛选/懒加载）+ `FileSystem.vue` + `DocumentPreviewCard.vue`；provider：`getFileUrl`、`loadChildren`、`loadPreviewImageUrl`；L1 `file-system`（4 视图 × 空/加载/错误）；L2 `/file-system` vs `/docs/components/file-system`。
 - **工作量/风险**：L（≥ #163 的 1.5 倍）；风险：`@pierre/trees` beta API、四 viewer 懒加载的包体积、拖放与键盘可达性。
@@ -517,6 +521,12 @@
 
 ### 10.5 实现方案（#179 决策）
 
+- **#179 决策（0.8.1）：实现最小可用面并补上持久化契约。** `SchemaBuilder.vue` +
+  `SchemaBuilderFieldRow.vue` + `schema-builder.ts` 已合入：字段行（名称/类型/必填/描述）、嵌套 object
+  与 object 数组、按钮排序、JSON Schema 导入/导出、同级校验与只读；`serializeSchemaBuilderSchema` /
+  `parseJsonSchema` / `validateSchemaBuilderSchema` 就是宿主需要的保存/发布契约。不使用 dnd-kit 与
+  `@pierre/diffs`；enum/integer/null 类型、拖拽排序、JSON 高亮与抽取预览未移植，登记在
+  [`../components/schema-builder.md`](../components/schema-builder.md)。
 - **不做（推荐 0.9 前）**：产品没有 schema 编辑入口；`LayoutBlocks`/`BoundingBoxCitations` 只需要只读 review 数据。
 - **若做**：先定义 `ExtractionSchema` 数据模型与宿主保存/发布流程；`SchemaBuilder.vue` 用 `@dnd-kit/vue`（或 `vue-draggable-plus`）替代 dnd-kit，JSON 预览用 `<pre>` + 轻量高亮替代 `@pierre/diffs`（避免第二套 worker pool）。
 - **工作量/风险**：M–L（4–8 人日）；风险：嵌套拖拽 + 键盘可达性；schema 校验语义。

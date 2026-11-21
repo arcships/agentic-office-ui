@@ -86,7 +86,28 @@
 
 拆分结果列表：`splits`、`thumbnailImages`、`withFrameDivider`、`hideAddSplit`、`disableRemove`、`loading`、`error`、`emptyMessage`。事件为 `select-page`、`update:splits`、`splits-change`、`add-split`、`remove-split`。页缩略图使用 `FileThumbnail`；支持页在组内/组间拖放，也提供键盘替代（`ArrowLeft/ArrowRight` 组内重排，`Ctrl/Cmd + ArrowLeft/ArrowRight` 跨组移动，拖拽手柄 `ArrowUp/ArrowDown` 重排拆分卡）。
 
-四个文档 block 的像素证据、状态矩阵、限制和 `FileSystem` / `SchemaBuilder` 的延期论证见[Document blocks：Extend 对齐](document-blocks.md)。
+四个文档 block 的像素证据、状态矩阵与限制见[Document blocks：Extend 对齐](document-blocks.md)。
+
+### `FileSystem`（0.8.1，#179）
+
+Finder 风格文件浏览：嵌套 `FileSystemItem[]`（`id`/`name`/`kind`/`children`/`size`/`mime`/`thumbnailUrl`/`url`/`updatedAt`），
+受控或非受控的 `currentFolderId` / `view`（`list`/`grid`）/ `selectedId`，面包屑与前进/后退历史，图片缩略图走
+`FileThumbnail`，空/加载/错误状态和只读模式。事件为 `update:currentFolderId`、`update:view`、
+`update:selectedId`、`selection-change`、`open-folder`、`open-file`、`delete-item`；模板引用暴露
+`navigate(folderId)` 与 `currentFolder()`。键盘：方向键/Home/End 移动选择，Enter/Space 打开，
+ArrowRight 进入文件夹，ArrowLeft/Backspace 返回上级，Delete 删除（只读时禁用）。
+不依赖 `@pierre/trees`，没有像素基线；未移植排序/筛选/搜索、columns/gallery、拖放与内嵌 viewer 预览。
+完整 API、状态合同与差异见[FileSystem](file-system.md)，示例在 demo 的 `/file-system`。
+
+### `SchemaBuilder`（0.8.1，#179）
+
+抽取 schema 编辑器：字段名/类型（`string`/`number`/`boolean`/`object`/`array`）/必填/描述，
+嵌套 object 与 object 数组，按钮上移/下移与删除，JSON Schema 导入/导出和同级校验（空名、重名、非法类型），
+只读模式。事件为 `update:schema`、`schema-change`、`validation-change`、`export`；模板引用暴露
+`toJSONSchema()` 与 `issues()`。持久化契约是公开的纯函数：`serializeSchemaBuilderSchema`、
+`parseJsonSchema`、`parseSchemaBuilderJsonText`、`validateSchemaBuilderSchema`、`findSchemaBuilderField`。
+不使用 dnd-kit 与 `@pierre/diffs`；未移植 enum/integer/null 类型、拖拽排序、JSON 高亮视图与抽取预览。
+完整 API、JSON Schema 契约与差异见[SchemaBuilder](schema-builder.md)，示例在 demo 的 `/schema-builder`。
 
 ### `CsvViewer`
 

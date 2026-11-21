@@ -404,6 +404,91 @@ export interface CsvViewerState {
   error: CsvViewerError | null
 }
 
+export type FileSystemView = "list" | "grid"
+
+export type FileSystemItemKind = "folder" | "file"
+
+/**
+ * One node in the file tree. Folders own their entries through `children`, so a
+ * host can hand over a nested manifest.
+ */
+export interface FileSystemItem {
+  /** Stable identifier; also the value emitted by selection/navigation events. */
+  id: string
+  /** Display name. Never parsed for navigation; the tree is explicit. */
+  name: string
+  kind: FileSystemItemKind
+  /** Folder entries. Ignored for files. */
+  children?: FileSystemItem[]
+  /** File size in bytes. */
+  size?: number
+  /** MIME type, e.g. `application/pdf`. Drives the file glyph and preview. */
+  mime?: string
+  /** Pre-generated preview image (thumbnail server, page-1 render, data URL). */
+  thumbnailUrl?: string
+  /** Resolved download/open URL, forwarded to `open-file`. */
+  url?: string
+  /** ISO timestamp shown in the list view. */
+  updatedAt?: string
+}
+
+export interface FileSystemProps {
+  /** Root entries. Missing folder nodes are not inferred; pass the real tree. */
+  items: FileSystemItem[]
+  /** Controlled open folder id; `null` is the root. Omit for internal state. */
+  currentFolderId?: string | null
+  defaultFolderId?: string | null
+  /** Controlled view. Omit to let the block keep its own selection. */
+  view?: FileSystemView
+  defaultView?: FileSystemView
+  /** Controlled selected item id. */
+  selectedId?: string | null
+  /** Root label used by the breadcrumb. Defaults to “Files”. */
+  title?: string
+  /** Hides the delete affordance; navigation and opening stay available. */
+  readOnly?: boolean
+  loading?: boolean
+  error?: string
+  emptyMessage?: string
+  className?: string
+}
+
+export type SchemaBuilderFieldType = "string" | "number" | "boolean" | "object" | "array"
+
+export type SchemaBuilderArrayItemType = "string" | "number" | "boolean" | "object"
+
+/** One extraction field. Nested `properties` describe objects and array items. */
+export interface SchemaBuilderField {
+  /** Stable row id, kept across renames so focus and tests can follow a field. */
+  id: string
+  /** JSON property name. Validated for emptiness and duplicate siblings. */
+  name: string
+  type: SchemaBuilderFieldType
+  required?: boolean
+  /** Field description, emitted as JSON Schema `description`. */
+  description?: string
+  /** Child fields for `type: "object"` and `type: "array"` + `itemType: "object"`. */
+  properties?: SchemaBuilderField[]
+  /** Element type for `type: "array"`. Defaults to `string`. */
+  itemType?: SchemaBuilderArrayItemType
+}
+
+export interface SchemaBuilderSchema {
+  properties: SchemaBuilderField[]
+}
+
+export interface SchemaBuilderProps {
+  schema: SchemaBuilderSchema
+  title?: string
+  description?: string
+  /** Disables every mutation, including JSON import. */
+  readOnly?: boolean
+  loading?: boolean
+  error?: string
+  emptyMessage?: string
+  className?: string
+}
+
 export interface SpinnerProps {
   size?: "sm" | "md" | "lg"
   className?: string

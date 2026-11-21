@@ -20,8 +20,10 @@
 | [components/office-chrome.md](components/office-chrome.md) | 共享 Office chrome：toolbar、page/zoom/search、status、empty/error/loading 状态与 160px document sidebar（#158） |
 | [components/docx-ui-stories.md](components/docx-ui-stories.md) | DOCX viewer/editor chrome 的确定性截图 story、390/768/1440 与 inline/overlay 证据（#159） |
 | [components/file-components.md](components/file-components.md) | FileUpload / FileThumbnail 的 Extend 对齐合同、像素对照、story 与 DocumentViewerSidebar 集成 seam（#163） |
-| [components/document-blocks.md](components/document-blocks.md) | BoundingBoxCitations / LayoutBlocks / SignaturePad / ESignatureFields / DocumentSplits 的 Extend 对齐、232 个像素 case、API 与 FileSystem/SchemaBuilder 延期论证（#164） |
+| [components/document-blocks.md](components/document-blocks.md) | BoundingBoxCitations / LayoutBlocks / SignaturePad / ESignatureFields / DocumentSplits 的 Extend 对齐、232 个像素 case 与 API（#164） |
 | [components/csv-viewer.md](components/csv-viewer.md) | `CsvViewer` 的 props/事件/实例方法、解析/搜索/虚拟化合同与可访问性（#178） |
+| [components/file-system.md](components/file-system.md) | FileSystem：Finder 风格浏览、面包屑、列表/网格、缩略图、键盘与只读，上游差异登记（#179） |
+| [components/schema-builder.md](components/schema-builder.md) | SchemaBuilder：字段/嵌套编辑、JSON Schema 导入导出契约、校验与只读，上游差异登记（#179） |
 | [components/pptx-chrome.md](components/pptx-chrome.md) | PPTX viewer/presenter/sorter 的共享 chrome、sorter/presenter 结构、右键菜单、状态与 390/768/1440 截图证据（#161） |
 | [design/pptx-presenter-reference.md](design/pptx-presenter-reference.md) | PPTX 演讲者视图参考规格：五个产品的区域/尺寸/交互对照、备注与计时规则、`office-reference` 验收与实现计划（#183） |
 | [design/xlsx-office-chrome-migration.md](design/xlsx-office-chrome-migration.md) | XLSX viewer/authoring 的 toolbar、ribbon、菜单、对话框、状态栏迁移到共享 chrome 的接法与已知差异（#160） |
